@@ -1,0 +1,9 @@
+# Zeilenenden: Git normalisiert Text, Shell-Skripte bleiben immer LF —
+# sonst scheitern sie unter Linux an "\r".
+* text=auto
+*.sh text eol=lf
+
+# Binär, nie anfassen
+*.png binary
+*.ico binary
+*.jpg binary

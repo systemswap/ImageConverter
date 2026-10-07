@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <!-- Bewusst KEINE Avalonia-Referenz: der Core bleibt UI-frei,
+             damit Pipeline und CLI ohne UI testbar sind. -->
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Magick.NET-Q8-AnyCPU" />
+    </ItemGroup>
+</Project>

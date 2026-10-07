@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ImageConverter.Ui/ImageConverter.Ui.csproj" />
+  <Project Path="ImageConverter.Core/ImageConverter.Core.csproj" />
+  <Project Path="ImageConverter.Desktop/ImageConverter.Desktop.csproj" />
+  <Project Path="ImageConverter.Tests/ImageConverter.Tests.csproj" />
+</Solution>

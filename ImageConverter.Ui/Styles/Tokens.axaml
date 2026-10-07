@@ -1,0 +1,59 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Farb- und Maß-Tokens. Alles Sichtbare referenziert diese Namen,
+         damit Hell/Dunkel an einer Stelle definiert bleibt. -->
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="AppBackgroundColor">#F4F5F7</Color>
+            <Color x:Key="SurfaceColor">#FFFFFF</Color>
+            <Color x:Key="SurfaceAltColor">#FAFAFB</Color>
+            <Color x:Key="CanvasColor">#E7E9ED</Color>
+            <Color x:Key="BorderColor">#DEE0E5</Color>
+            <Color x:Key="BorderStrongColor">#C4C8D0</Color>
+            <Color x:Key="TextColor">#1B1D21</Color>
+            <Color x:Key="TextMutedColor">#6B7280</Color>
+            <Color x:Key="AccentColor">#2F6FEB</Color>
+            <Color x:Key="AccentHoverColor">#2560D8</Color>
+            <Color x:Key="AccentSoftColor">#E8F0FE</Color>
+            <Color x:Key="GoodColor">#1F8A4C</Color>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="AppBackgroundColor">#1A1C20</Color>
+            <Color x:Key="SurfaceColor">#24272C</Color>
+            <Color x:Key="SurfaceAltColor">#2A2D33</Color>
+            <Color x:Key="CanvasColor">#131518</Color>
+            <Color x:Key="BorderColor">#34383F</Color>
+            <Color x:Key="BorderStrongColor">#464B54</Color>
+            <Color x:Key="TextColor">#ECEDEF</Color>
+            <Color x:Key="TextMutedColor">#9AA1AC</Color>
+            <Color x:Key="AccentColor">#4C8DFF</Color>
+            <Color x:Key="AccentHoverColor">#5F99FF</Color>
+            <Color x:Key="AccentSoftColor">#1E2A3F</Color>
+            <Color x:Key="GoodColor">#49C17C</Color>
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- Brushes auf die Theme-Farben -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{DynamicResource AppBackgroundColor}" />
+    <SolidColorBrush x:Key="SurfaceBrush"       Color="{DynamicResource SurfaceColor}" />
+    <SolidColorBrush x:Key="SurfaceAltBrush"    Color="{DynamicResource SurfaceAltColor}" />
+    <SolidColorBrush x:Key="CanvasBrush"        Color="{DynamicResource CanvasColor}" />
+    <SolidColorBrush x:Key="BorderBrush2"       Color="{DynamicResource BorderColor}" />
+    <SolidColorBrush x:Key="BorderStrongBrush"  Color="{DynamicResource BorderStrongColor}" />
+    <SolidColorBrush x:Key="TextBrush"          Color="{DynamicResource TextColor}" />
+    <SolidColorBrush x:Key="TextMutedBrush"     Color="{DynamicResource TextMutedColor}" />
+    <SolidColorBrush x:Key="AccentBrush"        Color="{DynamicResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentHoverBrush"   Color="{DynamicResource AccentHoverColor}" />
+    <SolidColorBrush x:Key="AccentSoftBrush"    Color="{DynamicResource AccentSoftColor}" />
+    <SolidColorBrush x:Key="GoodBrush"          Color="{DynamicResource GoodColor}" />
+
+    <!-- Maße -->
+    <CornerRadius x:Key="RadiusCard">8</CornerRadius>
+    <CornerRadius x:Key="RadiusControl">6</CornerRadius>
+    <Thickness x:Key="CardPadding">14,12,14,14</Thickness>
+
+</ResourceDictionary>

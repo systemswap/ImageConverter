@@ -1,0 +1,511 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ImageConverter.ViewModels"
+             xmlns:m="using:ImageConverter.Models"
+             xmlns:c="using:ImageConverter.Controls"
+             mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="760"
+             x:Class="ImageConverter.Views.MainView"
+             x:DataType="vm:MainViewModel"
+             Background="{DynamicResource AppBackgroundBrush}">
+
+    <Design.DataContext>
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ============================================================ -->
+        <!-- Kopfleiste: Dateien                                          -->
+        <!-- ============================================================ -->
+        <Border DockPanel.Dock="Top" Classes="bar" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                <Button Grid.Column="0" Classes="subtle" Content="＋  Bilder"
+                        Click="OnOpenFilesClick"
+                        ToolTip.Tip="Bilder oder ganze Ordner öffnen — oder einfach ins Fenster ziehen." />
+
+                <!-- Blättern, wenn mehrere Bilder geladen sind -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="10,0,0,0"
+                            IsVisible="{Binding HasMultipleFiles}">
+                    <Button Classes="icon" Content="‹" FontSize="18"
+                            Command="{Binding PreviousFileCommand}" ToolTip.Tip="Vorheriges Bild" />
+                    <TextBlock Classes="label" Text="{Binding FilePosition}" Margin="4,0" />
+                    <Button Classes="icon" Content="›" FontSize="18"
+                            Command="{Binding NextFileCommand}" ToolTip.Tip="Nächstes Bild" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Margin="14,0,0,0" Spacing="1">
+                    <TextBlock Text="{Binding CurrentFileName}" FontWeight="SemiBold" FontSize="13" />
+                    <TextBlock Classes="hint" Text="{Binding FileDetails}" />
+                </StackPanel>
+
+                <!-- Fehlermeldung, z. B. bei nicht unterstütztem Format -->
+                <Border Grid.Column="3" HorizontalAlignment="Center" Margin="16,0"
+                        IsVisible="{Binding ErrorMessage, Converter={x:Static ObjectConverters.IsNotNull}}"
+                        Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
+                        CornerRadius="{DynamicResource RadiusControl}" Padding="10,5">
+                    <TextBlock Classes="hint" Text="{Binding ErrorMessage}" MaxWidth="460" />
+                </Border>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4">
+                    <Button Classes="icon" Content="☰" ToolTip.Tip="Einstellungen" />
+                    <Button Classes="icon" Content="?" ToolTip.Tip="Hilfe" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================================================ -->
+        <!-- Fußleiste: Ziel, Export                                      -->
+        <!-- ============================================================ -->
+        <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="12,10">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <TextBlock Grid.Column="1" Classes="label" Margin="0,0,8,0" Text="Ziel" />
+
+                <Border Grid.Column="2"
+                        Background="{DynamicResource SurfaceAltBrush}"
+                        BorderBrush="{DynamicResource BorderBrush2}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource RadiusControl}"
+                        Padding="10,6" Margin="0,0,10,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding OutputFolder}" FontSize="12" />
+                        <TextBlock Classes="label" Text="…" />
+                    </StackPanel>
+                </Border>
+
+                <Button Grid.Column="3" Classes="primary" Content="Exportieren" />
+            </Grid>
+        </Border>
+
+        <!-- ============================================================ -->
+        <!-- Hauptbereich: Einstellungen links, Bild rechts               -->
+        <!-- ============================================================ -->
+        <Grid ColumnDefinitions="384,Auto,*">
+
+            <!-- Einstellungen links -->
+            <ScrollViewer Grid.Column="0"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="14,14,10,14">
+                <StackPanel Spacing="12">
+
+                    <!-- ============================== Format -->
+                    <HeaderedContentControl Header="FORMAT">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="88,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Format" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding Formats}"
+                                          SelectedItem="{Binding SelectedFormat}" />
+                            </Grid>
+
+                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Qualität" />
+                                <Slider Grid.Column="1" Minimum="1" Maximum="100"
+                                        Value="{Binding Quality}"
+                                        IsEnabled="{Binding !Lossless}" />
+                                <TextBlock Grid.Column="2" Classes="value"
+                                           Text="{Binding Quality, StringFormat='{}{0:F0}'}" />
+                            </Grid>
+
+                            <CheckBox IsChecked="{Binding Lossless}"
+                                      Content="Verlustfrei" FontSize="12" />
+
+                            <Border Background="{DynamicResource AccentSoftBrush}"
+                                    CornerRadius="{DynamicResource RadiusControl}"
+                                    Padding="10,7" Margin="0,10,0,0">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Classes="good" Text="{Binding EstimatedSize}" />
+                                    <TextBlock Classes="hint" Text="{Binding SavingsText}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Größe -->
+                    <HeaderedContentControl Header="GRÖSSE">
+                        <StackPanel>
+                            <!-- Breite × Höhe mit Kette: zu = proportional, offen = frei -->
+                            <Grid Classes="row" ColumnDefinitions="88,*,Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Pixel" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding TargetWidth}"
+                                               Classes.derived="{Binding KeepAspectRatio}"
+                                               Classes.leading="{Binding WidthIsLeading}" />
+                                <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
+                                <NumericUpDown Grid.Column="3" Value="{Binding TargetHeight}"
+                                               Classes.derived="{Binding KeepAspectRatio}"
+                                               Classes.leading="{Binding !WidthIsLeading}" />
+                                <ToggleButton Grid.Column="4" Classes="chain" Margin="8,0,0,0"
+                                              IsChecked="{Binding KeepAspectRatio}"
+                                              ToolTip.Tip="Kette geschlossen: Seitenverhältnis bleibt, die zweite Kante rechnet sich mit. Kette offen: Breite und Höhe frei — das Bild wird gestaucht oder gestreckt.">
+                                    <Panel Width="24" Height="24">
+                                        <!-- Zwei Kettenglieder, um 45° gedreht -->
+                                        <Canvas Width="24" Height="24" IsVisible="{Binding KeepAspectRatio}">
+                                            <Canvas.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Canvas.RenderTransform>
+                                            <Rectangle Canvas.Left="1.5" Canvas.Top="8" Width="12" Height="8"
+                                                       RadiusX="4" RadiusY="4" StrokeThickness="2.2"
+                                                       Stroke="{DynamicResource AccentBrush}" />
+                                            <Rectangle Canvas.Left="10.5" Canvas.Top="8" Width="12" Height="8"
+                                                       RadiusX="4" RadiusY="4" StrokeThickness="2.2"
+                                                       Stroke="{DynamicResource AccentBrush}" />
+                                        </Canvas>
+                                        <!-- Gebrochen: Glieder auseinander, Bruchstriche dazwischen -->
+                                        <Canvas Width="24" Height="24" IsVisible="{Binding !KeepAspectRatio}">
+                                            <Canvas.RenderTransform>
+                                                <RotateTransform Angle="-45" />
+                                            </Canvas.RenderTransform>
+                                            <Rectangle Canvas.Left="-1" Canvas.Top="8" Width="10" Height="8"
+                                                       RadiusX="4" RadiusY="4" StrokeThickness="2.2"
+                                                       Stroke="{DynamicResource TextMutedBrush}" />
+                                            <Rectangle Canvas.Left="15" Canvas.Top="8" Width="10" Height="8"
+                                                       RadiusX="4" RadiusY="4" StrokeThickness="2.2"
+                                                       Stroke="{DynamicResource TextMutedBrush}" />
+                                            <Line StartPoint="12,2" EndPoint="12,5.5" StrokeThickness="2"
+                                                  StrokeLineCap="Round" Stroke="{DynamicResource TextMutedBrush}" />
+                                            <Line StartPoint="12,18.5" EndPoint="12,22" StrokeThickness="2"
+                                                  StrokeLineCap="Round" Stroke="{DynamicResource TextMutedBrush}" />
+                                        </Canvas>
+                                    </Panel>
+                                </ToggleButton>
+                            </Grid>
+
+                            <!-- Filter: jeder Eintrag erklärt sich im Tooltip -->
+                            <Grid Classes="row" ColumnDefinitions="88,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Filter" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding Filters}"
+                                          SelectedItem="{Binding SelectedFilter}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="m:FilterOption">
+                                            <Border Background="Transparent">
+                                                <ToolTip.Tip>
+                                                    <StackPanel MaxWidth="290" Spacing="6">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold"
+                                                                   Text="{Binding BestFor, StringFormat='Gut für: {0}'}" />
+                                                    </StackPanel>
+                                                </ToolTip.Tip>
+                                                <TextBlock Text="{Binding Name}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <TextBlock Classes="hint" Margin="88,-4,0,10"
+                                       Text="{Binding SelectedFilter.BestFor}" />
+
+                            <StackPanel Spacing="6">
+                                <CheckBox IsChecked="{Binding DoNotEnlarge}"
+                                          Content="Nicht vergrößern" FontSize="12"
+                                          ToolTip.Tip="Kleine Bilder werden nie größer gerechnet — Vergrößern erfindet keine Details, es macht nur unscharf." />
+                                <CheckBox IsChecked="{Binding GammaCorrect}"
+                                          Content="Gamma-korrekt skalieren" FontSize="12"
+                                          ToolTip.Tip="Rechnet so, wie das Auge Helligkeit wahrnimmt. Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Kostet etwas Zeit, sieht fast immer besser aus." />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Zuschnitt -->
+                    <HeaderedContentControl x:Name="CropGroup" Header="ZUSCHNITT">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="88,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Verhältnis" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding AspectPresets}"
+                                          SelectedItem="{Binding SelectedAspectPreset}" />
+                            </Grid>
+
+                            <!-- Noch keine Auswahl: kurze Anleitung -->
+                            <Border IsVisible="{Binding !HasCropSelection}"
+                                    Background="{DynamicResource SurfaceAltBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush2}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource RadiusControl}"
+                                    Padding="10,8">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <TextBlock Grid.Column="0" Text="✂" FontSize="16"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               Margin="0,0,10,0" VerticalAlignment="Top" />
+                                    <TextBlock Grid.Column="1" Classes="hint"
+                                               Text="Mit gedrückter linker Maustaste über das Bild ziehen, um einen Ausschnitt zu wählen." />
+                                </Grid>
+                            </Border>
+
+                            <!-- Auswahl vorhanden -->
+                            <StackPanel IsVisible="{Binding HasCropSelection}">
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto,*">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Position" />
+                                    <NumericUpDown Grid.Column="1" Value="{Binding CropX}" Minimum="0" />
+                                    <TextBlock Grid.Column="2" Classes="label" Text="," Margin="7,0" />
+                                    <NumericUpDown Grid.Column="3" Value="{Binding CropY}" Minimum="0" />
+                                </Grid>
+
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto,*">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Größe" />
+                                    <NumericUpDown Grid.Column="1" Value="{Binding CropWidth}" />
+                                    <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
+                                    <NumericUpDown Grid.Column="3" Value="{Binding CropHeight}" />
+                                </Grid>
+
+                                <!-- Runde Ecken: Max = halbe längste Seite → Ellipse bzw. Kreis -->
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Ecken" />
+                                    <Slider Grid.Column="1" Minimum="0"
+                                            Maximum="{Binding MaxCornerRadius}"
+                                            Value="{Binding CornerRadius}"
+                                            ToolTip.Tip="Rundet die Ecken der Auswahl ab. Ganz rechts wird daraus eine Ellipse — bei Verhältnis 1:1 ein Kreis. Alles außerhalb der Rundung wird beim Zuschneiden transparent." />
+                                    <TextBlock Grid.Column="2" Classes="value" MinWidth="50"
+                                               Text="{Binding CornerRadiusLabel}" />
+                                </Grid>
+
+                                <Border IsVisible="{Binding ShowTransparencyWarning}"
+                                        Background="#1FE0A100" BorderBrush="#66E0A100"
+                                        BorderThickness="1"
+                                        CornerRadius="{DynamicResource RadiusControl}"
+                                        Padding="10,7" Margin="0,0,0,10">
+                                    <TextBlock Classes="hint"
+                                               Text="JPEG und BMP kennen keine Transparenz — die runden Ecken würden weiß. Für Buttons PNG oder WebP wählen." />
+                                </Border>
+
+                                <Grid ColumnDefinitions="Auto,8,*">
+                                    <Button Grid.Column="0" Classes="subtle"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            Command="{Binding ClearSelectionCommand}"
+                                            Content="Auswahl aufheben" FontSize="13" Padding="10,8"
+                                            ToolTip.Tip="Rahmen entfernen, das Bild bleibt unverändert (Esc)." />
+                                    <Button Grid.Column="2" Classes="primary"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            Padding="8,8" FontSize="13"
+                                            Command="{Binding CropToSelectionCommand}"
+                                            Content="Auf Auswahl zuschneiden"
+                                            ToolTip.Tip="Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen." />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Auflösung und DPI -->
+                    <HeaderedContentControl Header="AUFLÖSUNG &amp; DPI">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="DPI" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding Dpi}"
+                                               Minimum="1" Maximum="2400" />
+                                <TextBlock Grid.Column="2" Classes="label" Text="ppi" Margin="7,0,0,0" />
+                            </Grid>
+
+                            <StackPanel Spacing="6" Margin="0,0,0,8">
+                                <RadioButton GroupName="dpi" FontSize="12"
+                                             IsChecked="{Binding DpiMetadataOnly}"
+                                             Content="Nur Metadaten ändern"
+                                             ToolTip.Tip="Die Pixel bleiben wie sie sind. Es ändert sich nur, wie groß das Bild beim Drucken herauskommt." />
+                                <RadioButton GroupName="dpi" FontSize="12"
+                                             IsChecked="{Binding !DpiMetadataOnly}"
+                                             Content="Pixel neu berechnen"
+                                             ToolTip.Tip="Das Bild wird so umgerechnet, dass es bei dieser DPI die gewünschte Druckgröße hat." />
+                            </StackPanel>
+
+                            <TextBlock Classes="hint" Text="{Binding PrintSize}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Bildverbesserung -->
+                    <HeaderedContentControl Header="BILDVERBESSERUNG">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Schärfen" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="3"
+                                        Value="{Binding SharpenAmount}" />
+                                <TextBlock Grid.Column="2" Classes="value"
+                                           Text="{Binding SharpenLabel}" />
+                            </Grid>
+
+                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Radius" />
+                                <Slider Grid.Column="1" Minimum="0.3" Maximum="5"
+                                        Value="{Binding SharpenRadius}" />
+                                <TextBlock Grid.Column="2" Classes="value"
+                                           Text="{Binding SharpenRadius, StringFormat='{}{0:F1}'}" />
+                            </Grid>
+
+                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Rauschen" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="3"
+                                        Value="{Binding NoiseReduction}" />
+                                <TextBlock Grid.Column="2" Classes="value"
+                                           Text="{Binding NoiseLabel}" />
+                            </Grid>
+
+                            <CheckBox IsChecked="{Binding UseAiDenoise}" FontSize="12"
+                                      Content="KI-Optimierung (lokal, lädt Modell nach)" />
+                            <TextBlock Classes="hint" Margin="26,0,0,0"
+                                       Text="Läuft komplett auf deinem Rechner. Langsam — für einzelne Bilder gedacht." />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Metadaten und Farbe -->
+                    <HeaderedContentControl Header="METADATEN &amp; FARBE">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="88,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="EXIF" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding MetadataModes}"
+                                          SelectedItem="{Binding SelectedMetadataMode}" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="88,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="ICC-Profil" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding ColorModes}"
+                                          SelectedItem="{Binding SelectedColorMode}" />
+                            </Grid>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Ausgabe -->
+                    <HeaderedContentControl Header="AUSGABE">
+                        <Grid ColumnDefinitions="88,*">
+                            <TextBlock Grid.Column="0" Classes="label" Text="Dateiname" />
+                            <TextBox Grid.Column="1" Text="{Binding NamePattern}"
+                                     FontSize="12"
+                                     CornerRadius="{DynamicResource RadiusControl}" />
+                        </Grid>
+                    </HeaderedContentControl>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Trennlinie -->
+            <Rectangle Grid.Column="1" Width="1" Fill="{DynamicResource BorderBrush2}" />
+
+            <!-- Bildfläche rechts -->
+            <DockPanel Grid.Column="2" LastChildFill="True">
+
+                <!-- Werkzeugleiste unter dem Bild -->
+                <Border DockPanel.Dock="Bottom"
+                        Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush2}"
+                        BorderThickness="0,1,0,0"
+                        Padding="10,6">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                        <Button Grid.Column="0" Classes="tool" MinWidth="56"
+                                IsVisible="{Binding HasImage}"
+                                Click="OnFitToViewClick"
+                                Content="{Binding #Crop.DisplayPercent, StringFormat='{}{0} %'}">
+                            <ToolTip.Tip>
+                                <StackPanel Spacing="4" MaxWidth="280">
+                                    <TextBlock FontWeight="SemiBold" Text="Zoom" />
+                                    <TextBlock TextWrapping="Wrap" Text="Strg + Mausrad über dem Bild zoomt um den Mauszeiger." />
+                                    <TextBlock TextWrapping="Wrap" Text="Im Zoom verschieben: mittlere Maustaste ziehen, Leertaste + Ziehen oder Mausrad (mit Umschalt waagerecht)." />
+                                    <TextBlock TextWrapping="Wrap" Text="Klick hier oder Strg+0: einpassen · Strg+1: 100 %" />
+                                </StackPanel>
+                            </ToolTip.Tip>
+                        </Button>
+
+                        <Rectangle Grid.Column="1" Width="1" Margin="10,4"
+                                   Fill="{DynamicResource BorderBrush2}" />
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                            <Button Classes="tool" Content="↶  Rückgängig"
+                                    Command="{Binding UndoCommand}"
+                                    ToolTip.Tip="Letzten Schritt zurücknehmen (Strg+Z). Nach einem Zuschnitt kommt der Rahmen wieder, zum Nachjustieren." />
+                            <Button Classes="tool" Content="↷  Wiederholen"
+                                    Command="{Binding RedoCommand}"
+                                    ToolTip.Tip="Zurückgenommenen Schritt erneut ausführen (Strg+Y)." />
+
+                            <Rectangle Width="1" Margin="8,4" Fill="{DynamicResource BorderBrush2}" />
+
+                            <Button Classes="icon" Content="⇄" Command="{Binding FlipHorizontalCommand}"
+                                    ToolTip.Tip="Waagerecht spiegeln (links ↔ rechts). Rückgängig mit Strg+Z." />
+                        </StackPanel>
+
+                        <ToggleButton Grid.Column="4" Classes="chain" Width="NaN" Padding="12,5"
+                                      Content="◧  Vorher / Nachher" FontSize="12" />
+                    </Grid>
+                </Border>
+
+                <!-- Leinwand: Auswahlrahmen erscheint erst beim Aufziehen -->
+                <Border Background="{DynamicResource CanvasBrush}">
+                    <Grid>
+                        <c:CropView x:Name="Crop"
+                                    IsVisible="{Binding HasImage}"
+                                    Source="{Binding Preview}"
+                                    Selection="{Binding CropSelection}"
+                                    AspectRatio="{Binding AspectRatio}"
+                                    SelectionRadius="{Binding CornerRadius}"
+                                    CropCommand="{Binding CropToSelectionCommand}" />
+
+                        <!-- Leerer Zustand: große Drop-Zone -->
+                        <Grid IsVisible="{Binding !HasImage}"
+                              Margin="40" MaxWidth="560" MaxHeight="360">
+                            <Rectangle RadiusX="16" RadiusY="16"
+                                       Fill="{DynamicResource SurfaceBrush}"
+                                       Stroke="{DynamicResource BorderStrongBrush}"
+                                       StrokeThickness="2" StrokeDashArray="4,3" />
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                                <TextBlock Text="🖼" FontSize="44" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource TextMutedBrush}" />
+                                <TextBlock Text="Bilder hierher ziehen" FontSize="17" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Classes="hint" HorizontalAlignment="Center" TextAlignment="Center"
+                                           Text="Einzelne Bilder, mehrere auf einmal oder einen ganzen Ordner." />
+                                <TextBlock Classes="hint" HorizontalAlignment="Center" TextAlignment="Center"
+                                           Text="{Binding SupportedFormatsSummary}" />
+                                <Button Classes="primary" HorizontalAlignment="Center" Margin="0,8,0,0"
+                                        Content="Bilder auswählen…" Click="OnOpenFilesClick" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Drehen: gebogene Pfeile oben in den Ecken der Vorschau.
+                             Pfadform nach den Lucide-Icons rotate-ccw/rotate-cw (ISC-Lizenz). -->
+                        <Button Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                IsVisible="{Binding HasImage}"
+                                Command="{Binding RotateLeftCommand}"
+                                ToolTip.Tip="90° nach links drehen (gegen den Uhrzeigersinn). Rückgängig mit Strg+Z.">
+                            <Path Data="M 3,12 A 9,9 0 1 0 12,3 A 9.75,9.75 0 0 0 5.26,5.74 L 3,8 M 3,3 L 3,8 L 8,8" />
+                        </Button>
+                        <Button Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                IsVisible="{Binding HasImage}"
+                                Command="{Binding RotateRightCommand}"
+                                ToolTip.Tip="90° nach rechts drehen (im Uhrzeigersinn). Rückgängig mit Strg+Z.">
+                            <Path Data="M 21,12 A 9,9 0 1 1 12,3 A 9.75,9.75 0 0 1 18.74,5.74 L 21,8 M 21,3 L 21,8 L 16,8" />
+                        </Button>
+
+                        <!-- Hinweis über dem Bild -->
+                        <Border VerticalAlignment="Top" HorizontalAlignment="Center"
+                                Margin="0,10,0,0" Padding="12,5"
+                                IsVisible="{Binding HasImage}"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}"
+                                BorderThickness="1" CornerRadius="999" Opacity="0.92"
+                                IsHitTestVisible="False">
+                            <TextBlock Classes="hint"
+                                       Text="Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt" />
+                        </Border>
+
+                        <!-- Ladeanzeige -->
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
+                                     VerticalAlignment="Top" Height="3" MinHeight="3"
+                                     CornerRadius="0" />
+
+                        <!-- Wird beim Hineinziehen von Dateien eingeblendet -->
+                        <Grid x:Name="DropOverlay" IsVisible="False" IsHitTestVisible="False"
+                              Margin="12" Opacity="0.95">
+                            <Rectangle RadiusX="14" RadiusY="14"
+                                       Fill="{DynamicResource AccentSoftBrush}"
+                                       Stroke="{DynamicResource AccentBrush}"
+                                       StrokeThickness="2" StrokeDashArray="4,3" />
+                            <TextBlock Text="Loslassen zum Öffnen" FontSize="18" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource AccentBrush}" />
+                        </Grid>
+                    </Grid>
+                </Border>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

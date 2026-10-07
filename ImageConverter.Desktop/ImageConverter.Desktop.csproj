@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <!--If you are willing to use platform-specific APIs, use conditional compilation.
+        See https://docs.avaloniaui.net/docs/guides/platforms/platform-specific-code/dotnet for more details.-->
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+
+        <AssemblyName>ImageConverter</AssemblyName>
+        <RootNamespace>ImageConverter.Desktop</RootNamespace>
+        <Company>ImageConverter</Company>
+        <Product>ImageConverter</Product>
+        <RuntimeIdentifiers>win-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <!-- Self-contained Single-File fuer Portable-exe und AppImage.
+             InvariantGlobalization bleibt FALSE - wir brauchen Kulturen fuer die Lokalisierung. -->
+        <SelfContained>true</SelfContained>
+        <PublishSingleFile>true</PublishSingleFile>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+        <InvariantGlobalization>false</InvariantGlobalization>
+        <DebugType>none</DebugType>
+        <!-- PublishTrimmed vorerst aus: der ViewLocator nutzt Reflection.
+             Erst messen, dann aktivieren. -->
+        <PublishTrimmed>false</PublishTrimmed>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Desktop"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ImageConverter.Ui\ImageConverter.Ui.csproj"/>
+    </ItemGroup>
+</Project>
