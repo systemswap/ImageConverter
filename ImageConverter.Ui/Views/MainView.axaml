@@ -409,6 +409,10 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
+                    <!-- ============================== KI (eigenes Modul, Ordner Ai/) — vor dem Schärfen,
+                         das als letzter Schritt auf das KI-Ergebnis wirkt -->
+                    <ai:AiPanel DataContext="{Binding Ai}" />
+
                     <!-- ============================== Bildverbesserung -->
                     <HeaderedContentControl Header="BILDVERBESSERUNG">
                         <StackPanel>
@@ -437,9 +441,6 @@
                             </Grid>
                         </StackPanel>
                     </HeaderedContentControl>
-
-                    <!-- ============================== KI (eigenes Modul, Ordner Ai/) -->
-                    <ai:AiPanel DataContext="{Binding Ai}" />
 
                     <!-- ============================== Metadaten und Farbe -->
                     <HeaderedContentControl Header="METADATEN &amp; FARBE">
