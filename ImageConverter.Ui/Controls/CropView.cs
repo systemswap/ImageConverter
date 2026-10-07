@@ -66,6 +66,27 @@ public sealed class CropView : Control
             cmd.Execute(null);
     }
 
+    /// <summary>Echte Bildgröße in Pixeln; die Auswahl rechnet damit, auch wenn
+    /// <see cref="Source"/> nur eine verkleinerte Vorschau ist.</summary>
+    public static readonly StyledProperty<PixelSize> DocumentSizeProperty =
+        AvaloniaProperty.Register<CropView, PixelSize>(nameof(DocumentSize));
+
+    public PixelSize DocumentSize
+    {
+        get => GetValue(DocumentSizeProperty);
+        set => SetValue(DocumentSizeProperty, value);
+    }
+
+    /// <summary>Jede Änderung passt die Ansicht neu ein (neues Bild, Zuschnitt …).</summary>
+    public static readonly StyledProperty<object?> ViewResetTokenProperty =
+        AvaloniaProperty.Register<CropView, object?>(nameof(ViewResetToken));
+
+    public object? ViewResetToken
+    {
+        get => GetValue(ViewResetTokenProperty);
+        set => SetValue(ViewResetTokenProperty, value);
+    }
+
     /// <summary>Bildgröße des Platzhalters, solange kein Bild geladen ist.</summary>
     public static readonly StyledProperty<PixelSize> PlaceholderSizeProperty =
         AvaloniaProperty.Register<CropView, PixelSize>(nameof(PlaceholderSize), new PixelSize(4000, 3000));
@@ -210,7 +231,12 @@ public sealed class CropView : Control
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
 
-    private PixelSize ImageSize => Source?.PixelSize ?? PlaceholderSize;
+    /// <summary>
+    /// Bildgröße für Auswahl und Zoom. Die angezeigte Bitmap kann kleiner sein
+    /// (Vorschau) — sie wird dann auf diese Fläche gestreckt.
+    /// </summary>
+    private PixelSize ImageSize =>
+        DocumentSize is { Width: > 0, Height: > 0 } doc ? doc : Source?.PixelSize ?? PlaceholderSize;
 
     // ------------------------------------------------------------ Geometrie
 
@@ -218,19 +244,22 @@ public sealed class CropView : Control
     {
         base.OnPropertyChanged(change);
 
-        if (change.Property == SourceProperty || change.Property == PlaceholderSizeProperty)
+        if (change.Property == ViewResetTokenProperty)
         {
-            // Neues Bild (auch nach Zuschnitt/Rückgängig): wieder eingepasst anzeigen
+            // Neuer Bildstand (Laden, Zuschnitt, Drehen, Rückgängig): neu einpassen
             _fitMode = true;
             UpdateGeometry();
+            InvalidateVisual();
         }
-        else if (change.Property == BoundsProperty)
+        else if (change.Property == BoundsProperty
+                 || change.Property == SourceProperty
+                 || change.Property == DocumentSizeProperty
+                 || change.Property == PlaceholderSizeProperty)
         {
+            // Nur die Vorschau-Bitmap gewechselt (z. B. Schärfe-Regler): Zoom und
+            // Auswahl bleiben, wo sie sind.
             UpdateGeometry();
         }
-
-        if (change.Property == SourceProperty)
-            Selection = null;
 
         if (change.Property == AspectRatioProperty && Selection is { } sel && AspectRatio > 0)
             Selection = Round(ReshapeAroundCenter(sel, AspectRatio));
@@ -742,7 +771,7 @@ public sealed class CropView : Control
             // Ab 200 % Pixel hart zeigen (zum Prüfen), darunter weich interpolieren
             using (context.PushRenderOptions(new RenderOptions
                    {
-                       BitmapInterpolationMode = _scale >= 2
+                       BitmapInterpolationMode = _imageRect.Width / bmp.PixelSize.Width >= 2
                            ? BitmapInterpolationMode.None
                            : BitmapInterpolationMode.HighQuality,
                    }))

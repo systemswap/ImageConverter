@@ -2,17 +2,27 @@ using ImageMagick;
 
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>Ein geladenes Bild als rohe 8-Bit-BGRA-Pixel (nicht vormultipliziert), fertig für die Anzeige.</summary>
+/// <summary>
+/// Ein geladenes Bild: bereits richtig herum gedreht und in sRGB.
+/// Gehört dem Aufrufer — nach Gebrauch freigeben.
+/// </summary>
 public sealed record LoadedImage(
-    int Width,
-    int Height,
-    byte[] Bgra,
+    MagickImage Image,
     string FormatName,
     long FileBytes,
-    bool HasAlpha);
+    double Dpi) : IDisposable
+{
+    public int Width => (int)Image.Width;
+    public int Height => (int)Image.Height;
+
+    public void Dispose() => Image.Dispose();
+}
 
 public static class ImageLoader
 {
+    /// <summary>DPI, wenn die Datei keine Angabe enthält (Konvention von Referenzwerkzeug und Co.).</summary>
+    public const double DefaultDpi = 72;
+
     /// <summary>
     /// Lädt ein Bild über ImageMagick. Die Datei wird asynchron gelesen; Dekodieren,
     /// Drehen und Farbumrechnung sind CPU-Arbeit und laufen auf dem Threadpool,
@@ -21,37 +31,45 @@ public static class ImageLoader
     public static Task<LoadedImage> LoadAsync(string path, CancellationToken ct = default) =>
         Task.Run(async () =>
         {
-            using var image = new MagickImage();
-            await image.ReadAsync(path, ct).ConfigureAwait(false);
-            ct.ThrowIfCancellationRequested();
+            var image = new MagickImage();
+            try
+            {
+                await image.ReadAsync(path, ct).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
 
-            var formatName = image.Format.ToString().ToUpperInvariant();
+                var formatName = image.Format.ToString().ToUpperInvariant();
+                var dpi = ReadDpi(image);
 
-            // Handyfotos: EXIF-Drehung in die Pixel übernehmen, damit nichts quer liegt
-            image.AutoOrient();
+                // Handyfotos: EXIF-Drehung in die Pixel übernehmen, damit nichts quer liegt
+                image.AutoOrient();
 
-            // Für die Anzeige in sRGB: eingebettetes Profil (z. B. Adobe RGB) umrechnen,
-            // CMYK ohne Profil wenigstens in RGB bringen.
-            if (image.GetColorProfile() is not null)
-                image.TransformColorSpace(ColorProfiles.SRGB);
-            else if (image.ColorSpace == ColorSpace.CMYK)
-                image.ColorSpace = ColorSpace.sRGB;
+                // In sRGB arbeiten: eingebettetes Profil (z. B. Adobe RGB) umrechnen,
+                // CMYK ohne Profil wenigstens in RGB bringen.
+                if (image.GetColorProfile() is not null)
+                    image.TransformColorSpace(ColorProfiles.SRGB);
+                else if (image.ColorSpace == ColorSpace.CMYK)
+                    image.ColorSpace = ColorSpace.sRGB;
 
-            ct.ThrowIfCancellationRequested();
-
-            var hasAlpha = image.HasAlpha;
-
-            // Rohexport schreibt in der Bittiefe der Datei — ein einfarbiges PNG oder
-            // Schwarzweiß-TIFF käme sonst mit 1 Bit pro Kanal statt 8 heraus.
-            image.Depth = 8;
-            var bgra = image.ToByteArray(MagickFormat.Bgra);
-
-            return new LoadedImage(
-                (int)image.Width,
-                (int)image.Height,
-                bgra,
-                formatName,
-                new FileInfo(path).Length,
-                hasAlpha);
+                ct.ThrowIfCancellationRequested();
+                return new LoadedImage(image, formatName, new FileInfo(path).Length, dpi);
+            }
+            catch
+            {
+                image.Dispose();
+                throw;
+            }
         }, ct);
+
+    private static double ReadDpi(MagickImage image)
+    {
+        var density = image.Density;
+        if (density.X <= 0) return DefaultDpi;
+        return density.Units switch
+        {
+            DensityUnit.PixelsPerCentimeter => Math.Round(density.X * 2.54),
+            DensityUnit.PixelsPerInch => Math.Round(density.X),
+            // Ohne Einheit ist der Wert nicht verlässlich (oft 1 oder 72)
+            _ => DefaultDpi,
+        };
+    }
 }

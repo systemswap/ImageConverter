@@ -171,6 +171,11 @@
                                 </ToggleButton>
                             </Grid>
 
+                            <!-- Hinweis, wenn das Ziel größer ist als das Original -->
+                            <TextBlock Classes="hint" Margin="88,-4,0,10"
+                                       IsVisible="{Binding HasUpscaleHint}"
+                                       Text="{Binding UpscaleHint}" />
+
                             <!-- Filter: jeder Eintrag erklärt sich im Tooltip -->
                             <Grid Classes="row" ColumnDefinitions="88,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Filter" />
@@ -204,7 +209,7 @@
                                           ToolTip.Tip="Kleine Bilder werden nie größer gerechnet — Vergrößern erfindet keine Details, es macht nur unscharf." />
                                 <CheckBox IsChecked="{Binding GammaCorrect}"
                                           Content="Gamma-korrekt skalieren" FontSize="12"
-                                          ToolTip.Tip="Rechnet so, wie das Auge Helligkeit wahrnimmt. Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Kostet etwas Zeit, sieht fast immer besser aus." />
+                                          ToolTip.Tip="Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus." />
                             </StackPanel>
                         </StackPanel>
                     </HeaderedContentControl>
@@ -294,19 +299,28 @@
                             <Grid Classes="row" ColumnDefinitions="88,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="DPI" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding Dpi}"
-                                               Minimum="1" Maximum="2400" />
+                                               Minimum="1" Maximum="2400"
+                                               ToolTip.Tip="Bis 2400 eintippbar, z. B. für Scans von Strichzeichnungen." />
                                 <TextBlock Grid.Column="2" Classes="label" Text="ppi" Margin="7,0,0,0" />
                             </Grid>
 
+                            <!-- Regler 72–1200, mit Marken bei den üblichen Werten; Feld und Regler folgen einander -->
+                            <Slider Minimum="72" Maximum="1200" Margin="88,-6,0,0"
+                                    SmallChange="1" LargeChange="50"
+                                    Ticks="72,96,150,300,600,1200" TickPlacement="BottomRight"
+                                    Value="{Binding Dpi}"
+                                    ToolTip.Tip="72–96: Bildschirm · 150: einfacher Druck · 300: Fotodruck · 600: Kunstdruck · 1200: Strichzeichnungen" />
+                            <TextBlock Classes="hint" Margin="88,0,0,10" Text="{Binding DpiPurpose}" />
+
                             <StackPanel Spacing="6" Margin="0,0,0,8">
-                                <RadioButton GroupName="dpi" FontSize="12"
-                                             IsChecked="{Binding DpiMetadataOnly}"
-                                             Content="Nur Metadaten ändern"
-                                             ToolTip.Tip="Die Pixel bleiben wie sie sind. Es ändert sich nur, wie groß das Bild beim Drucken herauskommt." />
                                 <RadioButton GroupName="dpi" FontSize="12"
                                              IsChecked="{Binding !DpiMetadataOnly}"
                                              Content="Pixel neu berechnen"
-                                             ToolTip.Tip="Das Bild wird so umgerechnet, dass es bei dieser DPI die gewünschte Druckgröße hat." />
+                                             ToolTip.Tip="Die Druckgröße bleibt gleich, die Pixelzahl folgt der DPI: mehr DPI = mehr Pixel. Skaliert mit dem gewählten Filter." />
+                                <RadioButton GroupName="dpi" FontSize="12"
+                                             IsChecked="{Binding DpiMetadataOnly}"
+                                             Content="Nur Metadaten ändern"
+                                             ToolTip.Tip="Die Pixel bleiben wie sie sind — verlustfrei. Es ändert sich nur, wie groß das Bild beim Drucken herauskommt." />
                             </StackPanel>
 
                             <TextBlock Classes="hint" Text="{Binding PrintSize}" />
@@ -326,7 +340,7 @@
 
                             <Grid Classes="row" ColumnDefinitions="88,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Radius" />
-                                <Slider Grid.Column="1" Minimum="0.3" Maximum="5"
+                                <Slider Grid.Column="1" Minimum="0.5" Maximum="5"
                                         Value="{Binding SharpenRadius}" />
                                 <TextBlock Grid.Column="2" Classes="value"
                                            Text="{Binding SharpenRadius, StringFormat='{}{0:F1}'}" />
@@ -424,7 +438,10 @@
                         </StackPanel>
 
                         <ToggleButton Grid.Column="4" Classes="chain" Width="NaN" Padding="12,5"
-                                      Content="◧  Vorher / Nachher" FontSize="12" />
+                                      IsChecked="{Binding ShowOriginal}"
+                                      IsEnabled="{Binding HasAdjustments}"
+                                      Content="◧  Vorher / Nachher" FontSize="12"
+                                      ToolTip.Tip="Eingedrückt: Original zeigen. Sonst: Ergebnis mit Größe, Entrauschen und Schärfe — so, wie es exportiert wird." />
                     </Grid>
                 </Border>
 
@@ -433,7 +450,9 @@
                     <Grid>
                         <c:CropView x:Name="Crop"
                                     IsVisible="{Binding HasImage}"
-                                    Source="{Binding Preview}"
+                                    Source="{Binding DisplayBitmap}"
+                                    DocumentSize="{Binding DocumentSize}"
+                                    ViewResetToken="{Binding ViewResetToken}"
                                     Selection="{Binding CropSelection}"
                                     AspectRatio="{Binding AspectRatio}"
                                     SelectionRadius="{Binding CornerRadius}"
@@ -491,6 +510,15 @@
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
                                      VerticalAlignment="Top" Height="3" MinHeight="3"
                                      CornerRadius="0" />
+
+                        <!-- Erscheint nur, wenn eine Vorschau-Berechnung spürbar dauert -->
+                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                Margin="12" Padding="10,4" CornerRadius="999"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                IsVisible="{Binding ShowRendering}" IsHitTestVisible="False">
+                            <TextBlock Classes="hint" Text="Vorschau wird berechnet …" />
+                        </Border>
 
                         <!-- Wird beim Hineinziehen von Dateien eingeblendet -->
                         <Grid x:Name="DropOverlay" IsVisible="False" IsHitTestVisible="False"
