@@ -140,12 +140,8 @@ public partial class MainView : UserControl
         if (_vm?.LastExportFolder is not { } folder || !System.IO.Directory.Exists(folder)) return;
 
         // Dateimanager des Systems: Explorer, Nautilus, Dolphin … über die Standard-Zuordnung
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = OperatingSystem.IsWindows() ? "explorer.exe" : "xdg-open",
-            ArgumentList = { folder },
-            UseShellExecute = false,
-        });
+        if (!ImageConverter.Services.FolderOpener.TryOpen(folder))
+            _vm.ErrorMessage = $"Kein Dateimanager gefunden. Der Ordner ist: {folder}";
     }
 
     // ------------------------------------------------------- Dateidialog

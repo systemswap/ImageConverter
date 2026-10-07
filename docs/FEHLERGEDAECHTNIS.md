@@ -145,3 +145,45 @@ Test oder Nachweis.
   `ImageMagick_PolicyBlocksExternalPrograms`. Von Hand ohne Netz
   (`unshare -rn`) mit protokollierten `getaddrinfo`/`connect`-Aufrufen: ohne
   Richtlinie DNS-Anfrage, mit Richtlinie keine.
+
+## 5. „Ordner öffnen“ stürzte ohne xdg-open ab
+
+- **Entdeckt:** 0.4.17 (Commit `123b17f`, 07.10.2026), bei der Durchsicht für
+  Linux (nicht beim Benutzer aufgetreten). **Behoben:** 0.4.22.
+- **Was:** Die Knöpfe „Ordner öffnen“ (nach dem Export) und „Modellordner
+  öffnen“ (KI) riefen `xdg-open` direkt mit `Process.Start` auf, ohne
+  Fehlerbehandlung. Fehlt `xdg-open` (schlankes Linux, manche Container),
+  wirft das eine `Win32Exception` im Klick-Handler – das Programm stürzt ab.
+- **Wie behoben:** `FolderOpener.TryOpen` probiert `xdg-open`, dann
+  `gio open` (Windows: Explorer, macOS: `open`) und liefert `false`, statt zu
+  werfen; die Oberfläche zeigt dann „Kein Dateimanager gefunden“ mit dem Pfad.
+- **Nicht tun:** wieder `Process.Start` für den Dateimanager ohne
+  Fehlerbehandlung direkt im Klick-Handler.
+- **Wo:** `ImageConverter.Ui/Services/FolderOpener.cs`, Aufrufe in
+  `Views/MainView.axaml.cs` (`OnOpenExportFolderClick`) und
+  `Ai/AiViewModel.cs` (`OpenFolder`).
+- **Test:** `SystemToolsTests.OpenFolder_WithoutFileManager_ReportsInsteadOfCrashing`
+  (leerer `PATH`; zeigt im selben Test, dass der alte direkte Aufruf wirft).
+
+## 6. Druckdialog: konnte bei hängendem Druckdienst einfrieren
+
+- **Entdeckt:** 0.4.17 (Commit `123b17f`, 07.10.2026), bei der Durchsicht für
+  Linux (nicht beim Benutzer aufgetreten). **Behoben:** 0.4.22.
+- **Was:** Der Druckdialog holte die Druckerliste (`lpstat`, unter Windows
+  der Druckdienst) synchron im Konstruktor – die Oberfläche stand, bis die
+  Antwort kam. Zusätzlich las `SystemPrinters.RunWithExit` die Ausgabe mit
+  `ReadToEnd()` *vor* `WaitForExit(15000)`: Hängt CUPS, wartete es
+  unbegrenzt, die 15 Sekunden griffen nie.
+- **Wie behoben:** Druckerliste im Hintergrund (`LoadPrintersAsync`); bis dahin
+  steht „Als PDF speichern“ da, der Standarddrucker wird danach nur
+  vorgewählt, wenn der Benutzer noch nichts anderes gewählt hat. Ausgabe
+  parallel lesen, begrenzt warten, bei Zeitüberschreitung den Prozess beenden
+  und `TimeoutException` werfen (die Aufrufer fangen sie ab).
+- **Nicht tun:** `ReadToEnd()` vor dem begrenzten Warten; Systemabfragen
+  synchron im Konstruktor eines Dialogs.
+- **Wo:** `ImageConverter.Ui/ViewModels/PrintDialogViewModel.cs`
+  (`LoadPrintersAsync`), `ImageConverter.Core/Printing/SystemPrinters.cs`
+  (`RunWithExit`).
+- **Test:** `SystemToolsTests.PrintService_Hanging_TimesOutAndIsStopped`
+  (`sleep 30`, Grenze 300 ms; Gegenprobe mit der alten Reihenfolge: hängt
+  30 s, schlägt fehl).

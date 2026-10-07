@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -37,8 +38,11 @@ public partial class PrintDialogViewModel : ViewModelBase
     {
         _main = main;
 
-        Printers = [new PrinterChoice("Als PDF speichern", null), ..SystemPrinters.List().Select(p => new PrinterChoice(p.ToString(), p))];
-        SelectedPrinter = Printers.Skip(1).FirstOrDefault(p => p.Printer!.IsDefault) ?? Printers[0];
+        // Drucker im Hintergrund holen: lpstat bzw. der Windows-Druckdienst kann dauern oder
+        // hängen. Bis dahin steht „Als PDF speichern" da.
+        Printers = [new PrinterChoice("Als PDF speichern", null)];
+        SelectedPrinter = Printers[0];
+        _ = LoadPrintersAsync();
 
         Papers = PaperSize.Common;
         SelectedPaper = Papers[0];
@@ -61,7 +65,7 @@ public partial class PrintDialogViewModel : ViewModelBase
 
     // ------------------------------------------------------------ Einstellungen
 
-    public IReadOnlyList<PrinterChoice> Printers { get; }
+    public ObservableCollection<PrinterChoice> Printers { get; }
     public IReadOnlyList<PaperSize> Papers { get; }
     public IReadOnlyList<string> Orientations { get; }
     public IReadOnlyList<string> Modes { get; }
@@ -153,6 +157,20 @@ public partial class PrintDialogViewModel : ViewModelBase
     partial void OnCapabilitiesChanged(PrinterCapabilities value) => ApplyCapabilities();
 
     /// <summary>Fähigkeiten im Hintergrund abfragen — unter Linux startet das lpoptions.</summary>
+    private async Task LoadPrintersAsync()
+    {
+        IReadOnlyList<PrinterInfo> found;
+        try { found = await Task.Run(SystemPrinters.List); }
+        catch { return; }
+
+        var choices = found.Select(p => new PrinterChoice(p.ToString(), p)).ToList();
+        foreach (var c in choices) Printers.Add(c);
+
+        // Standarddrucker vorwählen — nur, wenn noch niemand etwas anderes gewählt hat
+        if (SelectedPrinter.IsPdf && choices.FirstOrDefault(c => c.Printer!.IsDefault) is { } standard)
+            SelectedPrinter = standard;
+    }
+
     private async Task LoadCapabilitiesAsync(PrinterChoice choice)
     {
         ApplyCapabilities();

@@ -287,7 +287,7 @@ public static class SystemPrinters
 
     private static string Run(string file, string args) => RunWithExit(file, args.Split(' ')).Output;
 
-    private static (int Code, string Output) RunWithExit(string file, IEnumerable<string> args)
+    internal static (int Code, string Output) RunWithExit(string file, IEnumerable<string> args, int timeoutMs = 15000)
     {
         var psi = new ProcessStartInfo(file)
         {
@@ -300,9 +300,15 @@ public static class SystemPrinters
         psi.Environment["LC_ALL"] = "C";
 
         using var p = Process.Start(psi) ?? throw new InvalidOperationException($"{file} ließ sich nicht starten.");
-        var stdout = p.StandardOutput.ReadToEnd();
-        var stderr = p.StandardError.ReadToEnd();
-        p.WaitForExit(15000);
-        return (p.ExitCode, stdout + stderr);
+        // Erst parallel lesen, dann begrenzt warten: ReadToEnd vor dem Warten blockiert
+        // unbegrenzt, wenn der Druckdienst hängt.
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
+        if (!p.WaitForExit(timeoutMs))
+        {
+            try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            throw new TimeoutException($"{file} antwortet nicht.");
+        }
+        return (p.ExitCode, stdout.Result + stderr.Result);
     }
 }

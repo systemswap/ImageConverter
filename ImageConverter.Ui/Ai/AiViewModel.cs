@@ -64,12 +64,8 @@ public partial class AiViewModel : ViewModelBase
         var folder = Store.DownloadFolder;   // legt ihn bei Bedarf an
         Directory.CreateDirectory(folder);
         WatchFolders();
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = OperatingSystem.IsWindows() ? "explorer.exe" : "xdg-open",
-            ArgumentList = { folder },
-            UseShellExecute = false,
-        });
+        if (!ImageConverter.Services.FolderOpener.TryOpen(folder))
+            Status = $"Kein Dateimanager gefunden. Der Ordner ist: {folder}";
         OnPropertyChanged(nameof(FolderText));
     }
 
