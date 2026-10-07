@@ -1,190 +1,157 @@
 <#
 .SYNOPSIS
-    Baut ImageConverter fuer Windows und Linux nach .\published\.
+    Baut ImageConverter unter Windows nach .\published\ - Pendant zu publish.sh.
 
 .DESCRIPTION
-    Legt neben der Solution einen Ordner "published" an, darin je Zielplattform
-    einen Unterordner:
+    Legt dieselben Ordner an wie publish.sh:
 
-        published\windows\   ImageConverter.exe   (portabel, self-contained)
-        published\linux\     ImageConverter       (self-contained)
-                             einrichten.sh        legt .desktop an -> Rechtsklick
-                             deinstallieren.sh
-                             imageconverter.png
-                             LIESMICH.txt
+        published\windows-x64\   ImageConverter.exe   eine Datei: Programm, .NET und Avalonia
+                                 Tools\ImageMagick\   ImageMagick mit Lizenztexten
+                                 Tools\OnnxRuntime\   ONNX Runtime mit Lizenztexten
+                                 einrichten.ps1       Rechtsklick "Mit ImageConverter oeffnen"
+        published\linux-x64\     ImageConverter       Linux-Programm als eine Datei (ohne AppImage -
+                                                      die baut nur publish.sh unter Linux)
+        published\ImageConverter-windows-x64.zip
+
+    Fremde native Bibliotheken liegen nicht in der Programmdatei, sondern je in einem
+    eigenen Ordner daneben (Build-Target in ImageConverter.Desktop.csproj). Heruntergeladene
+    KI-Modelle (KI-Modelle\ neben dem Programm) bleiben bei jedem Bau stehen und kommen nicht
+    ins Paket. Jedes Ziel loescht nur seine eigene Ausgabe.
 
 .PARAMETER Target
-    windows, linux oder all (Standard).
+    windows (Standard), linux oder beides.
 
-.PARAMETER Arch
-    Nur fuer Linux: x64 (Standard) oder arm64.
+.PARAMETER Einzeln
+    Alle Bibliotheken lose im Ordner statt einer Datei (zur Fehlersuche).
 
 .EXAMPLE
     .\publish.ps1
-    .\publish.ps1 -Target linux -Arch arm64
+    .\publish.ps1 -Target beides
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'windows', 'linux')]
-    [string]$Target = 'all',
+    [ValidateSet('windows', 'linux', 'beides')]
+    [string]$Target = 'windows',
 
-    [ValidateSet('x64', 'arm64')]
-    [string]$Arch = 'x64',
-
-    [switch]$KeepOld
+    [switch]$Einzeln
 )
 
 $ErrorActionPreference = 'Stop'
 
+# Keine Nutzungsdaten an Microsoft (.NET, ONNX Runtime) oder Avalonia senden.
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+$env:AVALONIA_TELEMETRY_OPTOUT = '1'
+$env:ORT_DISABLE_TELEMETRY = '1'
+$env:DO_NOT_TRACK = '1'
+$env:DOTNET_NOLOGO = '1'
+
 $root      = $PSScriptRoot
 $project   = Join-Path $root 'ImageConverter.Desktop\ImageConverter.Desktop.csproj'
 $solution  = Join-Path $root 'ImageConverter.sln'
-$publishIn = Join-Path $root 'published'
-$iconSrc   = Join-Path $root 'ImageConverter.Ui\Assets\Icon.png'
-
-if (-not (Test-Path $project)) {
-    throw "Projekt nicht gefunden: $project"
-}
+$outDir    = Join-Path $root 'published'
+$cacheDir  = Join-Path $env:LOCALAPPDATA 'imageconverter-build'
+$workDir   = Join-Path $cacheDir 'publish'
+$artifacts = Join-Path $cacheDir 'artifacts'
+$nugetDir  = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget\packages' }
+$single    = if ($Einzeln) { 'false' } else { 'true' }
 
 function Write-Step([string]$text) {
     Write-Host ''
     Write-Host "==> $text" -ForegroundColor Cyan
 }
 
-# --- Version aus Directory.Build.props (zentrale Stelle für alle Projekte) ---
-$version = '0.0.0'
-$propsXml = [xml](Get-Content (Join-Path $root 'Directory.Build.props'))
-$versionNode = $propsXml.Project.PropertyGroup.Version | Where-Object { $_ }
-if ($versionNode) { $version = ([string]$versionNode).Trim() }
+[xml]$props    = Get-Content (Join-Path $root 'Directory.Build.props')
+[xml]$packages = Get-Content (Join-Path $root 'Directory.Packages.props')
+$version = ([string]($props.Project.PropertyGroup.Version | Where-Object { $_ })).Trim()
+function Get-PackageVersion([string]$name) {
+    ($packages.Project.ItemGroup.PackageVersion | Where-Object { $_.Include -eq $name }).Version
+}
+$magickVersion = Get-PackageVersion 'Magick.NET-Q16-AnyCPU'
+$onnxVersion   = Get-PackageVersion 'Microsoft.ML.OnnxRuntime'
 
 Write-Step "ImageConverter $version"
 
-# --- Tests zuerst: ein kaputter Build soll nicht im published-Ordner landen ---
+if (Test-Path $workDir) { Remove-Item $workDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $workDir, $outDir | Out-Null
+
+# --- Tests zuerst: ein kaputter Stand soll nicht im published-Ordner landen ---
 Write-Step 'Tests'
-dotnet test $solution -c Release --nologo
-if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen - Publish abgebrochen.' }
+dotnet test $solution -c Release --nologo -p:UseArtifactsOutput=true "-p:ArtifactsPath=$artifacts"
+if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen - nichts veroeffentlicht.' }
 
-New-Item -ItemType Directory -Force -Path $publishIn | Out-Null
-
-# Nur die Ordner leeren, die dieser Lauf auch neu baut - sonst wuerde
-# "-Target linux" das fertige Windows-Paket mitloeschen.
-if (-not $KeepOld) {
-    $targets = if ($Target -eq 'all') { @('windows', 'linux') } else { @($Target) }
-    foreach ($name in $targets) {
-        $dir = Join-Path $publishIn $name
-        if (Test-Path $dir) {
-            Write-Step "Alten Ordner entfernen: $name"
-            Remove-Item $dir -Recurse -Force
-        }
-    }
+# Leert einen Ausgabeordner bis auf die heruntergeladenen KI-Modelle.
+function Clear-ProgramFolder([string]$dest) {
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    Get-ChildItem $dest -Force | Where-Object { $_.Name -ne 'KI-Modelle' } | Remove-Item -Recurse -Force
 }
 
-function Publish-Runtime {
-    param([string]$Rid, [string]$OutDir)
+function Publish-Runtime([string]$rid, [string]$dest) {
+    dotnet publish $project -c Release -r $rid --self-contained true --nologo `
+        "-p:PublishSingleFile=$single" `
+        "-p:IncludeNativeLibrariesForSelfExtract=$single" `
+        "-p:EnableCompressionInSingleFile=$single" `
+        -p:DebugType=None -p:DebugSymbols=false `
+        -p:UseArtifactsOutput=true "-p:ArtifactsPath=$artifacts" `
+        -o $dest
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish fuer $rid fehlgeschlagen." }
+    Get-ChildItem $dest -Recurse -Filter *.pdb | Remove-Item -Force
+}
 
-    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    dotnet publish $project `
-        -c Release `
-        -r $Rid `
-        --self-contained true `
-        -p:PublishSingleFile=true `
-        -p:Version=$version `
-        -o $OutDir `
-        --nologo
-    if ($LASTEXITCODE -ne 0) { throw "dotnet publish fuer $Rid fehlgeschlagen." }
+# Lizenz, Hinweise auf fremde Bestandteile und deren Lizenztexte neben das Programm.
+function Copy-Notices([string]$dest) {
+    Copy-Item (Join-Path $root 'LICENSE') (Join-Path $dest 'LICENSE.txt') -Force
+    Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.md') $dest -Force
+    $licenses = Join-Path $dest 'licenses'
+    if (Test-Path $licenses) { Remove-Item $licenses -Recurse -Force }
+    Copy-Item (Join-Path $root 'packaging\licenses') $licenses -Recurse
+    Copy-Item (Join-Path $nugetDir "magick.net-q16-anycpu\$magickVersion\Notice.txt") (Join-Path $dest 'Tools\ImageMagick\') -Force
+    Copy-Item (Join-Path $nugetDir "microsoft.ml.onnxruntime\$onnxVersion\LICENSE") (Join-Path $dest 'Tools\OnnxRuntime\') -Force
+    Copy-Item (Join-Path $nugetDir "microsoft.ml.onnxruntime\$onnxVersion\ThirdPartyNotices.txt") (Join-Path $dest 'Tools\OnnxRuntime\') -Force
 }
 
 # ------------------------------------------------------------------ Windows
-if ($Target -in @('all', 'windows')) {
-    $winDir = Join-Path $publishIn 'windows'
+if ($Target -in @('windows', 'beides')) {
+    $winDir = Join-Path $outDir 'windows-x64'
     Write-Step "Windows (win-x64) -> $winDir"
-    Publish-Runtime -Rid 'win-x64' -OutDir $winDir
+    $build = Join-Path $workDir 'windows'
+    Publish-Runtime 'win-x64' $build
+    Clear-ProgramFolder $winDir
+    Copy-Item (Join-Path $build '*') $winDir -Recurse -Force
+    Copy-Notices $winDir
+    Copy-Item (Join-Path $root 'packaging\windows\einrichten.ps1') $winDir -Force
 
-    # Die .pdb braucht im Release-Paket niemand.
-    Get-ChildItem $winDir -Filter *.pdb -ErrorAction SilentlyContinue | Remove-Item -Force
-
-    $winTemplate = Join-Path $root 'packaging\windows\einrichten.ps1'
-    if (-not (Test-Path $winTemplate)) { throw "Vorlage fehlt: $winTemplate" }
-    Copy-Item $winTemplate (Join-Path $winDir 'einrichten.ps1') -Force
-
-    @"
-ImageConverter $version - Windows (portabel)
-===========================================
-
-ImageConverter.exe laeuft ohne Installation, .NET muss nicht vorhanden sein.
-
-Rechtsklick-Integration ("Oeffnen mit ImageConverter"):
-
-  Windows registriert "Oeffnen mit" automatisch, sobald du die exe einmal
-  ueber Rechtsklick > Oeffnen mit > Andere App auswaehlen einem Bild
-  zugeordnet hast.
-
-  Dauerhaft fuer alle Bildtypen, ohne Adminrechte:
-
-      .\einrichten.ps1
-
-  Rueckgaengig:
-
-      .\einrichten.ps1 -Uninstall
-"@ | Set-Content (Join-Path $winDir 'LIESMICH.txt') -Encoding UTF8
+    $zip = Join-Path $outDir 'ImageConverter-windows-x64.zip'
+    if (Test-Path $zip) { Remove-Item $zip -Force }
+    $items = Get-ChildItem $winDir | Where-Object { $_.Name -ne 'KI-Modelle' }
+    Compress-Archive -Path $items.FullName -DestinationPath $zip
 }
 
 # -------------------------------------------------------------------- Linux
-if ($Target -in @('all', 'linux')) {
-    $rid      = "linux-$Arch"
-    $linuxDir = Join-Path $publishIn 'linux'
-    Write-Step "Linux ($rid) -> $linuxDir"
-    Publish-Runtime -Rid $rid -OutDir $linuxDir
+if ($Target -in @('linux', 'beides')) {
+    $linuxDir = Join-Path $outDir 'linux-x64'
+    Write-Step "Linux (linux-x64, ohne AppImage) -> $linuxDir"
+    $build = Join-Path $workDir 'linux'
+    Publish-Runtime 'linux-x64' $build
+    Clear-ProgramFolder $linuxDir
+    Copy-Item (Join-Path $build '*') $linuxDir -Recurse -Force
+    Copy-Notices $linuxDir
 
-    Get-ChildItem $linuxDir -Filter *.pdb -ErrorAction SilentlyContinue | Remove-Item -Force
-
-    if (Test-Path $iconSrc) {
-        Copy-Item $iconSrc (Join-Path $linuxDir 'imageconverter.png') -Force
-    } else {
-        Write-Warning "Icon nicht gefunden: $iconSrc - einrichten.sh laeuft trotzdem."
-    }
-
-    # Die Setup-Skripte liegen als Vorlage im Repo und werden mitkopiert.
-    $templates = Join-Path $root 'packaging\linux'
-    foreach ($name in @('einrichten.sh', 'deinstallieren.sh')) {
-        $src = Join-Path $templates $name
-        if (-not (Test-Path $src)) { throw "Vorlage fehlt: $src" }
-        $dest = Join-Path $linuxDir $name
-        # LF-Zeilenenden erzwingen, sonst scheitert /bin/sh an \r
-        $text = (Get-Content $src -Raw) -replace "`r`n", "`n"
+    $share = Join-Path $linuxDir 'share'
+    New-Item -ItemType Directory -Force -Path "$share\icons\hicolor\256x256\apps", "$share\applications" | Out-Null
+    Copy-Item (Join-Path $root 'ImageConverter.Ui\Assets\Icon.png') "$share\icons\hicolor\256x256\apps\imageconverter.png" -Force
+    # LF-Zeilenenden erzwingen, sonst scheitern Skript und Menueintrag unter Linux an \r
+    foreach ($name in @('einrichten.sh', 'entfernen.sh', 'ImageConverter.desktop')) {
+        $text = (Get-Content (Join-Path $root "packaging\linux\$name") -Raw) -replace "`r`n", "`n"
+        $dest = if ($name -like '*.desktop') { "$share\applications\$name" } else { Join-Path $linuxDir $name }
         [System.IO.File]::WriteAllText($dest, $text, (New-Object System.Text.UTF8Encoding $false))
     }
-
-    @"
-ImageConverter $version - Linux (self-contained)
-===============================================
-
-Kein .NET noetig. Erst ausfuehrbar machen, dann einrichten:
-
-    chmod +x ImageConverter einrichten.sh deinstallieren.sh
-    ./einrichten.sh
-
-einrichten.sh legt an:
-
-    ~/.local/share/imageconverter/           Programm und Icon
-    ~/.local/share/applications/
-        imageconverter.desktop               Rechtsklick > Oeffnen mit
-    ~/.local/share/icons/hicolor/256x256/apps/imageconverter.png
-    ~/.local/bin/imageconverter              Aufruf im Terminal
-
-Danach erscheint ImageConverter in Nautilus/Dolphin/Thunar unter
-"Oeffnen mit". Taucht es nicht auf, einmal abmelden und neu anmelden.
-
-Entfernen:
-
-    ./deinstallieren.sh
-"@ | Set-Content (Join-Path $linuxDir 'LIESMICH.txt') -Encoding UTF8
+    Write-Host 'Unter Linux: chmod +x ImageConverter einrichten.sh entfernen.sh; ./einrichten.sh'
 }
 
 Write-Step 'Fertig'
-Get-ChildItem $publishIn -Directory | ForEach-Object {
-    $size = (Get-ChildItem $_.FullName -Recurse -File | Measure-Object -Sum Length).Sum / 1MB
-    Write-Host ("  {0,-10} {1,7:N1} MB" -f $_.Name, $size)
+Get-ChildItem $outDir -Directory | ForEach-Object {
+    $size = (Get-ChildItem $_.FullName -Recurse -File | Where-Object { $_.FullName -notlike '*\KI-Modelle\*' } | Measure-Object -Sum Length).Sum / 1MB
+    Write-Host ("  {0,-12} {1,7:N1} MB" -f $_.Name, $size)
 }
 Write-Host ''
-Write-Host "Ausgabe: $publishIn"
+Write-Host "Ausgabe: $outDir"

@@ -1,8 +1,8 @@
 <Project>
     <!-- Zentrale Versionsnummer für alle Projekte.
          Schema: 0.4.x — die letzte Zahl wird bei jedem Commit um eins erhöht.
-         Erscheint in der Titelleiste, in LIESMICH.txt und im AppImage-Namen. -->
+         Erscheint in der Titelleiste (die AppImage heißt bewusst ohne Nummer). -->
     <PropertyGroup>
-        <Version>0.4.19</Version>
+        <Version>0.4.20</Version>
     </PropertyGroup>
 </Project>
