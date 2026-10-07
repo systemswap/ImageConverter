@@ -18,7 +18,8 @@
     </Application.Resources>
 
     <Application.Styles>
-        <FluentTheme />
+        <!-- Compact: niedrigere Felder und Buttons, wirkt feiner -->
+        <FluentTheme DensityStyle="Compact" />
         <StyleInclude Source="avares://ImageConverter.Ui/Styles/Controls.axaml" />
     </Application.Styles>
 </Application>

@@ -26,10 +26,10 @@
                                     BorderBrush="{DynamicResource BorderBrush2}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="7,7,0,0"
-                                    Padding="14,8">
+                                    Padding="12,6">
                                 <ContentPresenter Name="PART_HeaderPresenter"
                                                   Content="{TemplateBinding Header}"
-                                                  TextElement.FontSize="12"
+                                                  TextElement.FontSize="11"
                                                   TextElement.FontWeight="SemiBold"
                                                   TextElement.Foreground="{DynamicResource TextMutedBrush}" />
                             </Border>
@@ -226,6 +226,62 @@
     <!-- Reihe "Label ... Steuerelement" in den GroupBoxen -->
     <Style Selector="Grid.row">
         <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <!-- ===================================================================
+         Einstellungsspalte links: feiner und ruhiger
+         Kleinere Schrift, niedrigere Felder, engere Zeilen. Gilt nur innerhalb
+         von .settings, damit Kopf- und Fußleiste ihre Größe behalten.
+         =================================================================== -->
+    <Style Selector=".settings Grid.row">
+        <Setter Property="Margin" Value="0,0,0,7" />
+    </Style>
+
+    <Style Selector=".settings TextBlock.label">
+        <Setter Property="FontSize" Value="11.5" />
+    </Style>
+
+    <Style Selector=".settings ComboBox, .settings NumericUpDown, .settings TextBox">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector=".settings ComboBox">
+        <Setter Property="Padding" Value="9,3,6,3" />
+    </Style>
+    <Style Selector=".settings NumericUpDown /template/ TextBox">
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Padding" Value="8,3" />
+    </Style>
+    <Style Selector=".settings TextBox">
+        <Setter Property="Padding" Value="8,3" />
+    </Style>
+
+    <Style Selector=".settings CheckBox, .settings RadioButton">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+
+    <Style Selector=".settings TextBlock.value">
+        <Setter Property="FontSize" Value="11.5" />
+    </Style>
+
+    <Style Selector=".settings TextBlock.hint">
+        <Setter Property="FontSize" Value="10.5" />
+    </Style>
+
+    <!-- Kette etwas kleiner, passend zu den niedrigeren Feldern -->
+    <Style Selector=".settings ToggleButton.chain">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="26" />
+    </Style>
+    <Style Selector=".settings ToggleButton.chain Panel">
+        <Setter Property="RenderTransform" Value="scale(0.82)" />
+    </Style>
+
+    <Style Selector=".settings Button.subtle, .settings Button.primary">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="MinHeight" Value="28" />
     </Style>
 
 </Styles>

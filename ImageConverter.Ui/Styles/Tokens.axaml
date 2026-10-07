@@ -54,6 +54,6 @@
     <!-- Maße -->
     <CornerRadius x:Key="RadiusCard">8</CornerRadius>
     <CornerRadius x:Key="RadiusControl">6</CornerRadius>
-    <Thickness x:Key="CardPadding">14,12,14,14</Thickness>
+    <Thickness x:Key="CardPadding">12,10,12,10</Thickness>
 
 </ResourceDictionary>

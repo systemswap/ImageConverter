@@ -81,25 +81,26 @@
         <!-- ============================================================ -->
         <!-- Hauptbereich: Einstellungen links, Bild rechts               -->
         <!-- ============================================================ -->
-        <Grid ColumnDefinitions="384,Auto,*">
+        <Grid ColumnDefinitions="352,Auto,*">
 
             <!-- Einstellungen links -->
             <ScrollViewer Grid.Column="0"
                           HorizontalScrollBarVisibility="Disabled"
-                          Padding="14,14,10,14">
-                <StackPanel Spacing="12">
+                          Padding="12,12,8,12"
+                          Classes="settings">
+                <StackPanel Spacing="10">
 
                     <!-- ============================== Format -->
                     <HeaderedContentControl Header="FORMAT">
                         <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="88,*">
+                            <Grid Classes="row" ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Format" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding Formats}"
                                           SelectedItem="{Binding SelectedFormat}" />
                             </Grid>
 
-                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Qualität" />
                                 <Slider Grid.Column="1" Minimum="1" Maximum="100"
                                         Value="{Binding Quality}"
@@ -126,7 +127,7 @@
                     <HeaderedContentControl Header="GRÖSSE">
                         <StackPanel>
                             <!-- Breite × Höhe mit Kette: zu = proportional, offen = frei -->
-                            <Grid Classes="row" ColumnDefinitions="88,*,Auto,*,Auto">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Pixel" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding TargetWidth}"
                                                Classes.derived="{Binding KeepAspectRatio}"
@@ -172,12 +173,12 @@
                             </Grid>
 
                             <!-- Hinweis, wenn das Ziel größer ist als das Original -->
-                            <TextBlock Classes="hint" Margin="88,-4,0,10"
+                            <TextBlock Classes="hint" Margin="76,-4,0,10"
                                        IsVisible="{Binding HasUpscaleHint}"
                                        Text="{Binding UpscaleHint}" />
 
                             <!-- Filter: jeder Eintrag erklärt sich im Tooltip -->
-                            <Grid Classes="row" ColumnDefinitions="88,*">
+                            <Grid Classes="row" ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Filter" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding Filters}"
@@ -200,7 +201,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <TextBlock Classes="hint" Margin="88,-4,0,10"
+                            <TextBlock Classes="hint" Margin="76,-4,0,10"
                                        Text="{Binding SelectedFilter.BestFor}" />
 
                             <StackPanel Spacing="6">
@@ -217,7 +218,7 @@
                     <!-- ============================== Zuschnitt -->
                     <HeaderedContentControl x:Name="CropGroup" Header="ZUSCHNITT">
                         <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="88,*">
+                            <Grid Classes="row" ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Verhältnis" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding AspectPresets}"
@@ -242,14 +243,14 @@
 
                             <!-- Auswahl vorhanden -->
                             <StackPanel IsVisible="{Binding HasCropSelection}">
-                                <Grid Classes="row" ColumnDefinitions="88,*,Auto,*">
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Position" />
                                     <NumericUpDown Grid.Column="1" Value="{Binding CropX}" Minimum="0" />
                                     <TextBlock Grid.Column="2" Classes="label" Text="," Margin="7,0" />
                                     <NumericUpDown Grid.Column="3" Value="{Binding CropY}" Minimum="0" />
                                 </Grid>
 
-                                <Grid Classes="row" ColumnDefinitions="88,*,Auto,*">
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Größe" />
                                     <NumericUpDown Grid.Column="1" Value="{Binding CropWidth}" />
                                     <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
@@ -257,7 +258,7 @@
                                 </Grid>
 
                                 <!-- Runde Ecken: Max = halbe längste Seite → Ellipse bzw. Kreis -->
-                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Ecken" />
                                     <Slider Grid.Column="1" Minimum="0"
                                             Maximum="{Binding MaxCornerRadius}"
@@ -280,11 +281,10 @@
                                     <Button Grid.Column="0" Classes="subtle"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                             Command="{Binding ClearSelectionCommand}"
-                                            Content="Auswahl aufheben" FontSize="13" Padding="10,8"
+                                            Content="Auswahl aufheben"
                                             ToolTip.Tip="Rahmen entfernen, das Bild bleibt unverändert (Esc)." />
                                     <Button Grid.Column="2" Classes="primary"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                            Padding="8,8" FontSize="13"
                                             Command="{Binding CropToSelectionCommand}"
                                             Content="Auf Auswahl zuschneiden"
                                             ToolTip.Tip="Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen." />
@@ -296,7 +296,7 @@
                     <!-- ============================== Auflösung und DPI -->
                     <HeaderedContentControl Header="AUFLÖSUNG &amp; DPI">
                         <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="DPI" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding Dpi}"
                                                Minimum="1" Maximum="2400"
@@ -305,12 +305,12 @@
                             </Grid>
 
                             <!-- Regler 72–1200, mit Marken bei den üblichen Werten; Feld und Regler folgen einander -->
-                            <Slider Minimum="72" Maximum="1200" Margin="88,-6,0,0"
+                            <Slider Minimum="72" Maximum="1200" Margin="76,-6,0,0"
                                     SmallChange="1" LargeChange="50"
                                     Ticks="72,96,150,300,600,1200" TickPlacement="BottomRight"
                                     Value="{Binding Dpi}"
                                     ToolTip.Tip="72–96: Bildschirm · 150: einfacher Druck · 300: Fotodruck · 600: Kunstdruck · 1200: Strichzeichnungen" />
-                            <TextBlock Classes="hint" Margin="88,0,0,10" Text="{Binding DpiPurpose}" />
+                            <TextBlock Classes="hint" Margin="76,0,0,10" Text="{Binding DpiPurpose}" />
 
                             <StackPanel Spacing="6" Margin="0,0,0,8">
                                 <RadioButton GroupName="dpi" FontSize="12"
@@ -330,7 +330,7 @@
                     <!-- ============================== Bildverbesserung -->
                     <HeaderedContentControl Header="BILDVERBESSERUNG">
                         <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Schärfen" />
                                 <Slider Grid.Column="1" Minimum="0" Maximum="3"
                                         Value="{Binding SharpenAmount}" />
@@ -338,7 +338,7 @@
                                            Text="{Binding SharpenLabel}" />
                             </Grid>
 
-                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Radius" />
                                 <Slider Grid.Column="1" Minimum="0.5" Maximum="5"
                                         Value="{Binding SharpenRadius}" />
@@ -346,7 +346,7 @@
                                            Text="{Binding SharpenRadius, StringFormat='{}{0:F1}'}" />
                             </Grid>
 
-                            <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Rauschen" />
                                 <Slider Grid.Column="1" Minimum="0" Maximum="3"
                                         Value="{Binding NoiseReduction}" />
@@ -364,14 +364,14 @@
                     <!-- ============================== Metadaten und Farbe -->
                     <HeaderedContentControl Header="METADATEN &amp; FARBE">
                         <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="88,*">
+                            <Grid Classes="row" ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="EXIF" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding MetadataModes}"
                                           SelectedItem="{Binding SelectedMetadataMode}" />
                             </Grid>
 
-                            <Grid ColumnDefinitions="88,*">
+                            <Grid ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="ICC-Profil" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding ColorModes}"
@@ -382,7 +382,7 @@
 
                     <!-- ============================== Ausgabe -->
                     <HeaderedContentControl Header="AUSGABE">
-                        <Grid ColumnDefinitions="88,*">
+                        <Grid ColumnDefinitions="76,*">
                             <TextBlock Grid.Column="0" Classes="label" Text="Dateiname" />
                             <TextBox Grid.Column="1" Text="{Binding NamePattern}"
                                      FontSize="12"
