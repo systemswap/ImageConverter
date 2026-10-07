@@ -29,13 +29,50 @@ public partial class MainViewModel
 
     /// <summary>Ergebnis der Vorschau-Kette; null = nichts zu tun, Original zeigen.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasAdjustments))]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasAdjustments), nameof(CanCompare))]
     public partial Bitmap? AdjustedBitmap { get; set; }
 
-    /// <summary>Vorher/Nachher-Schalter: true = Original zeigen.</summary>
+    /// <summary>
+    /// Vorher/Nachher-Schalter: true = „Vorher“ zeigen — das Bild vor den Bildschritten
+    /// gleicher Form (KI …), ohne Einstellungen wie Größe, Entrauschen, Schärfe.
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(ViewOutputSize))]
     public partial bool ShowOriginal { get; set; }
+
+    partial void OnShowOriginalChanged(bool value)
+    {
+        if (value) _ = LoadBeforeAsync();
+    }
+
+    /// <summary>Anzeige für „Vorher“, wenn es einen früheren Bildstand gibt; sonst gilt <see cref="FullBitmap"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap))]
+    public partial Bitmap? BeforeBitmap { get; set; }
+
+    /// <summary>Gibt es etwas zu vergleichen: Einstellungen oder ein früherer Bildstand (KI …)?</summary>
+    public bool CanCompare => HasAdjustments || FindBeforeImage() is not null;
+
+    private void NotifyCompare()
+    {
+        OnPropertyChanged(nameof(CanCompare));
+        if (ShowOriginal && !CanCompare) ShowOriginal = false;
+    }
+
+    /// <summary>„Vorher“-Bild holen (aus dem Speicher oder einmal umgerechnet).</summary>
+    private async Task LoadBeforeAsync()
+    {
+        if (FindBeforeImage() is not { } before)
+        {
+            BeforeBitmap = null;
+            return;
+        }
+
+        var bitmap = await DisplayBitmapForAsync(before);
+        if (ShowOriginal && ReferenceEquals(FindBeforeImage(), before))
+            BeforeBitmap = bitmap;
+        TrimDisplayCache();
+    }
 
     /// <summary>Maße des Bildes in Pixeln — die Auswahl rechnet immer damit,
     /// auch wenn gerade eine kleinere Vorschau angezeigt wird.</summary>
@@ -74,7 +111,8 @@ public partial class MainViewModel
     /// <summary>Hinweis über dem Bild bei langen Arbeiten (z. B. „KI · 42 % · noch 20 s“); null = keiner.</summary>
     [ObservableProperty] public partial string? ActivityText { get; set; }
 
-    public Bitmap? DisplayBitmap => OverrideBitmap ?? (ShowOriginal || AdjustedBitmap is null ? FullBitmap : AdjustedBitmap);
+    public Bitmap? DisplayBitmap => OverrideBitmap
+        ?? (ShowOriginal ? BeforeBitmap ?? FullBitmap : AdjustedBitmap ?? FullBitmap);
     public bool HasImage => FullBitmap is not null;
     public bool HasAdjustments => AdjustedBitmap is not null;
 
@@ -115,21 +153,7 @@ public partial class MainViewModel
         var w = (int)doc.Width;
         var h = (int)doc.Height;
 
-        Bitmap bitmap;
-        var i = _displayCache.FindIndex(e => ReferenceEquals(e.Doc, doc));
-        if (i >= 0)
-        {
-            var hit = _displayCache[i];
-            _displayCache.RemoveAt(i);
-            _displayCache.Insert(0, hit);
-            bitmap = hit.Bitmap;
-        }
-        else
-        {
-            var bgra = await Task.Run(() => ImageOps.ToDisplayBgra(doc));
-            bitmap = BitmapOps.FromBgra(bgra, w, h);
-            _displayCache.Insert(0, (doc, bitmap, (long)w * h * 4));
-        }
+        var bitmap = await DisplayBitmapForAsync(doc);
 
         // Gleiches Bild, gleiche Größe (Rückgängig eines KI-Schritts …): Zoom und Ausschnitt
         // bleiben — so lässt sich vorher/nachher an derselben Stelle vergleichen
@@ -140,6 +164,30 @@ public partial class MainViewModel
         TrimDisplayCache();
         DocumentSize = new PixelSize(w, h);
         if (!keepView) ViewResetToken = new object();
+
+        // „Vorher“ gehört zum Bildstand — neu bestimmen
+        BeforeBitmap = null;
+        NotifyCompare();
+        if (ShowOriginal) _ = LoadBeforeAsync();
+    }
+
+    /// <summary>Anzeige-Bitmap eines Bildstands — aus dem Speicher oder neu umgerechnet.</summary>
+    private async Task<Bitmap> DisplayBitmapForAsync(MagickImage doc)
+    {
+        var i = _displayCache.FindIndex(e => ReferenceEquals(e.Doc, doc));
+        if (i >= 0)
+        {
+            var hit = _displayCache[i];
+            _displayCache.RemoveAt(i);
+            _displayCache.Insert(0, hit);
+            return hit.Bitmap;
+        }
+
+        int w = (int)doc.Width, h = (int)doc.Height;
+        var bgra = await Task.Run(() => ImageOps.ToDisplayBgra(doc));
+        var bitmap = BitmapOps.FromBgra(bgra, w, h);
+        _displayCache.Insert(0, (doc, bitmap, (long)w * h * 4));
+        return bitmap;
     }
 
     /// <summary>Älteste Einträge freigeben, sobald zu viel Speicher belegt ist — nie das angezeigte Bild.</summary>
@@ -150,7 +198,8 @@ public partial class MainViewModel
         {
             var (_, bitmap, bytes) = _displayCache[i];
             total += bytes;
-            if (i == 0 || total <= DisplayCacheBytes || ReferenceEquals(bitmap, FullBitmap)) continue;
+            if (i == 0 || total <= DisplayCacheBytes
+                || ReferenceEquals(bitmap, FullBitmap) || ReferenceEquals(bitmap, BeforeBitmap)) continue;
 
             bitmap.Dispose();
             _displayCache.RemoveAt(i--);
@@ -163,6 +212,7 @@ public partial class MainViewModel
         var adjusted = AdjustedBitmap;
         FullBitmap = null;
         AdjustedBitmap = null;
+        BeforeBitmap = null;
         adjusted?.Dispose();
 
         foreach (var (_, bitmap, _) in _displayCache) bitmap.Dispose();

@@ -57,7 +57,32 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        NotifyCompare();
     }
+
+    /// <summary>
+    /// Bild für „Vorher“: im Verlauf dieser Datei zurück, solange die Form gleich bleibt —
+    /// also vor KI-Schritten, nicht aber vor einem Zuschnitt oder Drehen (andere Form).
+    /// Ein Vergrößern per KI (gleiches Seitenverhältnis) zählt mit. null: kein früherer Stand.
+    /// </summary>
+    private MagickImage? FindBeforeImage()
+    {
+        if (_history is not { } h || CurrentPath is not { } path) return null;
+
+        var before = h.Current;
+        foreach (var step in _undo)   // neuester zuerst
+        {
+            if (step.FilePath != path || step.Image is not { } image) continue;
+            if (!SameShape(image, before)) break;
+            before = image;
+        }
+
+        return ReferenceEquals(before, h.Current) ? null : before;
+    }
+
+    /// <summary>Gleiches Seitenverhältnis (auf einen Pixel genau).</summary>
+    private static bool SameShape(MagickImage a, MagickImage b) =>
+        Math.Abs((double)a.Width * b.Height - (double)b.Width * a.Height) <= Math.Max(a.Width, b.Width);
 
     private void ClearRedo()
     {

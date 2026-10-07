@@ -524,9 +524,9 @@
 
                         <ToggleButton Grid.Column="4" Classes="chain" Width="NaN" Padding="12,5"
                                       IsChecked="{Binding ShowOriginal}"
-                                      IsEnabled="{Binding HasAdjustments}"
+                                      IsEnabled="{Binding CanCompare}"
                                       Content="◧  Vorher / Nachher" FontSize="12"
-                                      ToolTip.Tip="Eingedrückt: Original zeigen. Sonst: Ergebnis mit Größe, Entrauschen und Schärfe — so, wie es exportiert wird." />
+                                      ToolTip.Tip="Eingedrückt: Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen und Schärfe. Sonst: Ergebnis, so wie es exportiert wird. Zoom und Ausschnitt bleiben beim Umschalten gleich." />
                     </Grid>
                 </Border>
 
