@@ -295,10 +295,12 @@ KI-Entrauschung und -Upscaling · SVG-Rasterung · Wasserzeichen/Rahmen
 
 ## 7. Offene Entscheidungen
 
-1. ~~**Bildbibliothek**~~ — **entschieden: Magick.NET-Q8-AnyCPU 14.17.2** als einzige
+1. ~~**Bildbibliothek**~~ — **entschieden: Magick.NET-Q16-AnyCPU 14.17.2** als einzige
    Bibliothek (alle Formate inkl. ICO/BMP/RAW, Async-I/O mit CancellationToken).
-   Gemessen: +15 MB Linux / +10 MB Windows im Paket. NetVips nur nachrüsten, falls
-   Batch-Läufe mit sehr großen Bildern zu langsam werden.
+   Gemessen: +15 MB Linux / +10 MB Windows im Paket. Erst Q8, dann auf Q16 gewechselt:
+   Q8 behielt beim gamma-korrekten Skalieren nur 6 von 41 dunklen Tonstufen (Banding),
+   Q16 32+; Preis: doppelter Arbeitsspeicher, 30–50 % langsamer. NetVips nur
+   nachrüsten, falls Batch-Läufe mit sehr großen Bildern zu langsam werden.
 2. **Mobile/Browser-Heads jetzt löschen?** (Empfehlung: ja.)
 3. **Flatpak zusätzlich zum AppImage?** (Empfehlung: ja, wegen Rechtsklick.)
 4. **Übersetzungs-Workflow**: `.resx` im Repo vs. gettext/Weblate für Community.

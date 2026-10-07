@@ -10,6 +10,6 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="ImageConverter.Tests" />
-        <PackageReference Include="Magick.NET-Q8-AnyCPU" />
+        <PackageReference Include="Magick.NET-Q16-AnyCPU" />
     </ItemGroup>
 </Project>

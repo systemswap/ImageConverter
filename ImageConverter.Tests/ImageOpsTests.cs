@@ -123,6 +123,32 @@ public class ImageOpsTests
         finally { File.Delete(path); }
     }
 
+    /// <summary>
+    /// Qualitätswächter: Gamma-korrektes Skalieren darf dunkle Tonstufen nicht
+    /// zusammenfallen lassen. Mit Q8 blieben hier nur 6 von 41 übrig (Banding in
+    /// Schatten) — deshalb Q16. Fällt der Test, ist vermutlich wieder Q8 im Spiel.
+    /// </summary>
+    [Fact]
+    public void GammaCorrectResize_KeepsDarkTones()
+    {
+        // 82 × 1: jede Stufe 0–40 doppelt nebeneinander, Box halbiert auf 41 × 1
+        const int levels = 41;
+        var bgra = new byte[levels * 2 * 4];
+        for (var x = 0; x < levels * 2; x++)
+        {
+            var v = (byte)(x / 2);
+            bgra[x * 4] = bgra[x * 4 + 1] = bgra[x * 4 + 2] = v;
+            bgra[x * 4 + 3] = 255;
+        }
+        using var src = ImageOps.FromBgra(bgra, levels * 2, 1);
+        using var small = ImageOps.Resize(src, levels, 1, ResampleFilter.Box, gammaCorrect: true);
+
+        var result = ImageOps.ToBgra(small);
+        var distinct = Enumerable.Range(0, levels).Select(x => result[x * 4]).Distinct().Count();
+
+        Assert.True(distinct >= 38, $"nur {distinct} von {levels} dunklen Stufen erhalten");
+    }
+
     [Fact]
     public void Bgra_RoundTrip_KeepsPixels()
     {

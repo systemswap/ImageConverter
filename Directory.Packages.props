@@ -14,9 +14,10 @@
 
         <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 
-        <!-- Bildverarbeitung: ImageMagick, 8 Bit pro Kanal (halber Speicher ggü. Q16).
+        <!-- Bildverarbeitung: ImageMagick, 16 Bit pro Kanal. Q8 verlor beim gamma-korrekten
+             Skalieren dunkle Tonwerte (6 von 41 Stufen, Q16: 32+). Doppelter Speicher, gleiche Paketgröße.
              Native Bibliothek steckt im Paket, keine Installation auf dem System. -->
-        <PackageVersion Include="Magick.NET-Q8-AnyCPU" Version="14.17.2" />
+        <PackageVersion Include="Magick.NET-Q16-AnyCPU" Version="14.17.2" />
 
         <!-- Test packages -->
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
