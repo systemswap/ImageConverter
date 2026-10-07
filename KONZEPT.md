@@ -280,6 +280,26 @@ Nicht im Hauptbundle, sondern „Modell herunterladen (ca. X MB)" beim ersten Nu
 
 Für v1 reicht klassische Entrauschung — KI ist v2.
 
+### Festgelegt am 07.10.2026 (noch nicht umgesetzt)
+
+**Bedienung im Hauptfenster**
+- Keine Checkbox, sondern ein **Button „KI anwenden“** — läuft nur auf Abruf, nie in der Live-Vorschau.
+- **ComboBox zur Modellwahl** daneben: Allround (Rauschen/Artefakte/Upscale), große Variante,
+  Gesichtsmodelle (GFPGAN/CodeFormer) — angeboten werden nur heruntergeladene Modelle.
+- **Verkettung:** Jeder Lauf wirkt auf das *aktuelle* Bild, also auf das Ergebnis des vorigen
+  KI-Laufs, nicht wieder auf das Original.
+- **Rückgängig/Wiederholen** wie beim Zuschneiden: Ergebnis wird als eigener Schritt im
+  Verlauf zwischengespeichert (Snapshot), Strg+Z/Strg+Y funktionieren.
+- Fortschritt + Abbrechen während der Berechnung (Tiles mit Overlap).
+
+**Modelle verwalten (Menü ☰ oben rechts → Einstellungen, eigener Tab „KI-Modelle“)**
+- Liste aller Modelle mit Zweck, Größe, Lizenz und Status (fehlt / vorhanden).
+- Download per Klick, automatisch von der Quelle — der Nutzer muss nichts suchen.
+- **Fortschrittsanzeige je Modell**, Download jederzeit **abbrechbar** (keine halben Dateien
+  zurücklassen: erst in `.part` schreiben, nach Prüfung umbenennen).
+- Ablage im Ordner **„KI-Modelle“ neben der AppImage bzw. der .exe**; die App erkennt
+  vorhandene Modelle beim Start und nach jedem Download automatisch.
+
 ---
 
 ## 6. Roadmap
