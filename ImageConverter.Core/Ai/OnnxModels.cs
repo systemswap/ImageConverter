@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 using Microsoft.ML.OnnxRuntime;
 
 namespace ImageConverter.Core.Ai;
@@ -27,11 +28,26 @@ public sealed class OnnxSessions : IDisposable
                 }
             }
 
+            EnsureNoTelemetry();
             using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
             session = new InferenceSession(path, options);
             _open[path] = session;
             return session;
         }
+    }
+
+    private static bool _telemetryOff;
+
+    /// <summary>
+    /// Keine Nutzungsdaten an Microsoft: die Variable vor dem Start der Laufzeit (falls
+    /// <see cref="NativeLibraries.Configure"/> nicht lief, z. B. in Tests), danach auch über die API.
+    /// </summary>
+    private static void EnsureNoTelemetry()
+    {
+        if (_telemetryOff) return;
+        NativeLibraries.DisableOnnxTelemetry();
+        OrtEnv.Instance().DisableTelemetryEvents();
+        _telemetryOff = true;
     }
 
     private static bool IsHelper(string path) =>

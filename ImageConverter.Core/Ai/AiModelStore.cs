@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
@@ -20,12 +21,8 @@ public sealed class AiModelStore
     /// <summary>Standard: neben dem Programm, ersatzweise im Benutzerverzeichnis.</summary>
     public static AiModelStore CreateDefault()
     {
-        // In einer AppImage ist AppContext.BaseDirectory das schreibgeschützte, entpackte
-        // Innere. Den Pfad der AppImage-Datei selbst setzt die Laufzeit in $APPIMAGE.
-        var appImage = Environment.GetEnvironmentVariable("APPIMAGE");
-        var baseDir = !string.IsNullOrEmpty(appImage) && Path.GetDirectoryName(appImage) is { Length: > 0 } dir
-            ? dir
-            : AppContext.BaseDirectory;
+        // Bei einer AppImage neben der .AppImage-Datei, nicht im schreibgeschützten Inneren.
+        var baseDir = AppLocations.ProgramFolder;
 
         var fallback = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageConverter", FolderName);

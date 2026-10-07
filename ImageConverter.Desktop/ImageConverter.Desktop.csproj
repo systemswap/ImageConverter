@@ -40,4 +40,27 @@
     <ItemGroup>
         <ProjectReference Include="..\ImageConverter.Ui\ImageConverter.Ui.csproj"/>
     </ItemGroup>
+
+    <!-- Fremde native Bibliotheken nicht in die Programmdatei (EXE/AppImage), sondern je in
+         einen eigenen Ordner daneben: Tools/ImageMagick, Tools/OnnxRuntime. In der Programmdatei
+         bleiben nur Programm, .NET und Avalonia. Gefunden werden sie über
+         Core/Platform/NativeLibraries.cs; die Ordnernamen müssen dazu passen. -->
+    <Target Name="ForeignNativeLibrariesBesideProgram" AfterTargets="ComputeResolvedFilesToPublishList">
+        <ItemGroup>
+            <_ImageMagickNative Include="@(ResolvedFileToPublish)"
+                                Condition="$([System.String]::Copy('%(Filename)').StartsWith('Magick.Native-'))" />
+            <_OnnxRuntimeNative Include="@(ResolvedFileToPublish)"
+                                Condition="('%(Filename)' == 'onnxruntime' Or '%(Filename)' == 'libonnxruntime' Or $([System.String]::Copy('%(Filename)').Contains('onnxruntime_providers_')))
+                                           And ('%(Extension)' == '.dll' Or '%(Extension)' == '.so' Or '%(Extension)' == '.dylib')" />
+            <ResolvedFileToPublish Remove="@(_ImageMagickNative);@(_OnnxRuntimeNative)" />
+            <ResolvedFileToPublish Include="@(_ImageMagickNative)">
+                <RelativePath>Tools/ImageMagick/%(Filename)%(Extension)</RelativePath>
+                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            </ResolvedFileToPublish>
+            <ResolvedFileToPublish Include="@(_OnnxRuntimeNative)">
+                <RelativePath>Tools/OnnxRuntime/%(Filename)%(Extension)</RelativePath>
+                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            </ResolvedFileToPublish>
+        </ItemGroup>
+    </Target>
 </Project>
