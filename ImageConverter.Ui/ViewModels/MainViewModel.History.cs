@@ -19,7 +19,7 @@ namespace ImageConverter.ViewModels;
 public partial class MainViewModel
 {
     /// <summary>Vollständiger Stand aller Einstellungen, die Rückgängig zurückholen kann.</summary>
-    private sealed record SettingsState(
+    internal sealed record SettingsState(
         string SelectedFormat, double Quality, bool Lossless,
         string SelectedSizeUnit, bool KeepAspectRatio, bool WidthIsLeading,
         int TargetWidth, int TargetHeight, double PrintWidthIn, double PrintHeightIn,
@@ -29,7 +29,8 @@ public partial class MainViewModel
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
         double SharpenAmount, double SharpenRadius, double NoiseReduction, bool UseAiDenoise,
         string SelectedMetadataMode, string SelectedColorMode,
-        string OutputFolder, string NamePattern);
+        string OutputFolder, string NamePattern,
+        int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
 
     /// <summary>Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt.</summary>
     private static readonly HashSet<string> TrackedSettings =
@@ -109,7 +110,8 @@ public partial class MainViewModel
             return;
         }
 
-        _undo.Push(new Snapshot(null, null, before));
+        // Im Einzelmodus gehört der Schritt zum aktuellen Bild — Rückgängig springt dorthin
+        _undo.Push(new Snapshot(ApplyToAll ? null : CurrentPath, null, before));
         ClearRedo();
         NotifyUndoRedo();
     }
@@ -124,11 +126,17 @@ public partial class MainViewModel
         SelectedAspectPreset, CropSelection, CornerRadius,
         SharpenAmount, SharpenRadius, NoiseReduction, UseAiDenoise,
         SelectedMetadataMode, SelectedColorMode,
-        OutputFolder, NamePattern);
+        OutputFolder, NamePattern,
+        SourceWidth, SourceHeight);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
     {
+        // Stand für ein anders großes Bild (z. B. „für alle" nach Bildwechsel):
+        // Größe passend umrechnen, statt fremde Pixelmaße zu übernehmen
+        if (s.SourceWidth != SourceWidth || s.SourceHeight != SourceHeight)
+            s = AdaptToImage(s, SourceWidth, SourceHeight);
+
         using (SuppressHistory())
         {
             _isSyncingSize = true;   // nichts nachrechnen — der Stand ist vollständig

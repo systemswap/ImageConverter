@@ -48,7 +48,7 @@ public static class ImageOps
     // gegeneinander gesperrt. Danach ist jede Kopie nur noch in einem Thread.
 
     /// <summary>Thread-sichere Kopie: alle Operationen kopieren über diesen Weg.</summary>
-    internal static MagickImage CloneOf(MagickImage source)
+    public static MagickImage CloneOf(MagickImage source)
     {
         lock (source)
             return (MagickImage)source.Clone();

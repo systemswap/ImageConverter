@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -32,12 +33,25 @@ public partial class MainView : UserControl
         base.OnDataContextChanged(e);
 
         if (_vm is not null)
+        {
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
+            _vm.MultiExportRequested -= OnMultiExportRequested;
+        }
 
         _vm = DataContext as MainViewModel;
 
         if (_vm is not null)
+        {
             _vm.PropertyChanged += OnViewModelPropertyChanged;
+            _vm.MultiExportRequested += OnMultiExportRequested;
+        }
+    }
+
+    /// <summary>Export mehrerer Bilder: eigenes Fenster mit Liste, modal über dem Hauptfenster.</summary>
+    private async Task OnMultiExportRequested(ExportDialogViewModel dialogVm)
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+        await new ExportWindow(dialogVm).ShowDialog(owner);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

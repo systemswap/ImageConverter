@@ -17,7 +17,9 @@ public partial class MainViewModel
     /// (Zuschnitt, Drehen …) ist <see cref="Image"/> das Bild davor und
     /// <see cref="FilePath"/> die Datei; bei reinen Einstellungsänderungen sind beide null.
     /// </summary>
-    private sealed record Snapshot(string? FilePath, MagickImage? Image, SettingsState Settings);
+    private sealed record Snapshot(string? FilePath, MagickImage? Image, SettingsState Settings,
+        bool? ApplyToAll = null, IReadOnlyDictionary<string, SettingsState>? FileSettings = null,
+        SettingsState? Template = null);
 
     /// <summary>Das Bild einer Datei: Original und aktueller Stand.</summary>
     private sealed class EditHistory(MagickImage original)
@@ -136,12 +138,7 @@ public partial class MainViewModel
         CommitPendingSettings();
         if (!_undo.TryPop(out var previous)) return;
 
-        // Gegenstück für Wiederholen: der jetzige Stand, gleicher Art wie der Schritt
-        var settingsNow = CaptureSettings();   // vor dem Bildtausch, der die Größe zurücksetzt
-        var redoImage = await SwapImageAsync(previous);
-        _redo.Push(new Snapshot(previous.FilePath, redoImage, settingsNow));
-
-        ApplySettings(previous.Settings);
+        _redo.Push(await RestoreAsync(previous));
         NotifyUndoRedo();
     }
 
@@ -150,33 +147,57 @@ public partial class MainViewModel
     {
         if (!_redo.TryPop(out var next)) return;
 
-        var settingsNow = CaptureSettings();
-        var undoImage = await SwapImageAsync(next);
-        _undo.Push(new Snapshot(next.FilePath, undoImage, settingsNow));
-
-        ApplySettings(next.Settings);
+        _undo.Push(await RestoreAsync(next));
         NotifyUndoRedo();
     }
 
     /// <summary>
-    /// Bei Bildschritten: zur Datei wechseln, deren Bild tauschen und das bisherige
-    /// zurückgeben. Bei reinen Einstellungsschritten passiert nichts (null).
+    /// Stellt einen Schritt wieder her und liefert sein Gegenstück für den anderen
+    /// Stapel (Rückgängig ↔ Wiederholen) — gleicher Art, mit dem Stand von jetzt.
     /// </summary>
-    private async Task<MagickImage?> SwapImageAsync(Snapshot step)
+    private async Task<Snapshot> RestoreAsync(Snapshot step)
     {
-        if (step.Image is null || step.FilePath is null) return null;
+        // Gehört der Schritt zu einem anderen Bild, erst dorthin wechseln
+        if (step.FilePath is { } path && path != CurrentPath)
+        {
+            var index = _files.IndexOf(path);
+            if (index >= 0) await ShowFileAsync(index);
+        }
 
-        var index = _files.IndexOf(step.FilePath);
-        if (index >= 0 && index != _fileIndex)
-            await ShowFileAsync(index);
+        var settingsNow = CaptureSettings();
 
-        if (!_histories.TryGetValue(step.FilePath, out var h)) return null;
+        // Bildschritt: Bild tauschen
+        MagickImage? imageNow = null;
+        if (step.Image is not null && step.FilePath is not null && _histories.TryGetValue(step.FilePath, out var h))
+        {
+            await StopPreviewAsync();
+            imageNow = h.Current;
+            h.Current = step.Image;
+            if (h == _history) await ShowCurrentAsync();
+        }
 
-        await StopPreviewAsync();
-        var current = h.Current;
-        h.Current = step.Image;
-        if (h == _history) await ShowCurrentAsync();
-        return current;
+        // Umschalten „für alle / einzeln": Modus und alle Einzelstände zurück
+        bool? modeNow = null;
+        SettingsState? templateNow = null;
+        Dictionary<string, SettingsState>? fileSettingsNow = null;
+        if (step.ApplyToAll is { } mode)
+        {
+            modeNow = ApplyToAll;
+            templateNow = _individualTemplate;
+            fileSettingsNow = new Dictionary<string, SettingsState>(_fileSettings);
+            using (SuppressHistory())
+                ApplyToAll = mode;
+            _fileSettings = step.FileSettings is { } saved
+                ? new Dictionary<string, SettingsState>(saved)
+                : new Dictionary<string, SettingsState>(StringComparer.Ordinal);
+            _individualTemplate = step.Template;
+        }
+
+        ApplySettings(step.Settings);
+        if (!ApplyToAll && CurrentPath is { } current)
+            _fileSettings[current] = CaptureSettings();
+
+        return new Snapshot(step.FilePath, imageNow, settingsNow, modeNow, fileSettingsNow, templateNow);
     }
 
     /// <summary>Zeigt das aktuelle Bild der Datei; Pixelmaße beginnen wieder beim Bild.</summary>
@@ -214,6 +235,8 @@ public partial class MainViewModel
         _undo.Clear();
         _redo.Clear();
         _history = null;
+        _fileSettings.Clear();
+        _individualTemplate = null;
         _pendingBaseline = null;
         NotifyUndoRedo();
     }

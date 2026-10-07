@@ -97,6 +97,17 @@ public partial class MainViewModel
 
     private bool CanExport => HasImage && !IsExporting;
 
+    /// <summary>Die Ansicht öffnet das Export-Fenster (modal) und wartet, bis es zu ist.</summary>
+    public event Func<ExportDialogViewModel, Task>? MultiExportRequested;
+
+    /// <summary>Ergebnis aus dem Export-Fenster in der Fußleiste anzeigen.</summary>
+    internal void ReportExport(string folder, string message)
+    {
+        LastExportFolder = folder;
+        ErrorMessage = null;
+        StatusMessage = message;
+    }
+
     /// <summary>Die aktuellen Einstellungen als Export-Auftrag in voller Auflösung.</summary>
     private ExportOptions BuildExportOptions(int width, int height, double sharpenScale = 1) => new(
         CurrentFormat,
@@ -117,6 +128,15 @@ public partial class MainViewModel
         if (_history?.Current is not { } doc || _fileIndex < 0) return;
 
         CommitPendingSettings();
+
+        // Mehrere Bilder: Export-Fenster mit Liste — öffnet die Ansicht
+        if (_files.Count > 1 && MultiExportRequested is { } openDialog)
+        {
+            if (!ApplyToAll && CurrentPath is { } current)
+                _fileSettings[current] = CaptureSettings();
+            await openDialog(new ExportDialogViewModel(this));
+            return;
+        }
         var sourcePath = _files[_fileIndex];
         var (w, h) = EffectiveTarget();
         var options = BuildExportOptions(w, h);

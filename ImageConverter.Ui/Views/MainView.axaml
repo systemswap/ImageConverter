@@ -113,6 +113,30 @@
                           Classes="settings">
                 <StackPanel Spacing="10">
 
+                    <!-- ============================== Für alle / einzeln -->
+                    <Border IsVisible="{Binding HasMultipleFiles}"
+                            Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                            CornerRadius="{DynamicResource RadiusCard}" Padding="12,6">
+                        <StackPanel Spacing="2">
+                            <CheckBox IsChecked="{Binding ApplyToAll}"
+                                      Content="Gleiche Einstellungen für alle Bilder">
+                                <ToolTip.Tip>
+                                    <StackPanel MaxWidth="300" Spacing="6">
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Haken gesetzt: alle Bilder teilen sich die Einstellungen." />
+                                        <TextBlock TextWrapping="Wrap" Text="Die Größe wird pro Bild umgerechnet: Die eingegebene Kante gilt, die andere folgt dem Seitenverhältnis des Bildes — nichts wird verzerrt." />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Haken entfernt: jedes Bild bekommt eigene Einstellungen." />
+                                        <TextBlock TextWrapping="Wrap" Text="Haken wieder setzen: alle Bilder übernehmen die Einstellungen des aktuellen Bildes." />
+                                        <TextBlock TextWrapping="Wrap" Text="Zuschnitt und Drehen gelten immer nur für das einzelne Bild." />
+                                    </StackPanel>
+                                </ToolTip.Tip>
+                            </CheckBox>
+                            <TextBlock Classes="hint" Margin="28,0,0,2"
+                                       IsVisible="{Binding !ApplyToAll}"
+                                       Text="Einstellungen gelten nur für dieses Bild." />
+                        </StackPanel>
+                    </Border>
+
                     <!-- ============================== Format -->
                     <HeaderedContentControl Header="FORMAT">
                         <StackPanel>

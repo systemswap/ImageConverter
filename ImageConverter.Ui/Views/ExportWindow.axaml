@@ -1,0 +1,107 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ImageConverter.ViewModels"
+        x:Class="ImageConverter.Views.ExportWindow"
+        x:DataType="vm:ExportDialogViewModel"
+        Title="Bilder exportieren"
+        Icon="/Assets/avalonia-logo.ico"
+        Width="820" Height="580" MinWidth="640" MinHeight="400"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}">
+
+    <DockPanel>
+        <!-- Kopf: Ziel und Modus -->
+        <Border DockPanel.Dock="Top" Classes="bar" BorderThickness="0,0,0,1" Padding="16,12">
+            <StackPanel Spacing="3">
+                <TextBlock Text="Bilder exportieren" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Destination, StringFormat='Ziel: {0}'}" />
+                <TextBlock Classes="hint" FontSize="11.5" Text="{Binding ModeHint}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Fuß: Auswahl, Fortschritt, Aktionen -->
+        <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="16,10">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <Button Grid.Column="0" Classes="tool" Content="Alle" Command="{Binding SelectAllCommand}"
+                        IsEnabled="{Binding !IsExporting}" />
+                <Button Grid.Column="1" Classes="tool" Content="Keine" Command="{Binding SelectNoneCommand}"
+                        IsEnabled="{Binding !IsExporting}" />
+
+                <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center" Spacing="4">
+                    <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4" MinHeight="4"
+                                 IsVisible="{Binding IsExporting}" />
+                    <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Summary}"
+                               IsVisible="{Binding IsDone}" />
+                </StackPanel>
+
+                <Button Grid.Column="3" Classes="subtle" Margin="0,0,8,0"
+                        Content="Abbrechen" Command="{Binding CancelExportCommand}"
+                        IsVisible="{Binding IsExporting}"
+                        ToolTip.Tip="Hört nach dem Bild auf, das gerade exportiert wird." />
+                <Button Grid.Column="3" Classes="subtle" Margin="0,0,8,0"
+                        Content="Schließen" Click="OnCloseClick"
+                        IsVisible="{Binding !IsExporting}" />
+                <Button Grid.Column="4" Classes="primary"
+                        Content="{Binding ExportButtonText}"
+                        Command="{Binding ExportCommand}" />
+            </Grid>
+        </Border>
+
+        <!-- Liste -->
+        <Grid RowDefinitions="Auto,*" Margin="16,10,16,0">
+            <!-- Spaltenköpfe -->
+            <Grid Grid.Row="0" ColumnDefinitions="36,88,150,*,190" Margin="8,0,8,6">
+                <TextBlock Grid.Column="0" Classes="label" Text="✓" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="label" Text="Vorschau" />
+                <TextBlock Grid.Column="2" Classes="label" Text="Auflösung" />
+                <TextBlock Grid.Column="3" Classes="label" Text="Datei" />
+                <TextBlock Grid.Column="4" Classes="label" Text="Status" />
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                    CornerRadius="{DynamicResource RadiusCard}" Margin="0,0,0,12">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExportItem">
+                                <Border BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1"
+                                        Padding="8,6">
+                                    <Grid ColumnDefinitions="36,88,150,*,190">
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding Include}"
+                                                  HorizontalAlignment="Center" />
+
+                                        <!-- Vorschaubild auf Schachbrett, damit Transparenz sichtbar ist -->
+                                        <Border Grid.Column="1" Width="72" Height="72" HorizontalAlignment="Left"
+                                                Background="{DynamicResource CanvasBrush}" CornerRadius="4" ClipToBounds="True">
+                                            <Grid>
+                                                <TextBlock Classes="hint" Text="…" HorizontalAlignment="Center"
+                                                           IsVisible="{Binding Thumbnail, Converter={x:Static ObjectConverters.IsNull}}" />
+                                                <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                                            </Grid>
+                                        </Border>
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Resolution}" FontSize="12.5"
+                                                   FontWeight="SemiBold" />
+
+                                        <StackPanel Grid.Column="3" VerticalAlignment="Center" Spacing="2" Margin="0,0,10,0">
+                                            <TextBlock Text="{Binding FileName}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="hint" FontSize="11" Text="{Binding Details, StringFormat='→ {0}'}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="4" FontSize="11.5" TextWrapping="Wrap"
+                                                   Text="{Binding Status}"
+                                                   Classes.good="{Binding Done}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

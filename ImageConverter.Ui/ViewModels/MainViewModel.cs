@@ -147,6 +147,13 @@ public partial class MainViewModel : ViewModelBase
         var path = _files[index];
         CommitPendingSettings();   // offene Reglerbewegungen gehören noch zum vorigen Bild
 
+        // Stand des Bildes, das gerade verlassen wird. Im Einzelmodus merken;
+        // im gemeinsamen Modus ist er die Vorlage für das nächste Bild.
+        var outgoing = _history is not null ? CaptureSettings() : null;
+        var outgoingFileDpi = _history?.Dpi;
+        if (!ApplyToAll && CurrentPath is { } leaving && outgoing is not null)
+            _fileSettings[leaving] = outgoing;
+
         _loadCts?.Cancel();
         var cts = _loadCts = new CancellationTokenSource();
 
@@ -177,13 +184,31 @@ public partial class MainViewModel : ViewModelBase
             CurrentFileName = Path.GetFileName(path);
             OnPropertyChanged(nameof(FilePosition));
 
-            // DPI aus der Datei übernehmen — aber nur beim ersten Öffnen, danach
-            // gilt, was eingestellt wurde.
-            if (isNew)
+            await ShowCurrentAsync();
+
+            // Einstellungen für dieses Bild: eigener Stand (Einzelmodus) oder der
+            // bisherige Stand, auf dieses Bild umgerechnet.
+            if (!ApplyToAll && _fileSettings.TryGetValue(path, out var own))
+            {
+                ApplySettings(own);
+            }
+            else if (outgoing is not null)
+            {
+                // DPI folgt der Datei, solange man sie beim vorigen Bild nicht selbst
+                // geändert hatte — sonst gilt die eigene Einstellung für alle.
+                // Einzelmodus ohne eigenen Stand: Vorlage vom Umschalten, nicht das vorige Bild
+                var template = !ApplyToAll && _individualTemplate is { } t ? t : outgoing;
+                if (isNew && outgoingFileDpi is { } prevDpi && template.Dpi == (int)Math.Round(prevDpi))
+                    template = template with { Dpi = (int)Math.Round(history.Dpi) };
+                ApplySettings(AdaptToImage(template, SourceWidth, SourceHeight));
+            }
+            else if (isNew)
+            {
+                // Allererstes Bild: DPI aus der Datei
                 using (SuppressHistory())
                     SetDpiSilently((int)Math.Round(history.Dpi));
-
-            await ShowCurrentAsync();
+                _committedSettings = CaptureSettings();
+            }
 
             // Unbearbeitete Bilder nicht im Speicher halten, bearbeitete schon —
             // sonst wäre ein Zuschnitt beim Weiterblättern verloren.
