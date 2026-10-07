@@ -11,6 +11,8 @@ public class PlatformTests
     [Fact]
     public void ProgramFolder_AppImage_IsFolderOfTheAppImageFile()
     {
+        if (OperatingSystem.IsWindows()) return;   // AppImage gibt es nur unter Linux; Windows macht aus / ein \
+
         var folder = AppLocations.Resolve("/home/user/Programme/ImageConverter-x86_64.AppImage", "/tmp/.mount_abc/usr/bin/");
         Assert.Equal("/home/user/Programme", folder);
     }

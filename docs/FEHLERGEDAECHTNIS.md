@@ -187,3 +187,32 @@ Test oder Nachweis.
 - **Test:** `SystemToolsTests.PrintService_Hanging_TimesOutAndIsStopped`
   (`sleep 30`, Grenze 300 ms; Gegenprobe mit der alten Reihenfolge: hängt
   30 s, schlägt fehl).
+
+## 7. publish.ps1 veröffentlichte unter Windows nichts: zwei Tests nur für Linux
+
+- **Entdeckt:** 0.4.22 (Commit `8259513`, 07.10.2026), beim ersten Bau unter
+  Windows nach der Weiterentwicklung unter Linux. **Behoben:** 0.4.23.
+- **Was:** `published\` blieb leer. `publish.ps1` führt vorher alle Tests aus
+  und bricht bei einem Fehler ab („Tests fehlgeschlagen - nichts
+  veroeffentlicht“); zwei Tests schlugen unter Windows fehl.
+- **Situation:** Tests, die unter Linux geschrieben und nur dort ausgeführt
+  wurden.
+- **Warum:**
+  `ProgramFolder_AppImage_IsFolderOfTheAppImageFile` – `Path.GetDirectoryName`
+  macht unter Windows aus `/home/user/Programme` den Pfad
+  `\home\user\Programme`. `OpenFolder_WithoutFileManager_ReportsInsteadOfCrashing`
+  – ein leerer `PATH` hilft unter Windows nicht: `CreateProcess` sucht immer
+  auch im Systemordner und findet `explorer.exe`. `TryOpen` liefert dort
+  `true` und öffnet bei jedem Testlauf ein Explorer-Fenster.
+- **Wie behoben:** Beide Tests kehren unter Windows sofort zurück, wie
+  `PrintService_Hanging_TimesOutAndIsStopped`. Eine AppImage gibt es unter
+  Windows nicht, und `explorer.exe` fehlt dort nie – die Fälle treten nicht auf.
+- **Nicht tun:** Tests, die Unix-Pfade erwarten oder Programme über `PATH`
+  verstecken, ohne Weiche für Windows schreiben. Nach Arbeit unter Linux vor
+  dem Windows-Bau `dotnet test` unter Windows laufen lassen.
+- **Wo:** `ImageConverter.Tests/PlatformTests.cs`,
+  `ImageConverter.Tests/SystemToolsTests.cs`.
+- **Nachweis:** `publish.ps1` unter Windows: vorher 2 von 169 Tests
+  fehlgeschlagen, nichts veröffentlicht; danach 169 bestanden,
+  `published\windows-x64\ImageConverter.exe` startet (Titel
+  „ImageConverter 0.4.22“).

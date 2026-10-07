@@ -16,6 +16,8 @@ public class SystemToolsTests
     [Fact]
     public void OpenFolder_WithoutFileManager_ReportsInsteadOfCrashing()
     {
+        if (OperatingSystem.IsWindows()) return;   // explorer.exe findet Windows auch ohne PATH im Systemordner
+
         var path = Environment.GetEnvironmentVariable("PATH");
         var empty = Directory.CreateTempSubdirectory("ic-leer-").FullName;
         try
