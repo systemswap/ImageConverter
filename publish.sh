@@ -17,7 +17,7 @@ done
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$ROOT/ImageConverter.Desktop/ImageConverter.Desktop.csproj"
-SOLUTION="$ROOT/ImageConverter.slnx"
+SOLUTION="$ROOT/ImageConverter.sln"
 PUBLISHED="$ROOT/published"
 TEMPLATES="$ROOT/packaging/linux"
 ICON_SRC="$ROOT/ImageConverter.Ui/Assets/Icon.png"

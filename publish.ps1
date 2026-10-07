@@ -38,7 +38,7 @@ $ErrorActionPreference = 'Stop'
 
 $root      = $PSScriptRoot
 $project   = Join-Path $root 'ImageConverter.Desktop\ImageConverter.Desktop.csproj'
-$solution  = Join-Path $root 'ImageConverter.slnx'
+$solution  = Join-Path $root 'ImageConverter.sln'
 $publishIn = Join-Path $root 'published'
 $iconSrc   = Join-Path $root 'ImageConverter.Ui\Assets\Icon.png'
 

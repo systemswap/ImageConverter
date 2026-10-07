@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="760"
         x:Class="ImageConverter.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/app.ico"
         Title="ImageConverter"
         Width="1180" Height="760"
         MinWidth="900" MinHeight="620"

@@ -29,6 +29,8 @@
 
     <PropertyGroup>
         <ApplicationManifest>app.manifest</ApplicationManifest>
+        <!-- Programmsymbol der exe (Explorer, Taskleiste, Alt+Tab) -->
+        <ApplicationIcon>../ImageConverter.Ui/Assets/app.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>

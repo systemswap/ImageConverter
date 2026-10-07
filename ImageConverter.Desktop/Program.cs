@@ -17,5 +17,9 @@ sealed class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            // Linux: Die Leiste (GNOME, KDE …) ordnet ein Fenster über WM_CLASS seiner
+            // .desktop-Datei zu und zeigt deren Icon. Muss zu StartupWMClass in
+            // packaging/linux/einrichten.sh und publish.sh passen.
+            .With(new X11PlatformOptions { WmClass = "ImageConverter" })
             .LogToTrace();
 }
