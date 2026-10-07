@@ -23,7 +23,7 @@ public partial class MainViewModel
     /// <summary>Das aktuelle Bild in voller Auflösung, unbearbeitet.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage))]
-    [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand), nameof(ExportCommand))]
     public partial Bitmap? FullBitmap { get; set; }
 
     /// <summary>Ergebnis der Vorschau-Kette; null = nichts zu tun, Original zeigen.</summary>
@@ -81,7 +81,7 @@ public partial class MainViewModel
     {
         var w = (int)doc.Width;
         var h = (int)doc.Height;
-        var bgra = await Task.Run(() => ImageOps.ToBgra(doc));
+        var bgra = await Task.Run(() => ImageOps.ToDisplayBgra(doc));
 
         var old = FullBitmap;
         FullBitmap = BitmapOps.FromBgra(bgra, w, h);
@@ -133,6 +133,7 @@ public partial class MainViewModel
     /// </summary>
     private void RequestPreview()
     {
+        RequestEstimate();   // Größe, Schärfe, Rauschen … ändern auch die Dateigröße
         if (_renderRunning)
         {
             _renderDirty = true;
@@ -186,6 +187,13 @@ public partial class MainViewModel
         _renderDirty = false;
         try { await _renderTask; } catch { /* Fehler zeigt die Schleife selbst an */ }
 
+        // Auch eine laufende Größenschätzung liest das Bild noch
+        _estimateCts?.Cancel();
+        try { await _estimateTask; } catch { /* abgebrochen */ }
+        _estimateBase?.Dispose();
+        _estimateBase = null;
+        _estimateBaseKey = null;
+
         _resized?.Dispose();
         _resized = null;
         _resizedKey = null;
@@ -233,11 +241,11 @@ public partial class MainViewModel
             if (job.Noise > 0)
             {
                 using var denoised = ImageOps.Denoise(_resized, job.Noise);
-                _denoisedBgra = ImageOps.ToBgra(denoised);
+                _denoisedBgra = ImageOps.ToDisplayBgra(denoised);
             }
             else
             {
-                _denoisedBgra = ImageOps.ToBgra(_resized);
+                _denoisedBgra = ImageOps.ToDisplayBgra(_resized);
             }
             _denoisedNoise = job.Noise;
         }

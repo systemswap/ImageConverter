@@ -149,6 +149,47 @@ public class ImageOpsTests
         Assert.True(distinct >= 38, $"nur {distinct} von {levels} dunklen Stufen erhalten");
     }
 
+    /// <summary>
+    /// Vorschau, Größenschätzung und Export lesen gleichzeitig dasselbe Bild.
+    /// Nachgestellt mit vielen parallelen Aufgaben — keine darf scheitern oder
+    /// ein falsches Ergebnis liefern.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentOperations_OnSameSource_AreSafe()
+    {
+        using var src = new MagickImage(MagickColors.SkyBlue, 1200, 800);
+        src.SetProfile(ColorProfiles.AdobeRGB1998);
+        var expectedDisplay = ImageOps.ToDisplayBgra(src);
+
+        var tasks = Enumerable.Range(0, 48).Select(i => Task.Run(() =>
+        {
+            switch (i % 4)
+            {
+                case 0:
+                    using (var r = ImageOps.Resize(src, 300, 200, ResampleFilter.Lanczos3, gammaCorrect: true))
+                        Assert.Contains("Adobe", r.GetColorProfile()?.Description ?? "");
+                    break;
+                case 1:
+                    using (var r = ImageOps.Rotate90(src, clockwise: true))
+                        Assert.Equal(800u, r.Width);
+                    break;
+                case 2:
+                    Assert.Equal(expectedDisplay, ImageOps.ToDisplayBgra(src));
+                    break;
+                default:
+                    using (var c = ImageOps.Crop(src, 10, 10, 200, 200, radius: 50))
+                        Assert.Equal(200u, c.Width);
+                    break;
+            }
+        }));
+
+        await Task.WhenAll(tasks);
+
+        // Die Quelle selbst ist unverändert
+        Assert.Equal((1200u, 800u), (src.Width, src.Height));
+        Assert.Contains("Adobe", src.GetColorProfile()?.Description ?? "");
+    }
+
     [Fact]
     public void Bgra_RoundTrip_KeepsPixels()
     {

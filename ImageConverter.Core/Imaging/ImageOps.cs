@@ -32,9 +32,43 @@ public static class ImageOps
     /// </remarks>
     public static byte[] ToBgra(MagickImage image)
     {
-        using var pixels = image.GetPixelsUnsafe();
-        return pixels.ToByteArray("BGRA")
-               ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        lock (image)
+        {
+            using var pixels = image.GetPixelsUnsafe();
+            return pixels.ToByteArray("BGRA")
+                   ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        }
+    }
+
+    // ------------------------------------------------------------- Threads
+    //
+    // Auf dasselbe Bild greifen bis zu drei Hintergrundaufgaben gleichzeitig zu:
+    // Vorschau, Größenschätzung und Bearbeiten/Export. Jede arbeitet auf einer
+    // eigenen Kopie — nur das Kopieren und Auslesen der gemeinsamen Quelle wird
+    // gegeneinander gesperrt. Danach ist jede Kopie nur noch in einem Thread.
+
+    /// <summary>Thread-sichere Kopie: alle Operationen kopieren über diesen Weg.</summary>
+    internal static MagickImage CloneOf(MagickImage source)
+    {
+        lock (source)
+            return (MagickImage)source.Clone();
+    }
+
+    /// <summary>
+    /// Wie <see cref="ToBgra"/>, aber für den Bildschirm: Bilder mit eigenem Profil
+    /// (Adobe RGB …) werden nach sRGB umgerechnet, damit die Farben stimmen.
+    /// Das Bild selbst bleibt in seinem Farbraum.
+    /// </summary>
+    public static byte[] ToDisplayBgra(MagickImage image)
+    {
+        IColorProfile? profile;
+        lock (image) profile = image.GetColorProfile();
+        if (profile is null || ImageExporter.IsSrgb(profile))
+            return ToBgra(image);
+
+        using var display = CloneOf(image);
+        display.TransformColorSpace(ColorProfiles.SRGB);
+        return ToBgra(display);
     }
 
     /// <summary>Liest 8-Bit-BGRA-Pixel zurück in ein ImageMagick-Bild (z. B. nach dem Schärfen).</summary>
@@ -49,7 +83,7 @@ public static class ImageOps
 
     public static MagickImage Rotate90(MagickImage source, bool clockwise)
     {
-        var result = (MagickImage)source.Clone();
+        var result = CloneOf(source);
         result.Rotate(clockwise ? 90 : -90);
         result.ResetPage();
         return result;
@@ -57,7 +91,7 @@ public static class ImageOps
 
     public static MagickImage FlipHorizontal(MagickImage source)
     {
-        var result = (MagickImage)source.Clone();
+        var result = CloneOf(source);
         result.Flop();
         return result;
     }
@@ -75,7 +109,7 @@ public static class ImageOps
         width = Math.Clamp(width, 1, (int)source.Width - x);
         height = Math.Clamp(height, 1, (int)source.Height - y);
 
-        var result = (MagickImage)source.Clone();
+        var result = CloneOf(source);
         result.Crop(new MagickGeometry(x, y, (uint)width, (uint)height));
         result.ResetPage();
 
@@ -170,13 +204,19 @@ public static class ImageOps
     /// </summary>
     public static MagickImage Resize(MagickImage source, int width, int height, ResampleFilter filter, bool gammaCorrect)
     {
-        var result = (MagickImage)source.Clone();
+        var result = CloneOf(source);
         if (result.Width == width && result.Height == height) return result;
 
         if (gammaCorrect) result.ColorSpace = ColorSpace.RGB;   // sRGB → linear
         result.FilterType = ToMagick(filter);
         result.Resize(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
-        if (gammaCorrect) result.ColorSpace = ColorSpace.sRGB;  // zurück
+        if (gammaCorrect)
+        {
+            result.ColorSpace = ColorSpace.sRGB;                 // zurück
+            // Der Umweg über linear entfernt das Farbprofil (z. B. Adobe RGB) —
+            // die Pixel sind aber wieder im Ausgangsraum, also Profil zurücksetzen.
+            ImageExporter.CopyProfiles(source, result);
+        }
 
         return result;
     }
@@ -184,7 +224,7 @@ public static class ImageOps
     /// <summary>Rauschminderung (Wavelet), <paramref name="strength"/> 0–3 wie der Regler.</summary>
     public static MagickImage Denoise(MagickImage source, double strength)
     {
-        var result = (MagickImage)source.Clone();
+        var result = CloneOf(source);
         if (strength > 0.01)
             result.WaveletDenoise(new Percentage(strength * 3), 0.0);
         return result;

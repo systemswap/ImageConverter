@@ -81,6 +81,35 @@ public partial class MainView : UserControl
 
     private void OnFitToViewClick(object? sender, RoutedEventArgs e) => Crop.FitToView();
 
+    // ------------------------------------------------------- Export
+
+    private async void OnChooseOutputFolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null || TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Zielordner für den Export",
+            AllowMultiple = false,
+        });
+
+        if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+            _vm.OutputFolder = path;
+    }
+
+    private void OnOpenExportFolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm?.LastExportFolder is not { } folder || !System.IO.Directory.Exists(folder)) return;
+
+        // Dateimanager des Systems: Explorer, Nautilus, Dolphin … über die Standard-Zuordnung
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "explorer.exe" : "xdg-open",
+            ArgumentList = { folder },
+            UseShellExecute = false,
+        });
+    }
+
     // ------------------------------------------------------- Dateidialog
 
     private async void OnOpenFilesClick(object? sender, RoutedEventArgs e)

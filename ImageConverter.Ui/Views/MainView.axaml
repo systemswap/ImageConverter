@@ -60,21 +60,44 @@
         <!-- ============================================================ -->
         <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="12,10">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                <!-- Ergebnis des letzten Exports -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10"
+                            IsVisible="{Binding StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Classes="good" Text="✓" FontSize="14" />
+                    <TextBlock Classes="hint" FontSize="12" Text="{Binding StatusMessage}" />
+                    <Button Classes="tool" Content="Ordner öffnen" Click="OnOpenExportFolderClick" />
+                </StackPanel>
+                <ProgressBar Grid.Column="0" IsIndeterminate="True" Width="160"
+                             HorizontalAlignment="Left" IsVisible="{Binding IsExporting}" />
+
                 <TextBlock Grid.Column="1" Classes="label" Margin="0,0,8,0" Text="Ziel" />
 
+                <!-- Zielordner: Klick wählt einen Ordner, ✕ setzt auf „neben dem Original" zurück -->
                 <Border Grid.Column="2"
                         Background="{DynamicResource SurfaceAltBrush}"
                         BorderBrush="{DynamicResource BorderBrush2}"
                         BorderThickness="1"
                         CornerRadius="{DynamicResource RadiusControl}"
-                        Padding="10,6" Margin="0,0,10,0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding OutputFolder}" FontSize="12" />
-                        <TextBlock Classes="label" Text="…" />
+                        Margin="0,0,10,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Classes="tool" Click="OnChooseOutputFolderClick" Padding="10,0"
+                                ToolTip.Tip="Zielordner wählen. Ohne Auswahl landet das Ergebnis im Unterordner „konvertiert“ neben dem Original.">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding OutputFolderDisplay}" FontSize="12" MaxWidth="320"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Classes="label" Text="…" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="tool" Content="✕" Padding="8,0"
+                                IsVisible="{Binding HasCustomOutputFolder}"
+                                Command="{Binding ResetOutputFolderCommand}"
+                                ToolTip.Tip="Zurück zu: neben dem Original › konvertiert" />
                     </StackPanel>
                 </Border>
 
-                <Button Grid.Column="3" Classes="primary" Content="Exportieren" />
+                <Button Grid.Column="3" Classes="primary" Content="Exportieren"
+                        Command="{Binding ExportCommand}"
+                        ToolTip.Tip="Mit allen Einstellungen in voller Auflösung speichern. Vorhandene Dateien werden nie überschrieben." />
             </Grid>
         </Border>
 
@@ -104,19 +127,29 @@
                                 <TextBlock Grid.Column="0" Classes="label" Text="Qualität" />
                                 <Slider Grid.Column="1" Minimum="1" Maximum="100"
                                         Value="{Binding Quality}"
-                                        IsEnabled="{Binding !Lossless}" />
+                                        IsEnabled="{Binding QualityApplies}"
+                                        ToolTip.Tip="Höher = schöner, aber größere Datei. 75–85 ist für Fotos meist der beste Kompromiss." />
                                 <TextBlock Grid.Column="2" Classes="value"
                                            Text="{Binding Quality, StringFormat='{}{0:F0}'}" />
                             </Grid>
 
-                            <CheckBox IsChecked="{Binding Lossless}"
-                                      Content="Verlustfrei" FontSize="12" />
+                            <CheckBox IsChecked="{Binding Lossless}" IsVisible="{Binding LosslessAvailable}"
+                                      Content="Verlustfrei" FontSize="12"
+                                      ToolTip.Tip="Jedes Pixel bleibt exakt erhalten. Ideal für Grafiken, Screenshots und Buttons — bei Fotos deutlich größer." />
+                            <TextBlock Classes="hint" IsVisible="{Binding !QualityApplies}" Margin="0,0,0,2"
+                                       Text="Dieses Format speichert immer verlustfrei." />
 
+                            <!-- Echte Schätzung: eine Probe wird im Zielformat kodiert -->
                             <Border Background="{DynamicResource AccentSoftBrush}"
                                     CornerRadius="{DynamicResource RadiusControl}"
-                                    Padding="10,7" Margin="0,10,0,0">
+                                    Padding="10,7" Margin="0,8,0,0"
+                                    ToolTip.Tip="Berechnet aus einer Probe im Zielformat mit allen Einstellungen. Ohne „≈“ ist es die exakte Größe.">
                                 <StackPanel Spacing="2">
-                                    <TextBlock Classes="good" Text="{Binding EstimatedSize}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="good" Text="{Binding EstimatedSize}" />
+                                        <TextBlock Classes="hint" Text="wird berechnet …"
+                                                   IsVisible="{Binding IsEstimating}" />
+                                    </StackPanel>
                                     <TextBlock Classes="hint" Text="{Binding SavingsText}" />
                                 </StackPanel>
                             </Border>
@@ -386,6 +419,7 @@
                                 <TextBlock Grid.Column="0" Classes="label" Text="EXIF" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding MetadataModes}"
+                                          ToolTip.Tip="EXIF/IPTC/XMP: Kamera, Datum, Ort, Copyright. „Nur GPS entfernen“ löscht die Ortsangaben — sinnvoll vor dem Teilen im Netz."
                                           SelectedItem="{Binding SelectedMetadataMode}" />
                             </Grid>
 
@@ -393,6 +427,7 @@
                                 <TextBlock Grid.Column="0" Classes="label" Text="ICC-Profil" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding ColorModes}"
+                                          ToolTip.Tip="Profil behalten: Farbraum wie im Original (z. B. Adobe RGB für den Druck). Nach sRGB: überall richtige Farben — Standard fürs Web. Profil verwerfen: sRGB ohne eingebettetes Profil, etwas kleinere Datei."
                                           SelectedItem="{Binding SelectedColorMode}" />
                             </Grid>
                         </StackPanel>
@@ -404,7 +439,8 @@
                             <TextBlock Grid.Column="0" Classes="label" Text="Dateiname" />
                             <TextBox Grid.Column="1" Text="{Binding NamePattern}"
                                      FontSize="12"
-                                     CornerRadius="{DynamicResource RadiusControl}" />
+                                     CornerRadius="{DynamicResource RadiusControl}"
+                                     ToolTip.Tip="Platzhalter: {name} Dateiname ohne Endung · {breite} {höhe} Pixelmaße · {n} laufende Nummer · {datum} heutiges Datum. Die Endung kommt automatisch dazu." />
                         </Grid>
                     </HeaderedContentControl>
 

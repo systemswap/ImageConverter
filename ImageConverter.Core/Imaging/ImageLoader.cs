@@ -43,12 +43,17 @@ public static class ImageLoader
                 // Handyfotos: EXIF-Drehung in die Pixel übernehmen, damit nichts quer liegt
                 image.AutoOrient();
 
-                // In sRGB arbeiten: eingebettetes Profil (z. B. Adobe RGB) umrechnen,
-                // CMYK ohne Profil wenigstens in RGB bringen.
-                if (image.GetColorProfile() is not null)
-                    image.TransformColorSpace(ColorProfiles.SRGB);
-                else if (image.ColorSpace == ColorSpace.CMYK)
-                    image.ColorSpace = ColorSpace.sRGB;
+                // Farbraum des Originals behalten (z. B. Adobe RGB) — umgerechnet wird
+                // erst für die Anzeige (ImageOps.ToDisplayBgra) bzw. beim Export, je
+                // nach Einstellung. Nur CMYK muss sofort nach RGB: Web-Formate und die
+                // Bearbeitung arbeiten in RGB.
+                if (image.ColorSpace == ColorSpace.CMYK)
+                {
+                    if (image.GetColorProfile() is not null)
+                        image.TransformColorSpace(ColorProfiles.SRGB);
+                    else
+                        image.ColorSpace = ColorSpace.sRGB;
+                }
 
                 ct.ThrowIfCancellationRequested();
                 return new LoadedImage(image, formatName, new FileInfo(path).Length, dpi);

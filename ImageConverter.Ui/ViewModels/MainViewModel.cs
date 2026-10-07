@@ -225,29 +225,4 @@ public partial class MainViewModel : ViewModelBase
         >= 1024 => $"{bytes / 1024.0:F0} KB",
         _ => $"{bytes} B",
     };
-
-    // -------------------------------------------------------------- Format
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowTransparencyWarning))]
-    public partial string SelectedFormat { get; set; }
-
-    [ObservableProperty] public partial double Quality { get; set; } = 82;
-    [ObservableProperty] public partial bool Lossless { get; set; }
-
-    public string EstimatedSize => $"≈ {Math.Max(12, (int)(Quality * 5.2))} KB";
-    public string SavingsText => $"{Math.Clamp(100 - (int)(Quality * 0.9), 5, 95)} % kleiner als das Original";
-
-    partial void OnQualityChanged(double value)
-    {
-        OnPropertyChanged(nameof(EstimatedSize));
-        OnPropertyChanged(nameof(SavingsText));
-    }
-
-    // ------------------------------------------------- Metadaten und Farbe
-    [ObservableProperty] public partial string SelectedMetadataMode { get; set; }
-    [ObservableProperty] public partial string SelectedColorMode { get; set; }
-
-    // ------------------------------------------------------------- Ausgabe
-    [ObservableProperty] public partial string OutputFolder { get; set; } = "~/Bilder/converted";
-    [ObservableProperty] public partial string NamePattern { get; set; } = "{name}_{breite}x{höhe}";
 }
