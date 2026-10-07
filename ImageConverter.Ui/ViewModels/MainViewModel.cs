@@ -45,7 +45,7 @@ public partial class MainViewModel : ViewModelBase
         ApplySourceSize(4000, 3000);
 
         // Ab hier zählen Änderungen als Rückgängig-Schritte
-        _committedSettings = CaptureSettings();
+        ResetHistoryBaseline();
 
         // KI-Modul (abtrennbar, siehe Ordner Ai/)
         Ai = new AiViewModel(this);
@@ -220,7 +220,7 @@ public partial class MainViewModel : ViewModelBase
                 // Allererstes Bild: DPI aus der Datei
                 using (SuppressHistory())
                     SetDpiSilently((int)Math.Round(history.Dpi));
-                _committedSettings = CaptureSettings();
+                ResetHistoryBaseline();
             }
 
             // Unbearbeitete Bilder nicht im Speicher halten, bearbeitete schon —

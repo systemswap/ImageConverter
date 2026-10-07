@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Linq;
 using Avalonia;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Models;
 
@@ -12,10 +13,16 @@ namespace ImageConverter.ViewModels;
 // Rückgängig für Einstellungen.
 //
 // Jede Einstellung, die man in der linken Spalte (oder per Auswahlrahmen) ändert,
-// lässt sich zurücknehmen. Damit Ziehen an einem Regler nicht hunderte Schritte
-// erzeugt, werden Änderungen zu einem Schritt zusammengefasst, sobald man kurz
-// innehält (SettleDelayMs). Ein Schritt speichert den kompletten Stand der
-// Einstellungen davor — kein Unterschied, sondern ein vollständiges Abbild.
+// lässt sich zurücknehmen. Ein Schritt entsteht pro Bedienvorgang, nicht nach Zeit:
+// – Alles, was ein Vorgang ändert, gehört zusammen (z. B. Breite samt verknüpfter Höhe,
+//   DPI samt neu berechneter Pixel).
+// – Regler und Eingabefelder: aufeinanderfolgende Vorgänge am selben Element werden ein
+//   Schritt — Hin- und Herschieben, Pausen und erneutes Anfassen ergeben nur einen.
+//   Abgeschlossen wird er, sobald etwas anderes bedient wird, bei Rückgängig,
+//   Bildwechsel, Bearbeiten oder Export.
+// – Auswahlrahmen: jedes Loslassen der Maus ist ein Schritt (CommitSettingsStep).
+// – Haken und Auswahllisten: jeder Vorgang ist ein eigener Schritt.
+// Ein Schritt speichert den kompletten Stand der Einstellungen davor.
 public partial class MainViewModel
 {
     /// <summary>Vollständiger Stand aller Einstellungen, die Rückgängig zurückholen kann.</summary>
@@ -32,88 +39,144 @@ public partial class MainViewModel
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
 
-    /// <summary>Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt.</summary>
-    private static readonly HashSet<string> TrackedSettings =
-    [
-        nameof(SelectedFormat), nameof(Quality), nameof(Lossless),
-        nameof(SelectedSizeUnit), nameof(KeepAspectRatio), nameof(TargetWidth), nameof(TargetHeight),
-        nameof(SelectedFilter), nameof(DoNotEnlarge), nameof(GammaCorrect),
-        nameof(Dpi), nameof(DpiMetadataOnly),
-        nameof(SelectedAspectPreset), nameof(CropSelection), nameof(CornerRadius),
-        nameof(SharpenAmount), nameof(SharpenRadius), nameof(NoiseReduction),
-        nameof(SelectedMetadataMode), nameof(SelectedColorMode),
-        nameof(OutputFolder), nameof(NamePattern),
-    ];
+    /// <summary>
+    /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
+    /// Gruppe für stufenlose Elemente (Regler, Eingabefelder) — Vorgänge derselben Gruppe
+    /// hintereinander werden zusammengefasst. null: jeder Vorgang ist ein eigener Schritt.
+    /// </summary>
+    private static readonly Dictionary<string, string?> TrackedSettings = new()
+    {
+        [nameof(SelectedFormat)] = null,
+        [nameof(Quality)] = "Qualität",
+        [nameof(Lossless)] = null,
+        [nameof(SelectedSizeUnit)] = null,
+        [nameof(KeepAspectRatio)] = null,
+        [nameof(TargetWidth)] = "Größe",
+        [nameof(TargetHeight)] = "Größe",
+        [nameof(SelectedFilter)] = null,
+        [nameof(DoNotEnlarge)] = null,
+        [nameof(GammaCorrect)] = null,
+        [nameof(Dpi)] = "DPI",
+        [nameof(DpiMetadataOnly)] = null,
+        [nameof(SelectedAspectPreset)] = null,
+        [nameof(CropSelection)] = "Auswahl",
+        [nameof(CornerRadius)] = "Ecken",
+        [nameof(SharpenAmount)] = "Schärfen",
+        [nameof(SharpenRadius)] = "Radius",
+        [nameof(NoiseReduction)] = "Rauschen",
+        [nameof(SelectedMetadataMode)] = null,
+        [nameof(SelectedColorMode)] = null,
+        [nameof(OutputFolder)] = "Ordner",
+        [nameof(NamePattern)] = "Dateiname",
+    };
 
-    /// <summary>Wartezeit nach der letzten Änderung, bis sie ein eigener Schritt wird.
-    /// Tests setzen -1 (nie automatisch) und rufen <see cref="CommitPendingSettings"/> selbst.</summary>
-    internal int SettleDelayMs { get; set; } = 700;
+    /// <summary>
+    /// true (App): Änderungen innerhalb eines Bedienvorgangs werden gesammelt und erst
+    /// danach ausgewertet. Tests setzen false — dann zählt jede Änderung sofort.
+    /// </summary>
+    internal bool DeferHistoryTurns { get; init; } = true;
 
     private SettingsState? _committedSettings;   // Stand nach dem letzten Schritt
-    private SettingsState? _pendingBaseline;     // Stand vor den noch offenen Änderungen
-    private CancellationTokenSource? _settleCts;
+    private SettingsState? _settled;             // Stand nach dem letzten Bedienvorgang
+    private SettingsState? _pendingBaseline;     // Stand vor dem noch offenen Schritt
+    private string? _pendingGroup;               // Gruppe des offenen Schritts (null: abgeschlossen bei nächster Aktion)
+
+    // Laufender Bedienvorgang: Stand davor und was er geändert hat
+    private SettingsState? _turnBaseline;
+    private readonly HashSet<string> _turnProperties = [];
     private int _suppressHistory;                // > 0: Änderungen kommen vom Programm, nicht vom Nutzer
 
-    private bool HasPendingSettings => _pendingBaseline is not null;
+    private bool HasPendingSettings => _pendingBaseline is not null || _turnBaseline is not null;
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is { } name && TrackedSettings.Contains(name))
-            OnSettingChanged();
+        if (e.PropertyName is { } name && TrackedSettings.ContainsKey(name))
+            OnSettingChanged(name);
     }
 
-    private void OnSettingChanged()
+    private void OnSettingChanged(string name)
     {
-        if (_suppressHistory > 0 || _committedSettings is null) return;
+        if (_suppressHistory > 0 || _settled is null) return;
+
+        var first = _turnBaseline is null;
+        _turnBaseline ??= _settled;
+        _turnProperties.Add(name);
+
+        if (!DeferHistoryTurns)
+        {
+            EndTurn();
+        }
+        else if (first)
+        {
+            // Folgeänderungen (verknüpfte Höhe …) laufen noch im selben Aufruf;
+            // ausgewertet wird, wenn der Vorgang durch ist — vor der nächsten Eingabe.
+            Dispatcher.UIThread.Post(EndTurn, DispatcherPriority.Normal);
+            NotifyUndoRedo();
+        }
+    }
+
+    /// <summary>Ein Bedienvorgang ist durch: zum offenen Schritt dazu oder neuer Schritt.</summary>
+    private void EndTurn()
+    {
+        if (_turnBaseline is not { } before) return;
+
+        var groups = _turnProperties.Select(p => TrackedSettings[p]).ToList();
+        var group = groups.Any(g => g is null) ? null : string.Join("+", groups.Distinct().Order());
+        _turnBaseline = null;
+        _turnProperties.Clear();
+
+        // Anderes Element (oder Haken/Liste) bedient: offenen Schritt abschließen
+        if (_pendingBaseline is not null && (group is null || group != _pendingGroup))
+            FinishPending(before);
 
         if (_pendingBaseline is null)
         {
-            _pendingBaseline = _committedSettings;
-            NotifyUndoRedo();
+            _pendingBaseline = before;
+            _pendingGroup = group;
         }
 
-        // Zeitfenster neu starten: erst wenn eine Weile Ruhe ist, wird es ein Schritt
-        _settleCts?.Cancel();
-        if (SettleDelayMs < 0) return;
-        var cts = _settleCts = new CancellationTokenSource();
-        _ = CommitAfterDelayAsync(cts.Token);
+        _settled = CaptureSettings();
+        NotifyUndoRedo();
     }
 
-    private async Task CommitAfterDelayAsync(CancellationToken ct)
+    /// <summary>Legt den offenen Schritt ab; <paramref name="after"/> ist der Stand danach.</summary>
+    private void FinishPending(SettingsState after)
     {
-        try
-        {
-            await Task.Delay(SettleDelayMs, ct);
-            CommitPendingSettings();
-        }
-        catch (OperationCanceledException)
-        {
-            // Weitere Änderung kam dazwischen — das neue Zeitfenster übernimmt
-        }
-    }
-
-    /// <summary>Offene Einstellungsänderungen jetzt als einen Schritt ablegen.</summary>
-    internal void CommitPendingSettings()
-    {
-        _settleCts?.Cancel();
         if (_pendingBaseline is not { } before) return;
-
-        var now = CaptureSettings();
         _pendingBaseline = null;
-        _committedSettings = now;
+        _pendingGroup = null;
+        _committedSettings = after;
 
         // Hin und zurück geschoben, ohne dass sich unterm Strich etwas geändert hat
-        if (now == before)
-        {
-            NotifyUndoRedo();
-            return;
-        }
+        if (after == before) return;
 
         // Im Einzelmodus gehört der Schritt zum aktuellen Bild — Rückgängig springt dorthin
         _undo.Push(new Snapshot(ApplyToAll ? null : CurrentPath, null, before));
         ClearRedo();
+    }
+
+    /// <summary>Offene Einstellungsänderungen jetzt als Schritt ablegen.</summary>
+    internal void CommitPendingSettings()
+    {
+        EndTurn();
+        FinishPending(CaptureSettings());
+        _settled = CaptureSettings();
         NotifyUndoRedo();
+    }
+
+    /// <summary>Ende einer Geste (z. B. Maus losgelassen am Auswahlrahmen): eigener Schritt.</summary>
+    [RelayCommand]
+    private void CommitSettingsStep() => CommitPendingSettings();
+
+    /// <summary>Ab hier zählen Änderungen neu — nach Laden, Rückgängig, Bildwechsel.</summary>
+    private void ResetHistoryBaseline()
+    {
+        _turnBaseline = null;
+        _turnProperties.Clear();
+        _pendingBaseline = null;
+        _pendingGroup = null;
+        _committedSettings = _settled = CaptureSettings();
     }
 
     private SettingsState CaptureSettings() => new(
@@ -177,7 +240,7 @@ public partial class MainViewModel
 
         OnPropertyChanged(nameof(DpiPurpose));
         NotifySizeDerived();
-        _committedSettings = CaptureSettings();
+        ResetHistoryBaseline();
     }
 
     /// <summary>Für Änderungen durch das Programm (Laden, Zuschnitt, Rückgängig selbst).</summary>

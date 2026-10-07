@@ -326,6 +326,20 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
 - Mögliche nächste Schritte: GPU (DirectML unter Windows), Vorher/Nachher auch für
   Bearbeitungsschritte, CodeFormer-„Treue“ als Regler.
 
+### Rückgängig / Wiederholen (0.4.15)
+
+- **Ein Schritt pro Bedienvorgang, kein Zeitfenster mehr.** Folgeänderungen (verknüpfte
+  Höhe, neu berechnete Pixel bei DPI) gehören zum selben Schritt.
+- **Regler und Eingabefelder:** aufeinanderfolgende Vorgänge am selben Element bleiben ein
+  Schritt; abgeschlossen wird er durch ein anderes Element, Rückgängig, Bildwechsel,
+  Bearbeiten oder Export. Kein Timer nötig — die offene Änderung ist Rückgängig sofort zugänglich.
+- **Auswahlrahmen:** jedes Loslassen der Maus ein Schritt. **Haken/Listen:** jeder Klick einer.
+- **Bildschritte** (Zuschnitt, Drehen, KI): ein Schritt vorher → nachher.
+- **Schneller:** Anzeige-Bitmaps der letzten Bildstände (bis 400 MB) und je vier Ergebnisse
+  der Vorschaustufen bleiben im Speicher. Das Herunterrechnen für die Vorschau kostet bei
+  10 MP 1,6–2 s, Entrauschen ~0,8 s — beim Hin und Her zwischen Ständen jetzt nicht mehr.
+  Gleiches Bild, gleiche Größe: Zoom und Ausschnitt bleiben (vorher/nachher vergleichen).
+
 ---
 
 ## 6. Roadmap

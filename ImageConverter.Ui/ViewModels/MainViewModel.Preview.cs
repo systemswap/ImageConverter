@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -102,29 +103,72 @@ public partial class MainViewModel
 
     // ------------------------------------------------------------ Anzeige
 
-    /// <summary>Neuer Bildstand: volle Auflösung für die Anzeige aufbereiten.</summary>
+    // Anzeige-Bitmaps der letzten Bildstände (volle Auflösung). Rückgängig/Wiederholen
+    // eines Zuschnitts oder KI-Schritts tauscht dann nur noch aus, statt neu umzurechnen.
+    private const long DisplayCacheBytes = 400L * 1024 * 1024;
+    private readonly List<(MagickImage Doc, Bitmap Bitmap, long Bytes)> _displayCache = [];
+    private string? _shownPath;
+
+    /// <summary>Neuer Bildstand: volle Auflösung für die Anzeige aufbereiten (oder aus dem Speicher).</summary>
     private async Task SetDocumentAsync(MagickImage doc)
     {
         var w = (int)doc.Width;
         var h = (int)doc.Height;
-        var bgra = await Task.Run(() => ImageOps.ToDisplayBgra(doc));
 
-        var old = FullBitmap;
-        FullBitmap = BitmapOps.FromBgra(bgra, w, h);
-        old?.Dispose();
+        Bitmap bitmap;
+        var i = _displayCache.FindIndex(e => ReferenceEquals(e.Doc, doc));
+        if (i >= 0)
+        {
+            var hit = _displayCache[i];
+            _displayCache.RemoveAt(i);
+            _displayCache.Insert(0, hit);
+            bitmap = hit.Bitmap;
+        }
+        else
+        {
+            var bgra = await Task.Run(() => ImageOps.ToDisplayBgra(doc));
+            bitmap = BitmapOps.FromBgra(bgra, w, h);
+            _displayCache.Insert(0, (doc, bitmap, (long)w * h * 4));
+        }
 
+        // Gleiches Bild, gleiche Größe (Rückgängig eines KI-Schritts …): Zoom und Ausschnitt
+        // bleiben — so lässt sich vorher/nachher an derselben Stelle vergleichen
+        var keepView = _shownPath == CurrentPath && DocumentSize == new PixelSize(w, h);
+        _shownPath = CurrentPath;
+
+        FullBitmap = bitmap;
+        TrimDisplayCache();
         DocumentSize = new PixelSize(w, h);
-        ViewResetToken = new object();
+        if (!keepView) ViewResetToken = new object();
+    }
+
+    /// <summary>Älteste Einträge freigeben, sobald zu viel Speicher belegt ist — nie das angezeigte Bild.</summary>
+    private void TrimDisplayCache()
+    {
+        long total = 0;
+        for (var i = 0; i < _displayCache.Count; i++)
+        {
+            var (_, bitmap, bytes) = _displayCache[i];
+            total += bytes;
+            if (i == 0 || total <= DisplayCacheBytes || ReferenceEquals(bitmap, FullBitmap)) continue;
+
+            bitmap.Dispose();
+            _displayCache.RemoveAt(i--);
+            total -= bytes;
+        }
     }
 
     private void ClearDisplay()
     {
-        var full = FullBitmap;
         var adjusted = AdjustedBitmap;
         FullBitmap = null;
         AdjustedBitmap = null;
-        full?.Dispose();
         adjusted?.Dispose();
+
+        foreach (var (_, bitmap, _) in _displayCache) bitmap.Dispose();
+        _displayCache.Clear();
+        _shownPath = null;
+        ClearPreviewCaches();
     }
 
     private void SetAdjusted(Bitmap? bitmap)
@@ -147,11 +191,13 @@ public partial class MainViewModel
     private bool _renderRunning;
     private bool _renderDirty;
 
-    // Zwischenspeicher der Stufen — nur im Render-Task benutzt, nie gleichzeitig
-    private MagickImage? _resized;
-    private (MagickImage Doc, int W, int H, ResampleFilter F, bool G)? _resizedKey;
-    private byte[]? _denoisedBgra;
-    private double _denoisedNoise = double.NaN;
+    // Zwischenspeicher der Stufen — nur im Render-Task benutzt, nie gleichzeitig.
+    // Je ein paar Ergebnisse, damit Rückgängig/Wiederholen zwischen Ständen nicht neu rechnet.
+    private const int StageCacheSize = 4;
+    private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
+    private readonly List<(ResizeKey Key, double Noise, byte[] Bgra)> _denoisedCache = [];
+
+    private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
 
     /// <summary>
     /// Fordert eine neue Vorschau an. Läuft schon eine Berechnung, wird danach genau
@@ -220,11 +266,14 @@ public partial class MainViewModel
         _estimateBase = null;
         _estimateBaseKey = null;
 
-        _resized?.Dispose();
-        _resized = null;
-        _resizedKey = null;
-        _denoisedBgra = null;
-        _denoisedNoise = double.NaN;
+    }
+
+    /// <summary>Zwischenspeicher leeren (Bilder geschlossen).</summary>
+    private void ClearPreviewCaches()
+    {
+        foreach (var (_, image) in _resizedCache) image.Dispose();
+        _resizedCache.Clear();
+        _denoisedCache.Clear();
     }
 
     /// <summary>Momentaufnahme der Einstellungen (UI-Thread). null = Original zeigen.</summary>
@@ -252,35 +301,56 @@ public partial class MainViewModel
     private PreviewResult Render(PreviewJob job)
     {
         // 1) Skalieren — teuer, nur bei Größe/Filter/Gamma neu
-        var key = (job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
-        if (_resized is null || _resizedKey != key)
+        var key = new ResizeKey(job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
+        var resized = Cached(_resizedCache, e => e.Key == key)?.Image;
+        if (resized is null)
         {
-            _resized?.Dispose();
-            _resized = ImageOps.Resize(job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
-            _resizedKey = key;
-            _denoisedBgra = null;
+            resized = ImageOps.Resize(job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
+            AddCached(_resizedCache, (Key: key, Image: resized), e => e.Image.Dispose());
         }
 
         // 2) Entrauschen — mittel, nur bei geändertem Regler neu
-        if (_denoisedBgra is null || _denoisedNoise != job.Noise)
+        var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Bgra;
+        if (denoised is null)
         {
             if (job.Noise > 0)
             {
-                using var denoised = ImageOps.Denoise(_resized, job.Noise);
-                _denoisedBgra = ImageOps.ToDisplayBgra(denoised);
+                using var d = ImageOps.Denoise(resized, job.Noise);
+                denoised = ImageOps.ToDisplayBgra(d);
             }
             else
             {
-                _denoisedBgra = ImageOps.ToDisplayBgra(_resized);
+                denoised = ImageOps.ToDisplayBgra(resized);
             }
-            _denoisedNoise = job.Noise;
+            AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Bgra: denoised), null);
         }
 
         // 3) Schärfen — schnell, bei jeder Reglerbewegung
         var final = job.SharpenAmount > 0
-            ? Sharpen.UnsharpMask(_denoisedBgra, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
-            : _denoisedBgra;
+            ? Sharpen.UnsharpMask(denoised, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
+            : denoised;
 
         return new PreviewResult(final, job.Width, job.Height);
+    }
+
+    /// <summary>Treffer nach vorn holen (zuletzt benutzt bleibt am längsten).</summary>
+    private static T? Cached<T>(List<T> cache, Func<T, bool> match) where T : struct
+    {
+        var i = cache.FindIndex(e => match(e));
+        if (i < 0) return null;
+        var hit = cache[i];
+        cache.RemoveAt(i);
+        cache.Insert(0, hit);
+        return hit;
+    }
+
+    private static void AddCached<T>(List<T> cache, T entry, Action<T>? evicted)
+    {
+        cache.Insert(0, entry);
+        while (cache.Count > StageCacheSize)
+        {
+            evicted?.Invoke(cache[^1]);
+            cache.RemoveAt(cache.Count - 1);
+        }
     }
 }

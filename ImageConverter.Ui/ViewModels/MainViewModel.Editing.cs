@@ -226,6 +226,7 @@ public partial class MainViewModel
     private async Task ShowCurrentAsync()
     {
         if (_history is not { } h) return;
+        CommitPendingSettings();   // z. B. Regler bewegt, während die KI rechnete
 
         var doc = h.Current;
         await SetDocumentAsync(doc);
@@ -238,7 +239,7 @@ public partial class MainViewModel
 
         using (SuppressHistory())
             ApplySourceSize(w, hgt);
-        _committedSettings = CaptureSettings();
+        ResetHistoryBaseline();
 
         NotifyUndoRedo();
         RequestPreview();

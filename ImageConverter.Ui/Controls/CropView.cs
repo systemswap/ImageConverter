@@ -60,6 +60,16 @@ public sealed class CropView : Control
         set => SetValue(CropCommandProperty, value);
     }
 
+    /// <summary>Wird ausgelöst, wenn eine Geste am Rahmen endet (Maus losgelassen) — ein Rückgängig-Schritt.</summary>
+    public static readonly StyledProperty<ICommand?> GestureCompletedCommandProperty =
+        AvaloniaProperty.Register<CropView, ICommand?>(nameof(GestureCompletedCommand));
+
+    public ICommand? GestureCompletedCommand
+    {
+        get => GetValue(GestureCompletedCommandProperty);
+        set => SetValue(GestureCompletedCommandProperty, value);
+    }
+
     private void RequestCrop()
     {
         if (CropCommand is { } cmd && cmd.CanExecute(null))
@@ -584,9 +594,12 @@ public sealed class CropView : Control
                 Selection = null;
         }
 
+        var wasEdit = _mode != DragMode.Pan;
         _mode = DragMode.None;
         e.Pointer.Capture(null);
         UpdateHoverCursor(e.GetPosition(this));
+        if (wasEdit && GestureCompletedCommand is { } done && done.CanExecute(null))
+            done.Execute(null);
         e.Handled = true;
     }
 

@@ -13,7 +13,7 @@ public class PerImageSettingsTests
     private static MainViewModel.SettingsState Landscape(int tw = 4000, int th = 3000,
         bool keep = true, bool widthLeading = true)
     {
-        var vm = new MainViewModel { SettleDelayMs = -1 };
+        var vm = new MainViewModel { DeferHistoryTurns = false };
         vm.Dpi = 300;
         var s = vm.SettingsFor("—", 4000, 3000);   // Vorlage mit allen Standardwerten
         return s with
@@ -93,7 +93,7 @@ public class PerImageSettingsTests
     [Fact]
     public async Task ToggleApplyToAll_IsUndoable()
     {
-        var vm = new MainViewModel { SettleDelayMs = -1 };
+        var vm = new MainViewModel { DeferHistoryTurns = false };
         vm.ApplyToAll = false;
         Assert.True(vm.CanUndo);
 

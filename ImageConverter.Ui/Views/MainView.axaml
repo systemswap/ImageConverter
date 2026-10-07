@@ -541,7 +541,8 @@
                                     Selection="{Binding CropSelection}"
                                     AspectRatio="{Binding AspectRatio}"
                                     SelectionRadius="{Binding CornerRadius}"
-                                    CropCommand="{Binding CropToSelectionCommand}" />
+                                    CropCommand="{Binding CropToSelectionCommand}"
+                                    GestureCompletedCommand="{Binding CommitSettingsStepCommand}" />
 
                         <!-- Leerer Zustand: große Drop-Zone -->
                         <Grid IsVisible="{Binding !HasImage}"

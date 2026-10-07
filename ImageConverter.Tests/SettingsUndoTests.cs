@@ -4,12 +4,12 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Rückgängig für Einstellungen. Das Zeitfenster zum Zusammenfassen ist hier
-/// abgeschaltet; ein „Innehalten" simuliert <see cref="MainViewModel.CommitPendingSettings"/>.
+/// Rückgängig für Einstellungen. Jede Änderung zählt hier sofort als eigener Bedienvorgang;
+/// <see cref="MainViewModel.CommitPendingSettings"/> schließt den offenen Schritt ab.
 /// </summary>
 public class SettingsUndoTests
 {
-    private static MainViewModel Create() => new() { SettleDelayMs = -1 };
+    private static MainViewModel Create() => new() { DeferHistoryTurns = false };
 
     [Fact]
     public async Task SingleChange_CanBeUndone_AndRedone()
@@ -147,6 +147,72 @@ public class SettingsUndoTests
         Assert.Equal(0, vm.CornerRadius);
         Assert.NotNull(vm.CropSelection);
 
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Null(vm.CropSelection);
+    }
+
+    [Fact]
+    public async Task SameSlider_SeveralDrags_StayOneStep()
+    {
+        // Ziehen, loslassen, nachdenken, nochmal ziehen — ein Schritt
+        var vm = Create();
+        vm.SharpenAmount = 1;
+        vm.SharpenAmount = 1.5;
+        vm.SharpenAmount = 0.8;
+        vm.CommitPendingSettings();
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(0, vm.SharpenAmount);
+        Assert.False(vm.CanUndo);
+    }
+
+    [Fact]
+    public async Task OtherControl_ClosesTheOpenStep()
+    {
+        var vm = Create();
+        vm.Quality = 50;
+        vm.SharpenAmount = 1;      // ohne Pause — trotzdem zwei Schritte
+        vm.Quality = 60;           // wieder Qualität: neuer Schritt, nicht der erste
+        vm.CommitPendingSettings();
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(50, vm.Quality);
+        Assert.Equal(1, vm.SharpenAmount);
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(0, vm.SharpenAmount);
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(82, vm.Quality);
+        Assert.False(vm.CanUndo);
+    }
+
+    [Fact]
+    public async Task Choices_AreEachTheirOwnStep()
+    {
+        var vm = Create();
+        vm.SelectedFormat = "PNG";
+        vm.SelectedFormat = "JPEG";
+        vm.CommitPendingSettings();
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal("PNG", vm.SelectedFormat);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal("WebP", vm.SelectedFormat);
+    }
+
+    [Fact]
+    public async Task Selection_EachMouseUpIsAStep()
+    {
+        var vm = Create();
+        vm.CropSelection = new Rect(10, 10, 100, 100);
+        vm.CropSelection = new Rect(10, 10, 200, 150);   // Ziehen
+        vm.CommitSettingsStepCommand.Execute(null);        // Maus los
+        vm.CropSelection = new Rect(50, 40, 200, 150);   // verschieben
+        vm.CommitSettingsStepCommand.Execute(null);
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(new Rect(10, 10, 200, 150), vm.CropSelection);
         await vm.UndoCommand.ExecuteAsync(null);
         Assert.Null(vm.CropSelection);
     }
