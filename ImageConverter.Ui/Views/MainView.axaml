@@ -123,6 +123,84 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
+                    <!-- ============================== Zuschnitt -->
+                    <HeaderedContentControl x:Name="CropGroup" Header="ZUSCHNITT">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Verhältnis" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding AspectPresets}"
+                                          SelectedItem="{Binding SelectedAspectPreset}" />
+                            </Grid>
+
+                            <!-- Noch keine Auswahl: kurze Anleitung -->
+                            <Border IsVisible="{Binding !HasCropSelection}"
+                                    Background="{DynamicResource SurfaceAltBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush2}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource RadiusControl}"
+                                    Padding="10,8">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <TextBlock Grid.Column="0" Text="✂" FontSize="16"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               Margin="0,0,10,0" VerticalAlignment="Top" />
+                                    <TextBlock Grid.Column="1" Classes="hint"
+                                               Text="Mit gedrückter linker Maustaste über das Bild ziehen, um einen Ausschnitt zu wählen." />
+                                </Grid>
+                            </Border>
+
+                            <!-- Auswahl vorhanden -->
+                            <StackPanel IsVisible="{Binding HasCropSelection}">
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Position" />
+                                    <NumericUpDown Grid.Column="1" Value="{Binding CropX}" Minimum="0" />
+                                    <TextBlock Grid.Column="2" Classes="label" Text="," Margin="7,0" />
+                                    <NumericUpDown Grid.Column="3" Value="{Binding CropY}" Minimum="0" />
+                                </Grid>
+
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Größe" />
+                                    <NumericUpDown Grid.Column="1" Value="{Binding CropWidth}" />
+                                    <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
+                                    <NumericUpDown Grid.Column="3" Value="{Binding CropHeight}" />
+                                </Grid>
+
+                                <!-- Runde Ecken: Max = halbe längste Seite → Ellipse bzw. Kreis -->
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Ecken" />
+                                    <Slider Grid.Column="1" Minimum="0"
+                                            Maximum="{Binding MaxCornerRadius}"
+                                            Value="{Binding CornerRadius}"
+                                            ToolTip.Tip="Rundet die Ecken der Auswahl ab. Ganz rechts wird daraus eine Ellipse — bei Verhältnis 1:1 ein Kreis. Alles außerhalb der Rundung wird beim Zuschneiden transparent." />
+                                    <TextBlock Grid.Column="2" Classes="value" MinWidth="50"
+                                               Text="{Binding CornerRadiusLabel}" />
+                                </Grid>
+
+                                <Border IsVisible="{Binding ShowTransparencyWarning}"
+                                        Background="#1FE0A100" BorderBrush="#66E0A100"
+                                        BorderThickness="1"
+                                        CornerRadius="{DynamicResource RadiusControl}"
+                                        Padding="10,7" Margin="0,0,0,10">
+                                    <TextBlock Classes="hint"
+                                               Text="JPEG und BMP kennen keine Transparenz — die runden Ecken würden weiß. Für Buttons PNG oder WebP wählen." />
+                                </Border>
+
+                                <Grid ColumnDefinitions="Auto,8,*">
+                                    <Button Grid.Column="0" Classes="subtle"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            Command="{Binding ClearSelectionCommand}"
+                                            Content="Auswahl aufheben"
+                                            ToolTip.Tip="Rahmen entfernen, das Bild bleibt unverändert (Esc)." />
+                                    <Button Grid.Column="2" Classes="primary"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            Command="{Binding CropToSelectionCommand}"
+                                            Content="Auf Auswahl zuschneiden"
+                                            ToolTip.Tip="Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen." />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
                     <!-- ============================== Größe -->
                     <HeaderedContentControl Header="GRÖSSE">
                         <StackPanel>
@@ -229,84 +307,6 @@
                                 <CheckBox IsChecked="{Binding GammaCorrect}"
                                           Content="Gamma-korrekt skalieren" FontSize="12"
                                           ToolTip.Tip="Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus." />
-                            </StackPanel>
-                        </StackPanel>
-                    </HeaderedContentControl>
-
-                    <!-- ============================== Zuschnitt -->
-                    <HeaderedContentControl x:Name="CropGroup" Header="ZUSCHNITT">
-                        <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Verhältnis" />
-                                <ComboBox Grid.Column="1"
-                                          ItemsSource="{Binding AspectPresets}"
-                                          SelectedItem="{Binding SelectedAspectPreset}" />
-                            </Grid>
-
-                            <!-- Noch keine Auswahl: kurze Anleitung -->
-                            <Border IsVisible="{Binding !HasCropSelection}"
-                                    Background="{DynamicResource SurfaceAltBrush}"
-                                    BorderBrush="{DynamicResource BorderBrush2}"
-                                    BorderThickness="1"
-                                    CornerRadius="{DynamicResource RadiusControl}"
-                                    Padding="10,8">
-                                <Grid ColumnDefinitions="Auto,*">
-                                    <TextBlock Grid.Column="0" Text="✂" FontSize="16"
-                                               Foreground="{DynamicResource AccentBrush}"
-                                               Margin="0,0,10,0" VerticalAlignment="Top" />
-                                    <TextBlock Grid.Column="1" Classes="hint"
-                                               Text="Mit gedrückter linker Maustaste über das Bild ziehen, um einen Ausschnitt zu wählen." />
-                                </Grid>
-                            </Border>
-
-                            <!-- Auswahl vorhanden -->
-                            <StackPanel IsVisible="{Binding HasCropSelection}">
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Position" />
-                                    <NumericUpDown Grid.Column="1" Value="{Binding CropX}" Minimum="0" />
-                                    <TextBlock Grid.Column="2" Classes="label" Text="," Margin="7,0" />
-                                    <NumericUpDown Grid.Column="3" Value="{Binding CropY}" Minimum="0" />
-                                </Grid>
-
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Größe" />
-                                    <NumericUpDown Grid.Column="1" Value="{Binding CropWidth}" />
-                                    <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
-                                    <NumericUpDown Grid.Column="3" Value="{Binding CropHeight}" />
-                                </Grid>
-
-                                <!-- Runde Ecken: Max = halbe längste Seite → Ellipse bzw. Kreis -->
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Ecken" />
-                                    <Slider Grid.Column="1" Minimum="0"
-                                            Maximum="{Binding MaxCornerRadius}"
-                                            Value="{Binding CornerRadius}"
-                                            ToolTip.Tip="Rundet die Ecken der Auswahl ab. Ganz rechts wird daraus eine Ellipse — bei Verhältnis 1:1 ein Kreis. Alles außerhalb der Rundung wird beim Zuschneiden transparent." />
-                                    <TextBlock Grid.Column="2" Classes="value" MinWidth="50"
-                                               Text="{Binding CornerRadiusLabel}" />
-                                </Grid>
-
-                                <Border IsVisible="{Binding ShowTransparencyWarning}"
-                                        Background="#1FE0A100" BorderBrush="#66E0A100"
-                                        BorderThickness="1"
-                                        CornerRadius="{DynamicResource RadiusControl}"
-                                        Padding="10,7" Margin="0,0,0,10">
-                                    <TextBlock Classes="hint"
-                                               Text="JPEG und BMP kennen keine Transparenz — die runden Ecken würden weiß. Für Buttons PNG oder WebP wählen." />
-                                </Border>
-
-                                <Grid ColumnDefinitions="Auto,8,*">
-                                    <Button Grid.Column="0" Classes="subtle"
-                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                            Command="{Binding ClearSelectionCommand}"
-                                            Content="Auswahl aufheben"
-                                            ToolTip.Tip="Rahmen entfernen, das Bild bleibt unverändert (Esc)." />
-                                    <Button Grid.Column="2" Classes="primary"
-                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                            Command="{Binding CropToSelectionCommand}"
-                                            Content="Auf Auswahl zuschneiden"
-                                            ToolTip.Tip="Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen." />
-                                </Grid>
                             </StackPanel>
                         </StackPanel>
                     </HeaderedContentControl>

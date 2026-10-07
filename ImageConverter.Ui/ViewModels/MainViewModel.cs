@@ -42,6 +42,9 @@ public partial class MainViewModel : ViewModelBase
 
         // Maße des Platzhalterbilds, solange nichts geladen ist
         ApplySourceSize(4000, 3000);
+
+        // Ab hier zählen Änderungen als Rückgängig-Schritte
+        _committedSettings = CaptureSettings();
     }
 
     public ObservableCollection<string> Formats { get; }
@@ -142,6 +145,7 @@ public partial class MainViewModel : ViewModelBase
     private async Task ShowFileAsync(int index)
     {
         var path = _files[index];
+        CommitPendingSettings();   // offene Reglerbewegungen gehören noch zum vorigen Bild
 
         _loadCts?.Cancel();
         var cts = _loadCts = new CancellationTokenSource();
@@ -175,17 +179,20 @@ public partial class MainViewModel : ViewModelBase
 
             // DPI aus der Datei übernehmen — aber nur beim ersten Öffnen, danach
             // gilt, was eingestellt wurde.
-            if (isNew) SetDpiSilently((int)Math.Round(history.Dpi));
+            if (isNew)
+                using (SuppressHistory())
+                    SetDpiSilently((int)Math.Round(history.Dpi));
 
-            await ShowCurrentAsync(restore: null);
+            await ShowCurrentAsync();
 
             // Unbearbeitete Bilder nicht im Speicher halten, bearbeitete schon —
             // sonst wäre ein Zuschnitt beim Weiterblättern verloren.
-            if (previous is { HasEdits: false } && previous != history && previousPath is not null)
+            if (previous is not null && previous != history && previousPath is not null
+                && !IsReferencedByHistory(previousPath, previous))
             {
                 await StopPreviewAsync();
                 _histories.Remove(previousPath);
-                previous.DisposeAll();
+                previous.Current.Dispose();   // unbearbeitet: Current ist das Original
                 RequestPreview();
             }
         }

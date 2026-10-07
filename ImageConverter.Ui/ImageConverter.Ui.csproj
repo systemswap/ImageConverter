@@ -25,4 +25,8 @@
     <ItemGroup>
       <ProjectReference Include="..\ImageConverter.Core\ImageConverter.Core.csproj" />
     </ItemGroup>
+
+    <ItemGroup>
+      <InternalsVisibleTo Include="ImageConverter.Tests" />
+    </ItemGroup>
 </Project>

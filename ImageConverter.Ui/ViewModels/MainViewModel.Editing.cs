@@ -12,43 +12,66 @@ namespace ImageConverter.ViewModels;
 // Zuschneiden, Drehen, Spiegeln und der Verlauf dafür.
 public partial class MainViewModel
 {
-    /// <summary>Stand vor einem Bearbeitungsschritt — inklusive Rahmen, damit
-    /// Rückgängig den Auswahlrahmen zum Nachjustieren zurückbringt.</summary>
-    private sealed record Snapshot(MagickImage Image, Rect? Selection, double Radius);
+    /// <summary>
+    /// Ein Schritt im Verlauf: der Stand <b>vor</b> der Änderung. Bei Bildänderungen
+    /// (Zuschnitt, Drehen …) ist <see cref="Image"/> das Bild davor und
+    /// <see cref="FilePath"/> die Datei; bei reinen Einstellungsänderungen sind beide null.
+    /// </summary>
+    private sealed record Snapshot(string? FilePath, MagickImage? Image, SettingsState Settings);
 
-    /// <summary>Verlauf einer Datei: aktuelles Bild plus Rückgängig/Wiederholen.</summary>
-    private sealed class EditHistory(MagickImage current)
+    /// <summary>Das Bild einer Datei: Original und aktueller Stand.</summary>
+    private sealed class EditHistory(MagickImage original)
     {
-        public MagickImage Current { get; set; } = current;
-        public Stack<Snapshot> Undo { get; } = new();
-        public Stack<Snapshot> Redo { get; } = new();
+        public MagickImage Original { get; } = original;
+        public MagickImage Current { get; set; } = original;
         public long FileBytes { get; init; }
         public string FormatName { get; init; } = "";
         public double Dpi { get; init; } = ImageLoader.DefaultDpi;
-        public bool HasEdits => Undo.Count > 0 || Redo.Count > 0;
 
-        public void ClearRedo()
-        {
-            foreach (var s in Redo) s.Image.Dispose();
-            Redo.Clear();
-        }
-
-        public void DisposeAll()
-        {
-            Current.Dispose();
-            foreach (var s in Undo) s.Image.Dispose();
-            Undo.Clear();
-            ClearRedo();
-        }
+        /// <summary>Weicht vom geladenen Bild ab (zugeschnitten, gedreht …).</summary>
+        public bool IsEdited => !ReferenceEquals(Current, Original);
     }
+
+    // Ein gemeinsamer Verlauf für alles: Einstellungen gelten für alle Bilder,
+    // Bildänderungen merken sich ihre Datei. „Rückgängig" nimmt immer den
+    // letzten Schritt zurück — notfalls auch an einem anderen Bild.
+    private readonly Stack<Snapshot> _undo = new();
+    private readonly Stack<Snapshot> _redo = new();
 
     private readonly Dictionary<string, EditHistory> _histories = new(StringComparer.Ordinal);
     private EditHistory? _history;
 
-    public bool CanUndo => _history?.Undo.Count > 0;
-    public bool CanRedo => _history?.Redo.Count > 0;
+    public bool CanUndo => _undo.Count > 0 || HasPendingSettings;
+    public bool CanRedo => _redo.Count > 0 && !HasPendingSettings;
 
     [ObservableProperty] public partial bool IsEditing { get; set; }
+
+    private void NotifyUndoRedo()
+    {
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRedo));
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ClearRedo()
+    {
+        foreach (var s in _redo) s.Image?.Dispose();
+        _redo.Clear();
+    }
+
+    /// <summary>Muss die Datei im Speicher bleiben, weil der Verlauf noch auf sie zeigt?</summary>
+    private bool IsReferencedByHistory(string path, EditHistory h) =>
+        h.IsEdited
+        || HasFile(_undo, path)
+        || HasFile(_redo, path);
+
+    private static bool HasFile(Stack<Snapshot> stack, string path)
+    {
+        foreach (var s in stack)
+            if (s.FilePath == path) return true;
+        return false;
+    }
 
     /// <summary>
     /// Der Ausschnitt wird zum neuen Bild. Bei runden Ecken ist alles außerhalb
@@ -75,24 +98,26 @@ public partial class MainViewModel
 
     /// <summary>
     /// Ein Bearbeitungsschritt auf dem echten Bild (ImageMagick, im Hintergrund).
-    /// Das Ergebnis wird das neue Bild, der vorherige Stand inklusive Rahmen und
-    /// Rundung kommt auf den Rückgängig-Stapel.
+    /// Das Ergebnis wird das neue Bild; Bild und Einstellungen davor kommen
+    /// als ein Schritt auf den Rückgängig-Stapel.
     /// </summary>
     private async Task ApplyEditAsync(Func<MagickImage, MagickImage> operation)
     {
-        if (_history is not { } h || IsEditing) return;
+        if (_history is not { } h || IsEditing || _fileIndex < 0) return;
 
+        CommitPendingSettings();   // offene Reglerbewegungen sind ein eigener Schritt davor
         IsEditing = true;
         try
         {
             var source = h.Current;
+            var before = CaptureSettings();
             var result = await Task.Run(() => operation(source));
 
-            h.Undo.Push(new Snapshot(source, CropSelection, CornerRadius));
             await StopPreviewAsync();   // Wiederholen-Bilder könnten gerade gelesen werden
-            h.ClearRedo();
+            _undo.Push(new Snapshot(_files[_fileIndex], source, before));
+            ClearRedo();
             h.Current = result;
-            await ShowCurrentAsync(restore: null);
+            await ShowCurrentAsync();
         }
         catch (Exception ex)
         {
@@ -101,33 +126,61 @@ public partial class MainViewModel
         finally
         {
             IsEditing = false;
+            NotifyUndoRedo();
         }
     }
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private async Task Undo()
     {
-        if (_history is not { Undo.Count: > 0 } h) return;
+        CommitPendingSettings();
+        if (!_undo.TryPop(out var previous)) return;
 
-        var previous = h.Undo.Pop();
-        h.Redo.Push(new Snapshot(h.Current, null, 0));
-        h.Current = previous.Image;
-        await ShowCurrentAsync(restore: previous);
+        // Gegenstück für Wiederholen: der jetzige Stand, gleicher Art wie der Schritt
+        var settingsNow = CaptureSettings();   // vor dem Bildtausch, der die Größe zurücksetzt
+        var redoImage = await SwapImageAsync(previous);
+        _redo.Push(new Snapshot(previous.FilePath, redoImage, settingsNow));
+
+        ApplySettings(previous.Settings);
+        NotifyUndoRedo();
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private async Task Redo()
     {
-        if (_history is not { Redo.Count: > 0 } h) return;
+        if (!_redo.TryPop(out var next)) return;
 
-        var next = h.Redo.Pop();
-        h.Undo.Push(new Snapshot(h.Current, CropSelection, CornerRadius));
-        h.Current = next.Image;
-        await ShowCurrentAsync(restore: null);
+        var settingsNow = CaptureSettings();
+        var undoImage = await SwapImageAsync(next);
+        _undo.Push(new Snapshot(next.FilePath, undoImage, settingsNow));
+
+        ApplySettings(next.Settings);
+        NotifyUndoRedo();
     }
 
-    /// <summary>Zeigt das aktuelle Bild des Verlaufs; stellt optional Rahmen und Rundung wieder her.</summary>
-    private async Task ShowCurrentAsync(Snapshot? restore)
+    /// <summary>
+    /// Bei Bildschritten: zur Datei wechseln, deren Bild tauschen und das bisherige
+    /// zurückgeben. Bei reinen Einstellungsschritten passiert nichts (null).
+    /// </summary>
+    private async Task<MagickImage?> SwapImageAsync(Snapshot step)
+    {
+        if (step.Image is null || step.FilePath is null) return null;
+
+        var index = _files.IndexOf(step.FilePath);
+        if (index >= 0 && index != _fileIndex)
+            await ShowFileAsync(index);
+
+        if (!_histories.TryGetValue(step.FilePath, out var h)) return null;
+
+        await StopPreviewAsync();
+        var current = h.Current;
+        h.Current = step.Image;
+        if (h == _history) await ShowCurrentAsync();
+        return current;
+    }
+
+    /// <summary>Zeigt das aktuelle Bild der Datei; Pixelmaße beginnen wieder beim Bild.</summary>
+    private async Task ShowCurrentAsync()
     {
         if (_history is not { } h) return;
 
@@ -136,30 +189,33 @@ public partial class MainViewModel
 
         var w = (int)doc.Width;
         var hgt = (int)doc.Height;
-        FileDetails = h.Undo.Count > 0
+        FileDetails = h.IsEdited
             ? $"{w} × {hgt} px  ·  {h.FormatName}  ·  bearbeitet"
             : $"{w} × {hgt} px  ·  {FormatBytes(h.FileBytes)}  ·  {h.FormatName}";
-        ApplySourceSize(w, hgt);
 
-        if (restore is { Selection: { } sel })
-        {
-            CropSelection = sel;
-            CornerRadius = restore.Radius;
-        }
+        using (SuppressHistory())
+            ApplySourceSize(w, hgt);
+        _committedSettings = CaptureSettings();
 
-        OnPropertyChanged(nameof(CanUndo));
-        OnPropertyChanged(nameof(CanRedo));
-        UndoCommand.NotifyCanExecuteChanged();
-        RedoCommand.NotifyCanExecuteChanged();
-
+        NotifyUndoRedo();
         RequestPreview();
     }
 
+    /// <summary>Alles freigeben — jedes Bild genau einmal, auch wenn es mehrfach referenziert ist.</summary>
     private void DisposeAllHistories()
     {
-        foreach (var h in _histories.Values) h.DisposeAll();
+        var images = new HashSet<MagickImage>(ReferenceEqualityComparer.Instance);
+        foreach (var h in _histories.Values) { images.Add(h.Original); images.Add(h.Current); }
+        foreach (var s in _undo) if (s.Image is not null) images.Add(s.Image);
+        foreach (var s in _redo) if (s.Image is not null) images.Add(s.Image);
+        foreach (var img in images) img.Dispose();
+
         _histories.Clear();
+        _undo.Clear();
+        _redo.Clear();
         _history = null;
+        _pendingBaseline = null;
+        NotifyUndoRedo();
     }
 
     // ----------------------------------------------------------- Zuschnitt
