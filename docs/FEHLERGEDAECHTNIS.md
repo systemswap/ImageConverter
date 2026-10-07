@@ -81,3 +81,33 @@ Test oder Nachweis.
 - **Test/Nachweis:** `PlatformTests` (Programmordner); von Hand: Testprogramm
   mit den Bibliotheken nur in `Tools/` – `/proc/self/maps` zeigt beide aus
   `Tools/` geladen.
+
+## 3. Telemetrie: Avalonia meldet jeden Build (Avalonia.BuildServices)
+
+- **Entdeckt:** 0.4.18 (Commit `62cd553`, 07.10.2026). **Behoben:** 0.4.19.
+- **Was:** Das Paket `Avalonia.BuildServices` (kommt automatisch mit Avalonia)
+  führt vor jedem Kompilieren die `AvaloniaStatsTask` aus und meldet Projekt,
+  Avalonia-Version, Zielsystem und System an den Server von Avalonia.
+- **Situation:** jeder Build in Rider, Visual Studio oder mit `dotnet` – auch
+  auf dem Windows-Rechner, auf dem bis 0.4.17 entwickelt wurde. Dort war
+  `AVALONIA_TELEMETRY_OPTOUT` vermutlich nicht gesetzt, die Builds bis 0.4.17
+  wurden also wahrscheinlich gemeldet (nicht mehr nachprüfbar).
+- **Warum:** Voreinstellung des Herstellers; abschaltbar nur über die
+  Umgebungsvariable `AVALONIA_TELEMETRY_OPTOUT=1`, die auf einem neuen Rechner
+  oder in der IDE leicht fehlt.
+- **Wie behoben:** `Directory.Build.targets` definiert ein leeres Target
+  `AvaloniaStats`. Diese Datei lädt MSBuild nach den Paket-Targets, die letzte
+  Definition gilt – die Meldung entfällt auf jedem Rechner, unabhängig von der
+  Umgebung. Die Build-Skripte setzen die Variable zusätzlich.
+  Verworfen: nur die Variable (hängt am Rechner); das Paket mit
+  `ExcludeAssets` ausschließen (bei einer neuen Avalonia-Fassung mit anderem
+  Paketnamen wirkungslos, das Target heißt seit Jahren gleich).
+- **Nicht tun:** `Directory.Build.targets` löschen oder umbenennen. Nach einem
+  Avalonia-Update prüfen, ob das Target noch `AvaloniaStats` heißt
+  (`~/.nuget/packages/avalonia.buildservices/<version>/buildTransitive/*.targets`).
+- **Wo:** `Directory.Build.targets`.
+- **Nachweis:** Build ohne Netz (`unshare -rn`) und ohne die Variable mit
+  `-v:d`: MSBuild meldet „Das Ziel "AvaloniaStats" … wird durch das Ziel …
+  aus Directory.Build.targets außer Kraft gesetzt“, die `AvaloniaStatsTask`
+  läuft nicht. Gegenprobe ohne die Datei (mit gesetzter Variable): die Aufgabe
+  läuft.
