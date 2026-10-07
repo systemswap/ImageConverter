@@ -23,7 +23,9 @@ public static class PrintDocument
     /// Schärfen), für den Druck immer sRGB; bei Bedarf verkleinert und gedreht.
     /// Ergebnis: JPEG (Qualität 95, ohne Farb-Unterabtastung) oder PNG bei Transparenz.
     /// </summary>
-    public static byte[] RenderForPrint(MagickImage source, ExportOptions o, Placement p)
+    /// <param name="grayscale">Schwarzweiß: Bild selbst in Graustufen umrechnen — wirkt auch,
+    /// wenn ein Druckertreiber die Option „monochrom" ignoriert, und im PDF.</param>
+    public static byte[] RenderForPrint(MagickImage source, ExportOptions o, Placement p, bool grayscale = false)
     {
         var options = o with { Color = ColorMode.ConvertToSrgb, Metadata = MetadataMode.RemoveAll };
         if (p.Scale < 1)
@@ -43,6 +45,10 @@ public static class PrintDocument
             img.Rotate(90);
             img.ResetPage();
         }
+
+        // Helligkeit wie das Auge sie wahrnimmt (Rec. 709), nicht einfach der Mittelwert
+        if (grayscale)
+            img.Grayscale(PixelIntensityMethod.Rec709Luminance);
 
         // PDFsharp liest nur gängige Varianten: 8 Bit pro Kanal, Farbe (kein Grau/Palette).
         // Mit Q16 schriebe ImageMagick sonst z. B. 16-Bit-PNG — „Unsupported image format".

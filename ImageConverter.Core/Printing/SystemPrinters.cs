@@ -10,6 +10,27 @@ public sealed record PrinterInfo(string Name, bool IsDefault)
     public override string ToString() => IsDefault ? $"{Name} (Standard)" : Name;
 }
 
+public enum DuplexMode
+{
+    OneSided,
+    /// <summary>Wenden an der langen Kante — wie ein Buch im Hochformat.</summary>
+    LongEdge,
+    /// <summary>Wenden an der kurzen Kante — wie ein Kalender oder Klemmbrett.</summary>
+    ShortEdge,
+}
+
+/// <summary>Druckeroptionen, die für jeden Auftrag gelten.</summary>
+public sealed record PrintSettings(int Copies, DuplexMode Duplex, bool Grayscale);
+
+/// <summary>
+/// Was ein Drucker kann. null = unbekannt (das System verrät es nicht) — die Option
+/// bleibt dann wählbar; false = sicher nicht vorhanden — die Option wird ausgegraut.
+/// </summary>
+public sealed record PrinterCapabilities(bool? Duplex, bool? Color)
+{
+    public static PrinterCapabilities Unknown { get; } = new(null, null);
+}
+
 /// <summary>
 /// Installierte Drucker und Druckaufträge. Linux: CUPS über die Befehle <c>lpstat</c>
 /// und <c>lp</c> — das PDF geht unverändert an CUPS. Windows: Druckdienst über
@@ -80,25 +101,97 @@ public static class SystemPrinters
         return Math.Round(max * 0.254, 1);
     }
 
+    // ------------------------------------------------------------ Fähigkeiten
+
+    /// <summary>Kann der Drucker doppelseitig, kann er Farbe? Soweit das System es verrät.</summary>
+    public static PrinterCapabilities Capabilities(string printer)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows()) return CapabilitiesWindows(printer);
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                return ParseCupsCapabilities(RunWithExit("lpoptions", ["-p", printer, "-l"]).Output);
+        }
+        catch
+        {
+            // Nicht ermittelbar — Optionen bleiben wählbar
+        }
+        return PrinterCapabilities.Unknown;
+    }
+
+    /// <summary>
+    /// Wertet die Ausgabe von <c>lpoptions -p NAME -l</c> aus. Zeilen wie
+    /// „sides/2-Sided Printing: *one-sided two-sided-long-edge two-sided-short-edge"
+    /// (IPP Everywhere) oder „Duplex/Double-Sided: *None DuplexNoTumble DuplexTumble" (PPD).
+    /// </summary>
+    internal static PrinterCapabilities ParseCupsCapabilities(string lpoptionsOutput)
+    {
+        bool? duplex = null, color = null;
+
+        foreach (var raw in lpoptionsOutput.Split('\n'))
+        {
+            var line = raw.Trim();
+            var colon = line.IndexOf(':');
+            if (colon < 0) continue;
+            // „Schlüssel/Anzeigetext: Werte" — der Schlüssel endet am ersten „/" vor dem „:"
+            var slash = line.IndexOf('/');
+            var keyEnd = slash > 0 && slash < colon ? slash : colon;
+            var key = line[..keyEnd].ToLowerInvariant();
+            var values = line[(colon + 1)..].Replace("*", "").ToLowerInvariant()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (key is "sides" or "duplex")
+            {
+                duplex = values.Any(v => v.Contains("two-sided") || v.Contains("duplexnotumble") || v.Contains("duplextumble"));
+            }
+            else if (key is "print-color-mode" or "colormodel" or "colormode")
+            {
+                var hasColor = values.Any(v => v is "color" or "rgb" or "cmyk" or "rgbw" || v.Contains("color") && !v.Contains("gray"));
+                var hasGray = values.Any(v => v.Contains("monochrome") || v.Contains("gray") || v.Contains("grey") || v is "black" or "kgray");
+                // Nur Grau angeboten → reiner Schwarzweißdrucker
+                color = hasColor ? true : hasGray ? false : null;
+            }
+        }
+
+        return new PrinterCapabilities(duplex, color);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static PrinterCapabilities CapabilitiesWindows(string printer)
+    {
+        var s = new System.Drawing.Printing.PrinterSettings { PrinterName = printer };
+        return new PrinterCapabilities(s.CanDuplex, s.SupportsColor);
+    }
+
     // ------------------------------------------------------------ Drucken
 
     /// <summary>Linux/macOS: fertiges PDF an CUPS schicken.</summary>
-    public static Task PrintPdfWithCupsAsync(string pdfPath, string printer, int copies, PaperSize paper, string title) =>
+    public static Task PrintPdfWithCupsAsync(string pdfPath, string printer, PrintSettings settings, PaperSize paper, string title) =>
         Task.Run(() =>
         {
-            var args = new List<string>
-            {
-                "-d", printer,
-                "-n", Math.Max(1, copies).ToString(),
-                "-t", title,
-                "-o", $"media={CupsMedia(paper)}",
-                "-o", "print-scaling=none",    // exakt in mm, nicht „an Seite anpassen"
-                "-o", "fit-to-page=false",
-                pdfPath,
-            };
-            var (code, output) = RunWithExit("lp", args);
+            var (code, output) = RunWithExit("lp", BuildCupsArgs(pdfPath, printer, settings, paper, title));
             if (code != 0) throw new InvalidOperationException($"Drucken fehlgeschlagen: {output.Trim()}");
         });
+
+    /// <summary>Befehlszeile für <c>lp</c> — mit den Standard-IPP-Optionen, die CUPS
+    /// auch für ältere PPD-Treiber übersetzt.</summary>
+    internal static List<string> BuildCupsArgs(string pdfPath, string printer, PrintSettings settings, PaperSize paper, string title) =>
+    [
+        "-d", printer,
+        "-n", Math.Max(1, settings.Copies).ToString(),
+        "-t", title,
+        "-o", $"media={CupsMedia(paper)}",
+        "-o", "print-scaling=none",    // exakt in mm, nicht „an Seite anpassen"
+        "-o", "fit-to-page=false",
+        "-o", "sides=" + settings.Duplex switch
+        {
+            DuplexMode.LongEdge => "two-sided-long-edge",
+            DuplexMode.ShortEdge => "two-sided-short-edge",
+            _ => "one-sided",
+        },
+        "-o", "print-color-mode=" + (settings.Grayscale ? "monochrome" : "color"),
+        pdfPath,
+    ];
 
     internal static string CupsMedia(PaperSize paper) => paper.Name switch
     {
@@ -110,12 +203,23 @@ public static class SystemPrinters
     /// <summary>Windows: Seitenplan direkt über den Druckdienst drucken.</summary>
     [SupportedOSPlatform("windows")]
     public static void PrintWithWindows(LayoutResult layout, Func<Placement, byte[]> imageFor,
-        string printer, int copies, PaperSize paper, bool cutMarks, double gapMm, string title)
+        string printer, PrintSettings settings, PaperSize paper, bool cutMarks, double gapMm, string title)
     {
         using var doc = new System.Drawing.Printing.PrintDocument { DocumentName = title };
         doc.PrinterSettings.PrinterName = printer;
-        doc.PrinterSettings.Copies = (short)Math.Clamp(copies, 1, short.MaxValue);
+        doc.PrinterSettings.Copies = (short)Math.Clamp(settings.Copies, 1, short.MaxValue);
         doc.DefaultPageSettings.Margins = new System.Drawing.Printing.Margins(0, 0, 0, 0);
+
+        // Doppelseitig: Windows nennt lange Kante „Vertical", kurze Kante „Horizontal"
+        if (doc.PrinterSettings.CanDuplex)
+            doc.PrinterSettings.Duplex = settings.Duplex switch
+            {
+                DuplexMode.LongEdge => System.Drawing.Printing.Duplex.Vertical,
+                DuplexMode.ShortEdge => System.Drawing.Printing.Duplex.Horizontal,
+                _ => System.Drawing.Printing.Duplex.Simplex,
+            };
+        if (doc.PrinterSettings.SupportsColor)
+            doc.DefaultPageSettings.Color = !settings.Grayscale;
 
         // Passendes Papier des Druckers suchen (Maße in Hundertstel Zoll, ±2 mm)
         var match = doc.PrinterSettings.PaperSizes.Cast<System.Drawing.Printing.PaperSize>()
@@ -129,6 +233,7 @@ public static class SystemPrinters
         {
             var page = layout.Pages[index];
             e.PageSettings.Landscape = page.WidthMm > page.HeightMm;
+            if (doc.PrinterSettings.SupportsColor) e.PageSettings.Color = !settings.Grayscale;
         };
 
         doc.PrintPage += (_, e) =>

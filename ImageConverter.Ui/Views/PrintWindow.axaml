@@ -52,6 +52,20 @@
                                 <NumericUpDown Grid.Column="1" Value="{Binding Copies}" Minimum="1" Maximum="99"
                                                FormatString="0" />
                             </Grid>
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Farbe" />
+                                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding ColorModes}" SelectedItem="{Binding SelectedColorMode}"
+                                          IsEnabled="{Binding ColorAvailable}"
+                                          ToolTip.Tip="{Binding ColorHint}" ToolTip.ShowOnDisabled="True" />
+                            </Grid>
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Seiten" />
+                                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding DuplexModes}" SelectedItem="{Binding SelectedDuplex}"
+                                          IsEnabled="{Binding DuplexAvailable}"
+                                          ToolTip.Tip="{Binding DuplexHint}" ToolTip.ShowOnDisabled="True" />
+                            </Grid>
                             <Border IsVisible="{Binding HasMarginHint}"
                                     Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
                                     CornerRadius="{DynamicResource RadiusControl}" Padding="10,6">

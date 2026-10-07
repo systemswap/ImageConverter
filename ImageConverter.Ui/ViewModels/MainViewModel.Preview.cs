@@ -33,12 +33,28 @@ public partial class MainViewModel
 
     /// <summary>Vorher/Nachher-Schalter: true = Original zeigen.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap))]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(ViewOutputSize))]
     public partial bool ShowOriginal { get; set; }
 
     /// <summary>Maße des Bildes in Pixeln — die Auswahl rechnet immer damit,
     /// auch wenn gerade eine kleinere Vorschau angezeigt wird.</summary>
-    [ObservableProperty] public partial PixelSize DocumentSize { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ViewOutputSize))]
+    public partial PixelSize DocumentSize { get; set; }
+
+    /// <summary>
+    /// Größe des angezeigten Ergebnisses — darauf bezieht sich die Zoom-Anzeige:
+    /// „100 %" heißt ein Ergebnis-Pixel pro Bildschirmpixel. Bei „Vorher" das Original.
+    /// </summary>
+    public PixelSize ViewOutputSize
+    {
+        get
+        {
+            if (ShowOriginal || DocumentSize.Width <= 0) return DocumentSize;
+            var (w, h) = EffectiveTarget();
+            return new PixelSize(w, h);
+        }
+    }
 
     /// <summary>Wechselt bei jedem neuen Bildstand; die Ansicht passt dann neu ein.</summary>
     [ObservableProperty] public partial object? ViewResetToken { get; set; }

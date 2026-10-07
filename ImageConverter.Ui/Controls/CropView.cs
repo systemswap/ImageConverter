@@ -78,6 +78,23 @@ public sealed class CropView : Control
     }
 
     /// <summary>Jede Änderung passt die Ansicht neu ein (neues Bild, Zuschnitt …).</summary>
+    /// <summary>
+    /// Größe des Ergebnisses (Zielgröße). Darauf beziehen sich Zoom-Anzeige, „100 %"
+    /// und Einpassen. Leer = wie <see cref="DocumentSize"/>.
+    /// </summary>
+    public static readonly StyledProperty<PixelSize> OutputSizeProperty =
+        AvaloniaProperty.Register<CropView, PixelSize>(nameof(OutputSize));
+
+    public PixelSize OutputSize
+    {
+        get => GetValue(OutputSizeProperty);
+        set => SetValue(OutputSizeProperty, value);
+    }
+
+    /// <summary>Ergebnis-Pixel je Bild-Pixel (Breite): 800 aus 4000 → 0,2.</summary>
+    private double OutputRatio =>
+        OutputSize.Width > 0 && ImageSize.Width > 0 ? (double)OutputSize.Width / ImageSize.Width : 1;
+
     public static readonly StyledProperty<object?> ViewResetTokenProperty =
         AvaloniaProperty.Register<CropView, object?>(nameof(ViewResetToken));
 
@@ -254,6 +271,7 @@ public sealed class CropView : Control
         else if (change.Property == BoundsProperty
                  || change.Property == SourceProperty
                  || change.Property == DocumentSizeProperty
+                 || change.Property == OutputSizeProperty
                  || change.Property == PlaceholderSizeProperty)
         {
             // Nur die Vorschau-Bitmap gewechselt (z. B. Schärfe-Regler): Zoom und
@@ -284,7 +302,8 @@ public sealed class CropView : Control
             var size = ImageSize;
             var area = ViewArea;
             if (size.Width <= 0 || size.Height <= 0 || area.Width <= 0 || area.Height <= 0) return 1;
-            return Math.Min(1.0, Math.Min(area.Width / size.Width, area.Height / size.Height));
+            // Einpassen, aber das Ergebnis nicht über 100 % aufblasen
+            return Math.Min(OutputRatio, Math.Min(area.Width / size.Width, area.Height / size.Height));
         }
     }
 
@@ -312,7 +331,7 @@ public sealed class CropView : Control
             _imageRect = ClampPan(_imageRect);
         }
 
-        DisplayPercent = (int)Math.Round(_scale * 100);
+        DisplayPercent = (int)Math.Round(_scale / OutputRatio * 100);
     }
 
     /// <summary>Zoomt auf <paramref name="newScale"/>; der Bildpunkt unter <paramref name="anchor"/> bleibt stehen.</summary>
@@ -321,7 +340,7 @@ public sealed class CropView : Control
         if (_imageRect.Width <= 0) return;
 
         var fit = FitScale;
-        newScale = Math.Clamp(newScale, fit, MaxScale);
+        newScale = Math.Clamp(newScale, fit, MaxScale * OutputRatio);
         if (Math.Abs(newScale - fit) < 1e-6)
         {
             FitToView();
@@ -338,7 +357,7 @@ public sealed class CropView : Control
             size.Width * _scale,
             size.Height * _scale));
 
-        DisplayPercent = (int)Math.Round(_scale * 100);
+        DisplayPercent = (int)Math.Round(_scale / OutputRatio * 100);
         InvalidateVisual();
     }
 
@@ -371,7 +390,7 @@ public sealed class CropView : Control
     }
 
     /// <summary>Originalgröße (100 %), um die Mitte der Ansicht.</summary>
-    public void ZoomToActualSize() => ZoomAt(ViewArea.Center, 1.0);
+    public void ZoomToActualSize() => ZoomAt(ViewArea.Center, OutputRatio);
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {

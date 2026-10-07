@@ -117,6 +117,7 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(FieldWidth));
         OnPropertyChanged(nameof(FieldHeight));
         OnPropertyChanged(nameof(PixelEquivalent));
+        OnPropertyChanged(nameof(ViewOutputSize));
         RequestPreview();
     }
 

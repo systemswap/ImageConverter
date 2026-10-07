@@ -499,6 +499,7 @@
                                     <TextBlock TextWrapping="Wrap" Text="Strg + Mausrad über dem Bild zoomt um den Mauszeiger." />
                                     <TextBlock TextWrapping="Wrap" Text="Im Zoom verschieben: mittlere Maustaste ziehen, Leertaste + Ziehen oder Mausrad (mit Umschalt waagerecht)." />
                                     <TextBlock TextWrapping="Wrap" Text="Klick hier oder Strg+0: einpassen · Strg+1: 100 %" />
+                                    <TextBlock TextWrapping="Wrap" Text="Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe (bei „Vorher“ auf das Original)." />
                                 </StackPanel>
                             </ToolTip.Tip>
                         </Button>
@@ -535,6 +536,7 @@
                                     IsVisible="{Binding HasImage}"
                                     Source="{Binding DisplayBitmap}"
                                     DocumentSize="{Binding DocumentSize}"
+                                    OutputSize="{Binding ViewOutputSize}"
                                     ViewResetToken="{Binding ViewResetToken}"
                                     Selection="{Binding CropSelection}"
                                     AspectRatio="{Binding AspectRatio}"

@@ -49,7 +49,14 @@ public partial class PrintDialogViewModel : ViewModelBase
         Modes = ["Mehrere pro Seite — schneidefreundlich", "Mehrere pro Seite — möglichst dicht", "Ein Bild pro Seite"];
         SelectedMode = Modes[0];
 
+        ColorModes = ["Farbe", "Schwarzweiß"];
+        SelectedColorMode = ColorModes[0];
+
+        DuplexModes = ["Einseitig", "Doppelseitig — lange Kante", "Doppelseitig — kurze Kante"];
+        SelectedDuplex = DuplexModes[0];
+
         PrintAll = main.OpenFiles.Count > 1;
+        _ = LoadCapabilitiesAsync(SelectedPrinter);
     }
 
     // ------------------------------------------------------------ Einstellungen
@@ -58,9 +65,12 @@ public partial class PrintDialogViewModel : ViewModelBase
     public IReadOnlyList<PaperSize> Papers { get; }
     public IReadOnlyList<string> Orientations { get; }
     public IReadOnlyList<string> Modes { get; }
+    public IReadOnlyList<string> ColorModes { get; }
+    public IReadOnlyList<string> DuplexModes { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PrimaryButtonText), nameof(MarginHint), nameof(CopiesAvailable))]
+    [NotifyPropertyChangedFor(nameof(PrimaryButtonText), nameof(MarginHint), nameof(CopiesAvailable),
+        nameof(DuplexAvailable), nameof(DuplexHint))]
     public partial PrinterChoice SelectedPrinter { get; set; }
 
     [ObservableProperty] public partial PaperSize SelectedPaper { get; set; }
@@ -76,6 +86,30 @@ public partial class PrintDialogViewModel : ViewModelBase
     [ObservableProperty] public partial bool ShrinkToFit { get; set; } = true;
     [ObservableProperty] public partial bool CutMarks { get; set; } = true;
     [ObservableProperty] public partial decimal Copies { get; set; } = 1;
+    [ObservableProperty] public partial string SelectedColorMode { get; set; }
+    [ObservableProperty] public partial string SelectedDuplex { get; set; }
+
+    /// <summary>Was der gewählte Drucker kann — unbekannt heißt: wählbar lassen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ColorAvailable), nameof(DuplexAvailable), nameof(ColorHint), nameof(DuplexHint))]
+    public partial PrinterCapabilities Capabilities { get; set; } = PrinterCapabilities.Unknown;
+
+    /// <summary>Farbe/Schwarzweiß: nur gesperrt, wenn der Drucker sicher nur Schwarzweiß kann.</summary>
+    public bool ColorAvailable => Capabilities.Color != false;
+
+    /// <summary>Doppelseitig: nicht im PDF und nicht, wenn der Drucker es sicher nicht kann.</summary>
+    public bool DuplexAvailable => !SelectedPrinter.IsPdf && Capabilities.Duplex != false;
+
+    public string ColorHint => Capabilities.Color == false
+        ? "Dieser Drucker druckt nur Schwarzweiß."
+        : "Schwarzweiß rechnet die Bilder selbst in Graustufen um (nach empfundener Helligkeit) — " +
+          "das wirkt auch im PDF und bei Druckern, die die Einstellung sonst übergehen.";
+
+    public string DuplexHint => SelectedPrinter.IsPdf
+        ? "Beim PDF entscheidet erst das Programm, mit dem es gedruckt wird."
+        : Capabilities.Duplex == false
+            ? "Dieser Drucker kann nicht beidseitig drucken."
+            : "Lange Kante: geblättert wird wie in einem Buch.\nKurze Kante: geblättert wird nach oben, wie bei einem Kalender oder Klemmbrett.";
 
     /// <summary>Alle geöffneten Bilder oder nur das aktuelle.</summary>
     [ObservableProperty] public partial bool PrintAll { get; set; }
@@ -109,7 +143,35 @@ public partial class PrintDialogViewModel : ViewModelBase
     partial void OnAllowRotationChanged(bool value) => Relayout();
     partial void OnShrinkToFitChanged(bool value) => Relayout();
     partial void OnPrintAllChanged(bool value) => Relayout();
-    partial void OnSelectedPrinterChanged(PrinterChoice value) => OnPropertyChanged(nameof(HasMarginHint));
+    partial void OnSelectedPrinterChanged(PrinterChoice value)
+    {
+        OnPropertyChanged(nameof(HasMarginHint));
+        Capabilities = PrinterCapabilities.Unknown;
+        _ = LoadCapabilitiesAsync(value);
+    }
+
+    partial void OnCapabilitiesChanged(PrinterCapabilities value) => ApplyCapabilities();
+
+    /// <summary>Fähigkeiten im Hintergrund abfragen — unter Linux startet das lpoptions.</summary>
+    private async Task LoadCapabilitiesAsync(PrinterChoice choice)
+    {
+        ApplyCapabilities();
+        if (choice.Printer is not { } p) return;
+
+        PrinterCapabilities caps;
+        try { caps = await Task.Run(() => SystemPrinters.Capabilities(p.Name)); }
+        catch { caps = PrinterCapabilities.Unknown; }
+
+        if (SelectedPrinter == choice)   // inzwischen anderer Drucker gewählt → verwerfen
+            Capabilities = caps;
+    }
+
+    /// <summary>Nicht mögliche Auswahl zurücksetzen: Schwarzweiß-Drucker, kein Duplex, PDF.</summary>
+    private void ApplyCapabilities()
+    {
+        if (!ColorAvailable) SelectedColorMode = ColorModes[1];
+        if (!DuplexAvailable) SelectedDuplex = DuplexModes[0];
+    }
 
     // ------------------------------------------------------------ Vorschau
 
@@ -261,17 +323,22 @@ public partial class PrintDialogViewModel : ViewModelBase
         Problem = null;
         try
         {
+            var printer = SelectedPrinter.Printer;
+            var settings = new PrintSettings(
+                (int)Copies,
+                !DuplexAvailable ? DuplexMode.OneSided : SelectedDuplex == DuplexModes[1] ? DuplexMode.LongEdge
+                    : SelectedDuplex == DuplexModes[2] ? DuplexMode.ShortEdge : DuplexMode.OneSided,
+                SelectedColorMode == ColorModes[1]);
+
             // Bild für eine Platzierung: aus dem Verlauf bzw. frisch geladen, wie beim Export
             byte[] ImageFor(Placement p)
             {
                 var source = sources[p.ItemId];
                 var (image, owned, _) = _main.GetImageAsync(source.Path).GetAwaiter().GetResult();
-                try { return PrintDocument.RenderForPrint(image, source.Options, p); }
+                try { return PrintDocument.RenderForPrint(image, source.Options, p, settings.Grayscale); }
                 finally { if (owned) image.Dispose(); }
             }
 
-            var printer = SelectedPrinter.Printer;
-            var copies = (int)Copies;
             var cutMarks = CutMarks;
             var gap = (double)GapMm;
             var paper = SelectedPaper;
@@ -285,7 +352,7 @@ public partial class PrintDialogViewModel : ViewModelBase
                 }
                 else if (OperatingSystem.IsWindows())
                 {
-                    SystemPrinters.PrintWithWindows(layout, ImageFor, printer!.Name, copies, paper, cutMarks, gap, title);
+                    SystemPrinters.PrintWithWindows(layout, ImageFor, printer!.Name, settings, paper, cutMarks, gap, title);
                 }
                 else
                 {
@@ -295,7 +362,7 @@ public partial class PrintDialogViewModel : ViewModelBase
                     {
                         await using (var fs = File.Create(temp))
                             PrintDocument.WritePdf(layout, ImageFor, fs, cutMarks, gap, title);
-                        await SystemPrinters.PrintPdfWithCupsAsync(temp, printer!.Name, copies, paper, title);
+                        await SystemPrinters.PrintPdfWithCupsAsync(temp, printer!.Name, settings, paper, title);
                     }
                     finally
                     {
