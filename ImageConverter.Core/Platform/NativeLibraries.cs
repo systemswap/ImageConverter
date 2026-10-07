@@ -55,6 +55,9 @@ public static class NativeLibraries
                 NativeLibrary.SetDllImportResolver(typeof(OrtEnv).Assembly, (name, _, _) =>
                     name is "onnxruntime" or "libonnxruntime" ? NativeLibrary.Load(onnx) : IntPtr.Zero);
             }
+
+            // Nach dem Resolver (lädt ImageMagick), vor jedem anderen Zugriff darauf.
+            ImageMagickPolicy.Apply();
         }
     }
 

@@ -13,7 +13,7 @@ Test oder Nachweis.
 ## 1. Telemetrie: ONNX Runtime sendet Nutzungsdaten an Microsoft
 
 - **Entdeckt:** 0.4.17 (Commit `123b17f`, 07.10.2026), bei der Durchsicht für
-  Linux. **Behoben:** 0.4.18.
+  Linux. **Behoben:** 0.4.18 (Commit `62cd553`).
 - **Was:** Die offiziellen Builds der ONNX Runtime (NuGet
   `Microsoft.ML.OnnxRuntime`, hier 1.30.0) haben Telemetrie standardmäßig an.
   Unter Linux und macOS steckt ein Uploader (1DS) an
@@ -52,7 +52,8 @@ Test oder Nachweis.
 ## 2. Fremde native Bibliotheken neben dem Programm: SetNativeLibraryDirectory wirkt nicht
 
 - **Entdeckt:** 0.4.18 in Arbeit (07.10.2026), beim Auslagern der nativen
-  Bibliotheken nach `Tools/`. **Behoben:** 0.4.18, bevor es ausgeliefert wurde.
+  Bibliotheken nach `Tools/`. **Behoben:** 0.4.18 (Commit `62cd553`), bevor es
+  ausgeliefert wurde.
 - **Was:** Das Programm brach beim ersten Zugriff auf ImageMagick mit
   `DllNotFoundException: Magick.Native-Q16-x64.dll` ab, obwohl die Bibliothek
   in `Tools/ImageMagick/` lag.
@@ -84,7 +85,8 @@ Test oder Nachweis.
 
 ## 3. Telemetrie: Avalonia meldet jeden Build (Avalonia.BuildServices)
 
-- **Entdeckt:** 0.4.18 (Commit `62cd553`, 07.10.2026). **Behoben:** 0.4.19.
+- **Entdeckt:** 0.4.18 (Commit `62cd553`, 07.10.2026). **Behoben:** 0.4.19
+  (Commit `21a8cd2`).
 - **Was:** Das Paket `Avalonia.BuildServices` (kommt automatisch mit Avalonia)
   führt vor jedem Kompilieren die `AvaloniaStatsTask` aus und meldet Projekt,
   Avalonia-Version, Zielsystem und System an den Server von Avalonia.
@@ -111,3 +113,35 @@ Test oder Nachweis.
   aus Directory.Build.targets außer Kraft gesetzt“, die `AvaloniaStatsTask`
   läuft nicht. Gegenprobe ohne die Datei (mit gesetzter Variable): die Aufgabe
   läuft.
+
+## 4. ImageMagick: Netzzugriff und externe Programme über einen Pfad wie „https://…“
+
+- **Entdeckt:** 0.4.20 (Commit `029962b`, 07.10.2026), bei der Prüfung auf
+  Netzzugriffe. **Behoben:** 0.4.21.
+- **Was:** Bekommt ImageMagick einen Pfad wie `https://…` (oder `http:`,
+  `ftp:`, `url:`), stellt es eine DNS-Anfrage und ruft das externe Programm
+  `curl` auf, um die Datei zu holen. Die Standardrichtlinie von Magick.NET
+  sperrt nur MVG, MSL, EPHEMERAL und `@`/`|`-Pfade, nicht das Netz.
+- **Situation:** Dateinamen kommen aus Dateidialog, „Öffnen mit …“, Drag &
+  Drop und der Kommandozeile – ein präparierter Aufruf hätte eine Verbindung
+  oder ein fremdes Programm auslösen können. Ein SVG mit eingebettetem
+  fremdem Bild lädt dagegen nichts nach (librsvg holt keine externen Adressen
+  – geprüft).
+- **Warum:** ImageMagick behandelt solche Pfade als „Coder“ und holt sie über
+  Delegates (externe Programme).
+- **Wie behoben:** `ImageMagickPolicy.Apply()` ergänzt die Standardrichtlinie
+  um die Coder `HTTP, HTTPS, FTP, URL` und sperrt alle Delegates (externe
+  Programme – ImageConverter braucht keine, alle Formate sind eingebaut).
+  Die Konfiguration schreibt Magick.NET nach
+  `~/.local/share/ImageConverter/ImageMagick` (Windows `%LOCALAPPDATA%`).
+- **Nicht tun:** Die Richtlinie erst nach dem ersten Zugriff auf ImageMagick
+  setzen – dann greift sie nur teilweise (im Test: Delegate-Regel ja,
+  Coder-Regel nein). Deshalb in `NativeLibraries.Configure()` ganz am Anfang
+  von `Main` und in den Tests über einen Modul-Initialisierer (`TestSetup`).
+- **Wo:** `ImageConverter.Core/Platform/ImageMagickPolicy.cs`,
+  `NativeLibraries.Configure`, `ImageConverter.Tests/TestSetup.cs`.
+- **Test:** `PlatformTests.ImageMagick_RefusesNetworkAddresses` (Gegenprobe
+  ohne Richtlinie: `MagickDelegateErrorException`, also curl-Versuch),
+  `ImageMagick_PolicyBlocksExternalPrograms`. Von Hand ohne Netz
+  (`unshare -rn`) mit protokollierten `getaddrinfo`/`connect`-Aufrufen: ohne
+  Richtlinie DNS-Anfrage, mit Richtlinie keine.

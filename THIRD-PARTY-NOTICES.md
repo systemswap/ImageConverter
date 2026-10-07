@@ -85,3 +85,5 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 ImageConverter sendet keine Nutzungsdaten. Ins Netz geht es nur, wenn man im
 Programm ein KI-Modell herunterlädt (Adressen siehe oben); dabei wird nur die
 Datei abgerufen, als Kennung schickt das Programm „ImageConverter“.
+ImageMagick ist so eingestellt, dass es selbst nichts aus dem Netz lädt und
+keine externen Programme aufruft.

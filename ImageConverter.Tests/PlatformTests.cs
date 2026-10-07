@@ -1,4 +1,5 @@
 using ImageConverter.Core.Platform;
+using ImageMagick;
 
 namespace ImageConverter.Tests;
 
@@ -37,5 +38,25 @@ public class PlatformTests
     {
         NativeLibraries.DisableOnnxTelemetry();
         Assert.Equal("1", NativeLibraries.NativeEnvironmentVariable(NativeLibraries.OnnxTelemetryVariable));
+    }
+
+    /// <summary>
+    /// Ohne Richtlinie löst ein Pfad wie „https://…“ eine DNS-Anfrage aus und ruft curl auf.
+    /// Mit Richtlinie lehnt ImageMagick ab, bevor irgendetwas ins Netz geht.
+    /// </summary>
+    [Fact]
+    public void ImageMagick_RefusesNetworkAddresses()
+    {
+        ImageMagickPolicy.Apply();
+        Assert.Throws<MagickPolicyErrorException>(() => new MagickImage("https://example.invalid/bild.png"));
+    }
+
+    [Fact]
+    public void ImageMagick_PolicyBlocksExternalPrograms()
+    {
+        ImageMagickPolicy.Apply();
+        var policy = File.ReadAllText(Path.Combine(ImageMagickPolicy.Folder(), "policy.xml"));
+        Assert.Contains("domain=\"delegate\" rights=\"none\" pattern=\"*\"", policy);
+        Assert.Contains("{HTTP,HTTPS,FTP,URL}", policy);
     }
 }
