@@ -11,5 +11,7 @@
     <ItemGroup>
         <InternalsVisibleTo Include="ImageConverter.Tests" />
         <PackageReference Include="Magick.NET-Q16-AnyCPU" />
+        <PackageReference Include="PDFsharp" />
+        <PackageReference Include="System.Drawing.Common" />
     </ItemGroup>
 </Project>

@@ -36,6 +36,7 @@ public partial class MainView : UserControl
         {
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
             _vm.MultiExportRequested -= OnMultiExportRequested;
+            _vm.PrintRequested -= OnPrintRequested;
         }
 
         _vm = DataContext as MainViewModel;
@@ -44,7 +45,14 @@ public partial class MainView : UserControl
         {
             _vm.PropertyChanged += OnViewModelPropertyChanged;
             _vm.MultiExportRequested += OnMultiExportRequested;
+            _vm.PrintRequested += OnPrintRequested;
         }
+    }
+
+    private async Task OnPrintRequested(PrintDialogViewModel dialogVm)
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+        await new PrintWindow(dialogVm).ShowDialog(owner);
     }
 
     /// <summary>Export mehrerer Bilder: eigenes Fenster mit Liste, modal über dem Hauptfenster.</summary>

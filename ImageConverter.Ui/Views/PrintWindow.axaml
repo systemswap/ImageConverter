@@ -1,0 +1,157 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ImageConverter.ViewModels"
+        xmlns:c="using:ImageConverter.Controls"
+        xmlns:p="using:ImageConverter.Core.Printing"
+        x:Class="ImageConverter.Views.PrintWindow"
+        x:DataType="vm:PrintDialogViewModel"
+        Title="Drucken"
+        Icon="/Assets/avalonia-logo.ico"
+        Width="1040" Height="720" MinWidth="820" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}">
+
+    <DockPanel>
+        <!-- Fuß: Hinweise und Aktionen -->
+        <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="16,10">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                    <Border IsVisible="{Binding Problem, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
+                            CornerRadius="{DynamicResource RadiusControl}" Padding="10,5" HorizontalAlignment="Left">
+                        <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Problem}" />
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding IsPrinting}">
+                        <ProgressBar IsIndeterminate="True" Width="140" />
+                        <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Message}" />
+                    </StackPanel>
+                </StackPanel>
+                <Button Grid.Column="1" Classes="subtle" Margin="0,0,8,0" Content="Abbrechen" Click="OnCancelClick" />
+                <Button Grid.Column="2" Classes="primary"
+                        Content="{Binding PrimaryButtonText}" Command="{Binding PrintCommand}" />
+            </Grid>
+        </Border>
+
+        <Grid ColumnDefinitions="330,Auto,*">
+
+            <!-- Einstellungen -->
+            <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Disabled"
+                          Padding="12,12,8,12" Classes="settings">
+                <StackPanel Spacing="10">
+
+                    <HeaderedContentControl Header="DRUCKER">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Ausgabe" />
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding Printers}"
+                                          SelectedItem="{Binding SelectedPrinter}"
+                                          ToolTip.Tip="„Als PDF speichern“ erzeugt eine PDF-Datei mit exakt denselben Maßen wie der Ausdruck." />
+                            </Grid>
+                            <Grid Classes="row" ColumnDefinitions="76,*" IsVisible="{Binding CopiesAvailable}">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Kopien" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding Copies}" Minimum="1" Maximum="99"
+                                               FormatString="0" />
+                            </Grid>
+                            <Border IsVisible="{Binding HasMarginHint}"
+                                    Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
+                                    CornerRadius="{DynamicResource RadiusControl}" Padding="10,6">
+                                <TextBlock Classes="hint" Text="{Binding MarginHint}" />
+                            </Border>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="PAPIER">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Format" />
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding Papers}"
+                                          SelectedItem="{Binding SelectedPaper}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Lage" />
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding Orientations}"
+                                          SelectedItem="{Binding SelectedOrientation}"
+                                          ToolTip.Tip="Automatisch: die Lage, bei der weniger Seiten nötig sind — bei Gleichstand bleiben Fotos aufrecht." />
+                            </Grid>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="ANORDNUNG">
+                        <StackPanel>
+                            <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}"
+                                      Margin="0,0,0,7">
+                                <ToolTip.Tip>
+                                    <StackPanel MaxWidth="300" Spacing="6">
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Schneidefreundlich" />
+                                        <TextBlock TextWrapping="Wrap" Text="Jede Seite lässt sich mit geraden Schnitten von Kante zu Kante zerlegen — ideal für die Schneidemaschine." />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Möglichst dicht" />
+                                        <TextBlock TextWrapping="Wrap" Text="Spart Papier, aber nicht jede Schnittlinie geht durch das ganze Blatt." />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Ein Bild pro Seite" />
+                                        <TextBlock TextWrapping="Wrap" Text="Jedes Bild mittig auf einem eigenen Blatt." />
+                                    </StackPanel>
+                                </ToolTip.Tip>
+                            </ComboBox>
+
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Abstand" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding GapMm}" Minimum="0" Maximum="50"
+                                               Increment="1" FormatString="0.#"
+                                               ToolTip.Tip="Platz zwischen den Bildern zum Ausschneiden. Ab etwa 3 mm ist Raum für Schnittmarken." />
+                                <TextBlock Grid.Column="2" Classes="label" Text="mm" Margin="7,0,0,0" />
+                            </Grid>
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Rand" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding MarginMm}" Minimum="0" Maximum="50"
+                                               Increment="1" FormatString="0.#"
+                                               ToolTip.Tip="Abstand zur Blattkante. Die meisten Drucker können die äußeren 3–5 mm nicht bedrucken." />
+                                <TextBlock Grid.Column="2" Classes="label" Text="mm" Margin="7,0,0,0" />
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <CheckBox IsChecked="{Binding AllowRotation}" Content="Bilder drehen, wenn es Platz spart"
+                                          ToolTip.Tip="Ein Bild darf quer liegen, wenn dadurch weniger Seiten nötig sind. Bei Gleichstand bleiben Fotos aufrecht." />
+                                <CheckBox IsChecked="{Binding ShrinkToFit}" Content="Zu große Bilder verkleinern"
+                                          ToolTip.Tip="Passt ein Bild nicht auf das Papier, wird es so weit verkleinert, dass es passt. Sonst wird es nicht gedruckt." />
+                                <CheckBox IsChecked="{Binding CutMarks}" Content="Schnittmarken"
+                                          ToolTip.Tip="Feine Eckmarken im Abstand zwischen den Bildern — zeigen, wo geschnitten wird, ohne ins Bild zu ragen." />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <HeaderedContentControl Header="BILDER" IsVisible="{Binding HasMultipleFiles}">
+                        <CheckBox IsChecked="{Binding PrintAll}" Content="{Binding PrintAllText}"
+                                  ToolTip.Tip="Sonst nur das Bild, das gerade angezeigt wird. Jedes Bild in der Größe aus seinen Einstellungen." />
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Rectangle Grid.Column="1" Width="1" Fill="{DynamicResource BorderBrush2}" />
+
+            <!-- Seitenvorschau -->
+            <DockPanel Grid.Column="2">
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,1,0,0" Padding="10,6">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
+                        <Button Classes="icon" Content="‹" FontSize="18" Command="{Binding PreviousPageCommand}"
+                                ToolTip.Tip="Vorherige Seite" />
+                        <TextBlock Classes="label" MinWidth="200" TextAlignment="Center" Text="{Binding PageInfo}" />
+                        <Button Classes="icon" Content="›" FontSize="18" Command="{Binding NextPageCommand}"
+                                ToolTip.Tip="Nächste Seite" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource CanvasBrush}">
+                    <Grid>
+                        <c:PrintPreview Page="{Binding CurrentPage}"
+                                        Thumbnails="{Binding Thumbnails}"
+                                        MarginMm="{Binding MarginMm}"
+                                        GapMm="{Binding GapMm}"
+                                        CutMarks="{Binding CutMarks}" />
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
+                                     VerticalAlignment="Top" Height="3" MinHeight="3" CornerRadius="0" />
+                    </Grid>
+                </Border>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>

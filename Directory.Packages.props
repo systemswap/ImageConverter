@@ -19,6 +19,12 @@
              Native Bibliothek steckt im Paket, keine Installation auf dem System. -->
         <PackageVersion Include="Magick.NET-Q16-AnyCPU" Version="14.17.2" />
 
+        <!-- PDF für Druck und „Als PDF speichern" — plattformunabhängige Core-Variante, MIT -->
+        <PackageVersion Include="PDFsharp" Version="6.2.4" />
+
+        <!-- Drucken unter Windows (Druckdienst). Wird nur unter Windows aufgerufen. -->
+        <PackageVersion Include="System.Drawing.Common" Version="10.0.12" />
+
         <!-- Test packages -->
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageVersion Include="xunit" Version="2.9.3" />

@@ -23,7 +23,7 @@ public partial class MainViewModel
     /// <summary>Das aktuelle Bild in voller Auflösung, unbearbeitet.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage))]
-    [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand), nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand), nameof(ExportCommand), nameof(PrintCommand))]
     public partial Bitmap? FullBitmap { get; set; }
 
     /// <summary>Ergebnis der Vorschau-Kette; null = nichts zu tun, Original zeigen.</summary>

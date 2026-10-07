@@ -59,13 +59,14 @@
         <!-- Fußleiste: Ziel, Export                                      -->
         <!-- ============================================================ -->
         <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="12,10">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                 <!-- Ergebnis des letzten Exports -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10"
                             IsVisible="{Binding StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <TextBlock Classes="good" Text="✓" FontSize="14" />
                     <TextBlock Classes="hint" FontSize="12" Text="{Binding StatusMessage}" />
-                    <Button Classes="tool" Content="Ordner öffnen" Click="OnOpenExportFolderClick" />
+                    <Button Classes="tool" Content="Ordner öffnen" Click="OnOpenExportFolderClick"
+                            IsVisible="{Binding LastExportFolder, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
                 <ProgressBar Grid.Column="0" IsIndeterminate="True" Width="160"
                              HorizontalAlignment="Left" IsVisible="{Binding IsExporting}" />
@@ -95,7 +96,11 @@
                     </StackPanel>
                 </Border>
 
-                <Button Grid.Column="3" Classes="primary" Content="Exportieren"
+                <Button Grid.Column="3" Classes="subtle" Content="Drucken …" Margin="0,0,8,0"
+                        Command="{Binding PrintCommand}"
+                        ToolTip.Tip="Drucken oder als PDF speichern — mehrere Bilder pro Seite, mit Abstand zum Ausschneiden (Strg+P)." />
+
+                <Button Grid.Column="4" Classes="primary" Content="Exportieren"
                         Command="{Binding ExportCommand}"
                         ToolTip.Tip="Mit allen Einstellungen in voller Auflösung speichern. Vorhandene Dateien werden nie überschrieben." />
             </Grid>

@@ -87,7 +87,7 @@ public partial class MainViewModel
     // ------------------------------------------------------------- Export
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand), nameof(PrintCommand))]
     public partial bool IsExporting { get; set; }
 
     [ObservableProperty] public partial string? StatusMessage { get; set; }
@@ -99,6 +99,29 @@ public partial class MainViewModel
 
     /// <summary>Die Ansicht öffnet das Export-Fenster (modal) und wartet, bis es zu ist.</summary>
     public event Func<ExportDialogViewModel, Task>? MultiExportRequested;
+
+    /// <summary>Die Ansicht öffnet den Druckdialog (modal).</summary>
+    public event Func<PrintDialogViewModel, Task>? PrintRequested;
+
+    internal string? CurrentImagePath => CurrentPath;
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task Print()
+    {
+        CommitPendingSettings();
+        if (!ApplyToAll && CurrentPath is { } current)
+            _fileSettings[current] = CaptureSettings();
+        if (PrintRequested is { } open)
+            await open(new PrintDialogViewModel(this));
+    }
+
+    /// <summary>Ergebnis aus dem Druckdialog in der Fußleiste anzeigen.</summary>
+    internal void ReportPrint(string message, string? pdfPath)
+    {
+        LastExportFolder = pdfPath is not null ? Path.GetDirectoryName(pdfPath) : null;
+        ErrorMessage = null;
+        StatusMessage = message;
+    }
 
     /// <summary>Ergebnis aus dem Export-Fenster in der Fußleiste anzeigen.</summary>
     internal void ReportExport(string folder, string message)

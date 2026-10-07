@@ -35,6 +35,7 @@ public partial class MainWindow : Window
             Key.Z when !shift => vm.UndoCommand,
             Key.Z when shift => vm.RedoCommand,
             Key.Y => vm.RedoCommand,
+            Key.P => vm.PrintCommand,
             _ => null,
         };
 
