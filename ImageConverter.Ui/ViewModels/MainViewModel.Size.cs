@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Models;
@@ -113,7 +114,106 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(PrintSize));
         OnPropertyChanged(nameof(UpscaleHint));
         OnPropertyChanged(nameof(HasUpscaleHint));
+        OnPropertyChanged(nameof(FieldWidth));
+        OnPropertyChanged(nameof(FieldHeight));
+        OnPropertyChanged(nameof(PixelEquivalent));
         RequestPreview();
+    }
+
+    // ------------------------------------------------- Einheit Pixel / mm
+
+    private const double MmPerInch = 25.4;
+
+    public IReadOnlyList<string> SizeUnits { get; } = ["Pixel", "mm"];
+
+    /// <summary>
+    /// „Pixel": die Pixelzahl ist maßgeblich.
+    /// „mm": die Druckgröße ist maßgeblich — eingegebene Millimeter bleiben exakt
+    /// stehen; Pixel (bzw. bei „Nur Metadaten" die DPI) werden daraus abgeleitet.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsMillimeter), nameof(SizeFormat), nameof(SizeMinimum),
+        nameof(FieldWidth), nameof(FieldHeight), nameof(PixelEquivalent), nameof(HasPixelEquivalent))]
+    public partial string SelectedSizeUnit { get; set; } = "Pixel";
+
+    public bool IsMillimeter => SelectedSizeUnit == "mm";
+    public string SizeFormat => IsMillimeter ? "0.#" : "0";
+    public decimal SizeMinimum => IsMillimeter ? 0.1m : 1m;
+
+    /// <summary>Breite im Eingabefeld — in der gewählten Einheit.</summary>
+    public decimal FieldWidth
+    {
+        get => IsMillimeter ? ToMm(_printWidthIn) : TargetWidth;
+        set => SetFieldSize(value, isWidth: true);
+    }
+
+    /// <summary>Höhe im Eingabefeld — in der gewählten Einheit.</summary>
+    public decimal FieldHeight
+    {
+        get => IsMillimeter ? ToMm(_printHeightIn) : TargetHeight;
+        set => SetFieldSize(value, isWidth: false);
+    }
+
+    /// <summary>Im mm-Modus: welche Pixelmaße daraus entstehen.</summary>
+    public string? PixelEquivalent => IsMillimeter ? $"= {TargetWidth} × {TargetHeight} px bei {Dpi} DPI" : null;
+    public bool HasPixelEquivalent => IsMillimeter;
+
+    private static decimal ToMm(double inches) => Math.Round((decimal)(inches * MmPerInch), 1);
+
+    private void SetFieldSize(decimal value, bool isWidth)
+    {
+        if (value <= 0) return;
+
+        if (!IsMillimeter)
+        {
+            // Pixel: bestehende Logik inkl. Kette
+            if (isWidth) TargetWidth = (int)Math.Round(value);
+            else TargetHeight = (int)Math.Round(value);
+            return;
+        }
+
+        // Millimeter: Druckgröße ist maßgeblich und bleibt exakt wie eingegeben
+        var inches = (double)value / MmPerInch;
+        _isSyncingSize = true;
+        WidthIsLeading = isWidth;
+
+        if (DpiMetadataOnly)
+        {
+            // Pixel bleiben fest → die DPI ergibt sich aus Pixel ÷ Druckgröße.
+            // Die andere Kante folgt dem Seitenverhältnis der Pixel.
+            var pixels = isWidth ? TargetWidth : TargetHeight;
+            Dpi = Math.Max(1, (int)Math.Round(pixels / inches));
+            if (isWidth)
+            {
+                _printWidthIn = inches;
+                _printHeightIn = TargetHeight / (double)Dpi;
+            }
+            else
+            {
+                _printHeightIn = inches;
+                _printWidthIn = TargetWidth / (double)Dpi;
+            }
+        }
+        else
+        {
+            // Pixel neu berechnen: Pixel = Druckgröße × DPI
+            if (isWidth)
+            {
+                _printWidthIn = inches;
+                if (KeepAspectRatio) _printHeightIn = inches / _calc.AspectRatio;
+            }
+            else
+            {
+                _printHeightIn = inches;
+                if (KeepAspectRatio) _printWidthIn = inches * _calc.AspectRatio;
+            }
+            TargetWidth = Math.Max(1, (int)Math.Round(_printWidthIn * Dpi));
+            TargetHeight = Math.Max(1, (int)Math.Round(_printHeightIn * Dpi));
+        }
+
+        _isSyncingSize = false;
+        OnPropertyChanged(nameof(DpiPurpose));
+        NotifySizeDerived();
     }
 
     public string SizeSummary =>

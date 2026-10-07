@@ -132,6 +132,26 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
 > Integration automatisch funktioniert. Empfehlung: (b) umsetzen *und* Flatpak als
 > zweite Auslieferungsform einplanen.
 
+### J. Drucken (Wunsch vom 07.10.2026)
+
+- Neben „Exportieren" ein **„Drucken"** — gedruckt wird in der eingestellten Größe
+  (Pixel bzw. mm bei der gewählten DPI), mit Schärfe/Entrauschen wie beim Export.
+- **Mehrere Bilder:** Auswahl zwischen
+  - **„So viele wie möglich auf eine Seite"** — Bilder in ihrer Druckgröße auf der Seite
+    anordnen (Reihen von links nach rechts, mit einstellbarem Abstand), neue Seite erst,
+    wenn keins mehr passt,
+  - **„Jedes Bild auf eine eigene Seite"**.
+- **Druckrand berücksichtigen:** nichts in den Bereich legen, den der Drucker nicht
+  bedrucken kann; zusätzlich einstellbarer eigener Rand.
+- Papierformat (A4, A5, A3, Letter, 10×15 …), Hoch-/Querformat, Anzahl Kopien.
+- Bild größer als die bedruckbare Fläche: Hinweis plus Option „auf Seite verkleinern".
+- **Seitenvorschau** mit Rand und Anordnung, bevor gedruckt wird.
+
+Technik (Vorschlag): Avalonia hat keine Druckfunktion. Die Anordnung der Bilder auf
+den Seiten rechnet der Core (plattformunabhängig, testbar). Daraus entsteht pro Seite ein
+Bild in Druckauflösung bzw. ein PDF mit exakten physischen Maßen. Ausgabe unter Linux über
+CUPS (`lp`), unter Windows über den Windows-Druckdienst.
+
 ---
 
 ## 2. Was ein einfacher Konverter noch braucht (von dir nicht genannt)

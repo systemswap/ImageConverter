@@ -126,14 +126,27 @@
                     <!-- ============================== Größe -->
                     <HeaderedContentControl Header="GRÖSSE">
                         <StackPanel>
+                            <!-- Einheit: Pixel oder Millimeter (Druckgröße bei der eingestellten DPI) -->
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="Einheit" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding SizeUnits}"
+                                          SelectedItem="{Binding SelectedSizeUnit}"
+                                          ToolTip.Tip="Pixel: Bildgröße in Pixeln. mm: Druckgröße in Millimetern — die Pixel ergeben sich aus der DPI (unten bei Auflösung)." />
+                            </Grid>
+
                             <!-- Breite × Höhe mit Kette: zu = proportional, offen = frei -->
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Pixel" />
-                                <NumericUpDown Grid.Column="1" Value="{Binding TargetWidth}"
+                                <TextBlock Grid.Column="0" Classes="label" Text="Maße" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding FieldWidth}"
+                                               FormatString="{Binding SizeFormat}"
+                                               Minimum="{Binding SizeMinimum}" Increment="1"
                                                Classes.derived="{Binding KeepAspectRatio}"
                                                Classes.leading="{Binding WidthIsLeading}" />
                                 <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
-                                <NumericUpDown Grid.Column="3" Value="{Binding TargetHeight}"
+                                <NumericUpDown Grid.Column="3" Value="{Binding FieldHeight}"
+                                               FormatString="{Binding SizeFormat}"
+                                               Minimum="{Binding SizeMinimum}" Increment="1"
                                                Classes.derived="{Binding KeepAspectRatio}"
                                                Classes.leading="{Binding !WidthIsLeading}" />
                                 <ToggleButton Grid.Column="4" Classes="chain" Margin="8,0,0,0"
@@ -171,6 +184,11 @@
                                     </Panel>
                                 </ToggleButton>
                             </Grid>
+
+                            <!-- Im mm-Modus: welche Pixel daraus werden -->
+                            <TextBlock Classes="hint" Margin="76,-4,0,8"
+                                       IsVisible="{Binding HasPixelEquivalent}"
+                                       Text="{Binding PixelEquivalent}" />
 
                             <!-- Hinweis, wenn das Ziel größer ist als das Original -->
                             <TextBlock Classes="hint" Margin="76,-4,0,10"
