@@ -300,6 +300,32 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
 - Ablage im Ordner **„KI-Modelle“ neben der AppImage bzw. der .exe**; die App erkennt
   vorhandene Modelle beim Start und nach jedem Download automatisch.
 
+### Umgesetzt in 0.4.14 (Testmodul)
+
+- **Eigene GroupBox „KI-Verbesserung“**, bewusst als abtrennbares Modul gebaut. Entfernen:
+  Ordner `ImageConverter.Core/Ai/` und `ImageConverter.Ui/Ai/`, die Zeile `<ai:AiPanel …/>`
+  in MainView, den Tab in SettingsWindow, die Eigenschaft `MainViewModel.Ai`, das Paket
+  `Microsoft.ML.OnnxRuntime` und `AiTests.cs`. Was im Hauptprogramm bleibt, ist allgemein
+  (vorübergehende Anzeige `OverrideBitmap`, Hinweis `ActivityText`, `ApplyImageEditAsync`).
+- **Modelle** (nur bekannte Lizenzen, feste Release-Adressen, SHA-256 geprüft):
+  Allround = Real-ESRGAN general x4v3 (4,3 MB, BSD-3, ONNX von Qualcomm AI Hub, feste
+  Kachel 128); GFPGAN 1.4 (325 MB, Apache-2.0); CodeFormer (360 MB, S-Lab, nur
+  nicht-kommerziell); YuNet-Gesichtserkennung (0,2 MB, MIT) — die drei von FaceFusion-Assets.
+- **Verworfen: Real-ESRGAN x4plus** („Fotos – hohe Qualität“, 66 MB): auf der CPU
+  ~400 s pro Megapixel (512 × 512 in 107 s). Ohne Grafikkarte unbrauchbar.
+- **Geschwindigkeit (16 Kerne, CPU):** Allround ~14–17 s pro Megapixel; Gesichter ~2 s
+  pro Gesicht plus ~0,4 s Erkennung.
+- **Fortschritt:** Balken + Restzeit in der GroupBox und als Hinweis über dem Bild. Das
+  Vorschaubild baut sich während der Berechnung neu auf (alle 0,4 s): fertige Kacheln
+  zeigen das neue Ergebnis, der Rest ist blass. Bei Gesichtern nach jedem Gesicht.
+- **Gesichter:** fünf Punkte → Ähnlichkeitstransformation auf die FFHQ-Normlage (512 px),
+  weicher Rand beim Zurücksetzen. Ist das Gesicht im Bild größer als 512 px, bleiben die
+  feinen Originaldetails erhalten (sie können im Ausschnitt nicht vorkommen).
+- **„Größe behalten“** rechnet in 4× und mittelt blockweise zurück (Supersampling);
+  2× / 4× vergrößern bis höchstens 80 Megapixel.
+- Mögliche nächste Schritte: GPU (DirectML unter Windows), Vorher/Nachher auch für
+  Bearbeitungsschritte, CodeFormer-„Treue“ als Regler.
+
 ---
 
 ## 6. Roadmap

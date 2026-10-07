@@ -62,7 +62,18 @@ public partial class MainViewModel
     /// <summary>Nur sichtbar, wenn eine Berechnung länger dauert — kein Flackern bei schnellen.</summary>
     [ObservableProperty] public partial bool ShowRendering { get; set; }
 
-    public Bitmap? DisplayBitmap => ShowOriginal || AdjustedBitmap is null ? FullBitmap : AdjustedBitmap;
+    /// <summary>
+    /// Vorübergehende Anzeige statt der Vorschau, z. B. der Zwischenstand einer langen
+    /// Berechnung. Muss dasselbe Seitenverhältnis wie das Bild haben.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap))]
+    public partial Bitmap? OverrideBitmap { get; set; }
+
+    /// <summary>Hinweis über dem Bild bei langen Arbeiten (z. B. „KI · 42 % · noch 20 s“); null = keiner.</summary>
+    [ObservableProperty] public partial string? ActivityText { get; set; }
+
+    public Bitmap? DisplayBitmap => OverrideBitmap ?? (ShowOriginal || AdjustedBitmap is null ? FullBitmap : AdjustedBitmap);
     public bool HasImage => FullBitmap is not null;
     public bool HasAdjustments => AdjustedBitmap is not null;
 
@@ -71,7 +82,6 @@ public partial class MainViewModel
     [ObservableProperty] public partial double SharpenAmount { get; set; }
     [ObservableProperty] public partial double SharpenRadius { get; set; } = 1.0;
     [ObservableProperty] public partial double NoiseReduction { get; set; }
-    [ObservableProperty] public partial bool UseAiDenoise { get; set; }
 
     public string SharpenLabel => SharpenAmount <= 0.01 ? "aus" : $"{SharpenAmount:F2}";
     public string NoiseLabel => NoiseReduction <= 0.01 ? "aus" : $"{NoiseReduction:F2}";

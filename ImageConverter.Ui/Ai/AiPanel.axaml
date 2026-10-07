@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ai="using:ImageConverter.Ai"
+             xmlns:core="using:ImageConverter.Core.Ai"
+             x:Class="ImageConverter.Ai.AiPanel"
+             x:DataType="ai:AiViewModel">
+
+    <!-- KI-Verbesserung: eigene Gruppe, wird mit einer Zeile in MainView eingebunden -->
+    <HeaderedContentControl Header="KI-VERBESSERUNG">
+        <StackPanel>
+
+            <!-- Noch keine Modelle -->
+            <StackPanel IsVisible="{Binding !HasModels}" Spacing="6">
+                <TextBlock Classes="hint" TextWrapping="Wrap"
+                           Text="Noch keine KI-Modelle vorhanden. Sie laufen komplett auf deinem Rechner und werden einmalig heruntergeladen." />
+                <Button HorizontalAlignment="Left" Content="Modelle laden …" Command="{Binding OpenModelsCommand}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding HasModels}">
+                <Grid Classes="row" ColumnDefinitions="76,*">
+                    <TextBlock Grid.Column="0" Classes="label" Text="Modell" />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Available}" SelectedItem="{Binding SelectedModel}"
+                              IsEnabled="{Binding !IsRunning}"
+                              ToolTip.Tip="{Binding ModelHint}">
+                        <ComboBox.SelectionBoxItemTemplate>
+                            <DataTemplate x:DataType="core:AiModel">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.SelectionBoxItemTemplate>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:AiModel">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="{Binding Name}" />
+                                    <TextBlock Classes="hint" FontSize="11" Text="{Binding Purpose}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="Stärke" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Strength}"
+                            IsEnabled="{Binding !IsRunning}"
+                            ToolTip.Tip="Mischung mit dem Bild davor: 100 % = nur das Ergebnis des Modells, darunter wirkt es schwächer und natürlicher." />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding StrengthLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*" IsVisible="{Binding IsEnhanceModel}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="Größe" />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding SizeOptions}" SelectedItem="{Binding SelectedSize}"
+                              IsEnabled="{Binding !IsRunning}"
+                              ToolTip.Tip="„Größe behalten“: das Modell rechnet in vierfacher Größe und mittelt zurück — sauberer als das Original, gleich viele Pixel. Vergrößern ergänzt Details, die vorher nicht da waren." />
+                </Grid>
+
+                <!-- Starten oder Fortschritt -->
+                <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Margin="0,4,0,0" Content="KI anwenden"
+                        IsVisible="{Binding !IsRunning}" Command="{Binding ApplyCommand}"
+                        ToolTip.Tip="Rechnet auf dem aktuellen Bild — auch auf einem schon verbesserten. Rückgängig mit Strg+Z." />
+
+                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0" IsVisible="{Binding IsRunning}">
+                    <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding Progress}"
+                                 VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Button Grid.Column="1" Classes="subtle" Content="Abbrechen" Command="{Binding CancelCommand}" />
+                </Grid>
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding Status}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           Text="Läuft lokal auf deinem Rechner. Kann je nach Bild einige Minuten dauern." />
+            </StackPanel>
+        </StackPanel>
+    </HeaderedContentControl>
+</UserControl>

@@ -43,10 +43,13 @@ public partial class MainViewModel
     private readonly Dictionary<string, EditHistory> _histories = new(StringComparer.Ordinal);
     private EditHistory? _history;
 
-    public bool CanUndo => _undo.Count > 0 || HasPendingSettings;
-    public bool CanRedo => _redo.Count > 0 && !HasPendingSettings;
+    // Während eines Bearbeitungsschritts (z. B. KI) nicht: das Ergebnis gehört zum Bild davor
+    public bool CanUndo => !IsEditing && (_undo.Count > 0 || HasPendingSettings);
+    public bool CanRedo => !IsEditing && _redo.Count > 0 && !HasPendingSettings;
 
     [ObservableProperty] public partial bool IsEditing { get; set; }
+
+    partial void OnIsEditingChanged(bool value) => NotifyUndoRedo();
 
     private void NotifyUndoRedo()
     {
@@ -103,27 +106,36 @@ public partial class MainViewModel
     /// Das Ergebnis wird das neue Bild; Bild und Einstellungen davor kommen
     /// als ein Schritt auf den Rückgängig-Stapel.
     /// </summary>
-    private async Task ApplyEditAsync(Func<MagickImage, MagickImage> operation)
+    private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation)
     {
-        if (_history is not { } h || IsEditing || _fileIndex < 0) return;
+        if (_history is not { } h || IsEditing || _fileIndex < 0) return false;
 
         CommitPendingSettings();   // offene Reglerbewegungen sind ein eigener Schritt davor
         IsEditing = true;
         try
         {
+            // Lange Schritte (KI): inzwischen kann ein anderes Bild angezeigt werden
+            var path = _files[_fileIndex];
             var source = h.Current;
             var before = CaptureSettings();
             var result = await Task.Run(() => operation(source));
 
             await StopPreviewAsync();   // Wiederholen-Bilder könnten gerade gelesen werden
-            _undo.Push(new Snapshot(_files[_fileIndex], source, before));
+            _undo.Push(new Snapshot(path, source, before));
             ClearRedo();
             h.Current = result;
-            await ShowCurrentAsync();
+            if (h == _history) await ShowCurrentAsync();
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            // abgebrochen — Bild bleibt, wie es war
+            return false;
         }
         catch (Exception ex)
         {
             ErrorMessage = $"Bearbeiten fehlgeschlagen: {ex.Message}";
+            return false;
         }
         finally
         {
@@ -131,6 +143,16 @@ public partial class MainViewModel
             NotifyUndoRedo();
         }
     }
+
+    /// <summary>
+    /// Für Erweiterungen (z. B. KI): ein Bearbeitungsschritt auf dem aktuellen Bild,
+    /// mit Rückgängig/Wiederholen wie Zuschneiden und Drehen. Abbruch über
+    /// <see cref="OperationCanceledException"/> lässt das Bild unverändert. Liefert true bei Erfolg.
+    /// </summary>
+    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, MagickImage> operation) => ApplyEditAsync(operation);
+
+    /// <summary>Das aktuelle Bild in voller Auflösung (mit allen Bearbeitungen) — nur lesen.</summary>
+    internal MagickImage? CurrentImage => _history?.Current;
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private async Task Undo()

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ImageConverter.Ai;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Models;
 
@@ -45,7 +46,19 @@ public partial class MainViewModel : ViewModelBase
 
         // Ab hier zählen Änderungen als Rückgängig-Schritte
         _committedSettings = CaptureSettings();
+
+        // KI-Modul (abtrennbar, siehe Ordner Ai/)
+        Ai = new AiViewModel(this);
     }
+
+    /// <summary>KI-Verbesserung — eigenes Modul mit GroupBox und Einstellungs-Tab.</summary>
+    public AiViewModel Ai { get; }
+
+    /// <summary>Von der Ansicht abonniert: öffnet das Einstellungsfenster.</summary>
+    public event Func<Task>? SettingsRequested;
+
+    [RelayCommand]
+    private Task OpenSettings() => SettingsRequested?.Invoke() ?? Task.CompletedTask;
 
     public ObservableCollection<string> Formats { get; }
     public IReadOnlyList<FilterOption> Filters { get; }

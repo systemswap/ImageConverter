@@ -27,7 +27,7 @@ public partial class MainViewModel
         FilterOption SelectedFilter, bool DoNotEnlarge, bool GammaCorrect,
         int Dpi, bool DpiMetadataOnly,
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
-        double SharpenAmount, double SharpenRadius, double NoiseReduction, bool UseAiDenoise,
+        double SharpenAmount, double SharpenRadius, double NoiseReduction,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
@@ -40,7 +40,7 @@ public partial class MainViewModel
         nameof(SelectedFilter), nameof(DoNotEnlarge), nameof(GammaCorrect),
         nameof(Dpi), nameof(DpiMetadataOnly),
         nameof(SelectedAspectPreset), nameof(CropSelection), nameof(CornerRadius),
-        nameof(SharpenAmount), nameof(SharpenRadius), nameof(NoiseReduction), nameof(UseAiDenoise),
+        nameof(SharpenAmount), nameof(SharpenRadius), nameof(NoiseReduction),
         nameof(SelectedMetadataMode), nameof(SelectedColorMode),
         nameof(OutputFolder), nameof(NamePattern),
     ];
@@ -124,7 +124,7 @@ public partial class MainViewModel
         SelectedFilter, DoNotEnlarge, GammaCorrect,
         Dpi, DpiMetadataOnly,
         SelectedAspectPreset, CropSelection, CornerRadius,
-        SharpenAmount, SharpenRadius, NoiseReduction, UseAiDenoise,
+        SharpenAmount, SharpenRadius, NoiseReduction,
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight);
@@ -164,7 +164,6 @@ public partial class MainViewModel
                 SharpenAmount = s.SharpenAmount;
                 SharpenRadius = s.SharpenRadius;
                 NoiseReduction = s.NoiseReduction;
-                UseAiDenoise = s.UseAiDenoise;
                 SelectedMetadataMode = s.SelectedMetadataMode;
                 SelectedColorMode = s.SelectedColorMode;
                 OutputFolder = s.OutputFolder;

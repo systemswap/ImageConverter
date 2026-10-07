@@ -13,5 +13,6 @@
         <PackageReference Include="Magick.NET-Q16-AnyCPU" />
         <PackageReference Include="PDFsharp" />
         <PackageReference Include="System.Drawing.Common" />
+        <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     </ItemGroup>
 </Project>

@@ -37,6 +37,7 @@ public partial class MainView : UserControl
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
             _vm.MultiExportRequested -= OnMultiExportRequested;
             _vm.PrintRequested -= OnPrintRequested;
+            _vm.SettingsRequested -= OnSettingsRequested;
         }
 
         _vm = DataContext as MainViewModel;
@@ -46,7 +47,22 @@ public partial class MainView : UserControl
             _vm.PropertyChanged += OnViewModelPropertyChanged;
             _vm.MultiExportRequested += OnMultiExportRequested;
             _vm.PrintRequested += OnPrintRequested;
+            _vm.SettingsRequested += OnSettingsRequested;
         }
+    }
+
+    private SettingsWindow? _settings;
+
+    /// <summary>Einstellungen: nicht modal — Downloads laufen weiter, während man arbeitet.</summary>
+    private Task OnSettingsRequested()
+    {
+        if (_settings is not null) { _settings.Activate(); return Task.CompletedTask; }
+        if (TopLevel.GetTopLevel(this) is not Window owner || _vm is null) return Task.CompletedTask;
+
+        _settings = new SettingsWindow(_vm);
+        _settings.Closed += (_, _) => _settings = null;
+        _settings.Show(owner);
+        return Task.CompletedTask;
     }
 
     private async Task OnPrintRequested(PrintDialogViewModel dialogVm)

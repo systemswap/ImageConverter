@@ -5,6 +5,7 @@
              xmlns:vm="using:ImageConverter.ViewModels"
              xmlns:m="using:ImageConverter.Models"
              xmlns:c="using:ImageConverter.Controls"
+             xmlns:ai="using:ImageConverter.Ai"
              mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="760"
              x:Class="ImageConverter.Views.MainView"
              x:DataType="vm:MainViewModel"
@@ -49,7 +50,8 @@
                 </Border>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4">
-                    <Button Classes="icon" Content="☰" ToolTip.Tip="Einstellungen" />
+                    <Button Classes="icon" Content="☰" ToolTip.Tip="Einstellungen (KI-Modelle)"
+                            Command="{Binding OpenSettingsCommand}" />
                     <Button Classes="icon" Content="?" ToolTip.Tip="Hilfe" />
                 </StackPanel>
             </Grid>
@@ -433,13 +435,11 @@
                                 <TextBlock Grid.Column="2" Classes="value"
                                            Text="{Binding NoiseLabel}" />
                             </Grid>
-
-                            <CheckBox IsChecked="{Binding UseAiDenoise}" FontSize="12"
-                                      Content="KI-Optimierung (lokal, lädt Modell nach)" />
-                            <TextBlock Classes="hint" Margin="26,0,0,0"
-                                       Text="Läuft komplett auf deinem Rechner. Langsam — für einzelne Bilder gedacht." />
                         </StackPanel>
                     </HeaderedContentControl>
+
+                    <!-- ============================== KI (eigenes Modul, Ordner Ai/) -->
+                    <ai:AiPanel DataContext="{Binding Ai}" />
 
                     <!-- ============================== Metadaten und Farbe -->
                     <HeaderedContentControl Header="METADATEN &amp; FARBE">
@@ -603,6 +603,16 @@
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                 IsVisible="{Binding ShowRendering}" IsHitTestVisible="False">
                             <TextBlock Classes="hint" Text="Vorschau wird berechnet …" />
+                        </Border>
+
+                        <!-- Lange Arbeiten (z. B. KI): Fortschritt direkt über dem Bild -->
+                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                Margin="12" Padding="12,5" CornerRadius="999"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
+                                IsVisible="{Binding ActivityText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                IsHitTestVisible="False">
+                            <TextBlock Classes="hint" Text="{Binding ActivityText}" />
                         </Border>
 
                         <!-- Wird beim Hineinziehen von Dateien eingeblendet -->
