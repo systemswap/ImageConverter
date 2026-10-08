@@ -648,3 +648,10 @@ Test oder Nachweis.
   `%LOCALAPPDATA%\imageconverter-build\publish-0445\`. Folgende Versionen bis
   zum nächsten Meilenstein tragen wieder `-beta`. Leistung als Ausgangswert in
   KONZEPT.md §6 — Speicher ist der Engpass (28,7 MP, 3 Durchläufe: 8,3 GB Spitze).
+- **Tooltips unter dem Mauszeiger (bis 0.4.46):** Avalonias Vorgabe ist
+  `PlacementMode.Pointer` — der Tooltip lag auf Regler oder Knopf, man klickte
+  ihn an statt des Elements. Seit 0.4.47 beta global `Top` mit 6 px Abstand
+  (`App.Initialize`). `OverrideDefaultValue<Control>` wirft („Metadata is
+  already set for Placement on Control“, Absturz beim Start!) — darum für
+  `TemplatedControl`, `TextBlock`, `Border`, `Panel`, `Image` einzeln. Neue
+  Tooltip-Träger anderer Art dort ergänzen.
