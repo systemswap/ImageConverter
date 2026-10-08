@@ -191,6 +191,29 @@ public class AdjustTests
         Assert.True(strongGain < 1.15, $"kräftig ×{strongGain:F2}");
     }
 
+    /// <summary>
+    /// Sättigung und Dynamik ändern nur die Buntheit (Oklab): Farbton und Helligkeit bleiben.
+    /// In RGB kippte Blau beim Verstärken ins Violette und Gelb wurde heller.
+    /// </summary>
+    [Theory]
+    [InlineData(200, 90, 40)]     // Blau (B, G, R)
+    [InlineData(40, 200, 220)]    // Gelb
+    [InlineData(150, 135, 120)]   // blasses Blaugrau
+    public void ColourBoost_KeepsHueAndLightness(byte b, byte g, byte r)
+    {
+        byte[] px = [b, g, r, 255];
+        foreach (var a in new[] { new Adjustments(Saturation: 50), new Adjustments(Vibrance: 80) })
+        {
+            var o = Adjust.Apply(px, 1, 1, a);
+            var before = Oklab.FromSrgb(r / 255f, g / 255f, b / 255f);
+            var after = Oklab.FromSrgb(o[2] / 255f, o[1] / 255f, o[0] / 255f);
+
+            Assert.InRange(Oklab.Hue(after.A, after.B) - Oklab.Hue(before.A, before.B), -2.5, 2.5);
+            Assert.InRange(after.L - before.L, -0.015, 0.015);
+            Assert.True(Math.Sqrt(after.A * after.A + after.B * after.B) >= Math.Sqrt(before.A * before.A + before.B * before.B));
+        }
+    }
+
     [Fact]
     public void Vibrance_ProtectsSkinTones()
     {

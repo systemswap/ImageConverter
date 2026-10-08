@@ -124,26 +124,17 @@ public static class Adjust
 
                 r = curve[Index(r)]; g = curve[Index(g)]; b = curve[Index(b)];
 
-                if (vibrance != 0 || saturation != 0 || a.Tint != Tint.None)
+                if (vibrance != 0 || saturation != 0)
                 {
-                    var lum = Kr * r + Kg * g + Kb * b;
-                    if (vibrance != 0)
-                    {
-                        var s = VibranceFactor(r, g, b, vibrance);
-                        r = lum + (r - lum) * s;
-                        g = lum + (g - lum) * s;
-                        b = lum + (b - lum) * s;
-                    }
-                    if (saturation != 0)
-                    {
-                        var s = 1 + saturation;
-                        r = lum + (r - lum) * s;
-                        g = lum + (g - lum) * s;
-                        b = lum + (b - lum) * s;
-                    }
-                    if (a.Tint != Tint.None)
-                        (r, g, b) = Colorize(Math.Clamp(lum, 0, 1), a.Tint, (float)a.TintHue);
+                    // Buntheit in Oklab: Farbton und Helligkeit bleiben stehen
+                    var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
+                    var factor = 1f;
+                    if (vibrance != 0) factor *= VibranceFactor(L, oa, ob, vibrance);
+                    if (saturation != 0) factor *= 1 + saturation;
+                    (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);
                 }
+                if (a.Tint != Tint.None)
+                    (r, g, b) = Colorize(Math.Clamp(Kr * r + Kg * g + Kb * b, 0, 1), a.Tint, (float)a.TintHue);
 
                 result[i] = ToByte(b);
                 result[i + 1] = ToByte(g);
@@ -264,31 +255,33 @@ public static class Adjust
     /// Hauttöne — Bilder werden lebendiger, Gesichter nicht orange. Nach links werden
     /// zuerst die blassen Farben grau, kräftige bleiben länger.
     /// </summary>
-    /// <returns>Faktor für den Abstand jedes Kanals zur Helligkeit (1 = unverändert).</returns>
-    internal static float VibranceFactor(float r, float g, float b, float vibrance)
+    /// <summary>Buntheit, ab der eine Farbe als kräftig gilt (Oklab-C; sRGB-Primärfarben ≈ 0,26–0,32).</summary>
+    private const float StrongChroma = 0.2f;
+
+    /// <returns>Faktor für die Buntheit in Oklab (1 = unverändert).</returns>
+    internal static float VibranceFactor(float L, float a, float b, float vibrance)
     {
-        var max = MathF.Max(r, MathF.Max(g, b));
-        var min = MathF.Min(r, MathF.Min(g, b));
-        var sat = max > 1e-3f ? Math.Clamp((max - min) / max, 0, 1) : 0;
+        var chroma = MathF.Sqrt(a * a + b * b);
+        var sat = Math.Clamp(chroma / StrongChroma, 0, 1);
 
         if (vibrance < 0)
             return Math.Max(0, 1 + vibrance * (1 - 0.6f * sat));
 
         var room = MathF.Pow(1 - sat, 1.5f);                  // blass: viel Spielraum
-        return 1 + vibrance * room * (1 - 0.7f * SkinTone(r, g, b, sat));
+        return 1 + 1.5f * vibrance * room * (1 - 0.75f * SkinTone(L, a, b, chroma));
     }
 
     /// <summary>
-    /// Wie sehr ein Farbton nach Haut aussieht (0–1): Rot vor Grün vor Blau, Farbwinkel um
-    /// 25° (orange-rötlich), mäßig gesättigt.
+    /// Wie sehr eine Farbe nach Haut aussieht (0–1): Oklab-Farbwinkel um 55°
+    /// (orange-rötlich), nicht zu dunkel, mäßig bunt — alle Hauttypen liegen auf dieser Achse.
     /// </summary>
-    private static float SkinTone(float r, float g, float b, float sat)
+    private static float SkinTone(float L, float a, float b, float chroma)
     {
-        if (!(r >= g && g >= b) || r - b < 1e-3f) return 0;
-        var hue = 60 * (g - b) / (r - b);                     // 0° rot … 60° gelb
-        var onHue = Math.Clamp(1 - MathF.Abs(hue - 25) / 20, 0, 1);
-        var onSat = 1 - SmoothStep(0.55f, 0.8f, sat);        // sehr kräftig = keine Haut
-        return onHue * onSat;
+        if (chroma < 1e-3f) return 0;
+        var onHue = Math.Clamp(1 - MathF.Abs(Oklab.Hue(a, b) - 55) / 30, 0, 1);
+        var onChroma = 1 - SmoothStep(0.12f, 0.18f, chroma);    // sehr kräftig = keine Haut
+        var onLight = SmoothStep(0.25f, 0.4f, L);
+        return onHue * onChroma * onLight;
     }
 
     private const int CurveSize = 4096;
