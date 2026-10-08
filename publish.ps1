@@ -15,8 +15,9 @@
 
     Fremde native Bibliotheken liegen nicht in der Programmdatei, sondern je in einem
     eigenen Ordner daneben (Build-Target in ImageConverter.Desktop.csproj). Heruntergeladene
-    KI-Modelle (KI-Modelle\ neben dem Programm) bleiben bei jedem Bau stehen und kommen nicht
-    ins Paket. Jedes Ziel loescht nur seine eigene Ausgabe.
+    KI-Modelle (KI-Modelle\) und eigene Sprachdateien (languages\) neben dem Programm bleiben
+    bei jedem Bau stehen; die Modelle kommen nicht ins Paket, die Sprachdateien schon.
+    Jedes Ziel loescht nur seine eigene Ausgabe.
 
 .PARAMETER Target
     windows (Standard), linux oder beides.
@@ -79,10 +80,10 @@ Write-Step 'Tests'
 dotnet test $solution -c Release --nologo -p:UseArtifactsOutput=true "-p:ArtifactsPath=$artifacts"
 if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen - nichts veroeffentlicht.' }
 
-# Leert einen Ausgabeordner bis auf die heruntergeladenen KI-Modelle.
+# Leert einen Ausgabeordner bis auf die Dateien des Benutzers: KI-Modelle und Sprachdateien.
 function Clear-ProgramFolder([string]$dest) {
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Get-ChildItem $dest -Force | Where-Object { $_.Name -ne 'KI-Modelle' } | Remove-Item -Recurse -Force
+    Get-ChildItem $dest -Force | Where-Object { $_.Name -notin @('KI-Modelle', 'languages') } | Remove-Item -Recurse -Force
 }
 
 function Publish-Runtime([string]$rid, [string]$dest) {

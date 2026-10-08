@@ -21,7 +21,7 @@ public enum PageOrientation { Portrait, Landscape, Auto }
 /// <summary>Papierformat in Millimetern (Hochformat).</summary>
 public sealed record PaperSize(string Name, double WidthMm, double HeightMm)
 {
-    public override string ToString() => Name;
+    public override string ToString() => Tr.T(Name);   // „Foto 10 × 15 cm“ übersetzt, A4 bleibt
 
     public static IReadOnlyList<PaperSize> Common { get; } =
     [

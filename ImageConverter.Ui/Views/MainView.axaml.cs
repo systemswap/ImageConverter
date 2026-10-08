@@ -130,7 +130,7 @@ public partial class MainView : UserControl
 
         var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Zielordner für den Export",
+            Title = Tr.T("Zielordner für den Export"),
             AllowMultiple = false,
         });
 
@@ -144,7 +144,7 @@ public partial class MainView : UserControl
 
         // Dateimanager des Systems: Explorer, Nautilus, Dolphin … über die Standard-Zuordnung
         if (!ImageConverter.Services.FolderOpener.TryOpen(folder))
-            _vm.ErrorMessage = $"Kein Dateimanager gefunden. Der Ordner ist: {folder}";
+            _vm.ErrorMessage = Tr.T("Kein Dateimanager gefunden. Der Ordner ist: {0}", folder);
     }
 
     // ------------------------------------------------------- Dateidialog
@@ -155,11 +155,11 @@ public partial class MainView : UserControl
 
         var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Bilder öffnen",
+            Title = Tr.T("Bilder öffnen"),
             AllowMultiple = true,
             FileTypeFilter =
             [
-                new FilePickerFileType("Bilder")
+                new FilePickerFileType(Tr.T("Bilder"))
                 {
                     // Linux-Dialoge unterscheiden Groß-/Kleinschreibung (Kameras schreiben .JPG)
                     Patterns = ImageFormats.ReadableExtensions

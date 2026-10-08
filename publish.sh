@@ -22,9 +22,10 @@ set -Eeuo pipefail
 #   einzeln                alle Bibliotheken lose im Ordner, ohne AppImage –
 #                          falls eine Datei zu groß wird oder zur Fehlersuche
 #
-# Heruntergeladene KI-Modelle (KI-Modelle/ neben dem Programm) bleiben bei jedem
-# Bau stehen und kommen nicht in die Pakete; alles andere wird ersetzt. Ein
-# Linux-Bau lässt den Windows-Stand stehen und umgekehrt.
+# Heruntergeladene KI-Modelle (KI-Modelle/) und eigene Sprachdateien (languages/)
+# neben dem Programm bleiben bei jedem Bau stehen; die Modelle kommen nicht in die
+# Pakete, die Sprachdateien schon. Alles andere wird ersetzt. Ein Linux-Bau lässt
+# den Windows-Stand stehen und umgekehrt.
 #
 # Aufruf ohne Argumente fragt erst nach der Paketform, dann nach dem Ziel.
 # Ohne Rückfrage (Reihenfolge egal, Paketform sonst „eine Datei“):
@@ -140,7 +141,7 @@ notices() {
 }
 
 # Was das Programm neben sich schreibt; bleibt bei jedem Bau stehen.
-USER_FILES=(KI-Modelle)
+USER_FILES=(KI-Modelle languages)
 
 # Leert einen Ausgabeordner bis auf die Dateien des Benutzers.
 clear_program_folder() {

@@ -47,10 +47,13 @@ public static class ImageMagickPolicy
     /// ~/.local/share/ImageConverter/ImageMagick bzw. %LOCALAPPDATA%\ImageConverter\ImageMagick;
     /// liefert .NET keinen Benutzerordner (z. B. fehlendes XDG-Verzeichnis), der Temp-Ordner.
     /// </summary>
-    internal static string Folder()
+    internal static string Folder() => Path.Combine(UserDataRoot(), "ImageMagick");
+
+    /// <summary>Benutzerordner des Programms: ~/.local/share/ImageConverter bzw. %LOCALAPPDATA%\ImageConverter.</summary>
+    internal static string UserDataRoot()
     {
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var root = string.IsNullOrEmpty(local) ? Path.GetTempPath() : local;
-        return Path.Combine(root, "ImageConverter", "ImageMagick");
+        return Path.Combine(root, "ImageConverter");
     }
 }

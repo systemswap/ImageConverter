@@ -21,6 +21,9 @@ public partial class App : Application
         // Desktop-only: die Single-View-Lifetimes (Android/iOS/Browser) sind entfallen.
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // Sprache vor dem ersten Fenster: gespeicherte Wahl, sonst Systemsprache
+            LanguageViewModel.ApplyAtStartup();
+
             var vm = new MainViewModel();
             desktop.MainWindow = new MainWindow { DataContext = vm };
 

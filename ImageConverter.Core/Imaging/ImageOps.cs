@@ -36,7 +36,7 @@ public static class ImageOps
         {
             using var pixels = image.GetPixelsUnsafe();
             return pixels.ToByteArray("BGRA")
-                   ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+                   ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
         }
     }
 
@@ -276,7 +276,7 @@ public static class ImageOps
             depth = image.Depth;
             map = image.HasAlpha ? "RGBA" : "RGB";
             using var pixels = image.GetPixelsUnsafe();
-            source = pixels.ToShortArray(map) ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+            source = pixels.ToShortArray(map) ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
         }
         var ch = map.Length;
         var (toLinear, toSrgb) = gammaCorrect ? GammaTables.Value : default;
@@ -336,7 +336,7 @@ public static class ImageOps
         strip.FilterType = filter;
         strip.Resize(new MagickGeometry((uint)toWidth, (uint)toHeight) { IgnoreAspectRatio = true });
         using var pixels = strip.GetPixelsUnsafe();
-        return pixels.ToShortArray(map) ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        return pixels.ToShortArray(map) ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
     }
 
     /// <summary>Wendet eine Tabelle auf Rot, Grün und Blau an (Alpha bleibt).</summary>

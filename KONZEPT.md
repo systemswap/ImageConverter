@@ -109,9 +109,20 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
 ### H. Lokalisierung
 
 - Deutsch, Englisch; Struktur für weitere Sprachen (fr, es, it, nl, pl, pt, tr, uk, zh).
-- `.resx` (bzw. gettext/`.po`, falls Community-Übersetzungen über Weblate geplant sind).
 - Sprache aus System-Locale, im UI überschreibbar. RTL-Layout vorbereiten (ar, he).
 - Übersetzbar sind auch Einheiten, Zahlenformate und Dateigrößen.
+
+**Umgesetzt (festgelegt am 08.10.2026):** statt `.resx` wie gettext — der deutsche Text
+ist der Schlüssel. XAML: `Text="{l:T 'Bilder hierher ziehen'}"`, C#: `Tr.T("…")`,
+Listen mit deutschen Werten zeigen über `ComboBox.tr` bzw. `{l:TItem}` die Übersetzung.
+Deutsch und Englisch stehen im Code (`Core/Localization/English.cs`), weitere Sprachen
+als JSON in `languages/` neben dem Programm (Code, Name in der Sprache selbst, Flagge
+als Streifen oder PNG, Texte); fehlende Texte erscheinen auf Englisch. Einstellungen →
+Tab „Sprache“: Combobox mit Flagge und Name, wirkt sofort, gespeichert in
+`settings.json` im Benutzerordner; „Vorlage erstellen“ schreibt `_vorlage.json` mit
+allen Texten. Neue Texte brauchen einen englischen Eintrag — sonst schlägt
+`LocalizationTests.English_CoversEveryText` fehl. Der Ordner `konvertiert` behält
+seinen Namen in allen Sprachen.
 
 ### I. Desktop-Integration
 

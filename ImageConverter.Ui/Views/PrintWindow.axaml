@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:ImageConverter.Localization"
         xmlns:vm="using:ImageConverter.ViewModels"
         xmlns:c="using:ImageConverter.Controls"
         xmlns:p="using:ImageConverter.Core.Printing"
         x:Class="ImageConverter.Views.PrintWindow"
         x:DataType="vm:PrintDialogViewModel"
-        Title="Drucken"
+        Title="{l:T 'Drucken'}"
         Icon="/Assets/app.ico"
         Width="1040" Height="720" MinWidth="820" MinHeight="560"
         WindowStartupLocation="CenterOwner"
@@ -26,7 +27,7 @@
                         <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Message}" />
                     </StackPanel>
                 </StackPanel>
-                <Button Grid.Column="1" Classes="subtle" Margin="0,0,8,0" Content="Abbrechen" Click="OnCancelClick" />
+                <Button Grid.Column="1" Classes="subtle" Margin="0,0,8,0" Content="{l:T 'Abbrechen'}" Click="OnCancelClick" />
                 <Button Grid.Column="2" Classes="primary"
                         Content="{Binding PrimaryButtonText}" Command="{Binding PrintCommand}" />
             </Grid>
@@ -39,29 +40,29 @@
                           Padding="12,12,8,12" Classes="settings">
                 <StackPanel Spacing="10">
 
-                    <HeaderedContentControl Header="DRUCKER">
+                    <HeaderedContentControl Header="{l:T 'DRUCKER'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Ausgabe" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ausgabe'}" />
                                 <ComboBox Grid.Column="1" ItemsSource="{Binding Printers}"
                                           SelectedItem="{Binding SelectedPrinter}"
-                                          ToolTip.Tip="„Als PDF speichern“ erzeugt eine PDF-Datei mit exakt denselben Maßen wie der Ausdruck." />
+                                          ToolTip.Tip="{l:T '„Als PDF speichern“ erzeugt eine PDF-Datei mit exakt denselben Maßen wie der Ausdruck.'}" />
                             </Grid>
                             <Grid Classes="row" ColumnDefinitions="76,*" IsVisible="{Binding CopiesAvailable}">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Kopien" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Kopien'}" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding Copies}" Minimum="1" Maximum="99"
                                                FormatString="0" />
                             </Grid>
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Farbe" />
-                                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbe'}" />
+                                <ComboBox Classes="tr" Grid.Column="1" HorizontalAlignment="Stretch"
                                           ItemsSource="{Binding ColorModes}" SelectedItem="{Binding SelectedColorMode}"
                                           IsEnabled="{Binding ColorAvailable}"
                                           ToolTip.Tip="{Binding ColorHint}" ToolTip.ShowOnDisabled="True" />
                             </Grid>
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Seiten" />
-                                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Seiten'}" />
+                                <ComboBox Classes="tr" Grid.Column="1" HorizontalAlignment="Stretch"
                                           ItemsSource="{Binding DuplexModes}" SelectedItem="{Binding SelectedDuplex}"
                                           IsEnabled="{Binding DuplexAvailable}"
                                           ToolTip.Tip="{Binding DuplexHint}" ToolTip.ShowOnDisabled="True" />
@@ -74,67 +75,67 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="PAPIER">
+                    <HeaderedContentControl Header="{l:T 'PAPIER'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Format" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Format'}" />
                                 <ComboBox Grid.Column="1" ItemsSource="{Binding Papers}"
                                           SelectedItem="{Binding SelectedPaper}" />
                             </Grid>
                             <Grid ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Lage" />
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding Orientations}"
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Lage'}" />
+                                <ComboBox Classes="tr" Grid.Column="1" ItemsSource="{Binding Orientations}"
                                           SelectedItem="{Binding SelectedOrientation}"
-                                          ToolTip.Tip="Automatisch: die Lage, bei der weniger Seiten nötig sind — bei Gleichstand bleiben Fotos aufrecht." />
+                                          ToolTip.Tip="{l:T 'Automatisch: die Lage, bei der weniger Seiten nötig sind — bei Gleichstand bleiben Fotos aufrecht.'}" />
                             </Grid>
                         </StackPanel>
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="ANORDNUNG">
+                    <HeaderedContentControl Header="{l:T 'ANORDNUNG'}">
                         <StackPanel>
-                            <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}"
+                            <ComboBox Classes="tr" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}"
                                       Margin="0,0,0,7">
                                 <ToolTip.Tip>
                                     <StackPanel MaxWidth="300" Spacing="6">
-                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Schneidefreundlich" />
-                                        <TextBlock TextWrapping="Wrap" Text="Jede Seite lässt sich mit geraden Schnitten von Kante zu Kante zerlegen — ideal für die Schneidemaschine." />
-                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Möglichst dicht" />
-                                        <TextBlock TextWrapping="Wrap" Text="Spart Papier, aber nicht jede Schnittlinie geht durch das ganze Blatt." />
-                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Ein Bild pro Seite" />
-                                        <TextBlock TextWrapping="Wrap" Text="Jedes Bild mittig auf einem eigenen Blatt." />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{l:T 'Schneidefreundlich'}" />
+                                        <TextBlock TextWrapping="Wrap" Text="{l:T 'Jede Seite lässt sich mit geraden Schnitten von Kante zu Kante zerlegen — ideal für die Schneidemaschine.'}" />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{l:T 'Möglichst dicht'}" />
+                                        <TextBlock TextWrapping="Wrap" Text="{l:T 'Spart Papier, aber nicht jede Schnittlinie geht durch das ganze Blatt.'}" />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{l:T 'Ein Bild pro Seite'}" />
+                                        <TextBlock TextWrapping="Wrap" Text="{l:T 'Jedes Bild mittig auf einem eigenen Blatt.'}" />
                                     </StackPanel>
                                 </ToolTip.Tip>
                             </ComboBox>
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Abstand" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Abstand'}" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding GapMm}" Minimum="0" Maximum="50"
                                                Increment="1" FormatString="0.#"
-                                               ToolTip.Tip="Platz zwischen den Bildern zum Ausschneiden. Ab etwa 3 mm ist Raum für Schnittmarken." />
+                                               ToolTip.Tip="{l:T 'Platz zwischen den Bildern zum Ausschneiden. Ab etwa 3 mm ist Raum für Schnittmarken.'}" />
                                 <TextBlock Grid.Column="2" Classes="label" Text="mm" Margin="7,0,0,0" />
                             </Grid>
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Rand" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Rand'}" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding MarginMm}" Minimum="0" Maximum="50"
                                                Increment="1" FormatString="0.#"
-                                               ToolTip.Tip="Abstand zur Blattkante. Die meisten Drucker können die äußeren 3–5 mm nicht bedrucken." />
+                                               ToolTip.Tip="{l:T 'Abstand zur Blattkante. Die meisten Drucker können die äußeren 3–5 mm nicht bedrucken.'}" />
                                 <TextBlock Grid.Column="2" Classes="label" Text="mm" Margin="7,0,0,0" />
                             </Grid>
 
                             <StackPanel Spacing="2">
-                                <CheckBox IsChecked="{Binding AllowRotation}" Content="Bilder drehen, wenn es Platz spart"
-                                          ToolTip.Tip="Ein Bild darf quer liegen, wenn dadurch weniger Seiten nötig sind. Bei Gleichstand bleiben Fotos aufrecht." />
-                                <CheckBox IsChecked="{Binding ShrinkToFit}" Content="Zu große Bilder verkleinern"
-                                          ToolTip.Tip="Passt ein Bild nicht auf das Papier, wird es so weit verkleinert, dass es passt. Sonst wird es nicht gedruckt." />
-                                <CheckBox IsChecked="{Binding CutMarks}" Content="Schnittmarken"
-                                          ToolTip.Tip="Feine Eckmarken im Abstand zwischen den Bildern — zeigen, wo geschnitten wird, ohne ins Bild zu ragen." />
+                                <CheckBox IsChecked="{Binding AllowRotation}" Content="{l:T 'Bilder drehen, wenn es Platz spart'}"
+                                          ToolTip.Tip="{l:T 'Ein Bild darf quer liegen, wenn dadurch weniger Seiten nötig sind. Bei Gleichstand bleiben Fotos aufrecht.'}" />
+                                <CheckBox IsChecked="{Binding ShrinkToFit}" Content="{l:T 'Zu große Bilder verkleinern'}"
+                                          ToolTip.Tip="{l:T 'Passt ein Bild nicht auf das Papier, wird es so weit verkleinert, dass es passt. Sonst wird es nicht gedruckt.'}" />
+                                <CheckBox IsChecked="{Binding CutMarks}" Content="{l:T 'Schnittmarken'}"
+                                          ToolTip.Tip="{l:T 'Feine Eckmarken im Abstand zwischen den Bildern — zeigen, wo geschnitten wird, ohne ins Bild zu ragen.'}" />
                             </StackPanel>
                         </StackPanel>
                     </HeaderedContentControl>
 
-                    <HeaderedContentControl Header="BILDER" IsVisible="{Binding HasMultipleFiles}">
+                    <HeaderedContentControl Header="{l:T 'BILDER'}" IsVisible="{Binding HasMultipleFiles}">
                         <CheckBox IsChecked="{Binding PrintAll}" Content="{Binding PrintAllText}"
-                                  ToolTip.Tip="Sonst nur das Bild, das gerade angezeigt wird. Jedes Bild in der Größe aus seinen Einstellungen." />
+                                  ToolTip.Tip="{l:T 'Sonst nur das Bild, das gerade angezeigt wird. Jedes Bild in der Größe aus seinen Einstellungen.'}" />
                     </HeaderedContentControl>
                 </StackPanel>
             </ScrollViewer>
@@ -147,10 +148,10 @@
                         BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,1,0,0" Padding="10,6">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
                         <Button Classes="icon" Content="‹" FontSize="18" Command="{Binding PreviousPageCommand}"
-                                ToolTip.Tip="Vorherige Seite" />
+                                ToolTip.Tip="{l:T 'Vorherige Seite'}" />
                         <TextBlock Classes="label" MinWidth="200" TextAlignment="Center" Text="{Binding PageInfo}" />
                         <Button Classes="icon" Content="›" FontSize="18" Command="{Binding NextPageCommand}"
-                                ToolTip.Tip="Nächste Seite" />
+                                ToolTip.Tip="{l:T 'Nächste Seite'}" />
                     </StackPanel>
                 </Border>
 

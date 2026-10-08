@@ -26,7 +26,7 @@ public partial class PrintWindow : Window
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Als PDF speichern",
+            Title = Tr.T("Als PDF speichern"),
             SuggestedFileName = suggestedName,
             DefaultExtension = "pdf",
             FileTypeChoices = [new FilePickerFileType("PDF") { Patterns = ["*.pdf"], MimeTypes = ["application/pdf"] }],

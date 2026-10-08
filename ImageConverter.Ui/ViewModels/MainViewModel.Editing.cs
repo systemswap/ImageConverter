@@ -159,7 +159,7 @@ public partial class MainViewModel
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Bearbeiten fehlgeschlagen: {ex.Message}";
+            ErrorMessage = Tr.T("Bearbeiten fehlgeschlagen: {0}", ex.Message);
             return false;
         }
         finally
@@ -258,9 +258,7 @@ public partial class MainViewModel
 
         var w = (int)doc.Width;
         var hgt = (int)doc.Height;
-        FileDetails = h.IsEdited
-            ? $"{w} × {hgt} px  ·  {h.FormatName}  ·  bearbeitet"
-            : $"{w} × {hgt} px  ·  {FormatBytes(h.FileBytes)}  ·  {h.FormatName}";
+        UpdateFileDetails();
 
         using (SuppressHistory())
             ApplySourceSize(w, hgt);
@@ -268,6 +266,16 @@ public partial class MainViewModel
 
         NotifyUndoRedo();
         RequestPreview();
+    }
+
+    /// <summary>Zeile unter dem Dateinamen: Maße, Größe, Format.</summary>
+    private void UpdateFileDetails()
+    {
+        if (_history is not { } h) return;
+        var doc = h.Current;
+        FileDetails = h.IsEdited
+            ? Tr.T("{0} × {1} px  ·  {2}  ·  bearbeitet", doc.Width, doc.Height, h.FormatName)
+            : $"{doc.Width} × {doc.Height} px  ·  {FormatBytes(h.FileBytes)}  ·  {h.FormatName}";
     }
 
     /// <summary>Alles freigeben — jedes Bild genau einmal, auch wenn es mehrfach referenziert ist.</summary>
@@ -321,9 +329,9 @@ public partial class MainViewModel
     {
         get
         {
-            if (CornerRadius < 0.5) return "eckig";
+            if (CornerRadius < 0.5) return Tr.T("eckig");
             if (CornerRadius >= MaxCornerRadius - 0.5)
-                return CropWidth == CropHeight ? "Kreis" : "Ellipse";
+                return CropWidth == CropHeight ? Tr.T("Kreis") : Tr.T("Ellipse");
             return $"{CornerRadius:F0} px";
         }
     }

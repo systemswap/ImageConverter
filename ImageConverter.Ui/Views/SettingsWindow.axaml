@@ -1,10 +1,13 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:ImageConverter.Localization"
         xmlns:vm="using:ImageConverter.ViewModels"
         xmlns:ai="using:ImageConverter.Ai"
+        xmlns:c="using:ImageConverter.Controls"
+        xmlns:core="using:ImageConverter.Core.Localization"
         x:Class="ImageConverter.Views.SettingsWindow"
         x:DataType="vm:MainViewModel"
-        Title="Einstellungen"
+        Title="{l:T 'Einstellungen'}"
         Icon="/Assets/app.ico"
         Width="720" Height="600" MinWidth="560" MinHeight="420"
         WindowStartupLocation="CenterOwner"
@@ -12,13 +15,52 @@
 
     <DockPanel>
         <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="16,10">
-            <Button HorizontalAlignment="Right" Classes="subtle" Content="Schließen" Click="OnCloseClick"
-                    ToolTip.Tip="Laufende Downloads gehen im Hintergrund weiter." />
+            <Button HorizontalAlignment="Right" Classes="subtle" Content="{l:T 'Schließen'}" Click="OnCloseClick"
+                    ToolTip.Tip="{l:T 'Laufende Downloads gehen im Hintergrund weiter.'}" />
         </Border>
 
         <TabControl Margin="12,8,12,0" Padding="4,12,4,12">
-            <TabItem Header="KI-Modelle" FontSize="14">
+            <TabItem Header="{l:T 'KI-Modelle'}" FontSize="14">
                 <ai:AiModelsView DataContext="{Binding Ai}" />
+            </TabItem>
+            <TabItem Header="{l:T 'Sprache'}" FontSize="14">
+                <StackPanel DataContext="{Binding Language}" x:DataType="vm:LanguageViewModel"
+                            Spacing="12" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0">
+                    <!-- Flagge + Name in der eigenen Sprache: die eigene Sprache findet man wieder,
+                         auch wenn gerade eine fremde eingestellt ist -->
+                    <ComboBox ItemsSource="{Binding Available}" SelectedItem="{Binding Selected}"
+                              MinWidth="260" FontSize="14">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:Language">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <c:FlagView Language="{Binding}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Weitere Sprachen: eine JSON-Datei in den Ordner „languages“ neben dem Programm legen. Die Vorlage enthält alle Texte mit englischer Übersetzung zum Übersetzen.'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Folder}" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="subtle" Content="{l:T 'Ordner öffnen'}" Command="{Binding OpenFolderCommand}" />
+                        <Button Classes="subtle" Content="{l:T 'Vorlage erstellen'}" Command="{Binding WriteTemplateCommand}"
+                                ToolTip.Tip="{l:T 'Schreibt _vorlage.json in den Ordner languages. Kopieren, umbenennen (z. B. fr.json), Code, Name, Flagge und Texte übersetzen.'}" />
+                    </StackPanel>
+
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Status}"
+                               IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <Border IsVisible="{Binding Problems, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
+                            CornerRadius="{DynamicResource RadiusControl}" Padding="10,7">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="hint" FontWeight="SemiBold" Text="{l:T 'Nicht geladene Sprachdateien:'}" />
+                            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Problems}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </TabItem>
         </TabControl>
     </DockPanel>

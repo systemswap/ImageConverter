@@ -85,7 +85,7 @@ public sealed class AiModelStore
             var actual = Convert.ToHexStringLower(hash.GetHashAndReset());
             if (!string.Equals(actual, model.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(
-                    $"Die heruntergeladene Datei ist beschädigt oder wurde verändert (Prüfsumme stimmt nicht).");
+                    Tr.T("Die heruntergeladene Datei ist beschädigt oder wurde verändert (Prüfsumme stimmt nicht)."));
 
             if (model.IsZip)
                 ExtractFlat(part, dir);

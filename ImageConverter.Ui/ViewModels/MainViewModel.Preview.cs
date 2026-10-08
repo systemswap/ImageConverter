@@ -122,8 +122,8 @@ public partial class MainViewModel
     [ObservableProperty] public partial double SharpenRadius { get; set; } = 1.0;
     [ObservableProperty] public partial double NoiseReduction { get; set; }
 
-    public string SharpenLabel => SharpenAmount <= 0.01 ? "aus" : $"{SharpenAmount:F2}";
-    public string NoiseLabel => NoiseReduction <= 0.01 ? "aus" : $"{NoiseReduction:F2}";
+    public string SharpenLabel => SharpenAmount <= 0.01 ? Tr.T("aus") : $"{SharpenAmount:F2}";
+    public string NoiseLabel => NoiseReduction <= 0.01 ? Tr.T("aus") : $"{NoiseReduction:F2}";
 
     partial void OnSharpenAmountChanged(double value)
     {
@@ -296,7 +296,7 @@ public partial class MainViewModel
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Vorschau fehlgeschlagen: {ex.Message}";
+            ErrorMessage = Tr.T("Vorschau fehlgeschlagen: {0}", ex.Message);
         }
         finally
         {

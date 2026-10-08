@@ -17,7 +17,7 @@ namespace ImageConverter.ViewModels;
 public sealed record PrinterChoice(string Label, PrinterInfo? Printer)
 {
     public bool IsPdf => Printer is null;
-    public override string ToString() => Label;
+    public override string ToString() => IsPdf ? Tr.T(Label) : Label;   // „Als PDF speichern“ übersetzt, Druckernamen nicht
 }
 
 /// <summary>Ein zu druckendes Bild: Druckauftrag (Größe, DPI …) und Vorschaubild.</summary>
@@ -47,16 +47,9 @@ public partial class PrintDialogViewModel : ViewModelBase
         Papers = PaperSize.Common;
         SelectedPaper = Papers[0];
 
-        Orientations = ["Automatisch", "Hochformat", "Querformat"];
         SelectedOrientation = Orientations[0];
-
-        Modes = ["Mehrere pro Seite — schneidefreundlich", "Mehrere pro Seite — möglichst dicht", "Ein Bild pro Seite"];
         SelectedMode = Modes[0];
-
-        ColorModes = ["Farbe", "Schwarzweiß"];
         SelectedColorMode = ColorModes[0];
-
-        DuplexModes = ["Einseitig", "Doppelseitig — lange Kante", "Doppelseitig — kurze Kante"];
         SelectedDuplex = DuplexModes[0];
 
         PrintAll = main.OpenFiles.Count > 1;
@@ -67,10 +60,16 @@ public partial class PrintDialogViewModel : ViewModelBase
 
     public ObservableCollection<PrinterChoice> Printers { get; }
     public IReadOnlyList<PaperSize> Papers { get; }
-    public IReadOnlyList<string> Orientations { get; }
-    public IReadOnlyList<string> Modes { get; }
-    public IReadOnlyList<string> ColorModes { get; }
-    public IReadOnlyList<string> DuplexModes { get; }
+    // Werte sind die deutschen Texte (Kennungen); angezeigt wird die Übersetzung (ComboBox.tr)
+    internal static readonly string[] OrientationLabels = ["Automatisch", "Hochformat", "Querformat"];
+    internal static readonly string[] ModeLabels = ["Mehrere pro Seite — schneidefreundlich", "Mehrere pro Seite — möglichst dicht", "Ein Bild pro Seite"];
+    internal static readonly string[] ColorModeLabels = ["Farbe", "Schwarzweiß"];
+    internal static readonly string[] DuplexLabels = ["Einseitig", "Doppelseitig — lange Kante", "Doppelseitig — kurze Kante"];
+
+    public IReadOnlyList<string> Orientations => OrientationLabels;
+    public IReadOnlyList<string> Modes => ModeLabels;
+    public IReadOnlyList<string> ColorModes => ColorModeLabels;
+    public IReadOnlyList<string> DuplexModes => DuplexLabels;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PrimaryButtonText), nameof(MarginHint), nameof(CopiesAvailable),
@@ -105,24 +104,23 @@ public partial class PrintDialogViewModel : ViewModelBase
     public bool DuplexAvailable => !SelectedPrinter.IsPdf && Capabilities.Duplex != false;
 
     public string ColorHint => Capabilities.Color == false
-        ? "Dieser Drucker druckt nur Schwarzweiß."
-        : "Schwarzweiß rechnet die Bilder selbst in Graustufen um (nach empfundener Helligkeit) — " +
-          "das wirkt auch im PDF und bei Druckern, die die Einstellung sonst übergehen.";
+        ? Tr.T("Dieser Drucker druckt nur Schwarzweiß.")
+        : Tr.T("Schwarzweiß rechnet die Bilder selbst in Graustufen um (nach empfundener Helligkeit) — das wirkt auch im PDF und bei Druckern, die die Einstellung sonst übergehen.");
 
     public string DuplexHint => SelectedPrinter.IsPdf
-        ? "Beim PDF entscheidet erst das Programm, mit dem es gedruckt wird."
+        ? Tr.T("Beim PDF entscheidet erst das Programm, mit dem es gedruckt wird.")
         : Capabilities.Duplex == false
-            ? "Dieser Drucker kann nicht beidseitig drucken."
-            : "Lange Kante: geblättert wird wie in einem Buch.\nKurze Kante: geblättert wird nach oben, wie bei einem Kalender oder Klemmbrett.";
+            ? Tr.T("Dieser Drucker kann nicht beidseitig drucken.")
+            : Tr.T("Lange Kante: geblättert wird wie in einem Buch.\nKurze Kante: geblättert wird nach oben, wie bei einem Kalender oder Klemmbrett.");
 
     /// <summary>Alle geöffneten Bilder oder nur das aktuelle.</summary>
     [ObservableProperty] public partial bool PrintAll { get; set; }
 
     public bool HasMultipleFiles => _main.OpenFiles.Count > 1;
-    public string PrintAllText => $"Alle geöffneten Bilder ({_main.OpenFiles.Count})";
+    public string PrintAllText => Tr.T("Alle geöffneten Bilder ({0})", _main.OpenFiles.Count);
     public bool CopiesAvailable => !SelectedPrinter.IsPdf;
 
-    public string PrimaryButtonText => SelectedPrinter.IsPdf ? "PDF speichern …" : "Drucken";
+    public string PrimaryButtonText => SelectedPrinter.IsPdf ? Tr.T("PDF speichern …") : Tr.T("Drucken");
 
     /// <summary>Warnung, wenn der Rand kleiner ist, als der Drucker bedrucken kann (nur wo bekannt).</summary>
     public string? MarginHint
@@ -132,7 +130,7 @@ public partial class PrintDialogViewModel : ViewModelBase
             if (SelectedPrinter.Printer is not { } p) return null;
             var hw = SystemPrinters.HardwareMarginMm(p.Name);
             return hw is { } min && (double)MarginMm < min
-                ? $"Dieser Drucker kann am Rand {min:0.#} mm nicht bedrucken — Bilder würden angeschnitten."
+                ? Tr.T("Dieser Drucker kann am Rand {0:0.#} mm nicht bedrucken — Bilder würden angeschnitten.", min)
                 : null;
         }
     }
@@ -219,10 +217,12 @@ public partial class PrintDialogViewModel : ViewModelBase
     {
         get
         {
-            if (IsLoading) return "Bilder werden vorbereitet …";
-            if (Layout is not { } l || l.Pages.Count == 0) return "Nichts zu drucken";
+            if (IsLoading) return Tr.T("Bilder werden vorbereitet …");
+            if (Layout is not { } l || l.Pages.Count == 0) return Tr.T("Nichts zu drucken");
             var images = l.Pages.Sum(p => p.Placements.Count);
-            return $"Seite {PageIndex + 1} von {l.Pages.Count}  ·  {images} {(images == 1 ? "Bild" : "Bilder")}";
+            return images == 1
+                ? Tr.T("Seite {0} von {1}  ·  1 Bild", PageIndex + 1, l.Pages.Count)
+                : Tr.T("Seite {0} von {1}  ·  {2} Bilder", PageIndex + 1, l.Pages.Count, images);
         }
     }
 
@@ -262,7 +262,7 @@ public partial class PrintDialogViewModel : ViewModelBase
             }
             catch (Exception ex)
             {
-                Problem = $"„{Path.GetFileName(path)}“ ließ sich nicht lesen: {ex.Message}";
+                Problem = Tr.T("„{0}“ ließ sich nicht lesen: {1}", Path.GetFileName(path), ex.Message);
             }
         }
 
@@ -299,8 +299,9 @@ public partial class PrintDialogViewModel : ViewModelBase
 
         var missing = layout.NotPlaced.Count;
         Problem = missing == 0 ? null
-            : $"{missing} {(missing == 1 ? "Bild ist" : "Bilder sind")} größer als die bedruckbare Fläche — " +
-              "„Zu große Bilder verkleinern“ einschalten oder größeres Papier wählen.";
+            : missing == 1
+                ? Tr.T("1 Bild ist größer als die bedruckbare Fläche — „Zu große Bilder verkleinern“ einschalten oder größeres Papier wählen.")
+                : Tr.T("{0} Bilder sind größer als die bedruckbare Fläche — „Zu große Bilder verkleinern“ einschalten oder größeres Papier wählen.", missing);
 
         PreviousPageCommand.NotifyCanExecuteChanged();
         NextPageCommand.NotifyCanExecuteChanged();
@@ -337,7 +338,7 @@ public partial class PrintDialogViewModel : ViewModelBase
         }
 
         IsPrinting = true;
-        Message = "Bilder werden für den Druck gerechnet …";
+        Message = Tr.T("Bilder werden für den Druck gerechnet …");
         Problem = null;
         try
         {
@@ -392,8 +393,8 @@ public partial class PrintDialogViewModel : ViewModelBase
 
             var pages = layout.Pages.Count;
             _main.ReportPrint(pdfPath is not null
-                ? $"PDF gespeichert: {Path.GetFileName(pdfPath)}  ·  {pages} {(pages == 1 ? "Seite" : "Seiten")}"
-                : $"An „{printer!.Name}“ gesendet  ·  {pages} {(pages == 1 ? "Seite" : "Seiten")}", pdfPath);
+                ? (pages == 1 ? Tr.T("PDF gespeichert: {0}  ·  1 Seite", Path.GetFileName(pdfPath)) : Tr.T("PDF gespeichert: {0}  ·  {1} Seiten", Path.GetFileName(pdfPath), pages))
+                : (pages == 1 ? Tr.T("An „{0}“ gesendet  ·  1 Seite", printer!.Name) : Tr.T("An „{0}“ gesendet  ·  {1} Seiten", printer!.Name, pages)), pdfPath);
             Close?.Invoke();
         }
         catch (Exception ex)

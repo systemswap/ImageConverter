@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:ImageConverter.ViewModels"
@@ -22,18 +23,18 @@
         <!-- ============================================================ -->
         <Border DockPanel.Dock="Top" Classes="bar" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                <Button Grid.Column="0" Classes="subtle" Content="＋  Bilder"
+                <Button Grid.Column="0" Classes="subtle" Content="{l:T '＋  Bilder'}"
                         Click="OnOpenFilesClick"
-                        ToolTip.Tip="Bilder oder ganze Ordner öffnen — oder einfach ins Fenster ziehen." />
+                        ToolTip.Tip="{l:T 'Bilder oder ganze Ordner öffnen — oder einfach ins Fenster ziehen.'}" />
 
                 <!-- Blättern, wenn mehrere Bilder geladen sind -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="10,0,0,0"
                             IsVisible="{Binding HasMultipleFiles}">
                     <Button Classes="icon" Content="‹" FontSize="18"
-                            Command="{Binding PreviousFileCommand}" ToolTip.Tip="Vorheriges Bild" />
+                            Command="{Binding PreviousFileCommand}" ToolTip.Tip="{l:T 'Vorheriges Bild'}" />
                     <TextBlock Classes="label" Text="{Binding FilePosition}" Margin="4,0" />
                     <Button Classes="icon" Content="›" FontSize="18"
-                            Command="{Binding NextFileCommand}" ToolTip.Tip="Nächstes Bild" />
+                            Command="{Binding NextFileCommand}" ToolTip.Tip="{l:T 'Nächstes Bild'}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Margin="14,0,0,0" Spacing="1">
@@ -50,9 +51,9 @@
                 </Border>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4">
-                    <Button Classes="icon" Content="☰" ToolTip.Tip="Einstellungen (KI-Modelle)"
+                    <Button Classes="icon" Content="☰" ToolTip.Tip="{l:T 'Einstellungen (KI-Modelle, Sprache)'}"
                             Command="{Binding OpenSettingsCommand}" />
-                    <Button Classes="icon" Content="?" ToolTip.Tip="Hilfe" />
+                    <Button Classes="icon" Content="?" ToolTip.Tip="{l:T 'Hilfe'}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -67,13 +68,13 @@
                             IsVisible="{Binding StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <TextBlock Classes="good" Text="✓" FontSize="14" />
                     <TextBlock Classes="hint" FontSize="12" Text="{Binding StatusMessage}" />
-                    <Button Classes="tool" Content="Ordner öffnen" Click="OnOpenExportFolderClick"
+                    <Button Classes="tool" Content="{l:T 'Ordner öffnen'}" Click="OnOpenExportFolderClick"
                             IsVisible="{Binding LastExportFolder, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
                 <ProgressBar Grid.Column="0" IsIndeterminate="True" Width="160"
                              HorizontalAlignment="Left" IsVisible="{Binding IsExporting}" />
 
-                <TextBlock Grid.Column="1" Classes="label" Margin="0,0,8,0" Text="Ziel" />
+                <TextBlock Grid.Column="1" Classes="label" Margin="0,0,8,0" Text="{l:T 'Ziel'}" />
 
                 <!-- Zielordner: Klick wählt einen Ordner, ✕ setzt auf „neben dem Original" zurück -->
                 <Border Grid.Column="2"
@@ -84,7 +85,7 @@
                         Margin="0,0,10,0">
                     <StackPanel Orientation="Horizontal">
                         <Button Classes="tool" Click="OnChooseOutputFolderClick" Padding="10,0"
-                                ToolTip.Tip="Zielordner wählen. Ohne Auswahl landet das Ergebnis im Unterordner „konvertiert“ neben dem Original.">
+                                ToolTip.Tip="{l:T 'Zielordner wählen. Ohne Auswahl landet das Ergebnis im Unterordner „konvertiert“ neben dem Original.'}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{Binding OutputFolderDisplay}" FontSize="12" MaxWidth="320"
                                            TextTrimming="CharacterEllipsis" />
@@ -94,17 +95,17 @@
                         <Button Classes="tool" Content="✕" Padding="8,0"
                                 IsVisible="{Binding HasCustomOutputFolder}"
                                 Command="{Binding ResetOutputFolderCommand}"
-                                ToolTip.Tip="Zurück zu: neben dem Original › konvertiert" />
+                                ToolTip.Tip="{l:T 'Zurück zu: neben dem Original › konvertiert'}" />
                     </StackPanel>
                 </Border>
 
-                <Button Grid.Column="3" Classes="subtle" Content="Drucken …" Margin="0,0,8,0"
+                <Button Grid.Column="3" Classes="subtle" Content="{l:T 'Drucken …'}" Margin="0,0,8,0"
                         Command="{Binding PrintCommand}"
-                        ToolTip.Tip="Drucken oder als PDF speichern — mehrere Bilder pro Seite, mit Abstand zum Ausschneiden (Strg+P)." />
+                        ToolTip.Tip="{l:T 'Drucken oder als PDF speichern — mehrere Bilder pro Seite, mit Abstand zum Ausschneiden (Strg+P).'}" />
 
-                <Button Grid.Column="4" Classes="primary" Content="Exportieren"
+                <Button Grid.Column="4" Classes="primary" Content="{l:T 'Exportieren'}"
                         Command="{Binding ExportCommand}"
-                        ToolTip.Tip="Mit allen Einstellungen in voller Auflösung speichern. Vorhandene Dateien werden nie überschrieben." />
+                        ToolTip.Tip="{l:T 'Mit allen Einstellungen in voller Auflösung speichern. Vorhandene Dateien werden nie überschrieben.'}" />
             </Grid>
         </Border>
 
@@ -118,7 +119,7 @@
             <Border Grid.Column="0" Classes="rail">
                 <DockPanel>
                     <ToggleButton x:Name="RailExpand" DockPanel.Dock="Bottom" Classes="railToggle"
-                                  ToolTip.Tip="Leiste aufklappen: zeigt, was in jeder Rubrik steckt">
+                                  ToolTip.Tip="{l:T 'Leiste aufklappen: zeigt, was in jeder Rubrik steckt'}">
                         <Viewbox Width="18" Height="18">
                             <Canvas Width="24" Height="24">
                                 <Path Data="M 6,17 L 11,12 L 6,7 M 13,17 L 18,12 L 13,7" />
@@ -128,7 +129,7 @@
 
                     <StackPanel Spacing="4">
                         <RadioButton x:Name="TabStandard" Classes="tile" GroupName="rubrik" IsChecked="True"
-                                     ToolTip.Tip="Standard: Format · Zuschnitt · Größe · DPI · Schärfen">
+                                     ToolTip.Tip="{l:T 'Standard: Format · Zuschnitt · Größe · DPI · Schärfen'}">
                             <Grid ColumnDefinitions="40,Auto">
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="24" Height="24">
@@ -136,14 +137,14 @@
                                     </Canvas>
                                 </Viewbox>
                                 <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
-                                    <TextBlock Classes="tileName" Text="Standard" />
-                                    <TextBlock Classes="tileHint" Text="Format · Zuschnitt · Größe · DPI · Schärfen" />
+                                    <TextBlock Classes="tileName" Text="{l:T 'Standard'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Format · Zuschnitt · Größe · DPI · Schärfen'}" />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
 
                         <RadioButton x:Name="TabAi" Classes="tile" GroupName="rubrik"
-                                     ToolTip.Tip="KI: Bilder vergrößern und verbessern, Gesichter wiederherstellen">
+                                     ToolTip.Tip="{l:T 'KI: Bilder vergrößern und verbessern, Gesichter wiederherstellen'}">
                             <Grid ColumnDefinitions="40,Auto">
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="24" Height="24">
@@ -151,14 +152,14 @@
                                     </Canvas>
                                 </Viewbox>
                                 <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
-                                    <TextBlock Classes="tileName" Text="KI" />
-                                    <TextBlock Classes="tileHint" Text="Vergrößern · Verbessern · Gesichter" />
+                                    <TextBlock Classes="tileName" Text="{l:T 'KI'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Vergrößern · Verbessern · Gesichter'}" />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
 
                         <RadioButton x:Name="TabTools" Classes="tile" GroupName="rubrik"
-                                     ToolTip.Tip="Tools: Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben">
+                                     ToolTip.Tip="{l:T 'Tools: Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben'}">
                             <Grid ColumnDefinitions="40,Auto">
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="24" Height="24">
@@ -166,14 +167,14 @@
                                     </Canvas>
                                 </Viewbox>
                                 <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
-                                    <TextBlock Classes="tileName" Text="Tools" />
-                                    <TextBlock Classes="tileHint" Text="Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben" />
+                                    <TextBlock Classes="tileName" Text="{l:T 'Tools'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben'}" />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
 
                         <RadioButton x:Name="TabOutput" Classes="tile" GroupName="rubrik"
-                                     ToolTip.Tip="Ausgabe: Metadaten · Farbprofil · Dateiname">
+                                     ToolTip.Tip="{l:T 'Ausgabe: Metadaten · Farbprofil · Dateiname'}">
                             <Grid ColumnDefinitions="40,Auto">
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="24" Height="24">
@@ -181,8 +182,8 @@
                                     </Canvas>
                                 </Viewbox>
                                 <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
-                                    <TextBlock Classes="tileName" Text="Ausgabe" />
-                                    <TextBlock Classes="tileHint" Text="Metadaten · Farbprofil · Dateiname" />
+                                    <TextBlock Classes="tileName" Text="{l:T 'Ausgabe'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Metadaten · Farbprofil · Dateiname'}" />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
@@ -204,20 +205,20 @@
                             CornerRadius="{DynamicResource RadiusCard}" Padding="12,6">
                         <StackPanel Spacing="2">
                             <CheckBox IsChecked="{Binding ApplyToAll}"
-                                      Content="Gleiche Einstellungen für alle Bilder">
+                                      Content="{l:T 'Gleiche Einstellungen für alle Bilder'}">
                                 <ToolTip.Tip>
                                     <StackPanel MaxWidth="300" Spacing="6">
-                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Haken gesetzt: alle Bilder teilen sich die Einstellungen." />
-                                        <TextBlock TextWrapping="Wrap" Text="Die Größe wird pro Bild umgerechnet: Die eingegebene Kante gilt, die andere folgt dem Seitenverhältnis des Bildes — nichts wird verzerrt." />
-                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="Haken entfernt: jedes Bild bekommt eigene Einstellungen." />
-                                        <TextBlock TextWrapping="Wrap" Text="Haken wieder setzen: alle Bilder übernehmen die Einstellungen des aktuellen Bildes." />
-                                        <TextBlock TextWrapping="Wrap" Text="Zuschnitt und Drehen gelten immer nur für das einzelne Bild." />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{l:T 'Haken gesetzt: alle Bilder teilen sich die Einstellungen.'}" />
+                                        <TextBlock TextWrapping="Wrap" Text="{l:T 'Die Größe wird pro Bild umgerechnet: Die eingegebene Kante gilt, die andere folgt dem Seitenverhältnis des Bildes — nichts wird verzerrt.'}" />
+                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold" Text="{l:T 'Haken entfernt: jedes Bild bekommt eigene Einstellungen.'}" />
+                                        <TextBlock TextWrapping="Wrap" Text="{l:T 'Haken wieder setzen: alle Bilder übernehmen die Einstellungen des aktuellen Bildes.'}" />
+                                        <TextBlock TextWrapping="Wrap" Text="{l:T 'Zuschnitt und Drehen gelten immer nur für das einzelne Bild.'}" />
                                     </StackPanel>
                                 </ToolTip.Tip>
                             </CheckBox>
                             <TextBlock Classes="hint" Margin="28,0,0,2"
                                        IsVisible="{Binding !ApplyToAll}"
-                                       Text="Einstellungen gelten nur für dieses Bild." />
+                                       Text="{l:T 'Einstellungen gelten nur für dieses Bild.'}" />
                         </StackPanel>
                     </Border>
 
@@ -225,40 +226,40 @@
                     <StackPanel Spacing="10" IsVisible="{Binding #TabStandard.IsChecked}">
 
                     <!-- ============================== Format -->
-                    <HeaderedContentControl Header="FORMAT">
+                    <HeaderedContentControl Header="{l:T 'FORMAT'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Format" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Format'}" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding Formats}"
                                           SelectedItem="{Binding SelectedFormat}" />
                             </Grid>
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Qualität" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Qualität'}" />
                                 <Slider Grid.Column="1" Minimum="1" Maximum="100"
                                         Value="{Binding Quality}"
                                         IsEnabled="{Binding QualityApplies}"
-                                        ToolTip.Tip="Höher = schöner, aber größere Datei. 75–85 ist für Fotos meist der beste Kompromiss." />
+                                        ToolTip.Tip="{l:T 'Höher = schöner, aber größere Datei. 75–85 ist für Fotos meist der beste Kompromiss.'}" />
                                 <TextBlock Grid.Column="2" Classes="value"
                                            Text="{Binding Quality, StringFormat='{}{0:F0}'}" />
                             </Grid>
 
                             <CheckBox IsChecked="{Binding Lossless}" IsVisible="{Binding LosslessAvailable}"
-                                      Content="Verlustfrei" FontSize="12"
-                                      ToolTip.Tip="Jedes Pixel bleibt exakt erhalten. Ideal für Grafiken, Screenshots und Buttons — bei Fotos deutlich größer." />
+                                      Content="{l:T 'Verlustfrei'}" FontSize="12"
+                                      ToolTip.Tip="{l:T 'Jedes Pixel bleibt exakt erhalten. Ideal für Grafiken, Screenshots und Buttons — bei Fotos deutlich größer.'}" />
                             <TextBlock Classes="hint" IsVisible="{Binding !QualityApplies}" Margin="0,0,0,2"
-                                       Text="Dieses Format speichert immer verlustfrei." />
+                                       Text="{l:T 'Dieses Format speichert immer verlustfrei.'}" />
 
                             <!-- Echte Schätzung: eine Probe wird im Zielformat kodiert -->
                             <Border Background="{DynamicResource AccentSoftBrush}"
                                     CornerRadius="{DynamicResource RadiusControl}"
                                     Padding="10,7" Margin="0,8,0,0"
-                                    ToolTip.Tip="Berechnet aus einer Probe im Zielformat mit allen Einstellungen. Ohne „≈“ ist es die exakte Größe.">
+                                    ToolTip.Tip="{l:T 'Berechnet aus einer Probe im Zielformat mit allen Einstellungen. Ohne „≈“ ist es die exakte Größe.'}">
                                 <StackPanel Spacing="2">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Classes="good" Text="{Binding EstimatedSize}" />
-                                        <TextBlock Classes="hint" Text="wird berechnet …"
+                                        <TextBlock Classes="hint" Text="{l:T 'wird berechnet …'}"
                                                    IsVisible="{Binding IsEstimating}" />
                                     </StackPanel>
                                     <TextBlock Classes="hint" Text="{Binding SavingsText}" />
@@ -268,11 +269,11 @@
                     </HeaderedContentControl>
 
                     <!-- ============================== Zuschnitt -->
-                    <HeaderedContentControl x:Name="CropGroup" Header="ZUSCHNITT">
+                    <HeaderedContentControl x:Name="CropGroup" Header="{l:T 'ZUSCHNITT'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Verhältnis" />
-                                <ComboBox Grid.Column="1"
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Verhältnis'}" />
+                                <ComboBox Classes="tr" Grid.Column="1"
                                           ItemsSource="{Binding AspectPresets}"
                                           SelectedItem="{Binding SelectedAspectPreset}" />
                             </Grid>
@@ -289,21 +290,21 @@
                                                Foreground="{DynamicResource AccentBrush}"
                                                Margin="0,0,10,0" VerticalAlignment="Top" />
                                     <TextBlock Grid.Column="1" Classes="hint"
-                                               Text="Mit gedrückter linker Maustaste über das Bild ziehen, um einen Ausschnitt zu wählen." />
+                                               Text="{l:T 'Mit gedrückter linker Maustaste über das Bild ziehen, um einen Ausschnitt zu wählen.'}" />
                                 </Grid>
                             </Border>
 
                             <!-- Auswahl vorhanden -->
                             <StackPanel IsVisible="{Binding HasCropSelection}">
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Position" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Position'}" />
                                     <NumericUpDown Grid.Column="1" Value="{Binding CropX}" Minimum="0" />
                                     <TextBlock Grid.Column="2" Classes="label" Text="," Margin="7,0" />
                                     <NumericUpDown Grid.Column="3" Value="{Binding CropY}" Minimum="0" />
                                 </Grid>
 
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto,*">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Größe" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Größe'}" />
                                     <NumericUpDown Grid.Column="1" Value="{Binding CropWidth}" />
                                     <TextBlock Grid.Column="2" Classes="label" Text="×" Margin="7,0" />
                                     <NumericUpDown Grid.Column="3" Value="{Binding CropHeight}" />
@@ -311,11 +312,11 @@
 
                                 <!-- Runde Ecken: Max = halbe längste Seite → Ellipse bzw. Kreis -->
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Ecken" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ecken'}" />
                                     <Slider Grid.Column="1" Minimum="0"
                                             Maximum="{Binding MaxCornerRadius}"
                                             Value="{Binding CornerRadius}"
-                                            ToolTip.Tip="Rundet die Ecken der Auswahl ab. Ganz rechts wird daraus eine Ellipse — bei Verhältnis 1:1 ein Kreis. Alles außerhalb der Rundung wird beim Zuschneiden transparent." />
+                                            ToolTip.Tip="{l:T 'Rundet die Ecken der Auswahl ab. Ganz rechts wird daraus eine Ellipse — bei Verhältnis 1:1 ein Kreis. Alles außerhalb der Rundung wird beim Zuschneiden transparent.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" MinWidth="50"
                                                Text="{Binding CornerRadiusLabel}" />
                                 </Grid>
@@ -326,40 +327,40 @@
                                         CornerRadius="{DynamicResource RadiusControl}"
                                         Padding="10,7" Margin="0,0,0,10">
                                     <TextBlock Classes="hint"
-                                               Text="JPEG und BMP kennen keine Transparenz — die runden Ecken würden weiß. Für Buttons PNG oder WebP wählen." />
+                                               Text="{l:T 'JPEG und BMP kennen keine Transparenz — die runden Ecken würden weiß. Für Buttons PNG oder WebP wählen.'}" />
                                 </Border>
 
                                 <Grid ColumnDefinitions="Auto,8,*">
                                     <Button Grid.Column="0" Classes="subtle"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                             Command="{Binding ClearSelectionCommand}"
-                                            Content="Auswahl aufheben"
-                                            ToolTip.Tip="Rahmen entfernen, das Bild bleibt unverändert (Esc)." />
+                                            Content="{l:T 'Auswahl aufheben'}"
+                                            ToolTip.Tip="{l:T 'Rahmen entfernen, das Bild bleibt unverändert (Esc).'}" />
                                     <Button Grid.Column="2" Classes="primary"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                             Command="{Binding CropToSelectionCommand}"
-                                            Content="Auf Auswahl zuschneiden"
-                                            ToolTip.Tip="Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen." />
+                                            Content="{l:T 'Auf Auswahl zuschneiden'}"
+                                            ToolTip.Tip="{l:T 'Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen.'}" />
                                 </Grid>
                             </StackPanel>
                         </StackPanel>
                     </HeaderedContentControl>
 
                     <!-- ============================== Größe -->
-                    <HeaderedContentControl Header="GRÖSSE">
+                    <HeaderedContentControl Header="{l:T 'GRÖSSE'}">
                         <StackPanel>
                             <!-- Einheit: Pixel oder Millimeter (Druckgröße bei der eingestellten DPI) -->
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Einheit" />
-                                <ComboBox Grid.Column="1"
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Einheit'}" />
+                                <ComboBox Classes="tr" Grid.Column="1"
                                           ItemsSource="{Binding SizeUnits}"
                                           SelectedItem="{Binding SelectedSizeUnit}"
-                                          ToolTip.Tip="Pixel: Bildgröße in Pixeln. mm: Druckgröße in Millimetern — die Pixel ergeben sich aus der DPI (unten bei Auflösung)." />
+                                          ToolTip.Tip="{l:T 'Pixel: Bildgröße in Pixeln. mm: Druckgröße in Millimetern — die Pixel ergeben sich aus der DPI (unten bei Auflösung).'}" />
                             </Grid>
 
                             <!-- Breite × Höhe mit Kette: zu = proportional, offen = frei -->
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Maße" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Maße'}" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding FieldWidth}"
                                                FormatString="{Binding SizeFormat}"
                                                Minimum="{Binding SizeMinimum}" Increment="1"
@@ -373,7 +374,7 @@
                                                Classes.leading="{Binding !WidthIsLeading}" />
                                 <ToggleButton Grid.Column="4" Classes="chain" Margin="8,0,0,0"
                                               IsChecked="{Binding KeepAspectRatio}"
-                                              ToolTip.Tip="Kette geschlossen: Seitenverhältnis bleibt, die zweite Kante rechnet sich mit. Kette offen: Breite und Höhe frei — das Bild wird gestaucht oder gestreckt.">
+                                              ToolTip.Tip="{l:T 'Kette geschlossen: Seitenverhältnis bleibt, die zweite Kante rechnet sich mit. Kette offen: Breite und Höhe frei — das Bild wird gestaucht oder gestreckt.'}">
                                     <Panel Width="24" Height="24">
                                         <!-- Zwei Kettenglieder, um 45° gedreht -->
                                         <Canvas Width="24" Height="24" IsVisible="{Binding KeepAspectRatio}">
@@ -419,7 +420,7 @@
 
                             <!-- Filter: jeder Eintrag erklärt sich im Tooltip -->
                             <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Filter" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Filter'}" />
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding Filters}"
                                           SelectedItem="{Binding SelectedFilter}">
@@ -429,9 +430,11 @@
                                                 <ToolTip.Tip>
                                                     <StackPanel MaxWidth="290" Spacing="6">
                                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
-                                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold"
-                                                                   Text="{Binding BestFor, StringFormat='Gut für: {0}'}" />
+                                                        <TextBlock Text="{l:TItem Path=Description}" TextWrapping="Wrap" />
+                                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold">
+                                                            <Run Text="{l:T 'Gut für:'}" />
+                                                            <Run Text="{l:TItem Path=BestFor}" />
+                                                        </TextBlock>
                                                     </StackPanel>
                                                 </ToolTip.Tip>
                                                 <TextBlock Text="{Binding Name}" />
@@ -442,27 +445,27 @@
                             </Grid>
 
                             <TextBlock Classes="hint" Margin="76,-4,0,10"
-                                       Text="{Binding SelectedFilter.BestFor}" />
+                                       Text="{l:TItem Path=SelectedFilter.BestFor}" />
 
                             <StackPanel Spacing="6">
                                 <CheckBox IsChecked="{Binding DoNotEnlarge}"
-                                          Content="Nicht vergrößern" FontSize="12"
-                                          ToolTip.Tip="Kleine Bilder werden nie größer gerechnet — Vergrößern erfindet keine Details, es macht nur unscharf." />
+                                          Content="{l:T 'Nicht vergrößern'}" FontSize="12"
+                                          ToolTip.Tip="{l:T 'Kleine Bilder werden nie größer gerechnet — Vergrößern erfindet keine Details, es macht nur unscharf.'}" />
                                 <CheckBox IsChecked="{Binding GammaCorrect}"
-                                          Content="Gamma-korrekt skalieren" FontSize="12"
-                                          ToolTip.Tip="Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus." />
+                                          Content="{l:T 'Gamma-korrekt skalieren'}" FontSize="12"
+                                          ToolTip.Tip="{l:T 'Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus.'}" />
                             </StackPanel>
                         </StackPanel>
                     </HeaderedContentControl>
 
                     <!-- ============================== Auflösung und DPI -->
-                    <HeaderedContentControl Header="AUFLÖSUNG &amp; DPI">
+                    <HeaderedContentControl Header="{l:T 'AUFLÖSUNG &amp; DPI'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="DPI" />
                                 <NumericUpDown Grid.Column="1" Value="{Binding Dpi}"
                                                Minimum="1" Maximum="2400"
-                                               ToolTip.Tip="Bis 2400 eintippbar, z. B. für Scans von Strichzeichnungen." />
+                                               ToolTip.Tip="{l:T 'Bis 2400 eintippbar, z. B. für Scans von Strichzeichnungen.'}" />
                                 <TextBlock Grid.Column="2" Classes="label" Text="ppi" Margin="7,0,0,0" />
                             </Grid>
 
@@ -471,18 +474,18 @@
                                     SmallChange="1" LargeChange="50"
                                     Ticks="72,96,150,300,600,1200" TickPlacement="BottomRight"
                                     Value="{Binding Dpi}"
-                                    ToolTip.Tip="72–96: Bildschirm · 150: einfacher Druck · 300: Fotodruck · 600: Kunstdruck · 1200: Strichzeichnungen" />
+                                    ToolTip.Tip="{l:T '72–96: Bildschirm · 150: einfacher Druck · 300: Fotodruck · 600: Kunstdruck · 1200: Strichzeichnungen'}" />
                             <TextBlock Classes="hint" Margin="76,0,0,10" Text="{Binding DpiPurpose}" />
 
                             <StackPanel Spacing="6" Margin="0,0,0,8">
                                 <RadioButton GroupName="dpi" FontSize="12"
                                              IsChecked="{Binding !DpiMetadataOnly}"
-                                             Content="Pixel neu berechnen"
-                                             ToolTip.Tip="Die Druckgröße bleibt gleich, die Pixelzahl folgt der DPI: mehr DPI = mehr Pixel. Skaliert mit dem gewählten Filter." />
+                                             Content="{l:T 'Pixel neu berechnen'}"
+                                             ToolTip.Tip="{l:T 'Die Druckgröße bleibt gleich, die Pixelzahl folgt der DPI: mehr DPI = mehr Pixel. Skaliert mit dem gewählten Filter.'}" />
                                 <RadioButton GroupName="dpi" FontSize="12"
                                              IsChecked="{Binding DpiMetadataOnly}"
-                                             Content="Nur Metadaten ändern"
-                                             ToolTip.Tip="Die Pixel bleiben wie sie sind — verlustfrei. Es ändert sich nur, wie groß das Bild beim Drucken herauskommt." />
+                                             Content="{l:T 'Nur Metadaten ändern'}"
+                                             ToolTip.Tip="{l:T 'Die Pixel bleiben wie sie sind — verlustfrei. Es ändert sich nur, wie groß das Bild beim Drucken herauskommt.'}" />
                             </StackPanel>
 
                             <TextBlock Classes="hint" Text="{Binding PrintSize}" />
@@ -490,10 +493,10 @@
                     </HeaderedContentControl>
 
                     <!-- ============================== Schärfen (wirkt als letzter Schritt, auch auf das KI-Ergebnis) -->
-                    <HeaderedContentControl Header="SCHÄRFEN &amp; RAUSCHEN">
+                    <HeaderedContentControl Header="{l:T 'SCHÄRFEN &amp; RAUSCHEN'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Schärfen" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Schärfen'}" />
                                 <Slider Grid.Column="1" Minimum="0" Maximum="3"
                                         Value="{Binding SharpenAmount}" />
                                 <TextBlock Grid.Column="2" Classes="value"
@@ -501,7 +504,7 @@
                             </Grid>
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Radius" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Radius'}" />
                                 <Slider Grid.Column="1" Minimum="0.5" Maximum="5"
                                         Value="{Binding SharpenRadius}" />
                                 <TextBlock Grid.Column="2" Classes="value"
@@ -509,7 +512,7 @@
                             </Grid>
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="Rauschen" />
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Rauschen'}" />
                                 <Slider Grid.Column="1" Minimum="0" Maximum="3"
                                         Value="{Binding NoiseReduction}" />
                                 <TextBlock Grid.Column="2" Classes="value"
@@ -525,88 +528,92 @@
 
                     <!-- ############################## Rubrik Tools — je Funktion ein Regler -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
-                        <HeaderedContentControl Header="LICHT">
+                        <HeaderedContentControl Header="{l:T 'LICHT'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Helligkeit" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Helligkeit'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Brightness}"
-                                            ToolTip.Tip="Hellt die Mitten auf oder dunkelt sie ab. Schwarz und Weiß bleiben, nichts frisst aus." />
+                                            ToolTip.Tip="{l:T 'Hellt die Mitten auf oder dunkelt sie ab. Schwarz und Weiß bleiben, nichts frisst aus.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrightnessLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Kontrast" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Kontrast'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Contrast}"
-                                            ToolTip.Tip="Rechts: Helles heller, Dunkles dunkler — knackiger. Links: weicher, flacher." />
+                                            ToolTip.Tip="{l:T 'Rechts: Helles heller, Dunkles dunkler — knackiger. Links: weicher, flacher.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding ContrastLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Tiefen" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Tiefen'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Shadows}"
-                                            ToolTip.Tip="Rechts: dunkle Bereiche aufhellen, z. B. Gesichter im Gegenlicht. Wirkt nur dort, wo die Umgebung dunkel ist — helle Bereiche bleiben." />
+                                            ToolTip.Tip="{l:T 'Rechts: dunkle Bereiche aufhellen, z. B. Gesichter im Gegenlicht. Wirkt nur dort, wo die Umgebung dunkel ist — helle Bereiche bleiben.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding ShadowsLabel}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Lichter" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Lichter'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Highlights}"
-                                            ToolTip.Tip="Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist." />
+                                            ToolTip.Tip="{l:T 'Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding HighlightsLabel}" />
                                 </Grid>
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <HeaderedContentControl Header="FARBE">
+                        <HeaderedContentControl Header="{l:T 'FARBE'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Sättigung" />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Sättigung'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Saturation}"
-                                            ToolTip.Tip="Rechts: kräftigere Farben. Ganz links: Schwarzweiß." />
+                                            ToolTip.Tip="{l:T 'Rechts: kräftigere Farben. Ganz links: Schwarzweiß.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding SaturationLabel}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="76,*">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="Färben" />
-                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Tints}" SelectedItem="{Binding SelectedTint}"
-                                              ToolTip.Tip="Das ganze Bild in einem Farbton: Schwarzweiß, Sepia (alter Fotoabzug) oder kühles Blau." />
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Färben'}" />
+                                    <ComboBox Classes="tr" Grid.Column="1" ItemsSource="{Binding Tints}" SelectedItem="{Binding SelectedTint}"
+                                              ToolTip.Tip="{l:T 'Das ganze Bild in einem Farbton: Schwarzweiß, Sepia (alter Fotoabzug) oder kühles Blau.'}" />
                                 </Grid>
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <Button Classes="subtle" HorizontalAlignment="Left" Content="Zurücksetzen"
+                        <Button Classes="subtle" HorizontalAlignment="Left" Content="{l:T 'Zurücksetzen'}"
                                 Command="{Binding ResetToolsCommand}"
-                                ToolTip.Tip="Alle Regler dieser Kachel auf 0, Färben aus. Rückgängig mit Strg+Z." />
+                                ToolTip.Tip="{l:T 'Alle Regler dieser Kachel auf 0, Färben aus. Rückgängig mit Strg+Z.'}" />
                     </StackPanel>
 
                     <!-- ############################## Rubrik Ausgabe -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabOutput.IsChecked}">
 
                     <!-- ============================== Metadaten und Farbe -->
-                    <HeaderedContentControl Header="METADATEN &amp; FARBE">
+                    <HeaderedContentControl Header="{l:T 'METADATEN &amp; FARBE'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="EXIF" />
-                                <ComboBox Grid.Column="1"
+                                <ComboBox Classes="tr" Grid.Column="1"
                                           ItemsSource="{Binding MetadataModes}"
-                                          ToolTip.Tip="EXIF/IPTC/XMP: Kamera, Datum, Ort, Copyright. „Nur GPS entfernen“ löscht die Ortsangaben — sinnvoll vor dem Teilen im Netz."
+                                          ToolTip.Tip="{l:T 'EXIF/IPTC/XMP: Kamera, Datum, Ort, Copyright. „Nur GPS entfernen“ löscht die Ortsangaben — sinnvoll vor dem Teilen im Netz.'}"
                                           SelectedItem="{Binding SelectedMetadataMode}" />
                             </Grid>
 
                             <Grid ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="ICC-Profil" />
-                                <ComboBox Grid.Column="1"
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'ICC-Profil'}" />
+                                <ComboBox Classes="tr" Grid.Column="1"
                                           ItemsSource="{Binding ColorModes}"
-                                          ToolTip.Tip="Profil behalten: Farbraum wie im Original (z. B. Adobe RGB für den Druck). Nach sRGB: überall richtige Farben — Standard fürs Web. Profil verwerfen: sRGB ohne eingebettetes Profil, etwas kleinere Datei."
+                                          ToolTip.Tip="{l:T 'Profil behalten: Farbraum wie im Original (z. B. Adobe RGB für den Druck). Nach sRGB: überall richtige Farben — Standard fürs Web. Profil verwerfen: sRGB ohne eingebettetes Profil, etwas kleinere Datei.'}"
                                           SelectedItem="{Binding SelectedColorMode}" />
                             </Grid>
                         </StackPanel>
                     </HeaderedContentControl>
 
                     <!-- ============================== Ausgabe -->
-                    <HeaderedContentControl Header="AUSGABE">
+                    <HeaderedContentControl Header="{l:T 'AUSGABE'}">
                         <Grid ColumnDefinitions="76,*">
-                            <TextBlock Grid.Column="0" Classes="label" Text="Dateiname" />
+                            <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dateiname'}" />
                             <TextBox Grid.Column="1" Text="{Binding NamePattern}"
                                      FontSize="12"
-                                     CornerRadius="{DynamicResource RadiusControl}"
-                                     ToolTip.Tip="Platzhalter: {name} Dateiname ohne Endung · {breite} {höhe} Pixelmaße · {n} laufende Nummer · {datum} heutiges Datum. Die Endung kommt automatisch dazu." />
+                                     CornerRadius="{DynamicResource RadiusControl}">
+                                <!-- Als Element: die Platzhalter {name} … würden in {l:T …} als Erweiterung gelesen -->
+                                <ToolTip.Tip>
+                                    <l:T Text="Platzhalter: {name} Dateiname ohne Endung · {breite} {höhe} Pixelmaße · {n} laufende Nummer · {datum} heutiges Datum. Die Endung kommt automatisch dazu." />
+                                </ToolTip.Tip>
+                            </TextBox>
                         </Grid>
                     </HeaderedContentControl>
 
@@ -634,11 +641,11 @@
                                 Content="{Binding #Crop.DisplayPercent, StringFormat='{}{0} %'}">
                             <ToolTip.Tip>
                                 <StackPanel Spacing="4" MaxWidth="280">
-                                    <TextBlock FontWeight="SemiBold" Text="Zoom" />
-                                    <TextBlock TextWrapping="Wrap" Text="Strg + Mausrad über dem Bild zoomt um den Mauszeiger." />
-                                    <TextBlock TextWrapping="Wrap" Text="Im Zoom verschieben: mittlere Maustaste ziehen, Leertaste + Ziehen oder Mausrad (mit Umschalt waagerecht)." />
-                                    <TextBlock TextWrapping="Wrap" Text="Klick hier oder Strg+0: einpassen · Strg+1: 100 %" />
-                                    <TextBlock TextWrapping="Wrap" Text="Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe (bei „Vorher“ auf das Original)." />
+                                    <TextBlock FontWeight="SemiBold" Text="{l:T 'Zoom'}" />
+                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Strg + Mausrad über dem Bild zoomt um den Mauszeiger.'}" />
+                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Im Zoom verschieben: mittlere Maustaste ziehen, Leertaste + Ziehen oder Mausrad (mit Umschalt waagerecht).'}" />
+                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Klick hier oder Strg+0: einpassen · Strg+1: 100 %'}" />
+                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe (bei „Vorher“ auf das Original).'}" />
                                 </StackPanel>
                             </ToolTip.Tip>
                         </Button>
@@ -647,24 +654,24 @@
                                    Fill="{DynamicResource BorderBrush2}" />
 
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-                            <Button Classes="tool" Content="↶  Rückgängig"
+                            <Button Classes="tool" Content="{l:T '↶  Rückgängig'}"
                                     Command="{Binding UndoCommand}"
-                                    ToolTip.Tip="Letzten Schritt zurücknehmen (Strg+Z). Nach einem Zuschnitt kommt der Rahmen wieder, zum Nachjustieren." />
-                            <Button Classes="tool" Content="↷  Wiederholen"
+                                    ToolTip.Tip="{l:T 'Letzten Schritt zurücknehmen (Strg+Z). Nach einem Zuschnitt kommt der Rahmen wieder, zum Nachjustieren.'}" />
+                            <Button Classes="tool" Content="{l:T '↷  Wiederholen'}"
                                     Command="{Binding RedoCommand}"
-                                    ToolTip.Tip="Zurückgenommenen Schritt erneut ausführen (Strg+Y)." />
+                                    ToolTip.Tip="{l:T 'Zurückgenommenen Schritt erneut ausführen (Strg+Y).'}" />
 
                             <Rectangle Width="1" Margin="8,4" Fill="{DynamicResource BorderBrush2}" />
 
                             <Button Classes="icon" Content="⇄" Command="{Binding FlipHorizontalCommand}"
-                                    ToolTip.Tip="Waagerecht spiegeln (links ↔ rechts). Rückgängig mit Strg+Z." />
+                                    ToolTip.Tip="{l:T 'Waagerecht spiegeln (links ↔ rechts). Rückgängig mit Strg+Z.'}" />
                         </StackPanel>
 
                         <ToggleButton Grid.Column="4" Classes="chain" Width="NaN" Padding="12,5"
                                       IsChecked="{Binding ShowOriginal}"
                                       IsEnabled="{Binding CanCompare}"
-                                      Content="◧  Vorher / Nachher" FontSize="12"
-                                      ToolTip.Tip="Eingedrückt: Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen, Tools und Schärfe. Sonst: Ergebnis, so wie es exportiert wird. Zoom und Ausschnitt bleiben beim Umschalten gleich." />
+                                      Content="{l:T '◧  Vorher / Nachher'}" FontSize="12"
+                                      ToolTip.Tip="{l:T 'Eingedrückt: Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen, Tools und Schärfe. Sonst: Ergebnis, so wie es exportiert wird. Zoom und Ausschnitt bleiben beim Umschalten gleich.'}" />
                     </Grid>
                 </Border>
 
@@ -693,14 +700,14 @@
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                                 <TextBlock Text="🖼" FontSize="44" HorizontalAlignment="Center"
                                            Foreground="{DynamicResource TextMutedBrush}" />
-                                <TextBlock Text="Bilder hierher ziehen" FontSize="17" FontWeight="SemiBold"
+                                <TextBlock Text="{l:T 'Bilder hierher ziehen'}" FontSize="17" FontWeight="SemiBold"
                                            HorizontalAlignment="Center" />
                                 <TextBlock Classes="hint" HorizontalAlignment="Center" TextAlignment="Center"
-                                           Text="Einzelne Bilder, mehrere auf einmal oder einen ganzen Ordner." />
+                                           Text="{l:T 'Einzelne Bilder, mehrere auf einmal oder einen ganzen Ordner.'}" />
                                 <TextBlock Classes="hint" HorizontalAlignment="Center" TextAlignment="Center"
                                            Text="{Binding SupportedFormatsSummary}" />
                                 <Button Classes="primary" HorizontalAlignment="Center" Margin="0,8,0,0"
-                                        Content="Bilder auswählen…" Click="OnOpenFilesClick" />
+                                        Content="{l:T 'Bilder auswählen…'}" Click="OnOpenFilesClick" />
                             </StackPanel>
                         </Grid>
 
@@ -709,13 +716,13 @@
                         <Button Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
                                 IsVisible="{Binding HasImage}"
                                 Command="{Binding RotateLeftCommand}"
-                                ToolTip.Tip="90° nach links drehen (gegen den Uhrzeigersinn). Rückgängig mit Strg+Z.">
+                                ToolTip.Tip="{l:T '90° nach links drehen (gegen den Uhrzeigersinn). Rückgängig mit Strg+Z.'}">
                             <Path Data="M 3,12 A 9,9 0 1 0 12,3 A 9.75,9.75 0 0 0 5.26,5.74 L 3,8 M 3,3 L 3,8 L 8,8" />
                         </Button>
                         <Button Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Top"
                                 IsVisible="{Binding HasImage}"
                                 Command="{Binding RotateRightCommand}"
-                                ToolTip.Tip="90° nach rechts drehen (im Uhrzeigersinn). Rückgängig mit Strg+Z.">
+                                ToolTip.Tip="{l:T '90° nach rechts drehen (im Uhrzeigersinn). Rückgängig mit Strg+Z.'}">
                             <Path Data="M 21,12 A 9,9 0 1 1 12,3 A 9.75,9.75 0 0 1 18.74,5.74 L 21,8 M 21,3 L 21,8 L 16,8" />
                         </Button>
 
@@ -728,7 +735,7 @@
                                 BorderThickness="1" CornerRadius="999" Opacity="0.92"
                                 IsHitTestVisible="False">
                             <TextBlock Classes="hint"
-                                       Text="Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt" />
+                                       Text="{l:T 'Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt'}" />
                         </Border>
 
                         <!-- Ladeanzeige -->
@@ -742,7 +749,7 @@
                                 Background="{DynamicResource SurfaceBrush}"
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                 IsVisible="{Binding ShowRendering}" IsHitTestVisible="False">
-                            <TextBlock Classes="hint" Text="Vorschau wird berechnet …" />
+                            <TextBlock Classes="hint" Text="{l:T 'Vorschau wird berechnet …'}" />
                         </Border>
 
                         <!-- Lange Arbeiten (z. B. KI): Fortschritt direkt über dem Bild -->
@@ -762,7 +769,7 @@
                                        Fill="{DynamicResource AccentSoftBrush}"
                                        Stroke="{DynamicResource AccentBrush}"
                                        StrokeThickness="2" StrokeDashArray="4,3" />
-                            <TextBlock Text="Loslassen zum Öffnen" FontSize="18" FontWeight="SemiBold"
+                            <TextBlock Text="{l:T 'Loslassen zum Öffnen'}" FontSize="18" FontWeight="SemiBold"
                                        HorizontalAlignment="Center"
                                        Foreground="{DynamicResource AccentBrush}" />
                         </Grid>

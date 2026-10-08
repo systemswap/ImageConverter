@@ -55,11 +55,11 @@ public partial class ExportDialogViewModel : ViewModelBase
     public ObservableCollection<ExportItem> Items { get; }
     public string Destination { get; }
     public string ModeHint => _main.ApplyToAll
-        ? "Gleiche Einstellungen für alle — Größe passend zu jedem Bild umgerechnet."
-        : "Jedes Bild mit seinen eigenen Einstellungen.";
+        ? Tr.T("Gleiche Einstellungen für alle — Größe passend zu jedem Bild umgerechnet.")
+        : Tr.T("Jedes Bild mit seinen eigenen Einstellungen.");
 
     public int SelectedCount => Items.Count(i => i.Include);
-    public string ExportButtonText => SelectedCount == 1 ? "1 Bild exportieren" : $"{SelectedCount} Bilder exportieren";
+    public string ExportButtonText => SelectedCount == 1 ? Tr.T("1 Bild exportieren") : Tr.T("{0} Bilder exportieren", SelectedCount);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
@@ -118,7 +118,7 @@ public partial class ExportDialogViewModel : ViewModelBase
             catch (Exception ex)
             {
                 item.Resolution = "—";
-                item.Status = "nicht lesbar";
+                item.Status = Tr.T("nicht lesbar");
                 item.Failed = true;
                 item.Include = false;
                 item.Details = ex.Message;
@@ -145,7 +145,7 @@ public partial class ExportDialogViewModel : ViewModelBase
             if (_cancelRequested || _closing.IsCancellationRequested) break;
 
             var item = selected[n];
-            item.Status = "wird exportiert …";
+            item.Status = Tr.T("wird exportiert …");
             item.Failed = false;
             try
             {
@@ -159,7 +159,7 @@ public partial class ExportDialogViewModel : ViewModelBase
             }
             catch (Exception ex)
             {
-                item.Status = $"Fehler: {ex.Message}";
+                item.Status = Tr.T("Fehler: {0}", ex.Message);
                 item.Failed = true;
             }
 
@@ -168,10 +168,10 @@ public partial class ExportDialogViewModel : ViewModelBase
 
         var failed = selected.Count(i => i.Failed);
         Summary = _cancelRequested
-            ? $"Abgebrochen — {ok} von {selected.Count} exportiert."
+            ? Tr.T("Abgebrochen — {0} von {1} exportiert.", ok, selected.Count)
             : failed > 0
-                ? $"{ok} exportiert, {failed} fehlgeschlagen."
-                : $"Fertig — {ok} {(ok == 1 ? "Bild" : "Bilder")} exportiert ({FormatBytes(total)}).";
+                ? Tr.T("{0} exportiert, {1} fehlgeschlagen.", ok, failed)
+                : ok == 1 ? Tr.T("Fertig — 1 Bild exportiert ({0}).", FormatBytes(total)) : Tr.T("Fertig — {0} Bilder exportiert ({1}).", ok, FormatBytes(total));
 
         if (lastFolder is not null)
             _main.ReportExport(lastFolder, Summary);

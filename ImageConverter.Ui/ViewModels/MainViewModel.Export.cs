@@ -79,7 +79,7 @@ public partial class MainViewModel
 
     public string OutputFolderDisplay => HasCustomOutputFolder
         ? OutputFolder
-        : $"neben dem Original › {OutputNaming.DefaultSubfolder}";
+        : Tr.T("neben dem Original › {0}", OutputNaming.DefaultSubfolder);
 
     [RelayCommand]
     private void ResetOutputFolder() => OutputFolder = "";
@@ -182,11 +182,11 @@ public partial class MainViewModel
             });
 
             LastExportFolder = folder;
-            StatusMessage = $"Gespeichert: {Path.GetFileName(path)}  ·  {FormatBytes(bytes)}";
+            StatusMessage = Tr.T("Gespeichert: {0}  ·  {1}", Path.GetFileName(path), FormatBytes(bytes));
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Export fehlgeschlagen: {ex.Message}";
+            ErrorMessage = Tr.T("Export fehlgeschlagen: {0}", ex.Message);
         }
         finally
         {
@@ -264,8 +264,8 @@ public partial class MainViewModel
             {
                 var ratio = (double)bytes / originalBytes;
                 SavingsText = ratio <= 1
-                    ? $"{Math.Round((1 - ratio) * 100)} % kleiner als das Original ({FormatBytes(originalBytes)})"
-                    : $"{Math.Round((ratio - 1) * 100)} % größer als das Original ({FormatBytes(originalBytes)})";
+                    ? Tr.T("{0} % kleiner als das Original ({1})", Math.Round((1 - ratio) * 100), FormatBytes(originalBytes))
+                    : Tr.T("{0} % größer als das Original ({1})", Math.Round((ratio - 1) * 100), FormatBytes(originalBytes));
             }
         }
         catch (OperationCanceledException)
@@ -275,7 +275,7 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             EstimatedSize = "—";
-            SavingsText = $"Schätzung nicht möglich: {ex.Message}";
+            SavingsText = Tr.T("Schätzung nicht möglich: {0}", ex.Message);
         }
         finally
         {

@@ -156,7 +156,7 @@ public partial class MainViewModel
     }
 
     /// <summary>Im mm-Modus: welche Pixelmaße daraus entstehen.</summary>
-    public string? PixelEquivalent => IsMillimeter ? $"= {TargetWidth} × {TargetHeight} px bei {Dpi} DPI" : null;
+    public string? PixelEquivalent => IsMillimeter ? Tr.T("= {0} × {1} px bei {2} DPI", TargetWidth, TargetHeight, Dpi) : null;
     public bool HasPixelEquivalent => IsMillimeter;
 
     private static decimal ToMm(double inches) => Math.Round((decimal)(inches * MmPerInch), 1);
@@ -241,9 +241,9 @@ public partial class MainViewModel
         get
         {
             if (TargetWidth <= SourceWidth && TargetHeight <= SourceHeight) return null;
-            if (!DoNotEnlarge) return "Wird hochgerechnet: mehr Pixel, aber keine zusätzlichen Details.";
+            if (!DoNotEnlarge) return Tr.T("Wird hochgerechnet: mehr Pixel, aber keine zusätzlichen Details.");
             var (w, h) = EffectiveTarget();
-            return $"Größer als das Original — wegen „Nicht vergrößern“ bleibt es bei {w} × {h} px.";
+            return Tr.T("Größer als das Original — wegen „Nicht vergrößern“ bleibt es bei {0} × {1} px.", w, h);
         }
     }
 
@@ -290,15 +290,15 @@ public partial class MainViewModel
     }
 
     public string PrintSize =>
-        $"Druckgröße {_printWidthIn * 2.54:F1} × {_printHeightIn * 2.54:F1} cm";
+        Tr.T("Druckgröße {0:F1} × {1:F1} cm", _printWidthIn * 2.54, _printHeightIn * 2.54);
 
     /// <summary>Wofür sich die eingestellte Auflösung eignet — als Orientierung unter dem Regler.</summary>
     public string DpiPurpose => Dpi switch
     {
-        <= 100 => "Bildschirm und Web",
-        <= 200 => "einfacher Druck, Zeitung",
-        <= 360 => "Fotodruck (300 ist der Standard)",
-        <= 720 => "hochwertiger Kunstdruck",
-        _ => "Strichzeichnungen und Scans",
+        <= 100 => Tr.T("Bildschirm und Web"),
+        <= 200 => Tr.T("einfacher Druck, Zeitung"),
+        <= 360 => Tr.T("Fotodruck (300 ist der Standard)"),
+        <= 720 => Tr.T("hochwertiger Kunstdruck"),
+        _ => Tr.T("Strichzeichnungen und Scans"),
     };
 }

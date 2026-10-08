@@ -16,7 +16,11 @@ public partial class SettingsWindow : Window
     {
         DataContext = vm;
         // Von Hand in den Modellordner kopierte Dateien gleich erkennen
-        Opened += (_, _) => vm.Ai.Rescan();
+        Opened += (_, _) =>
+        {
+            vm.Ai.Rescan();
+            vm.Language.Rescan();
+        };
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();

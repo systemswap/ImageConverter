@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:ImageConverter.Localization"
         xmlns:vm="using:ImageConverter.ViewModels"
         x:Class="ImageConverter.Views.ExportWindow"
         x:DataType="vm:ExportDialogViewModel"
-        Title="Bilder exportieren"
+        Title="{l:T 'Bilder exportieren'}"
         Icon="/Assets/app.ico"
         Width="820" Height="580" MinWidth="640" MinHeight="400"
         WindowStartupLocation="CenterOwner"
@@ -13,7 +14,7 @@
         <!-- Kopf: Ziel und Modus -->
         <Border DockPanel.Dock="Top" Classes="bar" BorderThickness="0,0,0,1" Padding="16,12">
             <StackPanel Spacing="3">
-                <TextBlock Text="Bilder exportieren" FontSize="15" FontWeight="SemiBold" />
+                <TextBlock Text="{l:T 'Bilder exportieren'}" FontSize="15" FontWeight="SemiBold" />
                 <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Destination, StringFormat='Ziel: {0}'}" />
                 <TextBlock Classes="hint" FontSize="11.5" Text="{Binding ModeHint}" />
             </StackPanel>
@@ -22,9 +23,9 @@
         <!-- Fuß: Auswahl, Fortschritt, Aktionen -->
         <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                <Button Grid.Column="0" Classes="tool" Content="Alle" Command="{Binding SelectAllCommand}"
+                <Button Grid.Column="0" Classes="tool" Content="{l:T 'Alle'}" Command="{Binding SelectAllCommand}"
                         IsEnabled="{Binding !IsExporting}" />
-                <Button Grid.Column="1" Classes="tool" Content="Keine" Command="{Binding SelectNoneCommand}"
+                <Button Grid.Column="1" Classes="tool" Content="{l:T 'Keine'}" Command="{Binding SelectNoneCommand}"
                         IsEnabled="{Binding !IsExporting}" />
 
                 <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center" Spacing="4">
@@ -35,11 +36,11 @@
                 </StackPanel>
 
                 <Button Grid.Column="3" Classes="subtle" Margin="0,0,8,0"
-                        Content="Abbrechen" Command="{Binding CancelExportCommand}"
+                        Content="{l:T 'Abbrechen'}" Command="{Binding CancelExportCommand}"
                         IsVisible="{Binding IsExporting}"
-                        ToolTip.Tip="Hört nach dem Bild auf, das gerade exportiert wird." />
+                        ToolTip.Tip="{l:T 'Hört nach dem Bild auf, das gerade exportiert wird.'}" />
                 <Button Grid.Column="3" Classes="subtle" Margin="0,0,8,0"
-                        Content="Schließen" Click="OnCloseClick"
+                        Content="{l:T 'Schließen'}" Click="OnCloseClick"
                         IsVisible="{Binding !IsExporting}" />
                 <Button Grid.Column="4" Classes="primary"
                         Content="{Binding ExportButtonText}"
@@ -52,10 +53,10 @@
             <!-- Spaltenköpfe -->
             <Grid Grid.Row="0" ColumnDefinitions="36,88,150,*,190" Margin="8,0,8,6">
                 <TextBlock Grid.Column="0" Classes="label" Text="✓" HorizontalAlignment="Center" />
-                <TextBlock Grid.Column="1" Classes="label" Text="Vorschau" />
-                <TextBlock Grid.Column="2" Classes="label" Text="Auflösung" />
-                <TextBlock Grid.Column="3" Classes="label" Text="Datei" />
-                <TextBlock Grid.Column="4" Classes="label" Text="Status" />
+                <TextBlock Grid.Column="1" Classes="label" Text="{l:T 'Vorschau'}" />
+                <TextBlock Grid.Column="2" Classes="label" Text="{l:T 'Auflösung'}" />
+                <TextBlock Grid.Column="3" Classes="label" Text="{l:T 'Datei'}" />
+                <TextBlock Grid.Column="4" Classes="label" Text="{l:T 'Status'}" />
             </Grid>
 
             <Border Grid.Row="1"

@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Ai;
 using ImageConverter.Core.Imaging;
+using ImageConverter.Core.Localization;
 using ImageConverter.Models;
 
 namespace ImageConverter.ViewModels;
@@ -49,10 +50,29 @@ public partial class MainViewModel : ViewModelBase
 
         // KI-Modul (abtrennbar, siehe Ordner Ai/)
         Ai = new AiViewModel(this);
+
+        // Sprachwechsel: berechnete Texte (Hinweise, Druckgröße …) neu abfragen lassen
+        Tr.Instance.PropertyChanged += (_, _) => RefreshTexts();
     }
 
     /// <summary>KI-Verbesserung — eigenes Modul mit GroupBox und Einstellungs-Tab.</summary>
     public AiViewModel Ai { get; }
+
+    /// <summary>Tab „Sprache“ in den Einstellungen.</summary>
+    public LanguageViewModel Language { get; } = new();
+
+    /// <summary>Nach einem Sprachwechsel: alle Bindungen neu lesen, gemerkte Texte neu bilden.</summary>
+    private void RefreshTexts()
+    {
+        OnPropertyChanged(string.Empty);
+        if (_history is null)
+        {
+            CurrentFileName = Tr.T("Kein Bild geladen");
+            FileDetails = Tr.T("Bild hierher ziehen oder „Bilder“ wählen");
+        }
+        UpdateFileDetails();
+        RequestEstimate();
+    }
 
     /// <summary>Von der Ansicht abonniert: öffnet das Einstellungsfenster.</summary>
     public event Func<Task>? SettingsRequested;
@@ -90,8 +110,8 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    [ObservableProperty] public partial string CurrentFileName { get; set; } = "Kein Bild geladen";
-    [ObservableProperty] public partial string FileDetails { get; set; } = "Bild hierher ziehen oder „Bilder“ wählen";
+    [ObservableProperty] public partial string CurrentFileName { get; set; } = Tr.T("Kein Bild geladen");
+    [ObservableProperty] public partial string FileDetails { get; set; } = Tr.T("Bild hierher ziehen oder „Bilder“ wählen");
     [ObservableProperty] public partial string? ErrorMessage { get; set; }
     [ObservableProperty] public partial bool IsLoading { get; set; }
 
@@ -126,8 +146,8 @@ public partial class MainViewModel : ViewModelBase
         if (found.Count == 0)
         {
             ErrorMessage = skipped.Count > 0
-                ? $"„{skipped[0]}“ ist kein unterstütztes Bildformat."
-                : "Keine Bilder gefunden.";
+                ? Tr.T("„{0}“ ist kein unterstütztes Bildformat.", skipped[0])
+                : Tr.T("Keine Bilder gefunden.");
             return;
         }
 
@@ -143,7 +163,7 @@ public partial class MainViewModel : ViewModelBase
         NotifyFileList();
 
         ErrorMessage = skipped.Count > 0
-            ? $"{skipped.Count} Datei(en) übersprungen — Format wird nicht unterstützt."
+            ? Tr.T("{0} Datei(en) übersprungen — Format wird nicht unterstützt.", skipped.Count)
             : null;
 
         await ShowFileAsync(0);
@@ -240,7 +260,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"„{Path.GetFileName(path)}“ ließ sich nicht öffnen: {ex.Message}";
+            ErrorMessage = Tr.T("„{0}“ ließ sich nicht öffnen: {1}", Path.GetFileName(path), ex.Message);
         }
         finally
         {

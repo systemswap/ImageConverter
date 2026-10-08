@@ -169,7 +169,7 @@ public static class AiEnhancer
         {
             using var pixels = image.GetPixelsUnsafe();
             return pixels.ToShortArray(mapping)
-                   ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+                   ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
         }
     }
 

@@ -87,7 +87,7 @@ public static class AiFaces
             rw = (int)small.Width;
             rh = (int)small.Height;
             using var pixels = small.GetPixelsUnsafe();
-            bgr = pixels.ToByteArray("BGR") ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+            bgr = pixels.ToByteArray("BGR") ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
         }
 
         // links oben einsetzen, Rest schwarz; Werte 0…255, BGR (so wurde YuNet trainiert)

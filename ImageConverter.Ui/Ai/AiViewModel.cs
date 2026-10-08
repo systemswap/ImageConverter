@@ -65,7 +65,7 @@ public partial class AiViewModel : ViewModelBase
         Directory.CreateDirectory(folder);
         WatchFolders();
         if (!ImageConverter.Services.FolderOpener.TryOpen(folder))
-            Status = $"Kein Dateimanager gefunden. Der Ordner ist: {folder}";
+            Status = Tr.T("Kein Dateimanager gefunden. Der Ordner ist: {0}", folder);
         OnPropertyChanged(nameof(FolderText));
     }
 
@@ -89,7 +89,7 @@ public partial class AiViewModel : ViewModelBase
     public bool HasModels => Available.Count > 0;
 
     public string? ModelHint => SelectedModel is { } m
-        ? m.Description + (m.NonCommercial ? "\n\nLizenz: nur für nicht-kommerzielle Nutzung." : "")
+        ? Tr.T(m.Description) + (m.NonCommercial ? "\n\n" + Tr.T("Lizenz: nur für nicht-kommerzielle Nutzung.") : "")
         : null;
 
     // ------------------------------------------------------------ Lauf
@@ -110,7 +110,7 @@ public partial class AiViewModel : ViewModelBase
         if (SelectedModel is not { } model || _main.CurrentImage is not { } image) return;
         if (Store.PathOf(model) is not { } modelPath)
         {
-            Status = "Modell fehlt — bitte in den Einstellungen herunterladen.";
+            Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
             return;
         }
 
@@ -119,7 +119,7 @@ public partial class AiViewModel : ViewModelBase
             && !AiEnhancer.PossibleFactors(model.Scale, (int)image.Width, (int)image.Height).Contains(factor))
         {
             var mp = image.Width * factor * image.Height * factor / 1e6;
-            Status = $"Zu groß: das Ergebnis hätte {mp:0} Megapixel (höchstens {AiEnhancer.MaxOutputPixels / 1_000_000}).";
+            Status = Tr.T("Zu groß: das Ergebnis hätte {0:0} Megapixel (höchstens {1}).", mp, AiEnhancer.MaxOutputPixels / 1_000_000);
             return;
         }
 
@@ -129,14 +129,14 @@ public partial class AiViewModel : ViewModelBase
         _runCts = cts;
         IsRunning = true;
         Progress = 0;
-        Status = "Modell wird geladen …";
+        Status = Tr.T("Modell wird geladen …");
         var clock = Stopwatch.StartNew();
 
         var progress = new Progress<double>(f =>
         {
             Progress = f * 100;
             Status = f <= 0 ? Status : $"{f * 100:0} %{Remaining(clock.Elapsed, f)}";
-            _main.ActivityText = $"KI · {Status}";
+            _main.ActivityText = Tr.T("KI · {0}", Status);
         });
 
         void Preview(AiPreviewFrame frame) => Dispatcher.UIThread.Post(() =>
@@ -153,20 +153,20 @@ public partial class AiViewModel : ViewModelBase
             {
                 if (Store.PathOf(AiModelCatalog.FaceDetector) is not { } detectorPath)
                 {
-                    Status = "Die Gesichtserkennung fehlt — bitte in den Einstellungen herunterladen.";
+                    Status = Tr.T("Die Gesichtserkennung fehlt — bitte in den Einstellungen herunterladen.");
                     return;
                 }
 
-                _main.ActivityText = "KI · Gesichter werden gesucht …";
+                _main.ActivityText = Tr.T("KI · Gesichter werden gesucht …");
                 var faces = await Task.Run(() =>
                     AiFaces.Detect(image, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
                 if (faces.Count == 0)
                 {
-                    Status = "Kein Gesicht gefunden.";
+                    Status = Tr.T("Kein Gesicht gefunden.");
                     return;
                 }
 
-                Status = faces.Count == 1 ? "1 Gesicht gefunden …" : $"{faces.Count} Gesichter gefunden …";
+                Status = faces.Count == 1 ? Tr.T("1 Gesicht gefunden …") : Tr.T("{0} Gesichter gefunden …", faces.Count);
                 ok = await _main.ApplyImageEditAsync(img =>
                 {
                     var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model);
@@ -182,16 +182,16 @@ public partial class AiViewModel : ViewModelBase
                 });
             }
 
-            Status = ok ? $"Fertig nach {FormatDuration(clock.Elapsed)} — rückgängig mit Strg+Z."
-                : cts.IsCancellationRequested ? "Abgebrochen." : "Fehlgeschlagen — siehe Meldung oben.";
+            Status = ok ? Tr.T("Fertig nach {0} — rückgängig mit Strg+Z.", FormatDuration(clock.Elapsed))
+                : cts.IsCancellationRequested ? Tr.T("Abgebrochen.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
         }
         catch (OperationCanceledException)
         {
-            Status = "Abgebrochen.";
+            Status = Tr.T("Abgebrochen.");
         }
         catch (Exception ex)
         {
-            Status = $"Fehler: {ex.Message}";
+            Status = Tr.T("Fehler: {0}", ex.Message);
         }
         finally
         {
@@ -213,7 +213,7 @@ public partial class AiViewModel : ViewModelBase
     {
         if (fraction < 0.03 || elapsed.TotalSeconds < 2) return "";
         var left = TimeSpan.FromSeconds(elapsed.TotalSeconds / fraction * (1 - fraction));
-        return $"  ·  noch ca. {FormatDuration(left)}";
+        return Tr.T("  ·  noch ca. {0}", FormatDuration(left));
     }
 
     private static string FormatDuration(TimeSpan t) =>
@@ -319,7 +319,7 @@ public partial class AiModelItem : ObservableObject
     internal CancellationToken Token => _cts?.Token ?? CancellationToken.None;
 
     public string Info =>
-        $"{Model.SizeText}  ·  Lizenz {Model.License}" + (Model.NonCommercial ? " (nur nicht-kommerziell)" : "");
+        Tr.T("{0}  ·  Lizenz {1}", Model.SizeText, Model.License) + (Model.NonCommercial ? " " + Tr.T("(nur nicht-kommerziell)") : "");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StateText), nameof(ShowDownload))]
@@ -336,7 +336,7 @@ public partial class AiModelItem : ObservableObject
 
     public bool ShowDownload => !IsInstalled && !IsDownloading;
 
-    public string StateText => IsDownloading ? "wird geladen …" : IsInstalled ? "✓ vorhanden" : "nicht geladen";
+    public string StateText => IsDownloading ? Tr.T("wird geladen …") : IsInstalled ? Tr.T("✓ vorhanden") : Tr.T("nicht geladen");
 
     internal void Refresh() => IsInstalled = _owner.Store.IsInstalled(Model);
 
@@ -359,7 +359,7 @@ public partial class AiModelItem : ObservableObject
         }
         catch (Exception ex)
         {
-            Problem = ex is HttpRequestException ? $"Download fehlgeschlagen: {ex.Message}" : ex.Message;
+            Problem = ex is HttpRequestException ? Tr.T("Download fehlgeschlagen: {0}", ex.Message) : ex.Message;
         }
         finally
         {
@@ -380,11 +380,11 @@ public partial class AiModelItem : ObservableObject
     {
         if (_owner.IsBusy)
         {
-            Problem = "Gerade läuft eine KI-Berechnung — danach löschen.";
+            Problem = Tr.T("Gerade läuft eine KI-Berechnung — danach löschen.");
             return;
         }
 
         try { _owner.Delete(this); }
-        catch (Exception ex) { Problem = $"Löschen fehlgeschlagen: {ex.Message}"; }
+        catch (Exception ex) { Problem = Tr.T("Löschen fehlgeschlagen: {0}", ex.Message); }
     }
 }

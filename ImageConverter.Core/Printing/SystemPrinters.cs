@@ -7,7 +7,7 @@ namespace ImageConverter.Core.Printing;
 
 public sealed record PrinterInfo(string Name, bool IsDefault)
 {
-    public override string ToString() => IsDefault ? $"{Name} (Standard)" : Name;
+    public override string ToString() => IsDefault ? Tr.T("{0} (Standard)", Name) : Name;
 }
 
 public enum DuplexMode
@@ -170,7 +170,7 @@ public static class SystemPrinters
         Task.Run(() =>
         {
             var (code, output) = RunWithExit("lp", BuildCupsArgs(pdfPath, printer, settings, paper, title));
-            if (code != 0) throw new InvalidOperationException($"Drucken fehlgeschlagen: {output.Trim()}");
+            if (code != 0) throw new InvalidOperationException(Tr.T("Drucken fehlgeschlagen: {0}", output.Trim()));
         });
 
     /// <summary>Befehlszeile für <c>lp</c> — mit den Standard-IPP-Optionen, die CUPS
@@ -299,7 +299,7 @@ public static class SystemPrinters
         foreach (var a in args) psi.ArgumentList.Add(a);
         psi.Environment["LC_ALL"] = "C";
 
-        using var p = Process.Start(psi) ?? throw new InvalidOperationException($"{file} ließ sich nicht starten.");
+        using var p = Process.Start(psi) ?? throw new InvalidOperationException(Tr.T("{0} ließ sich nicht starten.", file));
         // Erst parallel lesen, dann begrenzt warten: ReadToEnd vor dem Warten blockiert
         // unbegrenzt, wenn der Druckdienst hängt.
         var stdout = p.StandardOutput.ReadToEndAsync();
@@ -307,7 +307,7 @@ public static class SystemPrinters
         if (!p.WaitForExit(timeoutMs))
         {
             try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-            throw new TimeoutException($"{file} antwortet nicht.");
+            throw new TimeoutException(Tr.T("{0} antwortet nicht.", file));
         }
         return (p.ExitCode, stdout.Result + stderr.Result);
     }
