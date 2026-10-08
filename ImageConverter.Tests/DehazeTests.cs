@@ -36,18 +36,21 @@ public class DehazeTests
         return rgb;
     }
 
-    /// <summary>Dunst nach dem physikalischen Modell: Bild = Szene · t + Luft · (1 − t).</summary>
+    /// <summary>Dunst nach dem physikalischen Modell in linearem Licht: Bild = Szene · t + Luft · (1 − t).</summary>
     private static byte[] Haze(float[] scene, float t, float air)
     {
         var bgra = new byte[W * H * 4];
         for (var p = 0; p < W * H; p++)
         {
             for (var c = 0; c < 3; c++)
-                bgra[p * 4 + (2 - c)] = (byte)Math.Round(255 * (scene[p * 3 + c] * t + air * (1 - t)));
+                bgra[p * 4 + (2 - c)] = Srgb.ToByte(scene[p * 3 + c] * t + air * (1 - t));
             bgra[p * 4 + 3] = 255;
         }
         return bgra;
     }
+
+    private static float[] Linear(byte[] bgra) =>
+        Enumerable.Range(0, W * H * 3).Select(i => Srgb.ToLinear(bgra[i / 3 * 4 + i % 3])).ToArray();
 
     private static double Contrast(byte[] bgra)
     {
@@ -59,8 +62,12 @@ public class DehazeTests
     private static double Distance(byte[] a, byte[] b) =>
         Enumerable.Range(0, W * H * 4).Where(i => i % 4 != 3).Average(i => Math.Abs(a[i] - b[i]));
 
+    /// <summary>
+    /// Kontrast und Farben kommen zurück, die Helligkeit bleibt (Helligkeitsausgleich wie bei
+    /// Adobe) — ohne ihn wurde das Ergebnis dunkel.
+    /// </summary>
     [Fact]
-    public void HazyImage_GetsItsContrastBack_AndComesCloserToTheScene()
+    public void HazyImage_GetsContrastAndColourBack_WithoutGettingDark()
     {
         var scene = Scene();
         var clear = Haze(scene, 1, 0);
@@ -69,9 +76,20 @@ public class DehazeTests
         var result = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100));
 
         Assert.True(Contrast(result) > Contrast(hazy) * 1.5, $"Kontrast {Contrast(hazy):F1} → {Contrast(result):F1}");
-        Assert.True(Distance(result, clear) < Distance(hazy, clear) * 0.5,
-            $"Abstand zur klaren Szene {Distance(hazy, clear):F1} → {Distance(result, clear):F1}");
+        Assert.True(Chroma(result) > Chroma(hazy) + 0.5 * (Chroma(clear) - Chroma(hazy)),
+            $"Buntheit {Chroma(hazy):F3} → {Chroma(result):F3} (klar {Chroma(clear):F3})");
+        Assert.True(Mean(result) > Mean(hazy) * 0.85, $"Helligkeit {Mean(hazy):F1} → {Mean(result):F1}");
     }
+
+    private static double Mean(byte[] bgra) =>
+        Enumerable.Range(0, W * H).Average(p => 0.2126 * bgra[p * 4 + 2] + 0.7152 * bgra[p * 4 + 1] + 0.0722 * bgra[p * 4]);
+
+    /// <summary>Mittlere Oklab-Buntheit der Landschaft (ohne Himmelsstreifen).</summary>
+    private static double Chroma(byte[] bgra) => Enumerable.Range(SkyRows * W, (H - SkyRows) * W).Average(p =>
+    {
+        var c = Oklab.FromSrgb(bgra[p * 4 + 2] / 255f, bgra[p * 4 + 1] / 255f, bgra[p * 4] / 255f);
+        return Math.Sqrt(c.A * c.A + c.B * c.B);
+    });
 
     [Fact]
     public void ClearImage_StaysAlmostTheSame()
@@ -92,11 +110,10 @@ public class DehazeTests
     [Fact]
     public void AirLight_IsTheHazeColour()
     {
-        var hazy = Haze(Scene(), 0.5f, Air);
-        var air = Dehaze.AirLight(hazy, W, H);
+        var air = Dehaze.AirLight(Linear(Haze(Scene(), 0.5f, Air)), W, H);
         Assert.All(air, a => Assert.InRange(a, Air - 0.03f, Air + 0.03f));   // aus dem Himmel
 
-        Assert.All(Dehaze.AirLight(Haze(Scene(), 1, 0), W, H), a => Assert.True(a >= 0.5f));   // Untergrenze
+        Assert.All(Dehaze.AirLight(Linear(Haze(Scene(), 1, 0)), W, H), a => Assert.True(a >= 0.25f));   // Untergrenze
     }
 
     [Fact]

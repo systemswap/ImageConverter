@@ -358,3 +358,40 @@ Test oder Nachweis.
 - **Wo:** `publish.ps1`.
 - **Nachweis:** Bau nach dem Fix: „ZIP: Datei noch gesperrt, neuer Versuch …
   (1/5)“, danach fertig; `licenses\` und ZIP wieder da, `KI-Modelle\` unberührt.
+
+## 14. Dunst entfernen: Bild dunkel, Himmel türkis/violett, heller Streifen am Horizont
+
+- **Entdeckt:** 0.4.34 (08.10.2026), vom Benutzer an zwei Panoramen mit
+  Dunst (Landschaft mit Sonne im Bild, Gegenlicht am Abend). **Behoben:** 0.4.35.
+- **Was:** Mit der ersten Fassung (0.4.30) wurde das Bild dunkler, der Himmel
+  kippte ins Türkis bzw. bekam neben der Sonne einen violetten Stich; Zwischen-
+  stände erzeugten einen hellen Streifen über dem Horizont.
+- **Warum:**
+  - Gerechnet wurde in gamma-kodierten Werten; das Streumodell gilt für
+    lineares Licht.
+  - Luftlicht = Mittel der hellsten 0,1 % des dunklen Kanals – bei Sonne im
+    Bild kommt es aus deren Umgebung.
+  - Der dunkle Kanal hält Himmel für Dunst (bekannte Schwäche des Dark
+    Channel Prior). Erste Gegenmittel griffen nicht: Helligkeit relativ zum
+    Luftlicht (blauer Himmel erreicht nur ein Drittel davon) und die einfache
+    Helligkeitsschwankung (ein Himmel mit Verlauf schwankt auch; dichter Nebel
+    drückt die Schwankung der Landschaft – Nebel galt als Himmel).
+  - Kein Helligkeitsausgleich → Ergebnis dunkel. Ein Ausgleich über einen
+    einfachen Weichzeichner trug Aufhellung vom Land in den Himmel (Streifen).
+- **Wie behoben:** Lineares Licht; Luftlicht wie im Adobe-Patent US 9 305 339 B2
+  (hellste 1 %, davon die mittleren); Durchlässigkeit auf einer Fassung
+  ≤ 1024 px, verfeinert mit farbigem Guided Filter, kantentreu auf volle Größe
+  (Fast Guided Filter); Himmelsschutz über **Bandpass-Struktur** (Differenz
+  zweier Glättungen – Verläufe heben sich auf; gemessen Himmel 0,002–0,005,
+  Landschaft 0,04–0,38, dichter Testnebel 0,03); Toleranz nahe am Luftlicht;
+  Helligkeitsausgleich wie Adobe („guided brightness scaling“) mit Guided
+  Filter und nie heller als das Original. Ein einziger Durchlauf über das große
+  Bild: 78-MP-Panorama in 2,5 s.
+- **Nicht tun:** Schwellen für den Himmelsschutz ohne Messwerte an echten
+  Fotos und am Testnebel ändern. Zwischenkarten (Durchlässigkeit, Schutz)
+  ansehen statt Ergebnisse zu raten. Helligkeitsverhältnisse nicht mit
+  einfachem Weichzeichner glätten.
+- **Wo:** `ImageConverter.Core/Imaging/Dehaze.cs`.
+- **Test:** `DehazeTests` (Kontrast und Farbe kommen zurück, Helligkeit bleibt;
+  klares Bild bleibt; Luftlicht aus dem Himmel; Nebel hinzufügen).
+  Sichtprüfung an zwei Panoramen bei Dunst +60 und +100.
