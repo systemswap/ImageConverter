@@ -20,8 +20,11 @@ public partial class MainViewModel
     /// <summary>„Gleiche Farbe“ wie Referenzwerkzeug CS5: Luminanz −100 … +100 (Referenzwerkzeug 1–200 %).</summary>
     [ObservableProperty] public partial double MatchLuminance { get; set; }
 
-    /// <summary>„Gleiche Farbe“: Ausgleichen — Farbstich entfernen.</summary>
-    [ObservableProperty] public partial bool Neutralize { get; set; }
+    /// <summary>„Gleiche Farbe“: Ausgleichen — wie viel vom erkannten Farbstich entfernt wird, 0–100 %.</summary>
+    [ObservableProperty] public partial double Neutralize { get; set; }
+
+    /// <summary>„Gleiche Farbe“: Farbe — kühl (−) … neutral (0) … warm (+).</summary>
+    [ObservableProperty] public partial double Warmth { get; set; }
 
     [ObservableProperty] public partial double Vibrance { get; set; }
     [ObservableProperty] public partial double Saturation { get; set; }
@@ -48,6 +51,8 @@ public partial class MainViewModel
     public string ShadowsLabel => Signed(Shadows);
     public string HighlightsLabel => Signed(Highlights);
     public string MatchLuminanceLabel => $"{Math.Round(100 + MatchLuminance):0} %";
+    public string NeutralizeLabel => Neutralize < 0.5 ? Tr.T("aus") : $"{Math.Round(Neutralize):0} %";
+    public string WarmthLabel => Signed(Warmth);
     public string VibranceLabel => Signed(Vibrance);
     public string SaturationLabel => Signed(Saturation);
     public string TintHueLabel => $"{Math.Round(TintHue):0}°";
@@ -65,7 +70,8 @@ public partial class MainViewModel
     partial void OnShadowsChanged(double value) => ToolChanged(nameof(ShadowsLabel));
     partial void OnHighlightsChanged(double value) => ToolChanged(nameof(HighlightsLabel));
     partial void OnMatchLuminanceChanged(double value) => ToolChanged(nameof(MatchLuminanceLabel));
-    partial void OnNeutralizeChanged(bool value) => ToolChanged(null);
+    partial void OnNeutralizeChanged(double value) => ToolChanged(nameof(NeutralizeLabel));
+    partial void OnWarmthChanged(double value) => ToolChanged(nameof(WarmthLabel));
     partial void OnVibranceChanged(double value) => ToolChanged(nameof(VibranceLabel));
     partial void OnSaturationChanged(double value) => ToolChanged(nameof(SaturationLabel));
     partial void OnTintHueChanged(double value) => ToolChanged(nameof(TintHueLabel));
@@ -87,8 +93,7 @@ public partial class MainViewModel
     private void ResetTools()
     {
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
-        Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Vibrance = Saturation = 0;
-        Neutralize = false;
+        Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Neutralize = Warmth = Vibrance = Saturation = 0;
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
     }
@@ -96,7 +101,8 @@ public partial class MainViewModel
     /// <summary>Die Reglerstände als Auftrag für Vorschau und Export.</summary>
     private Adjustments CurrentAdjustments() => new(
         Round(Brightness), Round(Contrast), Round(Shadows), Round(Highlights), Round(Saturation),
-        TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze), Round(MatchLuminance), Neutralize);
+        TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze), Round(MatchLuminance),
+        Round(Neutralize), Round(Warmth));
 
     internal static Tint TintOf(string? label) =>
         TintLabels.FirstOrDefault(t => t.Label == label).Tint;

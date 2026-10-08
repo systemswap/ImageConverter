@@ -198,7 +198,8 @@ public static class English
         ["Luminanz"] = "Luminance",
         ["Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus."] = "Like “Match Color” in Referenzwerkzeug CS5: scales the brightness up instead of just lifting it — the image becomes more luminous and the contrasts stay. White rolls off softly, nothing blows out.",
         ["Ausgleichen"] = "Neutralise",
-        ["Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Kräftige Farben zählen dabei nicht mit."] = "Removes a colour cast (e.g. yellow artificial light, blue shade): greys and whites become neutral again. Strong colours are not counted.",
+        ["Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Der Regler bestimmt, wie viel davon. Kräftige Farben zählen bei der Erkennung nicht mit."] = "Removes a colour cast (e.g. yellow artificial light, blue shade): greys and whites become neutral again. The slider sets how much. Strong colours are not counted when detecting the cast.",
+        ["Links kühler (bläulich), rechts wärmer (gelblich), Mitte neutral — z. B. wenn Ausgleichen ein Kunstlicht-Foto zu kühl gemacht hat."] = "Left cooler (bluish), right warmer (yellowish), centre neutral — e.g. when neutralising made an artificial-light photo too cool.",
         ["Zurücksetzen"] = "Reset",
         ["Alle Regler dieser Kachel auf 0, Färben aus. Rückgängig mit Strg+Z."] = "All sliders in this section to 0, tint off. Undo with Ctrl+Z.",
 

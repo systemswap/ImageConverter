@@ -241,13 +241,40 @@ public class AdjustTests
             bgra[p * 4 + 3] = 255;
         }
 
-        var result = Adjust.Apply(bgra, w, h, new Adjustments(Neutralize: true));
+        var result = Adjust.Apply(bgra, w, h, new Adjustments(Neutralize: 100));
         var wall = Oklab.FromSrgb(result[2] / 255f, result[1] / 255f, result[0] / 255f);
         var i = (60 * w + 5) * 4;
         var blue = Oklab.FromSrgb(result[i + 2] / 255f, result[i + 1] / 255f, result[i] / 255f);
 
         Assert.True(Math.Sqrt(wall.A * wall.A + wall.B * wall.B) < 0.01, "Wand soll grau sein");
         Assert.True(Math.Sqrt(blue.A * blue.A + blue.B * blue.B) > 0.12, "Kissen bleibt kräftig blau");
+    }
+
+    /// <summary>Ausgleichen 50 % nimmt den halben Farbstich weg.</summary>
+    [Fact]
+    public void Neutralize_Strength_RemovesPartOfTheCast()
+    {
+        var bgra = new byte[32 * 32 * 4];
+        for (var p = 0; p < 32 * 32; p++) (bgra[p * 4], bgra[p * 4 + 1], bgra[p * 4 + 2], bgra[p * 4 + 3]) = (150, 180, 195, 255);
+
+        double Cast(byte[] px) { var c = Oklab.FromSrgb(px[2] / 255f, px[1] / 255f, px[0] / 255f); return Math.Sqrt(c.A * c.A + c.B * c.B); }
+        var half = Adjust.Apply(bgra, 32, 32, new Adjustments(Neutralize: 50));
+
+        Assert.InRange(Cast(half) / Cast(bgra), 0.4, 0.6);
+    }
+
+    /// <summary>Farbe: rechts wärmer (gelblich), links kühler (bläulich), Schwarz bleibt neutral.</summary>
+    [Fact]
+    public void Warmth_ShiftsTowardsYellowOrBlue_ButKeepsBlackNeutral()
+    {
+        byte[] grey = [128, 128, 128, 255];
+        var warm = Adjust.Apply(grey, 1, 1, new Adjustments(Warmth: 80));
+        var cool = Adjust.Apply(grey, 1, 1, new Adjustments(Warmth: -80));
+        var black = Adjust.Apply([0, 0, 0, 255], 1, 1, new Adjustments(Warmth: 80));
+
+        Assert.True(warm[2] > warm[0], "warm: R > B");
+        Assert.True(cool[0] > cool[2], "kühl: B > R");
+        Assert.Equal([0, 0, 0, 255], black);
     }
 
     [Fact]
@@ -348,15 +375,18 @@ public class AdjustTests
         vm.TintHue = 210;
         vm.Vibrance = 25;
         vm.MatchLuminance = 30;
-        vm.Neutralize = true;
+        vm.Neutralize = 80;
+        vm.Warmth = -20;
         vm.CommitPendingSettings();
 
         var options = MainViewModel.OptionsFor(vm.CaptureSettings());
-        Assert.Equal(new Adjustments(Shadows: 40, Tint: Tint.Color, Vibrance: 25, TintHue: 210, MatchLuminance: 30, Neutralize: true),
+        Assert.Equal(new Adjustments(Shadows: 40, Tint: Tint.Color, Vibrance: 25, TintHue: 210, MatchLuminance: 30, Neutralize: 80, Warmth: -20),
             options.Adjustments);
 
         await vm.UndoCommand.ExecuteAsync(null);
-        Assert.False(vm.Neutralize);
+        Assert.Equal(0, vm.Warmth);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(0, vm.Neutralize);
         await vm.UndoCommand.ExecuteAsync(null);
         Assert.Equal(0, vm.MatchLuminance);
         await vm.UndoCommand.ExecuteAsync(null);

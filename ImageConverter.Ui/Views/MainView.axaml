@@ -629,8 +629,39 @@
                                             ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
                                 </Grid>
-                                <CheckBox IsChecked="{Binding Neutralize}" Content="{l:T 'Ausgleichen'}" FontSize="12"
-                                          ToolTip.Tip="{l:T 'Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Kräftige Farben zählen dabei nicht mit.'}" />
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ausgleichen'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Neutralize}"
+                                            ToolTip.Tip="{l:T 'Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Der Regler bestimmt, wie viel davon. Kräftige Farben zählen bei der Erkennung nicht mit.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding NeutralizeLabel}" />
+                                </Grid>
+                                <!-- Farbe: Verlauf kühl → neutral → warm hinter durchsichtiger Spur -->
+                                <Grid ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbe'}" />
+                                    <Panel Grid.Column="1">
+                                        <Border Height="6" CornerRadius="3" VerticalAlignment="Center" Margin="10,0">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                    <GradientStop Offset="0" Color="#4C7FD0" />
+                                                    <GradientStop Offset="0.5" Color="#C8C8C8" />
+                                                    <GradientStop Offset="1" Color="#E0B040" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <Slider Minimum="-100" Maximum="100" Value="{Binding Warmth}"
+                                                ToolTip.Tip="{l:T 'Links kühler (bläulich), rechts wärmer (gelblich), Mitte neutral — z. B. wenn Ausgleichen ein Kunstlicht-Foto zu kühl gemacht hat.'}">
+                                            <Slider.Resources>
+                                                <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFill" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="Transparent" />
+                                            </Slider.Resources>
+                                        </Slider>
+                                    </Panel>
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding WarmthLabel}" />
+                                </Grid>
                             </StackPanel>
                         </HeaderedContentControl>
 

@@ -36,7 +36,7 @@ public partial class MainViewModel
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
         double SharpenAmount, double SharpenRadius, double NoiseReduction,
         double Dehaze, double Brightness, double Contrast, double Shadows, double Highlights, double Vibrance, double Saturation,
-        string SelectedTint, double TintHue, double MatchLuminance, bool Neutralize,
+        string SelectedTint, double TintHue, double MatchLuminance, double Neutralize, double Warmth,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
@@ -76,7 +76,8 @@ public partial class MainViewModel
         [nameof(SelectedTint)] = null,
         [nameof(TintHue)] = "Farbton",
         [nameof(MatchLuminance)] = "Luminanz",
-        [nameof(Neutralize)] = null,
+        [nameof(Neutralize)] = "Ausgleichen",
+        [nameof(Warmth)] = "Farbe",
         [nameof(SelectedMetadataMode)] = null,
         [nameof(SelectedColorMode)] = null,
         [nameof(OutputFolder)] = "Ordner",
@@ -202,7 +203,7 @@ public partial class MainViewModel
         SelectedAspectPreset, CropSelection, CornerRadius,
         SharpenAmount, SharpenRadius, NoiseReduction,
         Dehaze, Brightness, Contrast, Shadows, Highlights, Vibrance, Saturation, SelectedTint, TintHue,
-        MatchLuminance, Neutralize,
+        MatchLuminance, Neutralize, Warmth,
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight);
@@ -253,6 +254,7 @@ public partial class MainViewModel
                 TintHue = s.TintHue;
                 MatchLuminance = s.MatchLuminance;
                 Neutralize = s.Neutralize;
+                Warmth = s.Warmth;
                 SelectedMetadataMode = s.SelectedMetadataMode;
                 SelectedColorMode = s.SelectedColorMode;
                 OutputFolder = s.OutputFolder;

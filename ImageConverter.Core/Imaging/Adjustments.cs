@@ -24,7 +24,8 @@ public sealed record Adjustments(
     double TintHue = Adjustments.SepiaHue,
     double Dehaze = 0,
     double MatchLuminance = 0,
-    bool Neutralize = false)
+    double Neutralize = 0,
+    double Warmth = 0)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -102,8 +103,13 @@ public static class Adjust
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
         var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 1));   // wie Referenzwerkzeug 1–200 %
-        var (castA, castB) = a.Neutralize ? ColourCast(bgra, width, height) : (0f, 0f);
-        var oklab = vibrance != 0 || saturation != 0 || luminance != 1 || a.Neutralize;
+        // Gleiche Farbe, Ausgleichen (0–100 %) und Farbe (kühl − … + warm): als Verschiebung in Oklab
+        var neutralize = (float)Math.Clamp(a.Neutralize / 100, 0, 1);
+        var (castA, castB) = neutralize > 0 ? ColourCast(bgra, width, height) : (0f, 0f);
+        var warmth = (float)Math.Clamp(a.Warmth / 100, -1, 1);
+        var shiftA = -castA * neutralize + warmth * WarmthA;
+        var shiftB = -castB * neutralize + warmth * WarmthB;
+        var oklab = vibrance != 0 || saturation != 0 || luminance != 1 || shiftA != 0 || shiftB != 0;
 
         Parallel.For(0, height, y =>
         {
@@ -134,8 +140,14 @@ public static class Adjust
                 {
                     // In Oklab: Buntheit ändern lässt Farbton und Helligkeit stehen
                     var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
-                    oa -= castA;                                       // Gleiche Farbe: Ausgleichen
-                    ob -= castB;
+                    if (shiftA != 0 || shiftB != 0)
+                    {
+                        // Gleiche Farbe: Ausgleichen + Farbe. Ganz Dunkles bleibt neutral,
+                        // sonst würde Schwarz farbig.
+                        var w = Math.Min(1, L / 0.3f);
+                        oa += shiftA * w;
+                        ob += shiftB * w;
+                    }
                     var factor = 1f;
                     if (luminance != 1 && L > 1e-4f)
                     {
@@ -303,6 +315,12 @@ public static class Adjust
         }
         return n > 0 ? ((float)(sa / n), (float)(sb / n)) : (0, 0);
     }
+
+    /// <summary>
+    /// Regler Farbe bei ±100: Verschiebung in Oklab entlang der Farbtemperatur — b nach
+    /// Gelb (warm) bzw. Blau (kühl), a etwas mit (Kunstlicht ist gelb-rötlich).
+    /// </summary>
+    private const float WarmthB = 0.04f, WarmthA = 0.008f;
 
     /// <summary>Buntheit, ab der eine Farbe als kräftig gilt (Oklab-C; sRGB-Primärfarben ≈ 0,26–0,32).</summary>
     private const float StrongChroma = 0.2f;
