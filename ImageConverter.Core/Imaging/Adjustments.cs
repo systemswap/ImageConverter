@@ -21,7 +21,8 @@ public sealed record Adjustments(
     double Saturation = 0,
     Tint Tint = Tint.None,
     double Vibrance = 0,
-    double TintHue = Adjustments.SepiaHue)
+    double TintHue = Adjustments.SepiaHue,
+    double Dehaze = 0)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -36,7 +37,7 @@ public sealed record Adjustments(
 /// Wendet <see cref="Adjustments"/> auf 8-Bit-BGRA-Pixel an — wie <see cref="Sharpen"/>
 /// für Vorschau und Export dieselbe Funktion, damit man exportiert, was man gesehen hat.
 ///
-/// Reihenfolge: Tiefen/Lichter → Helligkeit → Kontrast → Dynamik → Sättigung → Färben.
+/// Reihenfolge: Dunst → Tiefen/Lichter → Helligkeit → Kontrast → Dynamik → Sättigung → Färben.
 /// Tiefen und Lichter wirken lokal wie in Referenzwerkzeug: Ob eine Stelle als dunkel oder hell
 /// gilt, entscheidet ihre Umgebung auf jeder Größenordnung (Local Laplacian Filter, wie
 /// Referenzwerkzeug), nicht das einzelne Pixel. Ein dunkles
@@ -58,14 +59,25 @@ public static class Adjust
     private const float Kr = 0.2126f, Kg = 0.7152f, Kb = 0.0722f;
 
     public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a) =>
-        Apply(bgra, width, height, a, ToneMap(bgra, width, height, a));
+        Apply(Prepare(bgra, width, height, a), width, height, a);
+
+    /// <summary>Ergebnis des teuren Teils: Bild nach „Dunst entfernen“ und die Zielhelligkeit
+    /// aus Tiefen/Lichtern (null, wenn beide auf 0).</summary>
+    public sealed record Prepared(byte[] Source, float[]? Toned);
 
     /// <summary>
-    /// Der teure Teil — Tiefen/Lichter über den Local Laplacian Filter: Zielhelligkeit je
-    /// Pixel, null wenn beide Regler auf 0 stehen. Hängt nur von Bild, Tiefen und Lichtern ab;
-    /// die Vorschau merkt sich das Ergebnis, damit die übrigen Regler flüssig bleiben.
+    /// Der teure Teil — Dunst entfernen und Tiefen/Lichter über den Local Laplacian Filter.
+    /// Hängt nur von Bild, Dunst, Tiefen und Lichtern ab; die Vorschau merkt sich das
+    /// Ergebnis, damit die übrigen Regler flüssig bleiben.
     /// </summary>
-    public static float[]? ToneMap(byte[] bgra, int width, int height, Adjustments a)
+    public static Prepared Prepare(byte[] bgra, int width, int height, Adjustments a)
+    {
+        var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 1);
+        var source = dehaze != 0 ? Dehaze.Apply(bgra, width, height, dehaze) : bgra;
+        return new Prepared(source, ToneMap(source, width, height, a));
+    }
+
+    private static float[]? ToneMap(byte[] bgra, int width, int height, Adjustments a)
     {
         var shadows = (float)Math.Clamp(a.Shadows / 100, -1, 1);
         var highlights = (float)Math.Clamp(a.Highlights / 100, -1, 1);
@@ -74,10 +86,11 @@ public static class Adjust
             : null;
     }
 
-    /// <param name="toned">Ergebnis von <see cref="ToneMap"/> für dasselbe Bild.</param>
-    public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a, float[]? toned)
+    /// <param name="prepared">Ergebnis von <see cref="Prepare"/> für dasselbe Bild.</param>
+    public static byte[] Apply(Prepared prepared, int width, int height, Adjustments a)
     {
-        ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(bgra));
+        var (bgra, toned) = (prepared.Source, prepared.Toned);
+        ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(prepared));
 
         var result = (byte[])bgra.Clone();
         if (a.IsNone) return result;
@@ -244,49 +257,6 @@ public static class Adjust
                 output[i] += (bounded - output[i]) * s;
             }
         });
-    }
-
-    /// <summary>
-    /// Kantenerhaltendes Glätten der Helligkeit (Guided Filter, He et al. 2010, mit sich
-    /// selbst als Führung). Flächen werden zur Umgebungshelligkeit gemittelt, an harten
-    /// Kanten folgt das Ergebnis der Kante. Ein einfacher Gauß blutete über die Kante:
-    /// Himmel direkt an dunklen Bergen galt als „dunkle Umgebung“ und bekam einen hellen
-    /// Lichthof (Halo).
-    /// </summary>
-    internal static float[] GuidedSmooth(float[] lum, int width, int height, double sigma)
-    {
-        // ε: ab welcher Helligkeitsschwankung (als Varianz, Werte 0–1) eine Kante zählt
-        const float eps = 0.003f;
-        var n = lum.Length;
-
-        var mean = (float[])lum.Clone();
-        var meanSq = new float[n];
-        for (var i = 0; i < n; i++) meanSq[i] = lum[i] * lum[i];
-        Blur.Gauss(mean, width, height, sigma);
-        Blur.Gauss(meanSq, width, height, sigma);
-
-        // Pro Umgebung: lineares Modell q = a·I + b
-        var a = new float[n];
-        var b = new float[n];
-        Parallel.For(0, height, y =>
-        {
-            for (int x = 0, i = y * width; x < width; x++, i++)
-            {
-                var variance = Math.Max(0, meanSq[i] - mean[i] * mean[i]);
-                a[i] = variance / (variance + eps);
-                b[i] = mean[i] - a[i] * mean[i];
-            }
-        });
-        Blur.Gauss(a, width, height, sigma);
-        Blur.Gauss(b, width, height, sigma);
-
-        var result = new float[n];
-        Parallel.For(0, height, y =>
-        {
-            for (int x = 0, i = y * width; x < width; x++, i++)
-                result[i] = a[i] * lum[i] + b[i];
-        });
-        return result;
     }
 
     /// <summary>

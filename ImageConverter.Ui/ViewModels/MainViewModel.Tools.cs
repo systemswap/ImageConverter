@@ -12,6 +12,7 @@ namespace ImageConverter.ViewModels;
 // Wirkt in der Kette nach dem Entrauschen und vor dem Schärfen (Core: Adjust).
 public partial class MainViewModel
 {
+    [ObservableProperty] public partial double Dehaze { get; set; }
     [ObservableProperty] public partial double Brightness { get; set; }
     [ObservableProperty] public partial double Contrast { get; set; }
     [ObservableProperty] public partial double Shadows { get; set; }
@@ -35,6 +36,7 @@ public partial class MainViewModel
 
     public IReadOnlyList<string> Tints { get; } = TintLabels.Select(t => t.Label).ToList();
 
+    public string DehazeLabel => Signed(Dehaze);
     public string BrightnessLabel => Signed(Brightness);
     public string ContrastLabel => Signed(Contrast);
     public string ShadowsLabel => Signed(Shadows);
@@ -50,6 +52,7 @@ public partial class MainViewModel
         var n => $"{n}",
     };
 
+    partial void OnDehazeChanged(double value) => ToolChanged(nameof(DehazeLabel));
     partial void OnBrightnessChanged(double value) => ToolChanged(nameof(BrightnessLabel));
     partial void OnContrastChanged(double value) => ToolChanged(nameof(ContrastLabel));
     partial void OnShadowsChanged(double value) => ToolChanged(nameof(ShadowsLabel));
@@ -75,7 +78,7 @@ public partial class MainViewModel
     private void ResetTools()
     {
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
-        Brightness = Contrast = Shadows = Highlights = Vibrance = Saturation = 0;
+        Dehaze = Brightness = Contrast = Shadows = Highlights = Vibrance = Saturation = 0;
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
     }
@@ -83,7 +86,7 @@ public partial class MainViewModel
     /// <summary>Die Reglerstände als Auftrag für Vorschau und Export.</summary>
     private Adjustments CurrentAdjustments() => new(
         Round(Brightness), Round(Contrast), Round(Shadows), Round(Highlights), Round(Saturation),
-        TintOf(SelectedTint), Round(Vibrance), Round(TintHue));
+        TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze));
 
     internal static Tint TintOf(string? label) =>
         TintLabels.FirstOrDefault(t => t.Label == label).Tint;

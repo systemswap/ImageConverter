@@ -251,8 +251,8 @@ public partial class MainViewModel
     private const int StageCacheSize = 4;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
     private readonly List<(ResizeKey Key, double Noise, byte[] Bgra)> _denoisedCache = [];
-    // Tiefen/Lichter (Local Laplacian Filter) gesondert: der teure Teil, hängt nur von diesen beiden Reglern ab
-    private readonly List<(ResizeKey Key, double Noise, double Shadows, double Highlights, float[]? Toned)> _tonedCache = [];
+    // Dunst + Tiefen/Lichter gesondert: der teure Teil, hängt nur von diesen drei Reglern ab
+    private readonly List<(ResizeKey Key, double Noise, double Dehaze, double Shadows, double Highlights, Adjust.Prepared Prepared)> _tonedCache = [];
     private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, byte[] Bgra)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
@@ -396,15 +396,15 @@ public partial class MainViewModel
             adjusted = Cached(_adjustedCache, e => e.Key == key && e.Noise == job.Noise && e.Adjust == job.Adjust)?.Bgra;
             if (adjusted is null)
             {
-                var toned = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise
-                    && e.Shadows == job.Adjust.Shadows && e.Highlights == job.Adjust.Highlights);
-                if (toned is null)
+                var j = job.Adjust;
+                var prepared = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise
+                    && e.Dehaze == j.Dehaze && e.Shadows == j.Shadows && e.Highlights == j.Highlights)?.Prepared;
+                if (prepared is null)
                 {
-                    toned = (key, job.Noise, job.Adjust.Shadows, job.Adjust.Highlights,
-                        Adjust.ToneMap(denoised, job.Width, job.Height, job.Adjust));
-                    AddCached(_tonedCache, toned.Value, null);
+                    prepared = Adjust.Prepare(denoised, job.Width, job.Height, j);
+                    AddCached(_tonedCache, (key, job.Noise, j.Dehaze, j.Shadows, j.Highlights, prepared), null);
                 }
-                adjusted = Adjust.Apply(denoised, job.Width, job.Height, job.Adjust, toned.Value.Toned);
+                adjusted = Adjust.Apply(prepared, job.Width, job.Height, j);
                 AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Bgra: adjusted), null);
             }
         }

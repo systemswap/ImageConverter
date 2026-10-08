@@ -148,7 +148,7 @@ public partial class MainViewModel
             ColorByLabel.TryGetValue(s.SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
             new Adjustments(Math.Round(s.Brightness), Math.Round(s.Contrast), Math.Round(s.Shadows),
                 Math.Round(s.Highlights), Math.Round(s.Saturation), TintOf(s.SelectedTint),
-                Math.Round(s.Vibrance), Math.Round(s.TintHue)));
+                Math.Round(s.Vibrance), Math.Round(s.TintHue), Math.Round(s.Dehaze)));
     }
 
     // ------------------------------------------------- für das Export-Fenster

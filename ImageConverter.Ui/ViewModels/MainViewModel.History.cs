@@ -35,7 +35,7 @@ public partial class MainViewModel
         int Dpi, bool DpiMetadataOnly,
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
         double SharpenAmount, double SharpenRadius, double NoiseReduction,
-        double Brightness, double Contrast, double Shadows, double Highlights, double Vibrance, double Saturation,
+        double Dehaze, double Brightness, double Contrast, double Shadows, double Highlights, double Vibrance, double Saturation,
         string SelectedTint, double TintHue,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
@@ -66,6 +66,7 @@ public partial class MainViewModel
         [nameof(SharpenAmount)] = "Schärfen",
         [nameof(SharpenRadius)] = "Radius",
         [nameof(NoiseReduction)] = "Rauschen",
+        [nameof(Dehaze)] = "Dunst",
         [nameof(Brightness)] = "Helligkeit",
         [nameof(Contrast)] = "Kontrast",
         [nameof(Shadows)] = "Tiefen",
@@ -198,7 +199,7 @@ public partial class MainViewModel
         Dpi, DpiMetadataOnly,
         SelectedAspectPreset, CropSelection, CornerRadius,
         SharpenAmount, SharpenRadius, NoiseReduction,
-        Brightness, Contrast, Shadows, Highlights, Vibrance, Saturation, SelectedTint, TintHue,
+        Dehaze, Brightness, Contrast, Shadows, Highlights, Vibrance, Saturation, SelectedTint, TintHue,
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight);
@@ -238,6 +239,7 @@ public partial class MainViewModel
                 SharpenAmount = s.SharpenAmount;
                 SharpenRadius = s.SharpenRadius;
                 NoiseReduction = s.NoiseReduction;
+                Dehaze = s.Dehaze;
                 Brightness = s.Brightness;
                 Contrast = s.Contrast;
                 Shadows = s.Shadows;
