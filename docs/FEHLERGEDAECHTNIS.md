@@ -292,4 +292,25 @@ Test oder Nachweis.
 - **Nicht tun:** Quelltext mit `Get-Content`/`Set-Content` unter PowerShell 5.1
   bearbeiten. Stattdessen Editor-Werkzeuge, `sed`/`perl` in Git Bash oder
   `[IO.File]::ReadAllText/WriteAllText` mit ausdrücklichem UTF-8 ohne BOM.
-- **Prüfen:** `git grep -n "Ã|â€" -- ":!docs"` muss leer sein (hier im Eintrag stehen die Zeichen absichtlich).\|â€"` muss leer sein.
+- **Prüfen:** `git grep -n "Ã\|â€" -- ":!docs"` muss leer sein (hier im Eintrag
+  stehen die Zeichen absichtlich).
+
+## 11. Tiefen-Kurve kippte: dunklere Töne wurden heller als hellere
+
+- **Entdeckt:** 0.4.28 (Commit `b205056`, 08.10.2026), beim Umstieg auf den
+  Local Laplacian Filter (Test `Shadows_LeaveMidtonesLikeFaces` wurde dunkler).
+  **Behoben:** 0.4.29. **Eingeführt:** 0.4.26.
+- **Was:** Die Tiefen-Kurve `x · 2^(Stufen · Regler · Gewicht(x))` war bei starken
+  Werten nicht monoton: Bei +100 wurde 0,25 zu 0,34, aber 0,30 nur zu 0,33.
+  Tonwerte konnten sich umdrehen (Streifen, flaue Stellen); der Local Laplacian
+  Filter schnitt die negative Steigung ab und dunkelte Mitteltöne leicht ab.
+- **Warum:** Das Gewicht fällt zur Reichweite hin schneller, als die Belichtung
+  steigt – die Ableitung wird negativ.
+- **Wie behoben:** Aufhellen über `x + Regler · 2,5 · x · (1 − x/0,4)²`; die
+  Steigung ist mindestens `1 − 2,5/3 > 0`. Abdunkeln bleibt Belichtung (dort
+  monoton). Lichter gespiegelt. Wirkung etwas sanfter: 40 → ~70 bei +80.
+- **Nicht tun:** Tonkurven als „Gewicht × Gain“ bauen, ohne die Monotonie zu
+  prüfen.
+- **Wo:** `ImageConverter.Core/Imaging/Adjustments.cs` (`ShadowCurve`,
+  `HighlightCurve`, `Raise`).
+- **Test:** `AdjustTests.ShadowAndHighlightCurves_AreMonotonic` (±50, ±100).

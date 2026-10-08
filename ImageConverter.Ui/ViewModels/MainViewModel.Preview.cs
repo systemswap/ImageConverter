@@ -251,6 +251,8 @@ public partial class MainViewModel
     private const int StageCacheSize = 4;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
     private readonly List<(ResizeKey Key, double Noise, byte[] Bgra)> _denoisedCache = [];
+    // Tiefen/Lichter (Local Laplacian Filter) gesondert: der teure Teil, hängt nur von diesen beiden Reglern ab
+    private readonly List<(ResizeKey Key, double Noise, double Shadows, double Highlights, float[]? Toned)> _tonedCache = [];
     private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, byte[] Bgra)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
@@ -334,6 +336,7 @@ public partial class MainViewModel
         _resizedCache.Clear();
         _denoisedCache.Clear();
         _adjustedCache.Clear();
+        _tonedCache.Clear();
     }
 
     /// <summary>Momentaufnahme der Einstellungen (UI-Thread). null = Original zeigen.</summary>
@@ -393,7 +396,15 @@ public partial class MainViewModel
             adjusted = Cached(_adjustedCache, e => e.Key == key && e.Noise == job.Noise && e.Adjust == job.Adjust)?.Bgra;
             if (adjusted is null)
             {
-                adjusted = Adjust.Apply(denoised, job.Width, job.Height, job.Adjust);
+                var toned = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise
+                    && e.Shadows == job.Adjust.Shadows && e.Highlights == job.Adjust.Highlights);
+                if (toned is null)
+                {
+                    toned = (key, job.Noise, job.Adjust.Shadows, job.Adjust.Highlights,
+                        Adjust.ToneMap(denoised, job.Width, job.Height, job.Adjust));
+                    AddCached(_tonedCache, toned.Value, null);
+                }
+                adjusted = Adjust.Apply(denoised, job.Width, job.Height, job.Adjust, toned.Value.Toned);
                 AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Bgra: adjusted), null);
             }
         }

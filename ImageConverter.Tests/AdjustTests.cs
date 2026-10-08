@@ -76,7 +76,7 @@ public class AdjustTests
         var dark = result[(50 * w + 50) * 4 + 1];
         var bright = result[(50 * w + 350) * 4 + 1];
 
-        Assert.True(dark > 70, $"dunkler Bereich nur auf {dark}");
+        Assert.True(dark > 65, $"dunkler Bereich nur auf {dark}");   // 40 → ~70: monotone Kurve, siehe Raise
         Assert.InRange(bright, 228, 233);
     }
 
@@ -222,6 +222,29 @@ public class AdjustTests
         var result = Adjust.Apply(bgra, w, h, new Adjustments(Shadows: 100));
 
         Assert.InRange(result[(100 * w + 100) * 4 + 1], 100, 104);
+    }
+
+    /// <summary>
+    /// Tonwerte dürfen sich nie umdrehen: Was dunkler war, bleibt dunkler — für jede
+    /// Reglerstellung. Die alte Tiefen-Kurve (Belichtung x·2^…) kippte bei starken Werten.
+    /// </summary>
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(0.5f)]
+    [InlineData(-0.5f)]
+    [InlineData(-1f)]
+    public void ShadowAndHighlightCurves_AreMonotonic(float amount)
+    {
+        float prevS = -1, prevH = -1;
+        for (var i = 0; i <= 1000; i++)
+        {
+            var x = i / 1000f;
+            var s = Adjust.ShadowCurve(x, amount);
+            var h = Adjust.HighlightCurve(x, amount);
+            Assert.True(s >= prevS - 1e-6f, $"Tiefen {amount}: kippt bei {x}");
+            Assert.True(h >= prevH - 1e-6f, $"Lichter {amount}: kippt bei {x}");
+            (prevS, prevH) = (s, h);
+        }
     }
 
     /// <summary>Eine Pupille im hellen Gesicht bleibt dunkel — nur weite dunkle Flächen zählen.</summary>

@@ -38,66 +38,53 @@ public sealed record Adjustments(
 ///
 /// Reihenfolge: Tiefen/Lichter → Helligkeit → Kontrast → Dynamik → Sättigung → Färben.
 /// Tiefen und Lichter wirken lokal wie in Referenzwerkzeug: Ob eine Stelle als dunkel oder hell
-/// gilt, entscheidet ihre Umgebung (kantenerhaltend geglättet), nicht das einzelne Pixel. Ein dunkles
+/// gilt, entscheidet ihre Umgebung auf jeder Größenordnung (Local Laplacian Filter, wie
+/// Referenzwerkzeug), nicht das einzelne Pixel. Ein dunkles
 /// Detail in einer hellen Fläche bleibt so dunkel, und das Bild wird nicht flau.
 /// </summary>
 public static class Adjust
 {
-    /// <summary>Radius der Umgebung für Tiefen/Lichter, relativ zur längsten Kante —
-    /// so wirkt es in der kleinen Vorschau und im Export gleich.</summary>
-    private const double NeighbourhoodPerEdge = 0.01;
-
-    /// <summary>Weitere Umgebung: Ein Bereich zählt nur als dunkel (bzw. hell), wenn auch
-    /// sie es ist. Kleine dunkle Stellen in hellen Flächen — Pupillen, Nasenlöcher,
-    /// Haarsträhnen im Gesicht — bleiben so unverändert.</summary>
+    /// <summary>Weite Umgebung relativ zur längsten Kante: Ein Bereich zählt nur als dunkel
+    /// (bzw. hell), wenn auch sie es ist. Kleine dunkle Stellen in hellen Flächen — Pupillen,
+    /// Nasenlöcher, Haarsträhnen im Gesicht — bleiben so unverändert. Relativ, damit es in
+    /// der kleinen Vorschau und im Export gleich wirkt.</summary>
     private const double WideNeighbourhoodPerEdge = 0.03;
+
+    /// <summary>Ab diesem Helligkeitsabstand zur Umgebung gilt ein Übergang als Kante,
+    /// über die Tiefen/Lichter nicht hinweg wirken.</summary>
+    private const float EdgeContrast = 0.15f;
 
     // Gewichte der Helligkeit (Rec. 709) auf den sRGB-Werten
     private const float Kr = 0.2126f, Kg = 0.7152f, Kb = 0.0722f;
 
-    public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a)
+    public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a) =>
+        Apply(bgra, width, height, a, ToneMap(bgra, width, height, a));
+
+    /// <summary>
+    /// Der teure Teil — Tiefen/Lichter über den Local Laplacian Filter: Zielhelligkeit je
+    /// Pixel, null wenn beide Regler auf 0 stehen. Hängt nur von Bild, Tiefen und Lichtern ab;
+    /// die Vorschau merkt sich das Ergebnis, damit die übrigen Regler flüssig bleiben.
+    /// </summary>
+    public static float[]? ToneMap(byte[] bgra, int width, int height, Adjustments a)
+    {
+        var shadows = (float)Math.Clamp(a.Shadows / 100, -1, 1);
+        var highlights = (float)Math.Clamp(a.Highlights / 100, -1, 1);
+        return shadows != 0 || highlights != 0
+            ? ShadowsHighlights(bgra, width, height, shadows, highlights)
+            : null;
+    }
+
+    /// <param name="toned">Ergebnis von <see cref="ToneMap"/> für dasselbe Bild.</param>
+    public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a, float[]? toned)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(bgra));
 
         var result = (byte[])bgra.Clone();
         if (a.IsNone) return result;
 
-        var pixels = width * height;
-        var shadows = (float)Math.Clamp(a.Shadows / 100, -1, 1);
-        var highlights = (float)Math.Clamp(a.Highlights / 100, -1, 1);
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
-
-        // Umgebungshelligkeit nur, wenn Tiefen oder Lichter gebraucht werden
-        float[]? dark = null, bright = null;
-        if (shadows != 0 || highlights != 0)
-        {
-            var surround = new float[pixels];
-            Parallel.For(0, height, y =>
-            {
-                for (int x = 0, p = y * width; x < width; x++, p++)
-                    surround[p] = (Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2]) / 255f;
-            });
-            var edge = Math.Max(width, height);
-            var wide = (float[])surround.Clone();
-            Blur.Gauss(wide, width, height, Math.Max(1.0, WideNeighbourhoodPerEdge * edge));
-            surround = GuidedSmooth(surround, width, height, Math.Max(1.0, NeighbourhoodPerEdge * edge));
-
-            // Tiefen: dunkel nur, wenn nah UND weit dunkel (der hellere Wert gilt).
-            // Lichter: hell nur, wenn nah UND weit hell (der dunklere Wert gilt).
-            dark = new float[pixels];
-            bright = new float[pixels];
-            var near = surround;
-            Parallel.For(0, height, y =>
-            {
-                for (int x = 0, p = y * width; x < width; x++, p++)
-                {
-                    dark[p] = Math.Max(near[p], wide[p]);
-                    bright[p] = Math.Min(near[p], wide[p]);
-                }
-            });
-        }
 
         Parallel.For(0, height, y =>
         {
@@ -106,10 +93,10 @@ public static class Adjust
                 var i = p * 4;
                 float b = bgra[i] / 255f, g = bgra[i + 1] / 255f, r = bgra[i + 2] / 255f;
 
-                if (dark is not null && bright is not null)
+                if (toned is not null)
                 {
                     var lum = Kr * r + Kg * g + Kb * b;
-                    var target = ShadowsHighlights(lum, dark[p], bright[p], shadows, highlights);
+                    var target = Math.Clamp(toned[p], 0, 1);
                     if (lum > 1f / 512)
                     {
                         // Farbton behalten: alle Kanäle im selben Verhältnis
@@ -164,25 +151,99 @@ public static class Adjust
     /// </summary>
     /// <remarks>
     /// Die Bereiche sind bewusst schmal: Tiefen wirkt voll im wirklich Dunklen und endet
-    /// bei Umgebungshelligkeit 0,35, Lichter beginnt erst bei 0,65. Gesichter in
+    /// bei Umgebungshelligkeit 0,4 (kaum noch ab 0,35), Lichter beginnt erst bei 0,6. Gesichter in
     /// Innenräumen liegen typisch bei 0,4–0,6 und bleiben so unberührt (gemessen an einem
     /// Familienfoto: Flur 0,08, Türrahmen 0,15, Haare/Augenpartie 0,36–0,40, Wangen 0,6).
     /// Vorher reichte Tiefen bis 0,6 und hellte Gesichter merklich mit auf.
     /// </remarks>
-    internal static float ShadowsHighlights(float lum, float darkSurround, float brightSurround, float shadows, float highlights)
+    /// <summary>Bis hierher (von Schwarz bzw. Weiß aus) wirken Tiefen bzw. Lichter.</summary>
+    private const float ToneReach = 0.4f;
+
+    /// <summary>Stärke der Anhebung; ≤ 3 hält die Kurve monoton (Steigung ≥ 1 − Lift/3).</summary>
+    private const float Lift = 2.5f;
+
+    internal static float ShadowCurve(float x, float shadows) => shadows >= 0
+        ? Math.Clamp(x + shadows * Raise(x), 0, 1)
+        : Math.Clamp(x * MathF.Pow(2, MaxStops * shadows * (1 - SmoothStep(0.02f, ToneReach, x))), 0, 1);
+
+    internal static float HighlightCurve(float x, float highlights) => highlights <= 0
+        ? Math.Clamp(x - (-highlights) * Raise(1 - x), 0, 1)
+        : Math.Clamp(1 - (1 - x) * MathF.Pow(2, -MaxStops * highlights * SmoothStep(1 - ToneReach, 0.98f, x)), 0, 1);
+
+    /// <summary>
+    /// Anhebung der Tiefen: x·(1 − x/Reichweite)²·Lift, null ab der Reichweite. Bewusst
+    /// keine Belichtung (x·2^…): die kippte bei starken Werten — 0,25 wurde heller als 0,30,
+    /// die Tonwerte drehten sich um.
+    /// </summary>
+    private static float Raise(float x)
     {
-        var result = lum;
+        if (x <= 0 || x >= ToneReach) return 0;
+        var u = 1 - x / ToneReach;
+        return Lift * x * u * u;
+    }
+
+    /// <summary>
+    /// Zielhelligkeit je Pixel: Tiefen- und Lichter-Kurve über den Local Laplacian Filter,
+    /// jeweils mit der weiten Umgebung als zweitem Maßstab (Tiefen: der hellere, Lichter:
+    /// der dunklere der beiden Umgebungswerte).
+    /// </summary>
+    private static float[] ShadowsHighlights(byte[] bgra, int width, int height, float shadows, float highlights)
+    {
+        var lum = new float[width * height];
+        Parallel.For(0, height, y =>
+        {
+            for (int x = 0, p = y * width; x < width; x++, p++)
+                lum[p] = (Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2]) / 255f;
+        });
+
+        // Pyramidenstufe, deren Glättung etwa der weiten Umgebung entspricht (Stufe l ≈ 2^l px)
+        var wideLevel = Math.Max(1, (int)Math.Round(Math.Log2(Math.Max(2, WideNeighbourhoodPerEdge * Math.Max(width, height)))));
+
+        Func<Pyramid, int, float[]> Guide(Func<float, float, float> pick) => (p, l) =>
+        {
+            if (l >= wideLevel || wideLevel >= p.Count) return p[l];
+            var near = p[l];
+            var wide = p.UpsampledFrom(wideLevel, l);
+            var g = new float[near.Length];
+            for (var i = 0; i < g.Length; i++) g[i] = pick(near[i], wide[i]);
+            return g;
+        };
+
         if (shadows != 0)
         {
-            var w = 1 - SmoothStep(0.02f, 0.35f, darkSurround);
-            result *= MathF.Pow(2, MaxStops * shadows * w);
+            var input = lum;
+            lum = LocalLaplacian.Apply(input, width, height, s => ShadowCurve(s, shadows), EdgeContrast, Guide(Math.Max));
+            // Was selbst hell ist, ändert Tiefen nicht stärker, als die Kurve es für diesen
+            // Wert täte (also gar nicht) — sonst bleibt an harten Kanten ein heller Saum
+            Bound(input, lum, s => ShadowCurve(s, shadows), v => SmoothStep(0.35f, 0.6f, v));
         }
         if (highlights != 0)
         {
-            var w = SmoothStep(0.65f, 0.98f, brightSurround);
-            result = 1 - (1 - result) * MathF.Pow(2, -MaxStops * highlights * w);
+            var input = lum;
+            lum = LocalLaplacian.Apply(input, width, height, s => HighlightCurve(s, highlights), EdgeContrast, Guide(Math.Min));
+            Bound(input, lum, s => HighlightCurve(s, highlights), v => 1 - SmoothStep(0.4f, 0.65f, v));
         }
-        return Math.Clamp(result, 0, 1);
+        return lum;
+    }
+
+    /// <summary>
+    /// Begrenzt die Änderung je Pixel auf die der Kurve für den eigenen Wert — mit Anteil
+    /// <paramref name="strength"/> (0 = Filter frei, 1 = voll begrenzt).
+    /// </summary>
+    private static void Bound(float[] input, float[] output, Func<float, float> curve, Func<float, float> strength)
+    {
+        Parallel.For(0, (input.Length + 4095) / 4096, chunk =>
+        {
+            var end = Math.Min(input.Length, (chunk + 1) * 4096);
+            for (var i = chunk * 4096; i < end; i++)
+            {
+                var s = strength(input[i]);
+                if (s <= 0) continue;
+                var point = curve(input[i]);
+                var bounded = point >= input[i] ? Math.Min(output[i], point) : Math.Max(output[i], point);
+                output[i] += (bounded - output[i]) * s;
+            }
+        });
     }
 
     /// <summary>
