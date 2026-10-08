@@ -429,3 +429,33 @@ Test oder Nachweis.
 - **Test:** `DehazeTests.UpTo300_GetsStrongerSteadily_ButNothingCrushes`
   (Kontrast steigt in jedem Schritt, kein Sprung, < 3 % abgesoffen).
   Sichtprüfung an beiden Panoramen bei 100, 200, 300.
+
+## 16. Dunst: ein Luftlicht für das ganze Bild – Gegenlicht-Panorama blieb fast unverändert
+
+- **Entdeckt:** 0.4.36 (08.10.2026), vom Benutzer: „Panorama wird deutlich
+  besser, Turmlandschaft leider noch nicht.“ **Behoben:** 0.4.37.
+- **Was:** Bei einem Panorama mit hoch stehender Sonne erkannte das Verfahren
+  links kaum Dunst, und am Horizont unter der Sonne blieb der dichteste Dunst
+  ganz stehen.
+- **Warum:**
+  - Die Farbe und Helligkeit des Dunstes hängen von der Richtung zur Sonne ab.
+    Gemessen am Horizont (linear): links 0,33–0,51, unter der Sonne bis 0,97.
+    Das eine Luftlicht kam aus der Gegend der Sonne (0,78–0,88) – abseits
+    davon wurde der Dunst auf etwa die Hälfte unterschätzt.
+  - Die Regel „heller als das Luftlicht = Lichtquelle“ (aus Eintrag 15, gegen
+    den Sonnensaum) griff deshalb am ganzen Horizont unter der Sonne.
+  - Die Regel „sehr hell ab 70 % Helligkeit“ schloss hellen Dunst ebenfalls aus.
+- **Wie behoben:** Luftlicht je senkrechtem Streifen (8, zwischen den Mitten
+  gemittelt); Streifen ohne Himmel (nur Bäume, dunkler Kanal 0,01) fallen weich
+  auf den Gesamtwert zurück, jeder Kanal bleibt bei 30–125 % davon.
+  Lichtquelle erst ab 5 % über dem Luftlicht dieser Richtung, „fast weiß“ erst
+  ab 85 % Helligkeit. Erkannter Dunst am Horizont: 0,13 → 0,27 und 0,33 → 0,54.
+- **Bleibt offen:** Dünner Dunst über sonniger Vegetation in mittlerer Ferne
+  (0,02–0,05 erkannt) – der dunkle Kanal findet dort fast schwarze
+  Baumschatten. Abhilfe bräuchte ein zweites Merkmal (Kontrast-/
+  Sättigungsverlust), siehe Analyse vom 08.10.2026.
+- **Nicht tun:** Lichtquellen am Verhältnis zu einem einzigen Luftlicht
+  erkennen; absolute Helligkeitsschwellen, die hellen Dunst mit erfassen.
+- **Wo:** `ImageConverter.Core/Imaging/Dehaze.cs` (`AirLightColumns`, `Tolerate`).
+- **Test:** `DehazeTests.AirLight_FollowsTheDirection_AndIgnoresStripsWithoutSky`.
+  Zwischenkarten und Zeilenmittel der Durchlässigkeit an beiden Panoramen.

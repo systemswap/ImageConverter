@@ -23,21 +23,22 @@ public partial class MainViewModel
 
     /// <summary>Das aktuelle Bild in voller Auflösung, unbearbeitet.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage))]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage), nameof(CompareBitmap))]
     [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand), nameof(ExportCommand), nameof(PrintCommand))]
     public partial Bitmap? FullBitmap { get; set; }
 
     /// <summary>Ergebnis der Vorschau-Kette; null = nichts zu tun, Original zeigen.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasAdjustments), nameof(CanCompare))]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasAdjustments), nameof(CanCompare), nameof(CompareBitmap))]
     public partial Bitmap? AdjustedBitmap { get; set; }
 
     /// <summary>
-    /// Vorher/Nachher-Schalter: true = „Vorher“ zeigen — das Bild vor den Bildschritten
-    /// gleicher Form (KI …), ohne Einstellungen wie Größe, Entrauschen, Schärfe.
+    /// Vorher/Nachher-Schalter: true = Vergleich zeigen — links der verschiebbaren Linie das
+    /// Bild vor den Bildschritten gleicher Form (KI …), ohne Einstellungen wie Größe,
+    /// Entrauschen, Tools, Schärfe; rechts das Ergebnis.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(ViewOutputSize))]
+    [NotifyPropertyChangedFor(nameof(CompareBitmap))]
     public partial bool ShowOriginal { get; set; }
 
     partial void OnShowOriginalChanged(bool value)
@@ -47,8 +48,51 @@ public partial class MainViewModel
 
     /// <summary>Anzeige für „Vorher“, wenn es einen früheren Bildstand gibt; sonst gilt <see cref="FullBitmap"/>.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap))]
+    [NotifyPropertyChangedFor(nameof(CompareBitmap))]
     public partial Bitmap? BeforeBitmap { get; set; }
+
+    /// <summary>
+    /// <see cref="FullBitmap"/> verkleinert auf Vorschaugröße — für die Vorher-Seite, solange
+    /// die Nachher-Seite ohnehin eine Vorschau ist. Ein Panorama in voller Größe bei jeder
+    /// Bewegung der Trennlinie neu zu zeichnen, wäre zäh.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CompareBitmap))]
+    public partial Bitmap? FullPreviewBitmap { get; set; }
+
+    private Bitmap? _fullPreviewOf;
+
+    /// <summary>Vorher-Seite des Vergleichs; null = kein Vergleich (oder Vorher wird noch geladen).</summary>
+    public Bitmap? CompareBitmap
+    {
+        get
+        {
+            if (!ShowOriginal || OverrideBitmap is not null || FullBitmap is null) return null;
+            if (FindBeforeImage() is not null) return BeforeBitmap;   // früherer Bildstand (KI …)
+            return AdjustedBitmap is not null && FullPreviewBitmap is { } small && ReferenceEquals(_fullPreviewOf, FullBitmap)
+                ? small
+                : FullBitmap;
+        }
+    }
+
+    /// <summary>Verkleinerte Fassung von <see cref="FullBitmap"/> anlegen, falls größer als die Vorschau.</summary>
+    private async Task PrepareFullPreviewAsync()
+    {
+        if (FullBitmap is not { } full || ReferenceEquals(_fullPreviewOf, full)) return;
+        var old = FullPreviewBitmap;
+        _fullPreviewOf = full;
+        FullPreviewBitmap = null;
+        old?.Dispose();
+
+        var size = full.PixelSize;
+        var scale = (double)PreviewMaxEdge / Math.Max(size.Width, size.Height);
+        if (scale >= 1) return;   // klein genug: das Bild selbst
+
+        var target = new PixelSize(Math.Max(1, (int)Math.Round(size.Width * scale)), Math.Max(1, (int)Math.Round(size.Height * scale)));
+        var small = await Task.Run(() => full.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality));
+        if (ReferenceEquals(_fullPreviewOf, full) && ReferenceEquals(FullBitmap, full)) FullPreviewBitmap = small;
+        else small.Dispose();
+    }
 
     /// <summary>Gibt es etwas zu vergleichen: Einstellungen oder ein früherer Bildstand (KI …)?</summary>
     public bool CanCompare => HasAdjustments || FindBeforeImage() is not null;
@@ -65,6 +109,7 @@ public partial class MainViewModel
         if (FindBeforeImage() is not { } before)
         {
             BeforeBitmap = null;
+            await PrepareFullPreviewAsync();
             return;
         }
 
@@ -82,13 +127,13 @@ public partial class MainViewModel
 
     /// <summary>
     /// Größe des angezeigten Ergebnisses — darauf bezieht sich die Zoom-Anzeige:
-    /// „100 %" heißt ein Ergebnis-Pixel pro Bildschirmpixel. Bei „Vorher" das Original.
+    /// „100 %" heißt ein Ergebnis-Pixel pro Bildschirmpixel.
     /// </summary>
     public PixelSize ViewOutputSize
     {
         get
         {
-            if (ShowOriginal || DocumentSize.Width <= 0) return DocumentSize;
+            if (DocumentSize.Width <= 0) return DocumentSize;
             var (w, h) = EffectiveTarget();
             return new PixelSize(w, h);
         }
@@ -105,14 +150,14 @@ public partial class MainViewModel
     /// Berechnung. Muss dasselbe Seitenverhältnis wie das Bild haben.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap))]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(CompareBitmap))]
     public partial Bitmap? OverrideBitmap { get; set; }
 
     /// <summary>Hinweis über dem Bild bei langen Arbeiten (z. B. „KI · 42 % · noch 20 s“); null = keiner.</summary>
     [ObservableProperty] public partial string? ActivityText { get; set; }
 
-    public Bitmap? DisplayBitmap => OverrideBitmap
-        ?? (ShowOriginal ? BeforeBitmap ?? FullBitmap : AdjustedBitmap ?? FullBitmap);
+    /// <summary>Angezeigtes Ergebnis (beim Vergleich die Nachher-Seite).</summary>
+    public Bitmap? DisplayBitmap => OverrideBitmap ?? AdjustedBitmap ?? FullBitmap;
     public bool HasImage => FullBitmap is not null;
     public bool HasAdjustments => AdjustedBitmap is not null;
 
@@ -215,10 +260,14 @@ public partial class MainViewModel
     private void ClearDisplay()
     {
         var adjusted = AdjustedBitmap;
+        var fullPreview = FullPreviewBitmap;
         FullBitmap = null;
         AdjustedBitmap = null;
         BeforeBitmap = null;
+        FullPreviewBitmap = null;
+        _fullPreviewOf = null;
         adjusted?.Dispose();
+        fullPreview?.Dispose();
 
         foreach (var (_, bitmap, _) in _displayCache) bitmap.Dispose();
         _displayCache.Clear();

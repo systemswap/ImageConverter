@@ -167,7 +167,8 @@ CUPS (`lp`), unter Windows über den Windows-Druckdienst.
 
 ## 2. Was ein einfacher Konverter noch braucht (von dir nicht genannt)
 
-1. **Live-Vorschau mit Vorher/Nachher** (Trennlinie zum Schieben oder A/B-Taste).
+1. **Live-Vorschau mit Vorher/Nachher** — umgesetzt als Trennlinie zum Schieben (0.4.37):
+   links Vorher, rechts das Ergebnis; Zoom und Ausschnitt gelten für beide.
 2. **Geschätzte Ausgabedateigröße**, live bei Qualitätsänderung — das ist der Grund,
    warum man so ein Tool überhaupt öffnet.
 3. **„Auf Dateigröße zielen"** — Qualität automatisch so wählen, dass z. B. < 500 KB.
@@ -225,7 +226,7 @@ Ziel: schlank bleiben, nicht aufblähen.
 |---|---|
 | Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
 | KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
-| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
+| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior, Luftlicht je Richtung, Regler bis 300), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
 | Ausgabe | Metadaten, Farbprofil, Dateiname |
 
 „Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von

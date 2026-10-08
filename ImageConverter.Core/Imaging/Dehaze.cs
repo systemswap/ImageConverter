@@ -60,21 +60,31 @@ internal static class Dehaze
         // Kopie in Fließkomma bräuchte Gigabytes.
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)WorkEdge));
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
-        var air = AirLight(small, sw, sh);
+        var air = AirLightColumns(small, sw, sh);   // je Spalte der kleinen Fassung
         var t = Transmission(small, sw, sh, air, 0.95f);
-        var boosted = ProtectSky(small, sw, sh, air, t, boost);
+        var boosted = ProtectSky(small, sw, sh, t, boost);
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         var guide = Encode(small);
         var refine = Math.Max(1.0, RefinePerEdge * Math.Max(sw, sh));
         var plain = GuidedColor.Coefficients(guide, t, sw, sh, refine, eps: 1e-3f);
         var strong = boosted == null ? default : GuidedColor.Coefficients(guide, boosted, sw, sh, refine, eps: 1e-3f);
 
-        // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
-        float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r)
+        // Luftlicht je Spalte des großen Bildes (zwischen den Spalten der kleinen Fassung gemittelt)
+        var airFull = new float[width * 3];
+        for (var x = 0; x < width; x++)
         {
-            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, air);
+            var sx = Math.Clamp((x + 0.5f) / f - 0.5f, 0, sw - 1);
+            int x0 = (int)sx, x1 = Math.Min(x0 + 1, sw - 1);
+            for (var c = 0; c < 3; c++)
+                airFull[x * 3 + c] = air[x0 * 3 + c] + (air[x1 * 3 + c] - air[x0 * 3 + c]) * (sx - x0);
+        }
+
+        // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
+        float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r, float[] a, int o)
+        {
+            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, o);
             if (boosted == null) return tt;
-            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, air);
+            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, o);
             return Math.Min(tt, strongT);
         }
 
@@ -85,9 +95,10 @@ internal static class Dehaze
             var after = new float[small.Length];
             for (var p = 0; p < sw * sh; p++)
             {
+                var o = p % sw * 3;
                 var tt = TransmitAt(p % sw, p / sw, guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
-                    small[p * 3], small[p * 3 + 1], small[p * 3 + 2]);
-                for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[c], tt, mix);
+                    small[p * 3], small[p * 3 + 1], small[p * 3 + 2], air, o);
+                for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[o + c], tt, mix);
             }
             gain = BrightnessGain(small, after, guide, sw, sh);
         }
@@ -102,17 +113,18 @@ internal static class Dehaze
             {
                 var sx = (x + 0.5f) / f - 0.5f;
                 var i = p * 4;
+                var o = x * 3;
                 float gB = bgra[i] / 255f, gG = bgra[i + 1] / 255f, gR = bgra[i + 2] / 255f;   // Führungsbild = Original
                 for (var c = 0; c < 3; c++) lin[c] = Srgb.ToLinear(bgra[i + c]);
 
-                var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2]);
+                var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2], airFull, o);
 
                 float oB, oG, oR;
                 if (amount > 0)
                 {
-                    oB = Recover(lin[0], air[0], tt, mix);
-                    oG = Recover(lin[1], air[1], tt, mix);
-                    oR = Recover(lin[2], air[2], tt, mix);
+                    oB = Recover(lin[0], airFull[o], tt, mix);
+                    oG = Recover(lin[1], airFull[o + 1], tt, mix);
+                    oR = Recover(lin[2], airFull[o + 2], tt, mix);
 
                     // Helligkeit großräumig ans Original — aber nie heller als das Original
                     // (sonst heller Streifen über dem Horizont)
@@ -128,9 +140,9 @@ internal static class Dehaze
                 {
                     // Dunst hinzufügen: Grundschleier plus mehr, wo es schon dunstig/fern ist
                     var add = strength * (0.3f + 0.5f * (1 - tt));
-                    oB = lin[0] + (air[0] - lin[0]) * add;
-                    oG = lin[1] + (air[1] - lin[1]) * add;
-                    oR = lin[2] + (air[2] - lin[2]) * add;
+                    oB = lin[0] + (airFull[o] - lin[0]) * add;
+                    oG = lin[1] + (airFull[o + 1] - lin[1]) * add;
+                    oR = lin[2] + (airFull[o + 2] - lin[2]) * add;
                 }
 
                 result[i] = Srgb.ToByte(oB);
@@ -154,21 +166,22 @@ internal static class Dehaze
     /// Toleranz: Was dem Luftlicht sehr ähnlich ist (Himmel am Horizont, weiße Wände), gilt
     /// nicht als dichter Dunst — sonst Farbstiche und Rauschen. Dazu die Grenzen je Kanal.
     /// </summary>
-    private static float Tolerate(float t, float b, float g, float r, float[] air)
+    /// <param name="air">Luftlicht je Spalte (B, G, R), <paramref name="o"/> = Beginn der Spalte.</param>
+    private static float Tolerate(float t, float b, float g, float r, float[] air, int o)
     {
-        var dist = Math.Max(Math.Abs(b - air[0]), Math.Max(Math.Abs(g - air[1]), Math.Abs(r - air[2])));
+        float aB = air[o], aG = air[o + 1], aR = air[o + 2];
+        var dist = Math.Max(Math.Abs(b - aB), Math.Max(Math.Abs(g - aG), Math.Abs(r - aR)));
         if (dist < Tolerance) t = Math.Min(1, t * Tolerance / Math.Max(dist, 1e-4f));
-        t = Math.Max(t, Math.Max(Keep(b, air[0], 0), Math.Max(Keep(g, air[1], 0), Keep(r, air[2], 0))));
+        t = Math.Max(t, Math.Max(Keep(b, aB, 0), Math.Max(Keep(g, aG, 0), Keep(r, aR, 0))));
 
-        // Heller als das Luftlicht — kanalweise: eine Lichtquelle (Sonne, ihr bläulicher
-        // Lichthof, Lampe), kein Dunst. Sonst bekam die Sonne bei kräftigem Regler einen
-        // violetten Saum (der Lichthof ist nur im Blaukanal heller als das warme Luftlicht).
-        var over = Math.Max(b / air[0], Math.Max(g / air[1], r / air[2]));
-        t += (1 - t) * SmoothStep(0.9f, 1.05f, over);
-        // Sehr hell (Helligkeit über ~75 % linear): Licht oder Weiß, praktisch nie Dunst — auch
-        // wenn das Luftlicht selbst aus der Gegend der Sonne stammt und noch heller ist. Nach der
-        // Helligkeit, nicht dem hellsten Kanal: Dunst über kräftigen Farben bleibt Dunst.
-        t += (1 - t) * SmoothStep(0.7f, 0.9f, Luma(b, g, r));
+        // Deutlich heller als das Luftlicht dieser Richtung — kanalweise: eine Lichtquelle
+        // (Sonne, ihr Lichthof, Lampe), kein Dunst. Erst ab 5 % darüber: Mit einem Luftlicht für
+        // das ganze Bild und der Grenze knapp darunter galt der helle Dunst unter der Sonne als
+        // Lichtquelle — genau der dichteste Dunst blieb stehen.
+        var over = Math.Max(b / aB, Math.Max(g / aG, r / aR));
+        t += (1 - t) * SmoothStep(1.05f, 1.2f, over);
+        // Fast weiß (an der Grenze der Aufnahme): Sonne, Lichter, Spitzlichter — nie Dunst
+        t += (1 - t) * SmoothStep(0.85f, 0.97f, Luma(b, g, r));
         return Math.Clamp(t, MinTransmission, 1);
     }
 
@@ -201,8 +214,11 @@ internal static class Dehaze
     {
         var floor = new float[w * h];
         for (var p = 0; p < floor.Length; p++)
-            floor[p] = Math.Max(Keep(lin[p * 3], air[0], KeepShare),
-                Math.Max(Keep(lin[p * 3 + 1], air[1], KeepShare), Keep(lin[p * 3 + 2], air[2], KeepShare)));
+        {
+            var o = p % w * 3;
+            floor[p] = Math.Max(Keep(lin[p * 3], air[o], KeepShare),
+                Math.Max(Keep(lin[p * 3 + 1], air[o + 1], KeepShare), Keep(lin[p * 3 + 2], air[o + 2], KeepShare)));
+        }
         Blur.Gauss(floor, w, h, Math.Max(1.0, PatchPerEdge * Math.Max(w, h)));
         for (var p = 0; p < floor.Length; p++)
         {
@@ -215,12 +231,16 @@ internal static class Dehaze
     /// <summary>
     /// Durchlässigkeit t = 1 − ω · dunkler Kanal des aufs Luftlicht normierten Bildes.
     /// </summary>
+    /// <param name="air">Luftlicht je Spalte (B, G, R).</param>
     internal static float[] Transmission(float[] lin, int w, int h, float[] air, float omega)
     {
         var n = w * h;
         var minRgb = new float[n];
         for (var p = 0; p < n; p++)
-            minRgb[p] = Math.Min(lin[p * 3] / air[0], Math.Min(lin[p * 3 + 1] / air[1], lin[p * 3 + 2] / air[2]));
+        {
+            var o = p % w * 3;
+            minRgb[p] = Math.Min(lin[p * 3] / air[o], Math.Min(lin[p * 3 + 1] / air[o + 1], lin[p * 3 + 2] / air[o + 2]));
+        }
         var dark = MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
         var t = new float[n];
         for (var p = 0; p < n; p++) t[p] = 1 - omega * dark[p];
@@ -228,19 +248,75 @@ internal static class Dehaze
     }
 
     /// <summary>
-    /// Luftlicht (B, G, R, linear): unter den Pixeln, deren dunkler Kanal zu den hellsten 1 %
-    /// gehört, die mittleren 20 % gemittelt (Adobe: Median). Die Sonne oder Lichter
-    /// bestimmen es so nicht. Mindestens 0,25 (linear), damit dunkle Bilder ohne Dunst nicht
-    /// kaputtgerechnet werden.
+    /// Luftlicht (B, G, R, linear) für das ganze Bild: unter den Pixeln, deren dunkler Kanal zu
+    /// den hellsten 1 % gehört, die mittleren 20 % gemittelt (Adobe: Median). Die Sonne oder
+    /// Lichter bestimmen es so nicht. Mindestens 0,25 (linear), damit dunkle Bilder ohne Dunst
+    /// nicht kaputtgerechnet werden.
     /// </summary>
-    internal static float[] AirLight(float[] lin, int w, int h)
-    {
-        var n = w * h;
-        var minRgb = new float[n];
-        for (var p = 0; p < n; p++) minRgb[p] = Math.Min(lin[p * 3], Math.Min(lin[p * 3 + 1], lin[p * 3 + 2]));
-        var dark = MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
+    internal static float[] AirLight(float[] lin, int w, int h) =>
+        AirLightOf(lin, DarkChannel(lin, w, h), Enumerable.Range(0, w * h).ToArray());
 
-        var top = Enumerable.Range(0, n).OrderByDescending(p => dark[p]).Take(Math.Max(1, n / 100)).ToArray();
+    /// <summary>Senkrechte Streifen für das Luftlicht je Richtung.</summary>
+    private const int AirStrips = 8;
+
+    /// <summary>
+    /// Luftlicht je Spalte (B, G, R je Spalte): wie <see cref="AirLight"/>, aber für jeden von
+    /// <see cref="AirStrips"/> senkrechten Streifen, zwischen den Streifenmitten gemittelt. Die
+    /// Farbe des Dunstes hängt von der Richtung zur Sonne ab — zur Sonne hin hell und warm, von
+    /// ihr weg blau und dunkler. Gemessen am Horizont eines Panoramas: 0,33 … 0,97 (linear); ein
+    /// einziger Wert aus der Gegend der Sonne unterschätzte den Dunst abseits davon auf die Hälfte.
+    /// </summary>
+    /// <remarks>
+    /// Streifen ohne Himmel und Dunst (nur Bäume: dunkler Kanal 0,01) taugen nicht — dort gilt
+    /// der Wert für das ganze Bild, mit weichem Übergang. Jeder Kanal bleibt zwischen 30 % und
+    /// 125 % des Gesamtwerts.
+    /// </remarks>
+    internal static float[] AirLightColumns(float[] lin, int w, int h)
+    {
+        var dark = DarkChannel(lin, w, h);
+        var global = AirLightOf(lin, dark, Enumerable.Range(0, w * h).ToArray());
+        var globalDark = Math.Min(global[0], Math.Min(global[1], global[2]));
+
+        var strips = new float[AirStrips][];
+        for (var k = 0; k < AirStrips; k++)
+        {
+            int x0 = k * w / AirStrips, x1 = Math.Max(x0 + 1, (k + 1) * w / AirStrips);
+            var pixels = new int[(x1 - x0) * h];
+            for (int y = 0, i = 0; y < h; y++)
+                for (var x = x0; x < x1; x++) pixels[i++] = y * w + x;
+            var a = AirLightOf(lin, dark, pixels);
+
+            // Wie verlässlich: dunkler Kanal der Kandidaten im Vergleich zum ganzen Bild
+            var candidates = pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).Average(p => dark[p]);
+            var trust = SmoothStep(0.1f, 0.25f, (float)candidates / globalDark);
+            for (var c = 0; c < 3; c++)
+                a[c] = global[c] + (Math.Clamp(a[c], 0.3f * global[c], 1.25f * global[c]) - global[c]) * trust;
+            strips[k] = a;
+        }
+
+        var air = new float[w * 3];
+        for (var x = 0; x < w; x++)
+        {
+            var pos = Math.Clamp((x + 0.5f) / w * AirStrips - 0.5f, 0, AirStrips - 1);
+            int k0 = (int)pos, k1 = Math.Min(k0 + 1, AirStrips - 1);
+            for (var c = 0; c < 3; c++)
+                air[x * 3 + c] = strips[k0][c] + (strips[k1][c] - strips[k0][c]) * (pos - k0);
+        }
+        return air;
+    }
+
+    /// <summary>Dunkler Kanal (kleinster Farbkanal, Minimum über das Fenster), nicht normiert.</summary>
+    private static float[] DarkChannel(float[] lin, int w, int h)
+    {
+        var minRgb = new float[w * h];
+        for (var p = 0; p < minRgb.Length; p++) minRgb[p] = Math.Min(lin[p * 3], Math.Min(lin[p * 3 + 1], lin[p * 3 + 2]));
+        return MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
+    }
+
+    /// <summary>Luftlicht aus einer Auswahl von Pixeln: hellste 1 % des dunklen Kanals, davon die mittleren 20 %.</summary>
+    private static float[] AirLightOf(float[] lin, float[] dark, int[] pixels)
+    {
+        var top = pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).ToArray();
         var from = (int)(top.Length * 0.4);
         var count = Math.Max(1, (int)(top.Length * 0.2));
         var air = new float[3];
@@ -265,7 +341,7 @@ internal static class Dehaze
     /// drückt die Schwankung der Landschaft — dichter Nebel galt als Himmel.
     /// </remarks>
     /// <returns>Die verstärkte Durchlässigkeit für den Regler über 100, sonst null.</returns>
-    private static float[]? ProtectSky(float[] lin, int w, int h, float[] air, float[] t, float boost)
+    private static float[]? ProtectSky(float[] lin, int w, int h, float[] t, float boost)
     {
         var l = Luma(lin);
         var edge = Math.Max(w, h);

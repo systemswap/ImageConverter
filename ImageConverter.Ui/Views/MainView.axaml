@@ -737,7 +737,7 @@
                                     <TextBlock TextWrapping="Wrap" Text="{l:T 'Strg + Mausrad über dem Bild zoomt um den Mauszeiger.'}" />
                                     <TextBlock TextWrapping="Wrap" Text="{l:T 'Im Zoom verschieben: mittlere Maustaste ziehen, Leertaste + Ziehen oder Mausrad (mit Umschalt waagerecht).'}" />
                                     <TextBlock TextWrapping="Wrap" Text="{l:T 'Klick hier oder Strg+0: einpassen · Strg+1: 100 %'}" />
-                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe (bei „Vorher“ auf das Original).'}" />
+                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe.'}" />
                                 </StackPanel>
                             </ToolTip.Tip>
                         </Button>
@@ -763,7 +763,7 @@
                                       IsChecked="{Binding ShowOriginal}"
                                       IsEnabled="{Binding CanCompare}"
                                       Content="{l:T '◧  Vorher / Nachher'}" FontSize="12"
-                                      ToolTip.Tip="{l:T 'Eingedrückt: Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen, Tools und Schärfe. Sonst: Ergebnis, so wie es exportiert wird. Zoom und Ausschnitt bleiben beim Umschalten gleich.'}" />
+                                      ToolTip.Tip="{l:T 'Vergleich mit Trennlinie: links Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen, Tools und Schärfe —, rechts das Ergebnis, so wie es exportiert wird. Die Linie mit der Maus über das Bild ziehen. Zoom und Ausschnitt bleiben gleich.'}" />
                     </Grid>
                 </Border>
 
@@ -773,6 +773,9 @@
                         <c:CropView x:Name="Crop"
                                     IsVisible="{Binding HasImage}"
                                     Source="{Binding DisplayBitmap}"
+                                    CompareSource="{Binding CompareBitmap}"
+                                    BeforeLabel="{l:T 'Vorher'}"
+                                    AfterLabel="{l:T 'Nachher'}"
                                     DocumentSize="{Binding DocumentSize}"
                                     OutputSize="{Binding ViewOutputSize}"
                                     ViewResetToken="{Binding ViewResetToken}"

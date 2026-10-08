@@ -121,6 +121,43 @@ public sealed class CropView : Control
     public static readonly DirectProperty<CropView, int> DisplayPercentProperty =
         AvaloniaProperty.RegisterDirect<CropView, int>(nameof(DisplayPercent), o => o.DisplayPercent);
 
+    /// <summary>
+    /// Vorher-Bild für den Vergleich; null = kein Vergleich. Gesetzt, liegt es links der
+    /// Trennlinie über <see cref="Source"/> (Nachher) — die Linie lässt sich mit der Maus
+    /// über das Bild ziehen. Wie <see cref="Source"/> auf die Bildfläche gestreckt.
+    /// </summary>
+    public static readonly StyledProperty<Bitmap?> CompareSourceProperty =
+        AvaloniaProperty.Register<CropView, Bitmap?>(nameof(CompareSource));
+
+    public Bitmap? CompareSource
+    {
+        get => GetValue(CompareSourceProperty);
+        set => SetValue(CompareSourceProperty, value);
+    }
+
+    /// <summary>Beschriftung der linken Seite beim Vergleich (übersetzt, aus der Oberfläche).</summary>
+    public static readonly StyledProperty<string?> BeforeLabelProperty =
+        AvaloniaProperty.Register<CropView, string?>(nameof(BeforeLabel));
+
+    public string? BeforeLabel
+    {
+        get => GetValue(BeforeLabelProperty);
+        set => SetValue(BeforeLabelProperty, value);
+    }
+
+    /// <summary>Beschriftung der rechten Seite beim Vergleich.</summary>
+    public static readonly StyledProperty<string?> AfterLabelProperty =
+        AvaloniaProperty.Register<CropView, string?>(nameof(AfterLabel));
+
+    public string? AfterLabel
+    {
+        get => GetValue(AfterLabelProperty);
+        set => SetValue(AfterLabelProperty, value);
+    }
+
+    /// <summary>Trennlinie als Anteil der Bildbreite (0 = alles Nachher, 1 = alles Vorher); bleibt beim Bildwechsel.</summary>
+    private double _split = 0.5;
+
     public Bitmap? Source
     {
         get => GetValue(SourceProperty);
@@ -159,7 +196,7 @@ public sealed class CropView : Control
     [Flags]
     private enum Edge { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 }
 
-    private enum DragMode { None, Create, Move, Resize, Pan }
+    private enum DragMode { None, Create, Move, Resize, Pan, Split }
 
     // Oben mehr Luft: dort schwebt der Bedienhinweis über dem Bild.
     private static readonly Thickness ViewPadding = new(28, 50, 28, 28);
@@ -253,7 +290,8 @@ public sealed class CropView : Control
 
     static CropView()
     {
-        AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty);
+        AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
+            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -493,6 +531,16 @@ public sealed class CropView : Control
         Focus();
         _pressScreen = p;
 
+        // Vergleich: die Trennlinie geht vor — sie liegt mitten im Bild
+        if (OnSplitLine(p))
+        {
+            _mode = DragMode.Split;
+            Cursor = CursorWestEast;
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+
         if (Selection is { } sel)
         {
             var screenSel = ToScreen(sel);
@@ -577,6 +625,11 @@ public sealed class CropView : Control
                 _imageRect = ClampPan(_panStartRect.Translate(p - _pressScreen));
                 InvalidateVisual();
                 break;
+
+            case DragMode.Split:
+                _split = Math.Clamp((p.X - _imageRect.X) / _imageRect.Width, 0, 1);
+                InvalidateVisual();
+                break;
         }
 
         e.Handled = true;
@@ -594,7 +647,7 @@ public sealed class CropView : Control
                 Selection = null;
         }
 
-        var wasEdit = _mode != DragMode.Pan;
+        var wasEdit = _mode is not (DragMode.Pan or DragMode.Split);
         _mode = DragMode.None;
         e.Pointer.Capture(null);
         UpdateHoverCursor(e.GetPosition(this));
@@ -617,6 +670,12 @@ public sealed class CropView : Control
             return;
         }
 
+        if (OnSplitLine(p))
+        {
+            Cursor = CursorWestEast;
+            return;
+        }
+
         if (Selection is { } sel)
         {
             var s = ToScreen(sel);
@@ -625,6 +684,95 @@ public sealed class CropView : Control
             if (s.Contains(p)) { Cursor = CursorMove; return; }
         }
         Cursor = _imageRect.Contains(p) ? CursorCross : Cursor.Default;
+    }
+
+    // ------------------------------------------------------------ Vergleich
+
+    private const double SplitHitRadius = 8;
+    private const double SplitKnobRadius = 13;
+
+    /// <summary>Trennlinie auf dem Bildschirm — innerhalb des sichtbaren Teils des Bildes.</summary>
+    private double SplitX => _imageRect.X + _imageRect.Width * _split;
+
+    /// <summary>Sichtbarer Teil des Bildes (im Zoom ragt es über die Ansicht hinaus).</summary>
+    private Rect VisibleImage => _imageRect.Intersect(new Rect(Bounds.Size));
+
+    /// <summary>Griff mittig auf der Linie, im sichtbaren Teil.</summary>
+    private Point SplitKnob => new(SplitX, VisibleImage.Center.Y);
+
+    private bool OnSplitLine(Point p) =>
+        CompareSource is not null && VisibleImage.Width > 0
+        && ((VisibleImage.Contains(p) && Math.Abs(p.X - SplitX) <= SplitHitRadius)
+            || Point.Distance(p, SplitKnob) <= SplitKnobRadius + 2);
+
+    private static readonly IPen SplitPen = new ImmutablePen(Brushes.White, 2);
+    private static readonly IPen SplitShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x60, 0, 0, 0)), 4);
+    private static readonly IBrush KnobFill = new ImmutableSolidColorBrush(Color.FromArgb(0xE6, 255, 255, 255));
+    private static readonly IBrush KnobArrow = new ImmutableSolidColorBrush(Color.FromArgb(0xD0, 0x30, 0x30, 0x30));
+
+    /// <summary>Vorher links der Linie über das Nachher, dazu Linie, Griff und Beschriftung.</summary>
+    private void RenderCompare(DrawingContext context, Bitmap before)
+    {
+        var visible = VisibleImage;
+        if (visible.Width <= 0) return;
+        var x = SplitX;
+
+        var left = new Rect(_imageRect.X, _imageRect.Y, Math.Max(0, x - _imageRect.X), _imageRect.Height);
+        using (context.PushClip(left))
+            DrawBitmap(context, before);
+
+        var top = new Point(x, visible.Top);
+        var bottom = new Point(x, visible.Bottom);
+        context.DrawLine(SplitShadowPen, top, bottom);
+        context.DrawLine(SplitPen, top, bottom);
+
+        // Griff: Kreis mit zwei Pfeilspitzen ◂ ▸
+        var knob = SplitKnob;
+        context.DrawEllipse(KnobFill, HandlePen, knob, SplitKnobRadius, SplitKnobRadius);
+        var arrows = new StreamGeometry();
+        using (var g = arrows.Open())
+        {
+            foreach (var dir in new[] { -1, 1 })
+            {
+                g.BeginFigure(new Point(knob.X + dir * 9, knob.Y), true);
+                g.LineTo(new Point(knob.X + dir * 3.5, knob.Y - 5));
+                g.LineTo(new Point(knob.X + dir * 3.5, knob.Y + 5));
+                g.EndFigure(true);
+            }
+        }
+        context.DrawGeometry(KnobArrow, null, arrows);
+
+        // Beschriftung oben in den Ecken der jeweiligen Seite, nur wenn Platz ist
+        DrawTag(context, BeforeLabel, new Point(Math.Max(visible.Left, _imageRect.Left) + 8, visible.Top + 8), x, alignRight: false);
+        DrawTag(context, AfterLabel, new Point(Math.Min(visible.Right, _imageRect.Right) - 8, visible.Top + 8), x, alignRight: true);
+    }
+
+    private static void DrawTag(DrawingContext context, string? label, Point anchor, double splitX, bool alignRight)
+    {
+        if (string.IsNullOrEmpty(label)) return;
+        var text = new FormattedText(label, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            Typeface.Default, 11, Brushes.White);
+        var pad = new Thickness(7, 3);
+        var box = new Size(text.Width + pad.Left + pad.Right, text.Height + pad.Top + pad.Bottom);
+        var bx = alignRight ? anchor.X - box.Width : anchor.X;
+        // Nur auf der eigenen Seite der Linie
+        if (alignRight ? bx < splitX + 4 : bx + box.Width > splitX - 4) return;
+        context.DrawRectangle(LabelBack, null, new RoundedRect(new Rect(new Point(bx, anchor.Y), box), 4));
+        context.DrawText(text, new Point(bx + pad.Left, anchor.Y + pad.Top));
+    }
+
+    /// <summary>Bitmap auf die Bildfläche gestreckt; ab 200 % Pixel hart (zum Prüfen), darunter weich.</summary>
+    private void DrawBitmap(DrawingContext context, Bitmap bmp)
+    {
+        using (context.PushRenderOptions(new RenderOptions
+               {
+                   BitmapInterpolationMode = _imageRect.Width / bmp.PixelSize.Width >= 2
+                       ? BitmapInterpolationMode.None
+                       : BitmapInterpolationMode.HighQuality,
+               }))
+        {
+            context.DrawImage(bmp, new Rect(bmp.Size), _imageRect);
+        }
     }
 
     // ------------------------------------------------------------ Tastatur
@@ -799,22 +947,15 @@ public sealed class CropView : Control
             // Schachbrett unter dem Bild: sichtbar nur, wo das Bild transparent ist
             // (z. B. die Ecken nach einem gerundeten Zuschnitt).
             context.FillRectangle(CheckerBrush, _imageRect);
-
-            // Ab 200 % Pixel hart zeigen (zum Prüfen), darunter weich interpolieren
-            using (context.PushRenderOptions(new RenderOptions
-                   {
-                       BitmapInterpolationMode = _imageRect.Width / bmp.PixelSize.Width >= 2
-                           ? BitmapInterpolationMode.None
-                           : BitmapInterpolationMode.HighQuality,
-                   }))
-            {
-                context.DrawImage(bmp, new Rect(bmp.Size), _imageRect);
-            }
+            DrawBitmap(context, bmp);
         }
         else
             context.FillRectangle(PlaceholderBrush, _imageRect);
 
         context.DrawRectangle(null, ImageEdgePen, _imageRect);
+
+        if (Source is not null && CompareSource is { } before)
+            RenderCompare(context, before);
 
         if (Selection is not { } sel) return;
 

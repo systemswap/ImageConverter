@@ -148,6 +148,36 @@ public class DehazeTests
         Assert.All(Dehaze.AirLight(Linear(Haze(Scene(), 1, 0)), W, H), a => Assert.True(a >= 0.25f));   // Untergrenze
     }
 
+    /// <summary>
+    /// Luftlicht je Richtung: links bläulich-dunkler Dunst, rechts heller warmer (zur Sonne
+    /// hin) — jede Seite bekommt ihren. Ein Streifen nur aus Bäumen (kein Himmel) fällt auf
+    /// den Wert für das ganze Bild zurück, statt Baumgrün als „Dunst“ zu nehmen.
+    /// </summary>
+    [Fact]
+    public void AirLight_FollowsTheDirection_AndIgnoresStripsWithoutSky()
+    {
+        var lin = new float[W * H * 3];
+        for (var y = 0; y < H; y++)
+        for (var x = 0; x < W; x++)
+        {
+            var i = (y * W + x) * 3;
+            (float B, float G, float R) c =
+                x < W / 8 ? (0.01f, 0.03f, 0.01f)                        // nur Bäume
+                : y >= SkyRows ? (0.05f, 0.15f, 0.08f)                   // Landschaft
+                : x < W / 2 ? (0.45f, 0.40f, 0.38f) : (0.80f, 0.85f, 0.95f);   // Dunst links / rechts
+            (lin[i], lin[i + 1], lin[i + 2]) = c;
+        }
+
+        var air = Dehaze.AirLightColumns(lin, W, H);
+        var global = Dehaze.AirLight(lin, W, H);
+        float At(int x, int c) => air[x * 3 + c];
+
+        Assert.InRange(At(W * 5 / 16, 2), 0.36f, 0.42f);   // links: R des bläulichen Dunstes
+        Assert.InRange(At(W * 13 / 16, 2), 0.90f, 1.00f);  // rechts: R des warmen Dunstes
+        for (var c = 0; c < 3; c++)
+            Assert.InRange(At(0, c), global[c] - 0.02f, global[c] + 0.02f);   // Bäume: Gesamtwert
+    }
+
     [Fact]
     public void MinFilter_MatchesTheNaiveMinimum()
     {
