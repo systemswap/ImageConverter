@@ -1,5 +1,6 @@
 using ImageConverter.Core.Imaging;
 using ImageMagick;
+using ImageMagick.Drawing;
 
 namespace ImageConverter.Tests;
 
@@ -150,6 +151,48 @@ public class ImageOpsTests
     }
 
     /// <summary>
+    /// Große Bilder werden in Streifen parallel skaliert (Magick.NET rechnet sonst auf
+    /// einem Kern). Das Ergebnis muss dem einfachen Weg über ImageMagick entsprechen —
+    /// mit Transparenz, Farbprofil, EXIF und 8 Bit Tiefe.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Resize_LargeImage_InStrips_MatchesImageMagick(bool gamma)
+    {
+        using var src = new MagickImage("plasma:fractal", 1600, 1000);
+        Assert.True(src.Width * src.Height >= ImageOps.ParallelMinPixels);
+        src.Alpha(AlphaOption.Set);
+        src.Draw(new Drawables().FillColor(MagickColors.Transparent).Rectangle(100, 100, 700, 500));
+        src.Depth = 8;
+        src.SetProfile(ColorProfiles.AdobeRGB1998);
+        var exif = new ExifProfile();
+        exif.SetValue(ExifTag.Make, "Testkamera");
+        src.SetProfile(exif);
+
+        using var strips = ImageOps.Resize(src, 640, 400, ResampleFilter.Lanczos3, gamma);
+
+        using var plain = (MagickImage)src.Clone();
+        if (gamma) plain.ColorSpace = ColorSpace.RGB;
+        plain.FilterType = FilterType.Lanczos;
+        plain.Resize(new MagickGeometry(640, 400) { IgnoreAspectRatio = true });
+        if (gamma) plain.ColorSpace = ColorSpace.sRGB;
+
+        var a = plain.GetPixelsUnsafe().ToShortArray("RGBA")!;
+        var b = strips.GetPixelsUnsafe().ToShortArray("RGBA")!;
+        var diffs = a.Zip(b, (x, y) => Math.Abs(x - y) / 257.0).ToArray();
+
+        // Rundung der Zwischenstufen: einzelne Pixel bis 2 Stufen (von 255), im Mittel praktisch 0
+        Assert.Equal((640u, 400u), (strips.Width, strips.Height));
+        Assert.True(diffs.Max() <= 2, $"Abweichung bis {diffs.Max():F2} Stufen");
+        Assert.True(diffs.Average() < 0.05, $"mittlere Abweichung {diffs.Average():F3} Stufen");
+        Assert.True(strips.HasAlpha);
+        Assert.Equal(8u, strips.Depth);
+        Assert.Contains("Adobe", strips.GetColorProfile()?.Description ?? "");
+        Assert.Equal("Testkamera", strips.GetExifProfile()?.GetValue(ExifTag.Make)?.Value);
+    }
+
+    /// <summary>
     /// Vorschau, Größenschätzung und Export lesen gleichzeitig dasselbe Bild.
     /// Nachgestellt mit vielen parallelen Aufgaben — keine darf scheitern oder
     /// ein falsches Ergebnis liefern.
@@ -157,7 +200,8 @@ public class ImageOpsTests
     [Fact]
     public async Task ConcurrentOperations_OnSameSource_AreSafe()
     {
-        using var src = new MagickImage(MagickColors.SkyBlue, 1200, 800);
+        // Über ParallelMinPixels: auch das Skalieren in Streifen läuft hier gleichzeitig
+        using var src = new MagickImage(MagickColors.SkyBlue, 1500, 800);
         src.SetProfile(ColorProfiles.AdobeRGB1998);
         var expectedDisplay = ImageOps.ToDisplayBgra(src);
 
@@ -186,7 +230,7 @@ public class ImageOpsTests
         await Task.WhenAll(tasks);
 
         // Die Quelle selbst ist unverändert
-        Assert.Equal((1200u, 800u), (src.Width, src.Height));
+        Assert.Equal((1500u, 800u), (src.Width, src.Height));
         Assert.Contains("Adobe", src.GetColorProfile()?.Description ?? "");
     }
 

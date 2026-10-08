@@ -216,3 +216,38 @@ Test oder Nachweis.
   fehlgeschlagen, nichts veröffentlicht; danach 169 bestanden,
   `published\windows-x64\ImageConverter.exe` startet (Titel
   „ImageConverter 0.4.22“).
+
+## 8. Bildwechsel langsam: ImageMagick rechnet nur auf einem Kern
+
+- **Entdeckt:** 0.4.24 (Commit `bb10203`, 08.10.2026), vom Benutzer beim
+  Blättern zwischen Bildern bemerkt. **Behoben:** 0.4.25.
+- **Was:** Das Blättern dauerte bei großen Fotos mehrere Sekunden. Gemessen
+  an einem 6000 × 4000-JPEG (Release, 16 Kerne): Laden 0,4 s, Anzeige 0,1 s,
+  **Verkleinern auf 2048 px gamma-korrekt 2,8 s** (Umrechnung nach linear
+  1,6 s, Lanczos 1 s). Das Verkleinern läuft bei jedem Wechsel für die
+  Größenschätzung und, sobald Größe/Schärfen/Rauschen eingestellt sind, für
+  die Vorschau. Solange zeigte die Vorschau noch das *vorige* Bild.
+- **Warum:** `Magick.NET-Q16-AnyCPU` ist ohne OpenMP gebaut
+  (`ResourceLimits.Thread` = 1, `MagickNET.Features` ohne OpenMP) – jede
+  Operation läuft auf einem Kern. Die Vorschau zeigte `AdjustedBitmap ??
+  FullBitmap`, und `AdjustedBitmap` gehörte bis zur neuen Berechnung noch zum
+  vorigen Bild.
+- **Wie behoben:** `ImageOps.Resize` zerlegt Bilder ab 1 Megapixel (sRGB) in
+  Zeilenstreifen (waagerecht skalieren) und dann Spaltenstreifen (senkrecht)
+  und rechnet sie parallel; sRGB ↔ linear über Tabellen mit den Formeln von
+  ImageMagick. 2,9 s → 0,75 s, bei normalem Verkleinern pixelgleich.
+  `SetDocumentAsync` verwirft die alte Vorschau bei neuem Bild oder neuer
+  Größe; die Render-Schleife verwirft Ergebnisse für ein inzwischen
+  gewechseltes Bild.
+- **Nicht tun:** Die Streifen über ImageMagick zerschneiden und zusammensetzen
+  (`CloneArea`, `AppendVertically`) – das kostete selbst rund 1 s auf einem
+  Kern; deshalb Pixel-Arrays (`ToShortArray`/`ReadPixels` mit
+  `StorageType.Quantum`, `Short` wirft). Pixel der gemeinsamen Quelle nur
+  unter `lock` lesen. Nicht annehmen, dass ImageMagick „sowieso parallel“
+  rechnet – vor teuren Operationen messen.
+- **Wo:** `ImageConverter.Core/Imaging/ImageOps.cs` (`ResizeInStrips`),
+  `ImageConverter.Ui/ViewModels/MainViewModel.Preview.cs`.
+- **Test:** `ImageOpsTests.Resize_LargeImage_InStrips_MatchesImageMagick`
+  (Vergleich mit dem einfachen Weg, mit Alpha, Adobe-RGB-Profil, EXIF, 8 Bit),
+  `ConcurrentOperations_OnSameSource_AreSafe` jetzt über der Schwelle.
+  Messung mit einem Testprogramm unter `%LOCALAPPDATA%\imageconverter-build\bench`.

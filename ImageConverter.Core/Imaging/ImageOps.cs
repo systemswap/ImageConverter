@@ -204,8 +204,17 @@ public static class ImageOps
     /// </summary>
     public static MagickImage Resize(MagickImage source, int width, int height, ResampleFilter filter, bool gammaCorrect)
     {
+        bool sameSize, large;
+        lock (source)
+        {
+            sameSize = source.Width == width && source.Height == height;
+            large = (long)source.Width * source.Height >= ParallelMinPixels && source.ColorSpace == ColorSpace.sRGB;
+        }
+        if (!sameSize && large)
+            return ResizeInStrips(source, width, height, ToMagick(filter), gammaCorrect);
+
         var result = CloneOf(source);
-        if (result.Width == width && result.Height == height) return result;
+        if (sameSize) return result;
 
         if (gammaCorrect) result.ColorSpace = ColorSpace.RGB;   // sRGB → linear
         result.FilterType = ToMagick(filter);
@@ -219,6 +228,126 @@ public static class ImageOps
         }
 
         return result;
+    }
+
+    // ------------------------------------------------------- Paralleles Skalieren
+    //
+    // Magick.NET-Q16-AnyCPU ist ohne OpenMP gebaut und rechnet auf einem Kern: Ein
+    // 24-Megapixel-Foto gamma-korrekt auf 2048 px zu verkleinern dauerte 2,8 s (1,6 s
+    // davon die Umrechnung nach linear, 1 s das Skalieren). Skalieren ist trennbar:
+    // erst waagerecht (jede Zeile für sich), dann senkrecht (jede Spalte für sich).
+    // Deshalb Zeilenstreifen bzw. Spaltenstreifen parallel rechnen — ohne Überlappung,
+    // denn in der jeweils anderen Richtung bleibt die Größe gleich. Die Umrechnung
+    // sRGB ↔ linear übernimmt eine Tabelle mit denselben Formeln wie ImageMagick.
+
+    /// <summary>Darunter lohnt das Aufteilen nicht; es gilt der einfache Weg.</summary>
+    internal const long ParallelMinPixels = 1_000_000;
+
+    private const int Quantum = 65535;   // Q16
+    private static readonly Lazy<(ushort[] ToLinear, ushort[] ToSrgb)> GammaTables = new(() =>
+    {
+        var toLinear = new ushort[Quantum + 1];
+        var toSrgb = new ushort[Quantum + 1];
+        for (var i = 0; i <= Quantum; i++)
+        {
+            var x = (double)i / Quantum;
+            // wie DecodePixelGamma / EncodePixelGamma in ImageMagick (gamma-private.h)
+            var lin = x <= 0.0404482362771076 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4);
+            var srgb = x <= 0.0031306684425005883 ? 12.92 * x : 1.055 * Math.Pow(x, 1.0 / 2.4) - 0.055;
+            toLinear[i] = (ushort)Math.Clamp(Math.Round(lin * Quantum), 0, Quantum);
+            toSrgb[i] = (ushort)Math.Clamp(Math.Round(srgb * Quantum), 0, Quantum);
+        }
+        return (toLinear, toSrgb);
+    });
+
+    // Zerschneiden und Zusammensetzen über ImageMagick (CloneArea, Append) kostete selbst
+    // rund 1 s auf einem Kern — deshalb laufen die Streifen über Pixel-Arrays.
+    private static MagickImage ResizeInStrips(MagickImage image, int width, int height, FilterType filter, bool gammaCorrect)
+    {
+        // Die Quelle ist oft das gemeinsame Original (siehe CloneOf) — nur gesperrt auslesen
+        int sw, sh;
+        uint depth;
+        string map;
+        ushort[] source;
+        lock (image)
+        {
+            sw = (int)image.Width;
+            sh = (int)image.Height;
+            depth = image.Depth;
+            map = image.HasAlpha ? "RGBA" : "RGB";
+            using var pixels = image.GetPixelsUnsafe();
+            source = pixels.ToShortArray(map) ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        }
+        var ch = map.Length;
+        var (toLinear, toSrgb) = gammaCorrect ? GammaTables.Value : default;
+
+        // 1) Zeilenstreifen: nach linear, waagerecht auf die Zielbreite
+        var wide = new ushort[(long)width * sh * ch];
+        Parallel.ForEach(Strips(sh), r =>
+        {
+            int offset = r.Start * sw * ch, count = r.Length * sw * ch;
+            if (toLinear is not null) MapColor(source.AsSpan(offset, count), ch, toLinear);
+            var scaled = Scale(source, offset, count, sw, r.Length, width, r.Length, map, filter);
+            scaled.CopyTo(wide, (long)r.Start * width * ch);
+        });
+
+        // 2) Spaltenstreifen: senkrecht auf die Zielhöhe, zurück nach sRGB
+        var result = new ushort[(long)width * height * ch];
+        Parallel.ForEach(Strips(width), c =>
+        {
+            var row = c.Length * ch;
+            var column = new ushort[row * sh];
+            for (var y = 0; y < sh; y++)
+                Array.Copy(wide, ((long)y * width + c.Start) * ch, column, (long)y * row, row);
+
+            var scaled = Scale(column, 0, column.Length, c.Length, sh, c.Length, height, map, filter);
+            if (toSrgb is not null) MapColor(scaled, ch, toSrgb);
+            for (var y = 0; y < height; y++)
+                Array.Copy(scaled, (long)y * row, result, ((long)y * width + c.Start) * ch, row);
+        });
+
+        var resized = new MagickImage();
+        resized.ReadPixels(result, new PixelReadSettings((uint)width, (uint)height, StorageType.Quantum, map));
+        resized.Depth = depth;                     // 8-Bit-Quelle bleibt 8 Bit (z. B. als PNG)
+        ImageExporter.CopyProfiles(image, resized);  // EXIF, ICC … wie beim Schärfen
+        return resized;
+    }
+
+    /// <summary>Teilt eine Länge in so viele Stücke wie Kerne (mindestens 64 Pixel je Stück).</summary>
+    private static List<(int Start, int Length)> Strips(int total)
+    {
+        var count = Math.Clamp(Math.Min(Environment.ProcessorCount, total / 64), 1, 32);
+        var list = new List<(int, int)>(count);
+        for (var i = 0; i < count; i++)
+        {
+            int start = (int)((long)total * i / count), end = (int)((long)total * (i + 1) / count);
+            list.Add((start, end - start));
+        }
+        return list;
+    }
+
+    /// <summary>Ein Streifen als eigenes Bild skaliert; liefert seine Pixel.</summary>
+    private static ushort[] Scale(ushort[] data, int offset, int count, int w, int h,
+        int toWidth, int toHeight, string map, FilterType filter)
+    {
+        using var strip = new MagickImage();
+        strip.ReadPixels(data, (uint)offset, (uint)count,
+            new PixelReadSettings((uint)w, (uint)h, StorageType.Quantum, map));
+        strip.FilterType = filter;
+        strip.Resize(new MagickGeometry((uint)toWidth, (uint)toHeight) { IgnoreAspectRatio = true });
+        using var pixels = strip.GetPixelsUnsafe();
+        return pixels.ToShortArray(map) ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+    }
+
+    /// <summary>Wendet eine Tabelle auf Rot, Grün und Blau an (Alpha bleibt).</summary>
+    private static void MapColor(Span<ushort> data, int channels, ushort[] table)
+    {
+        for (var p = 0; p < data.Length; p += channels)
+        {
+            data[p] = table[data[p]];
+            data[p + 1] = table[data[p + 1]];
+            data[p + 2] = table[data[p + 2]];
+        }
     }
 
     /// <summary>Rauschminderung (Wavelet), <paramref name="strength"/> 0–3 wie der Regler.</summary>

@@ -160,6 +160,11 @@ public partial class MainViewModel
         var keepView = _shownPath == CurrentPath && DocumentSize == new PixelSize(w, h);
         _shownPath = CurrentPath;
 
+        // Anderes Bild oder andere Größe: Die Vorschau des vorigen Stands passt nicht mehr —
+        // sofort das neue Bild zeigen, die Vorschau-Kette rechnet es gleich nach. Sonst stand
+        // beim Blättern das vorige Bild noch so lange da, wie die neue Vorschau brauchte.
+        if (!keepView) SetAdjusted(null);
+
         FullBitmap = bitmap;
         TrimDisplayCache();
         DocumentSize = new PixelSize(w, h);
@@ -281,6 +286,9 @@ public partial class MainViewModel
                 }
 
                 var result = await Task.Run(() => Render(job));
+                // Inzwischen ein anderes Bild gewählt: Ergebnis verwerfen, die Schleife
+                // rechnet ohnehin neu (RequestPreview hat _renderDirty gesetzt)
+                if (!ReferenceEquals(job.Doc, _history?.Current)) continue;
                 SetAdjusted(BitmapOps.FromBgra(result.Bgra, result.Width, result.Height));
             }
             while (_renderDirty);
