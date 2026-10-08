@@ -51,15 +51,25 @@ internal static class Dehaze
     /// <summary>Höchstzahl der Durchläufe.</summary>
     internal const int MaxPasses = 10;
 
-    // Schleife (Durchläufe > 1): Was die Regler je Durchlauf über die Tools-Kette bewirken, bei
-    // Reglerstand 100 % — die Vorgaben (Kontrast 12, Dynamik 25, Schärfe 60) ergeben dann je Runde
-    // Kontrast +8, Dynamik +8, feine Schärfe 0,3 wie die Laborschleife, die gefiel.
-    /// <summary>Tools-Kontrast je Durchlauf bei 100 %.</summary>
-    internal const double LoopContrast = 67;
-    /// <summary>Tools-Dynamik je Durchlauf bei 100 %.</summary>
-    internal const double LoopVibrance = 32;
+    /// <summary>Vorgabe der Durchläufe: Ein Durchlauf ist bewusst sacht, erst mehrere ergeben die Wirkung.</summary>
+    internal const int DefaultPasses = 3;
+
+    // Je Durchlauf, bei Dunst 100 und den Vorgaben der Feinregler: Was über die Tools-Kette dazukommt —
+    // sachte Schritte (0.4.43 war mit Dunst 40 · Kontrast +8 · Dynamik +8 je Runde viel zu kräftig).
+    /// <summary>Dunstmenge je Durchlauf bei Regler 100.</summary>
+    internal const double PassAmount = 0.3;
+    /// <summary>Tools-Kontrast je Durchlauf bei 100 % (Vorgabe 12 % → +4).</summary>
+    internal const double LoopContrast = 33;
+    /// <summary>Tools-Dynamik je Durchlauf bei 100 % (Vorgabe 25 % → +2); dazu wirkt die Dynamik im Dunstfilter selbst.</summary>
+    internal const double LoopVibrance = 8;
     /// <summary>Feine Unscharfmaskierung je Durchlauf bei 100 %.</summary>
-    internal const double LoopSharpen = 0.5;
+    internal const double LoopSharpen = 0.35;
+
+    /// <summary>Vorgabe Entstufen (Debanding) in Prozent.</summary>
+    internal const double DefaultDeband = 50;
+    /// <summary>Anteil des Entstufens an der Quelle (vor dem ersten Durchlauf): Ihre Stufen sind nur eine
+    /// 8-Bit-Stufe hoch, eine kleinere Schwelle genügt und schont feine Struktur.</summary>
+    internal const float SourceDebandShare = 0.6f;
     /// <summary>Gauß-Sigma der feinen Unscharfmaskierung in der Schleife.</summary>
     internal const double FineSigma = 0.7;
     /// <summary>Anteil des Kanten-Reglers je Durchlauf.</summary>
@@ -116,9 +126,14 @@ internal static class Dehaze
     /// <param name="share">Anteil der Wahrnehmung (Klarheit, Schärfe, Kurve, Dynamik) in diesem Durchlauf;
     /// die Schleife nimmt 1 in jeder Runde — wie das Auge: Kontrast und Farbe nach jeder Runde, die nächste
     /// schätzt den kontrastreicheren Stand neu. Nur am Schluss angewandt, brachten die Durchläufe fast nichts.</param>
-    internal static byte[] Apply(byte[] bgra, int width, int height, float amount, Pass? pass, Settings s, float share)
+    internal static byte[] Apply(byte[] bgra, int width, int height, float amount, Pass? pass, Settings s, float share) =>
+        Pixels.ToBytes(Apply(Pixels.FromBytes(bgra), width, height, amount, pass, s, share), dither: false);
+
+    /// <summary>Wie oben in Fließkomma (B, G, R, A je Pixel, sRGB-kodiert 0–1): Die Durchläufe runden so
+    /// nicht nach jedem Schritt auf 8 Bit — das gab Treppen im Himmel.</summary>
+    internal static float[] Apply(float[] bgra, int width, int height, float amount, Pass? pass, Settings s, float share)
     {
-        if (amount == 0) return (byte[])bgra.Clone();
+        if (amount == 0) return (float[])bgra.Clone();
         var strength = Math.Abs(amount);
         // Regler −100 … +300: bis 100 wie das physikalische Modell (Mischung Original → Ergebnis),
         // darüber wird die geschätzte Dunstmenge stufenlos bis aufs Dreifache verstärkt — das Modell
@@ -206,7 +221,7 @@ internal static class Dehaze
             baseL = GuidedColor.Coefficients(guide, l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 
-        var result = new byte[bgra.Length];
+        var result = new float[bgra.Length];
         Parallel.For(0, height, y =>
         {
             var sy = (y + 0.5f) / f - 0.5f;
@@ -217,8 +232,8 @@ internal static class Dehaze
                 var sx = (x + 0.5f) / f - 0.5f;
                 var i = p * 4;
                 AirAt(sx, sy, airHere);
-                float gB = bgra[i] / 255f, gG = bgra[i + 1] / 255f, gR = bgra[i + 2] / 255f;   // Führungsbild = Original
-                for (var c = 0; c < 3; c++) lin[c] = Srgb.ToLinear(bgra[i + c]);
+                float gB = bgra[i], gG = bgra[i + 1], gR = bgra[i + 2];   // Führungsbild = Original
+                for (var c = 0; c < 3; c++) lin[c] = Srgb.Decode(bgra[i + c]);
 
                 var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2], airHere);
                 var skyHere = At(sky, sw, sh, sx, sy, 0, 1);
@@ -268,9 +283,9 @@ internal static class Dehaze
                     ratio *= 1 + vibrance * land * (1 - Math.Min(1, chroma / VibranceFull));   // nicht im Himmel, auch nicht im Lichthof
 
                     var (sR, sG, sB) = Oklab.ToSrgb(L, was.A * ratio, was.B * ratio);
-                    result[i] = (byte)(sB * 255 + 0.5f);
-                    result[i + 1] = (byte)(sG * 255 + 0.5f);
-                    result[i + 2] = (byte)(sR * 255 + 0.5f);
+                    result[i] = sB;
+                    result[i + 1] = sG;
+                    result[i + 2] = sR;
                     result[i + 3] = bgra[i + 3];
                     continue;
                 }
@@ -283,9 +298,9 @@ internal static class Dehaze
                     oR = lin[2] + (airHere[2] - lin[2]) * add;
                 }
 
-                result[i] = Srgb.ToByte(oB);
-                result[i + 1] = Srgb.ToByte(oG);
-                result[i + 2] = Srgb.ToByte(oR);
+                result[i] = Srgb.Encode(oB);
+                result[i + 1] = Srgb.Encode(oG);
+                result[i + 2] = Srgb.Encode(oR);
                 result[i + 3] = bgra[i + 3];
             }
         });
@@ -296,12 +311,12 @@ internal static class Dehaze
     /// Feine Struktur an einem Pixel: Helligkeit (gamma-kodiert) minus 3×3-Binomialmittel —
     /// das, was eine leichte Unscharfmaskierung verstärkt.
     /// </summary>
-    private static float FineDetail(byte[] bgra, int w, int h, int x, int y)
+    private static float FineDetail(float[] bgra, int w, int h, int x, int y)
     {
         float Y(int xx, int yy)
         {
             var i = (Math.Clamp(yy, 0, h - 1) * w + Math.Clamp(xx, 0, w - 1)) * 4;
-            return (0.0722f * bgra[i] + 0.7152f * bgra[i + 1] + 0.2126f * bgra[i + 2]) / 255f;
+            return 0.0722f * bgra[i] + 0.7152f * bgra[i + 1] + 0.2126f * bgra[i + 2];
         }
         var blur = (4 * Y(x, y)
                     + 2 * (Y(x - 1, y) + Y(x + 1, y) + Y(x, y - 1) + Y(x, y + 1))
@@ -711,7 +726,7 @@ internal static class Dehaze
     /// Verkleinern direkt aus den 8-Bit-Pixeln: Flächenmittel über f × f Blöcke in linearem
     /// Licht (physikalisch richtig). Ergebnis B, G, R je Pixel.
     /// </summary>
-    private static (float[] Data, int W, int H) DownscaleLinear(byte[] bgra, int w, int h, int f)
+    private static (float[] Data, int W, int H) DownscaleLinear(float[] bgra, int w, int h, int f)
     {
         int sw = (w + f - 1) / f, sh = (h + f - 1) / f;
         var dst = new float[sw * sh * 3];
@@ -725,7 +740,7 @@ internal static class Dehaze
                 for (var x = sx * f; x < Math.Min(w, sx * f + f); x++)
                 {
                     var i = (y * w + x) * 4;
-                    b += Srgb.ToLinear(bgra[i]); g += Srgb.ToLinear(bgra[i + 1]); r += Srgb.ToLinear(bgra[i + 2]);
+                    b += Srgb.Decode(bgra[i]); g += Srgb.Decode(bgra[i + 1]); r += Srgb.Decode(bgra[i + 2]);
                     count++;
                 }
                 var o = (sy * sw + sx) * 3;
@@ -790,6 +805,23 @@ internal static class Srgb
     }).ToArray();
 
     public static float ToLinear(byte v) => ToLinearTable[v];
+
+    // Für die Fließkomma-Kette (Werte zwischen den 8-Bit-Stufen): feine Tabelle, linear interpoliert
+    private const int DecodeSize = 4096;
+    private static readonly float[] DecodeTable = Enumerable.Range(0, DecodeSize + 1).Select(i =>
+    {
+        var v = (double)i / DecodeSize;
+        return (float)(v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4));
+    }).ToArray();
+
+    /// <summary>sRGB-kodiert (0–1, Fließkomma) → linear.</summary>
+    public static float Decode(float v)
+    {
+        var x = Math.Clamp(v, 0, 1) * DecodeSize;
+        var i = (int)x;
+        if (i >= DecodeSize) return DecodeTable[DecodeSize];
+        return DecodeTable[i] + (DecodeTable[i + 1] - DecodeTable[i]) * (x - i);
+    }
 
     // Rückrichtung als Tabelle mit linearer Zwischenwertbildung — Panoramen haben 80 MP
     private const int EncodeSize = 8192;

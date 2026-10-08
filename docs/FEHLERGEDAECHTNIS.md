@@ -623,3 +623,22 @@ Test oder Nachweis.
   0.4.38 pixelweise schonte; die Grenze liegt damit im eigenen Verlauf des
   Himmels und ist unsichtbar. Messung danach: 1× = Original bis r 120, bei
   r 200 ±16,6 statt 19,5; 3× ±10,7 (Labor ±11,3).
+- **Treppen im Himmel (0.4.43, 0.4.44-beta):** Ursache: Jeder Durchlauf und
+  jeder Schritt darin (Dunst → Tools-Kontrast/Dynamik → Unscharfmaskierung)
+  rundete auf 8 Bit, und der Kontrast spreizte die übrigen Stufen — bei 3
+  Durchläufen fehlten im Himmel der Turmlandschaft 18 % der Tonwerte (Original
+  0,4 %), sichtbar als Konturen. Eine „Beta 2“ mit der genauen Laborschleife
+  auf dem 0.4.40-Filter hatte dieselben Treppen (5–7 %) und gefiel auch sonst
+  nicht – verworfen. Abhilfe 0.4.44: die ganze Dunstkette in 32-Bit-Fließkomma
+  (`Pixels`), einmal am Schluss mit TPDF-Dither gerundet; dazu Entstufen
+  (`Deband`, f3kdb/libplacebo-Verfahren mit strengerem Kriterium: jede der vier
+  Proben unter der Schwelle) an der Quelle und nach jedem Durchlauf, vor der
+  Schärfe. Messung 100 × 3: 1,1 % ohne, 0,6 % mit Entstufen; Detail der Wiese
+  unverändert (1,36).
+- **Zu kräftig je Durchlauf (0.4.43):** Volle Stärke plus Kontrast +8 und
+  Dynamik +8 je Durchlauf — bei Dunst 60 waren schon 2 Durchläufe zu viel, die
+  Dynamik wirkte doppelt (im Filter und über die Tools). 0.4.44: je Durchlauf
+  Dunst 0,3 × Regler, Kontrast +4, Dynamik +2 bei den Vorgaben, 3 Durchläufe
+  als Vorgabe. 100 × 3 liegt zwischen 0.4.43 60 × 1 und 60 × 2 (Kontrast 62,1,
+  Buntheit Wiese 0,059). Die Tests für den einzelnen Schritt (bis 300, klares
+  Bild) laufen deshalb ausdrücklich mit einem Durchlauf.

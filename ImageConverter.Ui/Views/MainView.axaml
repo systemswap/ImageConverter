@@ -572,7 +572,7 @@
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Durchläufe'}" />
                                         <Slider Grid.Column="1" Minimum="1" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DehazePasses}"
-                                                ToolTip.Tip="{l:T 'Wie oft der Dunst nacheinander entfernt wird — wie das Auge: Ergebnis ansehen, wieder schätzen. Je Durchlauf wirken auch Kontrast, Dynamik und Schärfe aus dieser Gruppe mit ihrem Reglerwert; der nächste Durchlauf schätzt den kontrastreicheren Stand neu. Wo der Dunst weg ist, passiert nichts mehr; die Ferne wird klarer. 3 bis 4 sind meist gut, der Himmel bleibt ab dem zweiten unverändert.'}" />
+                                                ToolTip.Tip="{l:T 'Wie oft der Dunst nacheinander entfernt wird — wie das Auge: Ergebnis ansehen, wieder schätzen. Jeder Durchlauf ist ein sachter Schritt mit Kontrast, Dynamik und Schärfe aus dieser Gruppe; der nächste schätzt den klareren Stand neu. Mehr Durchläufe wirken kräftiger. Vorgabe 3; der Himmel bleibt ab dem zweiten unverändert.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazePassesLabel}" />
                                     </Grid>
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
@@ -602,7 +602,7 @@
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Kanten'}" />
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding DehazeEdge}"
-                                                ToolTip.Tip="{l:T 'Kantenschärfe mit größerem Radius (2 Pixel), nach allen Durchläufen. Vorgabe aus — erst, wenn die feine Schärfe nicht reicht.'}" />
+                                                ToolTip.Tip="{l:T 'Kantenschärfe mit größerem Radius (2 Pixel), je Durchlauf. Vorgabe aus — erst, wenn die feine Schärfe nicht reicht.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeEdgeLabel}" />
                                     </Grid>
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
@@ -611,9 +611,15 @@
                                                 ToolTip.Tip="{l:T 'Wie weit die Helligkeit großräumig wieder ans Original angeglichen wird. 100: so hell wie vorher; 0: so dunkel, wie die Szene ohne Dunst wäre.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeBrightnessLabel}" />
                                     </Grid>
+                                    <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                        <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Entstufen'}" />
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding DehazeDeband}"
+                                                ToolTip.Tip="{l:T 'Glättet Treppen in weichen Verläufen wie dem Himmel (Debanding): am Original, bevor der Kontrast die 8-Bit-Stufen spreizt, und nach jedem Durchlauf. Kanten und Struktur bleiben. Gerechnet wird ohnehin in 32 Bit, auf 8 Bit gerundet erst am Schluss, mit feinem Korn.'}" />
+                                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeDebandLabel}" />
+                                    </Grid>
                                     <Button Classes="tool" HorizontalAlignment="Right" Content="{l:T 'Vorgaben'}"
                                             Command="{Binding ResetDehazeDetailsCommand}"
-                                            ToolTip.Tip="{l:T 'Feineinstellung zurück auf die Vorgaben (ein Durchlauf, Werte wie vor der Beta). Der Dunst-Regler bleibt.'}" />
+                                            ToolTip.Tip="{l:T 'Feineinstellung zurück auf die Vorgaben (3 Durchläufe). Der Dunst-Regler bleibt.'}" />
                                 </StackPanel>
                             </StackPanel>
                         </HeaderedContentControl>

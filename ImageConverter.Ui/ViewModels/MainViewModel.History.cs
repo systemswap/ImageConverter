@@ -41,7 +41,7 @@ public partial class MainViewModel
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight,   // Bildgröße, für die dieser Stand gilt
         double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
-        double DehazeSharpen, double DehazeEdge, double DehazeBrightness);
+        double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -76,6 +76,7 @@ public partial class MainViewModel
         [nameof(DehazeSharpen)] = "Schärfe fein",
         [nameof(DehazeEdge)] = "Kanten",
         [nameof(DehazeBrightness)] = "Helligkeit halten",
+        [nameof(DehazeDeband)] = "Entstufen",
         [nameof(Brightness)] = "Helligkeit",
         [nameof(Contrast)] = "Kontrast",
         [nameof(Shadows)] = "Tiefen",
@@ -216,7 +217,7 @@ public partial class MainViewModel
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
-        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness);
+        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -261,6 +262,7 @@ public partial class MainViewModel
                 DehazeSharpen = s.DehazeSharpen;
                 DehazeEdge = s.DehazeEdge;
                 DehazeBrightness = s.DehazeBrightness;
+                DehazeDeband = s.DehazeDeband;
                 Brightness = s.Brightness;
                 Contrast = s.Contrast;
                 Shadows = s.Shadows;

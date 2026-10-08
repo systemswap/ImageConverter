@@ -27,14 +27,15 @@ public sealed record Adjustments(
     double Neutralize = 0,
     double Warmth = 0,
     // Dunst, Feineinstellung (Beta): Durchläufe und die Wahrnehmungsanteile in Prozent.
-    // Die Vorgaben sind die Werte, die bis 0.4.40 fest eingebaut waren.
-    int DehazePasses = 1,
+    // Die Vorgaben sind die Werte, die bis 0.4.40 fest eingebaut waren; Entstufen (Debanding) seit 0.4.44.
+    int DehazePasses = Imaging.Dehaze.DefaultPasses,
     double DehazeClarity = Imaging.Dehaze.DefaultClarity,
     double DehazeContrast = Imaging.Dehaze.DefaultCurve,
     double DehazeVibrance = Imaging.Dehaze.DefaultVibrance,
     double DehazeSharpen = Imaging.Dehaze.DefaultSharpen,
     double DehazeEdge = 0,
-    double DehazeBrightness = Imaging.Dehaze.DefaultBrightness)
+    double DehazeBrightness = Imaging.Dehaze.DefaultBrightness,
+    double DehazeDeband = Imaging.Dehaze.DefaultDeband)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -50,8 +51,8 @@ public sealed record Adjustments(
         get
         {
             var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
-            return Dehaze == 0 ? n with { DehazePasses = 1, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
-                DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness } : n;
+            return Dehaze == 0 ? n with { DehazePasses = None.DehazePasses, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
+                DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness, DehazeDeband = None.DehazeDeband } : n;
         }
     }
 
@@ -61,7 +62,7 @@ public sealed record Adjustments(
         Shadows = Shadows, Highlights = Highlights, Dehaze = Normalized.Dehaze,
         DehazePasses = Normalized.DehazePasses, DehazeClarity = Normalized.DehazeClarity, DehazeContrast = Normalized.DehazeContrast,
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
-        DehazeBrightness = Normalized.DehazeBrightness,
+        DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband,
     };
 }
 
@@ -112,42 +113,86 @@ public static class Adjust
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
             // schätzen — wo er weg ist, findet die Schätzung nichts mehr, die Ferne wird weiter
             // klar. Luftlicht und Himmel stammen aus dem ersten Durchlauf, der Himmel bleibt danach
-            // unverändert (sonst körnig). Wahrnehmung (Klarheit, Kurve, Dynamik, Schärfe) und die
-            // Tools-Kurven wirken in jedem Durchlauf — das Laborrezept, das gefiel.
+            // unverändert (sonst körnig).
+            //
+            // Alles in 32-Bit-Fließkomma, gerundet wird einmal am Schluss (mit Dither): Mit 8 Bit
+            // zwischen den Schritten verlor jeder Durchlauf Zwischenstufen, und der Kontrast zog die
+            // übrigen auseinander — bei 3 Durchläufen Treppen im Himmel.
+            //
+            // Reihenfolge: Erst die Quelle entstufen (die 8-Bit-Stufen des JPEG werden zu Zwischenwerten,
+            // bevor der Kontrast sie spreizt), dann je Durchlauf Dunst → Kontrast/Dynamik → Entstufen →
+            // Schärfe. Schärfe zuletzt: Vor dem Entstufen hätte sie die Stufenkanten betont.
             var settings = new Dehaze.Settings(
                 (float)(a.DehazeClarity / 100), (float)(a.DehazeSharpen / 100), (float)(a.DehazeContrast / 100),
                 (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100));
-            var passes = dehaze > 0 ? Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses) : 1;
             var pass = new Dehaze.Pass();
-            var edge = Math.Clamp(a.DehazeEdge / 100, 0, 1) * Math.Min(1, Math.Abs(dehaze));
-            if (passes == 1)
+            var deband = (float)Math.Clamp(a.DehazeDeband / 100, 0, 1);
+            var px = Deband.Apply(Pixels.FromBytes(source), width, height, deband * Dehaze.SourceDebandShare, seed: 0);
+            if (dehaze < 0)
             {
-                source = Dehaze.Apply(source, width, height, dehaze, pass, settings, 1f);
-                if (edge > 0) source = Sharpen.UnsharpMask(source, width, height, edge, Dehaze.EdgeSigma);
+                px = Dehaze.Apply(px, width, height, dehaze, pass, settings, 1f);   // Dunst hinzufügen: ein Schritt
             }
             else
             {
-                // Je Durchlauf wie das Auge: Dunst weg, dann Kontrast, Dynamik und Schärfe auf das
-                // Ergebnis — die nächste Schätzung sieht den kontrastreicheren Stand. Das war der
-                // Unterschied zur Laborschleife, die gefiel: Nur am Schluss angewandt, brachten die
-                // Durchläufe fast nichts (Wiese hinten 93° / 0,058 statt 95° / 0,072).
-                // Kontrast und Dynamik über die Tools-Kurven (Kontrast, Dynamik), Schärfe fein und
-                // Kanten über Unscharfmaskierung; die Dunst-eigenen Anteile bleiben beim ersten Durchlauf.
-                var contrast = a.DehazeContrast / 100 * Dehaze.LoopContrast;
-                var vibrance = a.DehazeVibrance / 100 * Dehaze.LoopVibrance;
-                var fine = a.DehazeSharpen / 100 * Dehaze.LoopSharpen;
-                var loopEdge = edge * Dehaze.LoopEdgeShare;
-                var step = new Adjustments(Contrast: contrast, Vibrance: vibrance);
+                // Je Durchlauf ein sachter Schritt: Dunst weg, dann Kontrast, Dynamik und Schärfe auf das
+                // Ergebnis — der nächste Durchlauf schätzt den Rest neu. Mehr Durchläufe bauen darauf auf.
+                // Mit der vollen Stärke je Durchlauf (0.4.43) war schon bei 2 Durchläufen und Dunst 60
+                // Schluss, die Dynamik viel zu stark.
+                var passes = Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses);
+                var t = dehaze;   // 0 … 3: Reglerstand / 100
+                var contrast = a.DehazeContrast / 100 * Dehaze.LoopContrast * t;
+                var vibrance = a.DehazeVibrance / 100 * Dehaze.LoopVibrance * t;
+                var fine = a.DehazeSharpen / 100 * Dehaze.LoopSharpen * t;
+                var edge = Math.Clamp(a.DehazeEdge / 100, 0, 1) * Dehaze.LoopEdgeShare * t;
                 for (var i = 0; i < passes; i++)
                 {
-                    source = Dehaze.Apply(source, width, height, dehaze, pass, settings, 1f);   // Wahrnehmung jede Runde, wie das Labor
-                    if (!step.IsNone) source = Apply(new Prepared(source, null), width, height, step);
-                    if (fine > 0) source = Sharpen.UnsharpMask(source, width, height, fine, Dehaze.FineSigma);
-                    if (loopEdge > 0) source = Sharpen.UnsharpMask(source, width, height, loopEdge, Dehaze.EdgeSigma);
+                    px = Dehaze.Apply(px, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f);
+                    ContrastVibrance(px, width, height, contrast / 100, vibrance / 100);
+                    px = Deband.Apply(px, width, height, deband, seed: (uint)i + 1);
+                    if (fine > 0) px = Sharpen.UnsharpMask(px, width, height, fine, Dehaze.FineSigma);
+                    if (edge > 0) px = Sharpen.UnsharpMask(px, width, height, edge, Dehaze.EdgeSigma);
                 }
             }
+            source = Pixels.ToBytes(px, dither: true);
         }
         return new Prepared(source, ToneMap(source, width, height, a));
+    }
+
+    /// <summary>
+    /// Kontrast (S-Kurve je Kanal) und Dynamik wie die Regler dieser Kachel, aber auf Fließkomma-Pixeln
+    /// und an Ort und Stelle — der Schritt der Dunst-Durchläufe.
+    /// </summary>
+    /// <param name="contrast">−1 … 1 wie Regler / 100.</param>
+    /// <param name="vibrance">−1 … 1 wie Regler / 100.</param>
+    private static void ContrastVibrance(float[] px, int width, int height, double contrast, double vibrance)
+    {
+        if (contrast == 0 && vibrance == 0) return;
+        var curve = contrast != 0 ? ToneCurve(0, contrast) : null;
+        var vib = (float)Math.Clamp(vibrance, -1, 1);
+        Parallel.For(0, height, y =>
+        {
+            for (int x = 0, p = y * width; x < width; x++, p++)
+            {
+                var i = p * 4;
+                float b = px[i], g = px[i + 1], r = px[i + 2];
+                if (curve is not null) { r = Lookup(curve, r); g = Lookup(curve, g); b = Lookup(curve, b); }
+                if (vib != 0)
+                {
+                    var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
+                    (r, g, b) = Oklab.ScaleChroma(L, oa, ob, VibranceFactor(L, oa, ob, vib));
+                }
+                px[i] = b; px[i + 1] = g; px[i + 2] = r;
+            }
+        });
+    }
+
+    /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>
+    private static float Lookup(float[] curve, float v)
+    {
+        var x = Math.Clamp(v, 0, 1) * (CurveSize - 1);
+        var i = (int)x;
+        if (i >= CurveSize - 1) return curve[CurveSize - 1];
+        return curve[i] + (curve[i + 1] - curve[i]) * (x - i);
     }
 
     private static float[]? ToneMap(byte[] bgra, int width, int height, Adjustments a)

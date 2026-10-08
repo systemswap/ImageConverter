@@ -61,4 +61,38 @@ public static class Sharpen
 
         return result;
     }
+
+    /// <summary>Wie oben auf Fließkomma-Pixeln (sRGB-kodiert 0–1), ohne Rundung — für die Dunst-Durchläufe.</summary>
+    internal static float[] UnsharpMask(float[] px, int width, int height,
+        double amount, double sigma, double threshold = 2)
+    {
+        var result = (float[])px.Clone();
+        if (amount <= 0.001 || sigma <= 0.05) return result;
+
+        var pixels = width * height;
+        var blur = new float[pixels * 3];
+        Parallel.For(0, pixels, p =>
+        {
+            blur[p * 3] = px[p * 4];
+            blur[p * 3 + 1] = px[p * 4 + 1];
+            blur[p * 3 + 2] = px[p * 4 + 2];
+        });
+
+        Blur.Gauss(blur, width, height, sigma, channels: 3);
+
+        var amt = (float)amount;
+        var thr = (float)threshold / 255;
+        Parallel.For(0, pixels, p =>
+        {
+            for (var c = 0; c < 3; c++)
+            {
+                var original = px[p * 4 + c];
+                var diff = original - blur[p * 3 + c];
+                if (MathF.Abs(diff) < thr) continue;
+                result[p * 4 + c] = Math.Clamp(original + amt * diff, 0, 1);
+            }
+        });
+
+        return result;
+    }
 }

@@ -104,12 +104,12 @@ public class DehazeTests
         var scene = Scene();
         for (var i = SkyRows * W * 3; i < scene.Length; i++) scene[i] = 0.15f + 0.6f * scene[i];
         var hazy = Haze(scene, 0.6f, Air);
-        var at100 = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100));
+        var at100 = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100, DehazePasses: 1));
 
         var previous = Contrast(at100);
         foreach (var amount in new[] { 150, 200, 250, 300 })
         {
-            var result = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: amount));
+            var result = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: amount, DehazePasses: 1));
             var contrast = Contrast(result);
             Assert.True(contrast > previous, $"Kontrast bei {amount}: {contrast:F1}, davor {previous:F1}");
             Assert.True(contrast < previous * 1.5, $"Sprung bei {amount}: {previous:F1} → {contrast:F1}");
@@ -133,7 +133,7 @@ public class DehazeTests
     public void ClearImage_GetsOnlyModeratelyCrisper()
     {
         var clear = Haze(Scene(), 1, 0);
-        var result = Adjust.Apply(clear, W, H, new Adjustments(Dehaze: 100));
+        var result = Adjust.Apply(clear, W, H, new Adjustments(Dehaze: 100, DehazePasses: 1));
         Assert.InRange(Contrast(result) / Contrast(clear), 0.95, 1.3);
         Assert.InRange(Mean(result) / Mean(clear), 0.9, 1.1);
     }
@@ -179,7 +179,7 @@ public class DehazeTests
     public void Passes_RemoveMoreHaze_AndDetailsOnlyCountWithDehaze()
     {
         var hazy = Haze(Scene(), 0.5f, Air);
-        var once = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 40));
+        var once = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 40, DehazePasses: 1));
         var thrice = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 40, DehazePasses: 3));
         Assert.True(Contrast(thrice) > Contrast(once) * 1.1, $"Kontrast 1×: {Contrast(once):F1}, 3×: {Contrast(thrice):F1}");
         Assert.InRange(Mean(thrice) / Mean(hazy), 0.6, 1.05);
@@ -188,6 +188,45 @@ public class DehazeTests
         Assert.False(new Adjustments(Dehaze: 10, DehazePasses: 5).IsNone);
         Assert.Equal(new Adjustments(Dehaze: 10, Brightness: 30).PrepareKey, new Adjustments(Dehaze: 10, Contrast: -20).PrepareKey);
         Assert.NotEqual(new Adjustments(Dehaze: 10).PrepareKey, new Adjustments(Dehaze: 10, DehazePasses: 2).PrepareKey);
+    }
+
+    /// <summary>
+    /// Treppen (0.4.43: bei 3 Durchläufen im Himmel): Ein weicher 8-Bit-Verlauf bleibt nach mehreren
+    /// Durchläufen weich — gerechnet in Fließkomma, entstuft, am Schluss mit Dither gerundet. Gemessen
+    /// am Zeilenmittel: Der größte Sprung von Zeile zu Zeile gegenüber dem mittleren Anstieg.
+    /// </summary>
+    [Fact]
+    public void Passes_KeepSkyGradientSmooth()
+    {
+        const int w = 200, h = 400;
+        var sky = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var i = (y * w + x) * 4;
+            var v = (double)y / (h - 1);
+            (sky[i], sky[i + 1], sky[i + 2], sky[i + 3]) =
+                ((byte)Math.Round(235 - 60 * v), (byte)Math.Round(200 - 50 * v), (byte)Math.Round(165 - 40 * v), 255);
+        }
+
+        double Steps(byte[] px)
+        {
+            var rows = new double[h];
+            for (var y = 0; y < h; y++)
+            {
+                double s = 0;
+                for (var x = 0; x < w; x++) s += px[(y * w + x) * 4 + 1];
+                rows[y] = s / w;
+            }
+            double worst = 0;
+            for (var y = 21; y < h - 20; y++) worst = Math.Max(worst, Math.Abs(rows[y] - rows[y - 1]));
+            return worst / (Math.Abs(rows[h - 21] - rows[20]) / (h - 41));
+        }
+
+        var plain = Steps(Adjust.Apply(sky, w, h, new Adjustments(Dehaze: 100, DehazePasses: 3, DehazeDeband: 0)));
+        var debanded = Steps(Adjust.Apply(sky, w, h, new Adjustments(Dehaze: 100, DehazePasses: 3)));
+        Assert.True(debanded < plain, $"Sprung/Anstieg ohne Entstufen {plain:F1}, mit {debanded:F1}");
+        Assert.True(debanded < 4, $"Sprung/Anstieg mit Entstufen {debanded:F1} (Original {Steps(sky):F1})");
     }
 
     [Fact]
