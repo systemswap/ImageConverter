@@ -557,8 +557,9 @@
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <!-- Dunst mit Feineinstellung (Beta): Die Feinregler erscheinen erst, wenn Dunst
-                             entfernt wird; ihre Vorgaben sind die bis 0.4.40 fest eingebauten Werte. -->
+                        <!-- Dunst mit Feineinstellung (Beta): Die Feinregler wirken nur, wenn Dunst
+                             entfernt wird; ihre Vorgaben sind die bis 0.4.40 fest eingebauten Werte.
+                             Der ganze Block rechnet bei jeder Reglerbewegung vom Original neu. -->
                         <HeaderedContentControl Header="{l:T 'DUNST · BETA'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
@@ -567,7 +568,7 @@
                                             ToolTip.Tip="{l:T 'Rechts: Dunst und Nebel entfernen — ferne Berge, Stadt im Smog, Aufnahmen durchs Fenster bekommen wieder Kontrast und Farbe. Bis 100 so viel, wie physikalisch geschätzt wird, darüber kräftiger (bis 300). Links: Dunst hinzufügen, für eine weiche Stimmung.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeLabel}" />
                                 </Grid>
-                                <StackPanel IsVisible="{Binding HasDehaze}">
+                                <StackPanel>
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Durchläufe'}" />
                                         <Slider Grid.Column="1" Minimum="1" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DehazePasses}"

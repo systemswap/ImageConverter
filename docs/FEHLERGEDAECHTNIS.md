@@ -578,3 +578,12 @@ Test oder Nachweis.
   `MainView.axaml` (Gruppe „DUNST · BETA“), `MainWindow.axaml.cs` (Titel).
 - **Test:** `DehazeTests.Passes_RemoveMoreHaze_AndDetailsOnlyCountWithDehaze`.
   Vergleichsbilder: `%LOCALAPPDATA%\imageconverter-build\vergleich`.
+- **Nachtrag 0.4.42-beta (Ring um die Sonne):** Gemessen entlang einer Linie
+  durch die Sonne: Die Himmelskarte war im Lichthof 0 (Strahlen = Struktur),
+  der Hof galt als Landschaft mit roher Durchlässigkeit 0,2–0,6; die
+  Pixelregeln der Toleranz verdoppelten dort die Buntheit (0,023 → 0,045) —
+  der pinke Ring. Abhilfe: Lichtquelle mit Hof zählt als Himmel (ausgefressene
+  Pixel, Gauß σ 5 % der Kante, ab 1 %); im Himmel gelten nur die Grenzen, nicht
+  die Pixelregeln; im Himmel keine zusätzliche Buntheit und keine Dynamik.
+  Feinregler immer sichtbar (Wunsch). Der Block rechnet bei jeder
+  Reglerbewegung vom Original — nichts kumuliert.

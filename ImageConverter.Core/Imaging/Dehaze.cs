@@ -137,9 +137,10 @@ internal static class Dehaze
         // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
         float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r, float[] a)
         {
-            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0);
+            var landHere = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
+            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere);
             if (boosted == null) return tt;
-            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0);
+            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere);
             return Math.Min(tt, strongT);
         }
 
@@ -223,18 +224,20 @@ internal static class Dehaze
                     var now = Oklab.FromLinear(Math.Max(0, oR), Math.Max(0, oG), Math.Max(0, oB));
                     var c0 = MathF.Sqrt(was.A * was.A + was.B * was.B);
                     var c1 = MathF.Sqrt(now.A * now.A + now.B * now.B);
-                    var chromaCap = 1 + mix * (1 / tt - 1) + strength * ChromaPerUnit;   // tt ist über 100 schon verstärkt
+                    // Im Himmel keine zusätzliche Buntheit: Die Rückrechnung machte den Himmel blauer,
+                    // der Lichthof der Sonne (dunstfarben, bleibt stehen) wirkte dann als pinker Ring.
+                    var land = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
+                    var chromaCap = 1 + land * (mix * (1 / tt - 1) + strength * ChromaPerUnit);   // tt ist über 100 schon verstärkt
                     var ratio = c0 > 1e-3f ? Math.Min(c1 / c0, chromaCap) : 1;
 
                     // Klarheit, Schärfe, Kurve (auf der Helligkeit), Dynamik (auf der Buntheit)
-                    var land = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
                     var L = now.L
                           + clarity * land * (was.L - Sample(baseL, sw, sh, sx, sy, gB, gG, gR))
                           + sharpen * land * FineDetail(bgra, width, height, x, y);
                     L = Math.Clamp(L, 0, 1);
                     L -= curve * MathF.Sin(2 * MathF.PI * L) / (2 * MathF.PI);
                     var chroma = c0 * ratio;
-                    ratio *= 1 + vibrance * (1 - Math.Min(1, chroma / VibranceFull));
+                    ratio *= 1 + vibrance * land * (1 - Math.Min(1, chroma / VibranceFull));   // nicht im Himmel: Lichthof wurde pinker
 
                     var (sR, sG, sB) = Oklab.ToSrgb(L, was.A * ratio, was.B * ratio);
                     result[i] = (byte)(sB * 255 + 0.5f);
@@ -290,10 +293,17 @@ internal static class Dehaze
     /// Toleranz: Was dem Luftlicht sehr ähnlich ist (Himmel am Horizont, weiße Wände), gilt
     /// nicht als dichter Dunst — sonst Farbstiche und Rauschen. Dazu die Grenzen je Kanal.
     /// </summary>
-    /// <param name="air">Luftlicht je Spalte (B, G, R), <paramref name="o"/> = Beginn der Spalte.</param>
-    private static float Tolerate(float t, float b, float g, float r, float[] air, int o)
+    /// <param name="air">Luftlicht (B, G, R), <paramref name="o"/> = Beginn des Tripels.</param>
+    /// <param name="land">1 = Landschaft, 0 = Himmel. Im Himmel gelten nur die Grenzen, nicht die
+    /// Pixelregeln: Der Lichthof der Sonne hat die Farbe des Dunstes und wurde geschont, der Himmel
+    /// daneben wurde blauer — ein eingefärbter Ring um die Sonne. Im Himmel gibt es keine Kanten,
+    /// die glatte Karte reicht.</param>
+    private static float Tolerate(float t, float b, float g, float r, float[] air, int o, float land = 1)
     {
         float aB = air[o], aG = air[o + 1], aR = air[o + 2];
+        var smooth = Math.Max(t, Math.Max(Keep(b, aB, 0), Math.Max(Keep(g, aG, 0), Keep(r, aR, 0))));
+        if (land <= 0) return Math.Clamp(smooth, MinTransmission, 1);
+
         var dist = Math.Max(Math.Abs(b - aB), Math.Max(Math.Abs(g - aG), Math.Abs(r - aR)));
         if (dist < Tolerance) t = Math.Min(1, t * Tolerance / Math.Max(dist, 1e-4f));
         t = Math.Max(t, Math.Max(Keep(b, aB, 0), Math.Max(Keep(g, aG, 0), Keep(r, aR, 0))));
@@ -306,7 +316,7 @@ internal static class Dehaze
         t += (1 - t) * SmoothStep(1.05f, 1.2f, over);
         // Fast weiß (an der Grenze der Aufnahme): Sonne, Lichter, Spitzlichter — nie Dunst
         t += (1 - t) * SmoothStep(0.85f, 0.97f, Luma(b, g, r));
-        return Math.Clamp(t, MinTransmission, 1);
+        return Math.Clamp(smooth + (t - smooth) * land, MinTransmission, 1);
     }
 
     /// <summary>Anteil, den jeder Farbkanal bei verstärktem Regler (über 100) mindestens behält.</summary>
@@ -587,16 +597,29 @@ internal static class Dehaze
         Blur.Gauss(band, w, h, sigma);
         Blur.Gauss(mean, w, h, sigma);
 
+        // Lichtquelle mit Hof: Was um ausgefressene Pixel (Sonne, Lampe) herum liegt, ist Licht,
+        // kein Dunst — die Strahlen gelten sonst als Struktur, der Hof als Landschaft: Die
+        // Pixelregeln verdoppelten dort die Buntheit (gemessen 0,023 → 0,045), ein pinker Ring.
+        var hot = new float[l.Length];
+        for (var i = 0; i < hot.Length; i++) hot[i] = l[i] > HotLuma ? 1 : 0;
+        Blur.Gauss(hot, w, h, Math.Max(2.0, HaloPerEdge * edge));
+
         var sky = new float[l.Length];
         for (var i = 0; i < sky.Length; i++)
         {
             var structure = band[i] / Math.Max(mean[i], 1e-3f);
             var smooth = 1 - SmoothStep(0.008f, 0.02f, structure);
             var bright = SmoothStep(0.03f, 0.1f, l[i]);   // dunkle glatte Schatten sind kein Himmel
-            sky[i] = bright * smooth;
+            sky[i] = Math.Max(bright * smooth, SmoothStep(0.01f, 0.05f, hot[i]));
         }
         return sky;
     }
+
+    /// <summary>Ab dieser Helligkeit (linear) ist ein Pixel Lichtquelle (ausgefressen).</summary>
+    private const float HotLuma = 0.95f;
+
+    /// <summary>Reichweite des Lichthofs um eine Lichtquelle (Gauß-Sigma), relativ zur längsten Kante.</summary>
+    private const double HaloPerEdge = 0.05;
 
     /// <summary>Anteil, um den der Himmel geschützt wird (1 = gar nicht verändert).</summary>
     private const float SkyProtection = 0.85f;
