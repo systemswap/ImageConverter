@@ -529,3 +529,14 @@ Test oder Nachweis.
 - **Wo:** `Dehaze.cs` (`SkyMap`, `ReachFromTop`, `AirLightOf`, `Apply`).
 - **Test:** DehazeTests, Sichtprüfung an 4 Bildern (Sonne, Wolken, Smog, Äste).
   Rechenzeit 78 MP: 6–7 s (vorher 4 s).
+- **Zurückgenommen in 0.4.40:** Der Benutzer fand 0.4.39 „deutlich schlechter“
+  als 0.4.38 – zu Recht: Die Ferne wurde ein dunkles graubraunes Band
+  (Turmlandschaft), das Tal kippte ins Türkis (Panorama), das Bild wurde dunkler.
+  Ursache: Das Laborziel (klarer Vordergrund als „Wahrheit“, Luftperspektive
+  null) ist nicht das Sehziel. Ein Foto soll die Belichtung behalten und die
+  Ferne weich lassen; der Farbton aus der Rückrechnung ist in dichtem Dunst
+  Zufall (Luftlicht abgezogen → Blaugrün). `Dehaze.cs` und `DehazeTests.cs`
+  wieder auf 0.4.38 (`2ded64c`); Messumgebung bleibt als Werkzeug, aber mit
+  Sichtprüfung als Maß, nicht ΔE gegen die künstliche Wahrheit.
+- **Lehre:** Jede Laborverbesserung erst am echten Bild gegen den letzten
+  Stand ansehen (`cropstack`), dann erst übernehmen.
