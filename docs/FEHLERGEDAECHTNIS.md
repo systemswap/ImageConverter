@@ -664,3 +664,18 @@ Test oder Nachweis.
   Lückenmaß „Treppen“ falsche Verschlechterungen. Dieses Maß ist mit Dither
   ohnehin unzuverlässig (Dither füllt Lücken) — geurteilt wird über die
   Stufenhöhe. Ergebnis gegen 0.4.45: mittleres ΔE ≤ 0,38, alle Messwerte ≈.
+- **Phase 2, Speicher und Tempo (0.4.50 beta):** Gemessen (Panorama 28,7 MP, je
+  Fall frischer Prozess ohne Aufwärmlauf — ein Aufwärmlauf ließ Puffer im Pool
+  liegen und verfälschte die Spitze): Dunst 100 × 3 19,5 s / 6,4 GB → 13,9 s /
+  3,7 GB; Kombi 25,1 / 7,7 → 18,4 / 5,2. Maßnahmen: `PixelPool` (Rückgabe nur
+  eigener Zwischenstände, nie des Eingangs — Test `PooledBuffers_NeverTouchTheInput`;
+  höchstens 2 freie je Größe: mit 1 stieg die Spitze, weil weggeworfene Puffer
+  neu angelegt wurden), Local Laplacian ohne neue Vollbilder je Umgebungswert,
+  Entstufen mit Richtungstabelle statt sin/cos je Pixel und in Kacheln,
+  Dunst-Auslesen über `Cell` (Lage einmal je Pixel statt je Karte), 16 Bit von/zu
+  Magick in Streifen, `PixelPool.Trim(release)` nach dem Export. Vorschau bricht
+  zwischen zwei Schritten ab (`WorkPlan` mit CancellationToken) und zeigt den
+  Schritt. Wirkungslos: Exponentialfunktion im Local Laplacian als Tabelle
+  (Speicherzugriff bremst, nicht die Rechnung), Helligkeitsebene für die feine
+  Schärfe. Offen: Local Laplacian (6 s bei 28 MP), Farbumrechnung je Pixel im
+  Dunst (1,8 s je Durchlauf), Entstufen (1 s je Aufruf, Speicherlatenz).

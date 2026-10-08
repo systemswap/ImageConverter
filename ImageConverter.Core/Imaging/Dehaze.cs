@@ -161,20 +161,19 @@ internal static class Dehaze
         var strong = boosted == null ? default : GuidedColor.Coefficients(guide, boosted, sw, sh, refine, eps: 1e-3f);
 
         // Luftlicht an einer Stelle des großen Bildes: bilinear aus dem Feld der kleinen Fassung
-        void AirAt(float sx, float sy, float[] into)
+        void AirAt(in Cell cell, float[] into)
         {
-            for (var c = 0; c < 3; c++) into[c] = At(air, sw, sh, sx, sy, c);
+            for (var c = 0; c < 3; c++) into[c] = cell.Of(air, c);
         }
 
         // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
-        float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r, float[] a)
+        float TransmitAt(in Cell cell, float skyAt, float gB, float gG, float gR, float b, float g, float r, float[] a)
         {
-            var skyAt = At(sky, sw, sh, sx, sy, 0, 1);
             var landHere = 1 - Math.Clamp(skyAt, 0, 1);   // über 1 = Lichthof, zählt als Himmel
             var haloHere = Math.Clamp(skyAt - 1, 0, 1);
-            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere);
+            var tt = Tolerate(Math.Clamp(cell.Sample(plain, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere);
             if (boosted != null)
-                tt = Math.Min(tt, Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere));
+                tt = Math.Min(tt, Tolerate(Math.Clamp(cell.Sample(strong, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere));
             // Lichthof der Sonne: Licht, kein Dunst — nichts zurückrechnen. 0.4.38 erreichte das über die
             // Regel „heller als das Luftlicht“; ohne sie hellte die Rückrechnung den Hof auf, die
             // Strahlen liefen ins Weiß (Schwankung bei r 120: ±8,5 statt ±11,3 im Labor).
@@ -191,7 +190,8 @@ internal static class Dehaze
             {
                 var o = p * 3;
                 a3[0] = air[o]; a3[1] = air[o + 1]; a3[2] = air[o + 2];
-                var tt = TransmitAt(p % sw, p / sw, guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
+                var cell = new Cell(sw, sh, p % sw, p / sw);
+                var tt = TransmitAt(cell, sky[p], guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
                     small[p * 3], small[p * 3 + 1], small[p * 3 + 2], a3);
                 for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[o + c], tt, mix);
             }
@@ -221,7 +221,8 @@ internal static class Dehaze
             baseL = GuidedColor.Coefficients(guide, l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 
-        var result = new float[bgra.Length];
+        var luma = amount > 0 && sharpen > 0 ? LumaPlane(bgra, width, height) : null;
+        var result = PixelPool.Rent(bgra.Length);   // jedes Pixel wird unten vollständig geschrieben
         Parallel.For(0, height, y =>
         {
             var sy = (y + 0.5f) / f - 0.5f;
@@ -231,12 +232,13 @@ internal static class Dehaze
             {
                 var sx = (x + 0.5f) / f - 0.5f;
                 var i = p * 4;
-                AirAt(sx, sy, airHere);
+                var cell = new Cell(sw, sh, sx, sy);   // Lage in der kleinen Fassung — einmal für alle Karten
+                AirAt(cell, airHere);
                 float gB = bgra[i], gG = bgra[i + 1], gR = bgra[i + 2];   // Führungsbild = Original
                 for (var c = 0; c < 3; c++) lin[c] = Srgb.Decode(bgra[i + c]);
 
-                var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2], airHere);
-                var skyHere = At(sky, sw, sh, sx, sy, 0, 1);
+                var skyHere = cell.Of(sky, 0, 1);
+                var tt = TransmitAt(cell, skyHere, gB, gG, gR, lin[0], lin[1], lin[2], airHere);
                 var land = 1 - Math.Clamp(skyHere, 0, 1);
                 var halo = Math.Clamp(skyHere - 1, 0, 1);   // Lichthof der Sonne (Himmel über 1)
 
@@ -249,7 +251,7 @@ internal static class Dehaze
 
                     // Helligkeit großräumig ans Original — aber nie heller als das Original
                     // (sonst heller Streifen über dem Horizont)
-                    var g = MathF.Exp(Math.Clamp(Sample(gain, sw, sh, sx, sy, gB, gG, gR), -0.7f, 1.1f) * k);
+                    var g = MathF.Exp(Math.Clamp(cell.Sample(gain, gB, gG, gR), -0.7f, 1.1f) * k);
                     if (g > 1)
                     {
                         var before = Luma(lin[0], lin[1], lin[2]);
@@ -274,8 +276,8 @@ internal static class Dehaze
 
                     // Klarheit, Schärfe, Kurve (auf der Helligkeit), Dynamik (auf der Buntheit)
                     var L = now.L
-                          + clarity * land * (was.L - Sample(baseL, sw, sh, sx, sy, gB, gG, gR))
-                          + sharpen * land * FineDetail(bgra, width, height, x, y);
+                          + clarity * land * (was.L - cell.Sample(baseL, gB, gG, gR))
+                          + (luma is null ? 0 : sharpen * land * FineDetail(luma, width, height, x, y));
                     L = Math.Clamp(L, 0, 1);
                     // Kurve nicht im Lichthof: Ihre Schulter staucht die Strahlen (gemessen −11 % Schwankung)
                     L -= curve * (1 - halo) * MathF.Sin(2 * MathF.PI * L) / (2 * MathF.PI);
@@ -304,33 +306,72 @@ internal static class Dehaze
                 result[i + 3] = bgra[i + 3];
             }
         });
+        PixelPool.Return(luma);
         return result;
     }
 
     /// <summary>
     /// Feine Struktur an einem Pixel: Helligkeit (gamma-kodiert) minus 3×3-Binomialmittel —
-    /// das, was eine leichte Unscharfmaskierung verstärkt.
+    /// das, was eine leichte Unscharfmaskierung verstärkt. Aus der vorab gerechneten Helligkeitsebene
+    /// (vorher je Pixel neun Nachbarn mit je drei Kanälen).
     /// </summary>
-    private static float FineDetail(float[] bgra, int w, int h, int x, int y)
+    private static float FineDetail(float[] luma, int w, int h, int x, int y)
     {
-        float Y(int xx, int yy)
-        {
-            var i = (Math.Clamp(yy, 0, h - 1) * w + Math.Clamp(xx, 0, w - 1)) * 4;
-            return 0.0722f * bgra[i] + 0.7152f * bgra[i + 1] + 0.2126f * bgra[i + 2];
-        }
+        float Y(int xx, int yy) => luma[Math.Clamp(yy, 0, h - 1) * w + Math.Clamp(xx, 0, w - 1)];
         var blur = (4 * Y(x, y)
                     + 2 * (Y(x - 1, y) + Y(x + 1, y) + Y(x, y - 1) + Y(x, y + 1))
                     + Y(x - 1, y - 1) + Y(x + 1, y - 1) + Y(x - 1, y + 1) + Y(x + 1, y + 1)) / 16;
         return Y(x, y) - blur;
     }
 
+    /// <summary>Helligkeit (gamma-kodiert, Rec. 709) je Pixel, für <see cref="FineDetail"/>; Puffer aus dem Pool.</summary>
+    private static float[] LumaPlane(float[] bgra, int w, int h)
+    {
+        var luma = PixelPool.Rent(w * h);
+        Parallel.For(0, h, y =>
+        {
+            for (int x = 0, p = y * w; x < w; x++, p++)
+                luma[p] = 0.0722f * bgra[p * 4] + 0.7152f * bgra[p * 4 + 1] + 0.2126f * bgra[p * 4 + 2];
+        });
+        return luma;
+    }
+
     /// <summary>Szene zurückrechnen, mit der Stärke zwischen Original und voller Wirkung.</summary>
     private static float Recover(float v, float air, float t, float strength) =>
         v + ((v - air) / t + air - v) * strength;
 
-    /// <summary>Lineares Modell des Guided Filters an einer Stelle: aᵀ·I + b (bilinear aus der kleinen Fassung).</summary>
-    private static float Sample((float[] A, float[] B) m, int sw, int sh, float x, float y, float gB, float gG, float gR) =>
-        At(m.A, sw, sh, x, y, 0) * gB + At(m.A, sw, sh, x, y, 1) * gG + At(m.A, sw, sh, x, y, 2) * gR + At(m.B, sw, sh, x, y, 0, 1);
+    /// <summary>
+    /// Lage einer Stelle im Raster der kleinen Fassung: die vier Nachbarn und ihre Gewichte (bilinear).
+    /// Einmal je Pixel bestimmt und für alle Karten benutzt — vorher rechnete jedes der rund 24
+    /// Auslesen je Pixel die Lage neu (Klemmen, Runden, Indizes); das war ein Großteil der Zeit des Dunsts.
+    /// </summary>
+    private readonly struct Cell
+    {
+        private readonly int _i00, _i01, _i10, _i11;
+        private readonly float _fx, _fy;
+
+        public Cell(int w, int h, float x, float y)
+        {
+            x = Math.Clamp(x, 0, w - 1);
+            y = Math.Clamp(y, 0, h - 1);
+            int x0 = (int)x, y0 = (int)y;
+            int x1 = Math.Min(x0 + 1, w - 1), y1 = Math.Min(y0 + 1, h - 1);
+            (_fx, _fy) = (x - x0, y - y0);
+            (_i00, _i01, _i10, _i11) = (y0 * w + x0, y0 * w + x1, y1 * w + x0, y1 * w + x1);
+        }
+
+        /// <summary>Kanal <paramref name="c"/> einer Ebene mit <paramref name="ch"/> Kanälen.</summary>
+        public float Of(float[] data, int c, int ch = 3)
+        {
+            var top = data[_i00 * ch + c] * (1 - _fx) + data[_i01 * ch + c] * _fx;
+            var bottom = data[_i10 * ch + c] * (1 - _fx) + data[_i11 * ch + c] * _fx;
+            return top * (1 - _fy) + bottom * _fy;
+        }
+
+        /// <summary>Lineares Modell des Guided Filters an dieser Stelle: aᵀ·I + b.</summary>
+        public float Sample((float[] A, float[] B) m, float gB, float gG, float gR) =>
+            Of(m.A, 0) * gB + Of(m.A, 1) * gG + Of(m.A, 2) * gR + Of(m.B, 0, 1);
+    }
 
     /// <summary>
     /// Toleranz: Was dem Luftlicht sehr ähnlich ist (Himmel am Horizont, weiße Wände), gilt
@@ -751,19 +792,6 @@ internal static class Dehaze
     }
 
     private static float Luma(float b, float g, float r) => 0.0722f * b + 0.7152f * g + 0.2126f * r;
-
-    /// <summary>Bilinear aus einer Ebene mit <paramref name="ch"/> Kanälen, Kanal <paramref name="c"/>.</summary>
-    private static float At(float[] data, int w, int h, float x, float y, int c, int ch = 3)
-    {
-        x = Math.Clamp(x, 0, w - 1);
-        y = Math.Clamp(y, 0, h - 1);
-        int x0 = (int)x, y0 = (int)y;
-        int x1 = Math.Min(x0 + 1, w - 1), y1 = Math.Min(y0 + 1, h - 1);
-        float fx = x - x0, fy = y - y0;
-        var top = data[(y0 * w + x0) * ch + c] * (1 - fx) + data[(y0 * w + x1) * ch + c] * fx;
-        var bottom = data[(y1 * w + x0) * ch + c] * (1 - fx) + data[(y1 * w + x1) * ch + c] * fx;
-        return top * (1 - fy) + bottom * fy;
-    }
 
     /// <summary>Minimum über ein Quadrat mit Radius r — zerlegt in Zeilen und Spalten, O(n).</summary>
     internal static float[] MinFilter(float[] src, int width, int height, int r)

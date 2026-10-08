@@ -17,7 +17,7 @@ internal static class Blur
     public static void Gauss(float[] data, int width, int height, double sigma, int channels = 1)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(data.Length, width * height * channels, nameof(data));
-        var tmp = new float[data.Length];
+        var tmp = PixelPool.Rent(data.Length);   // wird vor dem Lesen vollständig geschrieben
 
         if (sigma < ExactGaussBelow)
         {
@@ -35,6 +35,7 @@ internal static class Blur
                 BoxVertical(tmp, data, width, height, channels, radius);
             }
         }
+        PixelPool.Return(tmp);
     }
 
     internal static float[] GaussKernel(double sigma)

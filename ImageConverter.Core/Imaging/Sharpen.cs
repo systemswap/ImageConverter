@@ -66,11 +66,12 @@ public static class Sharpen
     public static float[] UnsharpMask(float[] px, int width, int height,
         double amount, double sigma, double threshold = 2)
     {
-        var result = (float[])px.Clone();
+        var result = PixelPool.Rent(px.Length);
+        Array.Copy(px, result, px.Length);
         if (amount <= 0.001 || sigma <= 0.05) return result;
 
         var pixels = width * height;
-        var blur = new float[pixels * 3];
+        var blur = PixelPool.Rent(pixels * 3);
         Parallel.For(0, pixels, p =>
         {
             blur[p * 3] = px[p * 4];
@@ -93,6 +94,7 @@ public static class Sharpen
             }
         });
 
+        PixelPool.Return(blur);
         return result;
     }
 }

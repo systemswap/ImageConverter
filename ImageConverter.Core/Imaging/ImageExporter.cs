@@ -103,13 +103,14 @@ public static class ImageExporter
             var w = (int)result.Width;
             var h = (int)result.Height;
             var pixels = Pixels.FromMagick(result);
-            if (adjust is not null) pixels = Adjust.Apply(pixels, w, h, adjust, plan);
+            if (adjust is not null) pixels = Swap(pixels, Adjust.Apply(pixels, w, h, adjust, plan));
             if (o.SharpenAmount > 0.01)
             {
                 plan?.Next();
-                pixels = Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma);
+                pixels = Swap(pixels, Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma));
             }
             var processed = Pixels.ToMagick16(pixels, w, h, result.HasAlpha);
+            PixelPool.Return(pixels);
             CopyProfiles(result, processed);
             result.Dispose();
             result = processed;
@@ -121,6 +122,13 @@ public static class ImageExporter
         result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
         result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
         return result;
+    }
+
+    /// <summary>Den alten Puffer zurück in den Pool, den neuen weiterreichen (die Export-Puffer gehören nur uns).</summary>
+    private static float[] Swap(float[] old, float[] next)
+    {
+        if (!ReferenceEquals(old, next)) PixelPool.Return(old);
+        return next;
     }
 
     /// <summary>Kodiert ein fertig gerechnetes Bild im Zielformat.</summary>
@@ -216,6 +224,7 @@ public static class ImageExporter
             if (File.Exists(temp)) File.Delete(temp);
         }
 
+        PixelPool.Trim(release: true);   // Puffer dieser Rechnung loslassen — sonst bleibt der Speicher belegt
         plan?.Done(Tr.T("Gespeichert"));
         return new FileInfo(path).Length;
     }

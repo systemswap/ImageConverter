@@ -99,8 +99,13 @@ public static class Adjust
         Pixels.ToBytes(Apply(Pixels.FromBytes(bgra), width, height, a, plan), dither: true);
 
     /// <param name="px">Pixelpuffer (B, G, R, A, sRGB-kodiert 0–1, siehe <see cref="Pixels"/>); bleibt unverändert.</param>
-    public static float[] Apply(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null) =>
-        Apply(Prepare(px, width, height, a, plan), width, height, a, plan);
+    public static float[] Apply(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null)
+    {
+        var prepared = Prepare(px, width, height, a, plan);
+        var result = Apply(prepared, width, height, a, plan);
+        if (!ReferenceEquals(prepared.Source, px)) PixelPool.Return(prepared.Source);   // Zwischenstand, gehört uns
+        return result;
+    }
 
     /// <summary>
     /// Trägt die Schritte von <see cref="Prepare"/> und <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/>
@@ -156,11 +161,18 @@ public static class Adjust
                 (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100));
             var pass = new Dehaze.Pass();
             var deband = (float)Math.Clamp(a.DehazeDeband / 100, 0, 1);
+            // Zwischenstände kommen aus dem Pool und gehen dorthin zurück, sobald der nächste da ist —
+            // nie der Eingang (gehört dem Aufrufer, in der Vorschau liegt er im Zwischenspeicher)
+            float[] Replace(float[] old, float[] next)
+            {
+                if (!ReferenceEquals(old, next) && !ReferenceEquals(old, px)) PixelPool.Return(old);
+                return next;
+            }
             var work = Deband.Apply(source, width, height, deband * Dehaze.SourceDebandShare, seed: 0);
             plan?.Next();   // Entstufen der Quelle zählt zum ersten Schritt
             if (dehaze < 0)
             {
-                work = Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f);   // Dunst hinzufügen: ein Schritt
+                work = Replace(work, Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f));   // Dunst hinzufügen: ein Schritt
             }
             else
             {
@@ -177,11 +189,11 @@ public static class Adjust
                 for (var i = 0; i < passes; i++)
                 {
                     if (i > 0) plan?.Next();
-                    work = Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f);
+                    work = Replace(work, Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f));
                     ContrastVibrance(work, width, height, contrast / 100, vibrance / 100);
-                    work = Deband.Apply(work, width, height, deband, seed: (uint)i + 1);
-                    if (fine > 0) work = Sharpen.UnsharpMask(work, width, height, fine, Dehaze.FineSigma);
-                    if (edge > 0) work = Sharpen.UnsharpMask(work, width, height, edge, Dehaze.EdgeSigma);
+                    work = Replace(work, Deband.Apply(work, width, height, deband, seed: (uint)i + 1));
+                    if (fine > 0) work = Replace(work, Sharpen.UnsharpMask(work, width, height, fine, Dehaze.FineSigma));
+                    if (edge > 0) work = Replace(work, Sharpen.UnsharpMask(work, width, height, edge, Dehaze.EdgeSigma));
                 }
             }
             source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
@@ -242,7 +254,8 @@ public static class Adjust
         var (bgra, toned) = (prepared.Source, prepared.Toned);
         ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(prepared));
 
-        var result = (float[])bgra.Clone();
+        var result = PixelPool.Rent(bgra.Length);
+        Array.Copy(bgra, result, bgra.Length);
         if (a.IsNone) return result;
         plan?.Next();
 

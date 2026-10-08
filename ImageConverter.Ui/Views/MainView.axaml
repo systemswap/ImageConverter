@@ -914,7 +914,7 @@
                                 Background="{DynamicResource SurfaceBrush}"
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                 IsVisible="{Binding ShowRendering}" IsHitTestVisible="False">
-                            <TextBlock Classes="hint" Text="{l:T 'Vorschau wird berechnet …'}" />
+                            <TextBlock Classes="hint" Text="{Binding PreviewStep}" />
                         </Border>
 
                         <!-- Lange Arbeiten (z. B. KI): Fortschritt direkt über dem Bild -->

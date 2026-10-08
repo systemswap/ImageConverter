@@ -353,6 +353,51 @@ public class AdjustTests
         Assert.InRange(result[(200 * w + 200) * 4 + 1], 20, 35);
     }
 
+    /// <summary>
+    /// Pufferpool (Phase 2): Zwischenstände gehen zurück in den Pool — der Eingang nie. Würde er
+    /// zurückgegeben und wiederverwendet, änderte sich das Bild im Zwischenspeicher der Vorschau.
+    /// Zwei Rechnungen nacheinander müssen gleich ausfallen, der Eingang unverändert bleiben.
+    /// </summary>
+    [Fact]
+    public void PooledBuffers_NeverTouchTheInput()
+    {
+        const int w = 160, h = 120;
+        var px = new float[w * h * 4];
+        for (var p = 0; p < w * h; p++)
+        {
+            px[p * 4] = 0.55f + 0.2f * (p % w) / w;
+            px[p * 4 + 1] = 0.5f + 0.3f * (p / w) / (float)h;
+            px[p * 4 + 2] = 0.45f;
+            px[p * 4 + 3] = 1;
+        }
+        var copy = (float[])px.Clone();
+        var a = new Adjustments(Dehaze: 120, DehazePasses: 4, DehazeEdge: 40, Shadows: 30, Contrast: 10);
+
+        var first = Adjust.Apply(px, w, h, a);
+        var second = Adjust.Apply(px, w, h, a);
+        Assert.Equal(copy, px);
+        Assert.Equal(first, second);
+
+        var prepared = Adjust.Prepare(px, w, h, a);
+        var source = (float[])prepared.Source.Clone();
+        Adjust.Apply(px, w, h, a);   // nutzt den Pool erneut
+        Assert.Equal(source, prepared.Source);
+    }
+
+    /// <summary>Vorschau (Phase 2): Ein abgebrochener Plan beendet die Rechnung beim nächsten Schritt; der Eingang bleibt.</summary>
+    [Fact]
+    public void CancelledPlan_StopsBetweenSteps()
+    {
+        const int w = 64, h = 48;
+        var px = Enumerable.Repeat(0.5f, w * h * 4).ToArray();
+        var copy = (float[])px.Clone();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var plan = new WorkPlan(null, cts.Token);
+        Assert.Throws<OperationCanceledException>(() => Adjust.Prepare(px, w, h, new Adjustments(Dehaze: 80), plan));
+        Assert.Equal(copy, px);
+    }
+
     [Fact]
     public void Export_AppliesAdjustments_LikeThePreview()
     {

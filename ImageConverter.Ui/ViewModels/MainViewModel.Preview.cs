@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -144,6 +145,9 @@ public partial class MainViewModel
 
     /// <summary>Nur sichtbar, wenn eine Berechnung länger dauert — kein Flackern bei schnellen.</summary>
     [ObservableProperty] public partial bool ShowRendering { get; set; }
+
+    /// <summary>Was die Vorschau gerade rechnet (z. B. „Dunst entfernen – Durchlauf 2 von 3“).</summary>
+    [ObservableProperty] public partial string PreviewStep { get; set; } = "";
 
     /// <summary>
     /// Vorübergehende Anzeige statt der Vorschau, z. B. der Zwischenstand einer langen
@@ -294,6 +298,7 @@ public partial class MainViewModel
     private Task _renderTask = Task.CompletedTask;
     private bool _renderRunning;
     private bool _renderDirty;
+    private CancellationTokenSource? _renderCts;
 
     // Zwischenspeicher der Stufen — nur im Render-Task benutzt, nie gleichzeitig.
     // Je ein paar Ergebnisse, damit Rückgängig/Wiederholen zwischen Ständen nicht neu rechnet.
@@ -320,6 +325,7 @@ public partial class MainViewModel
         if (_renderRunning)
         {
             _renderDirty = true;
+            _renderCts?.Cancel();   // laufende Rechnung zwischen zwei Schritten abbrechen — der Regler läuft weiter
             return;
         }
         _renderTask = RenderLoopAsync();
@@ -341,7 +347,18 @@ public partial class MainViewModel
                     continue;
                 }
 
-                var result = await Task.Run(() => Render(job));
+                var cts = _renderCts = new CancellationTokenSource();   // ohne Zeitgeber, Dispose nicht nötig
+                PreviewStep = Tr.T("Vorschau wird berechnet …");
+                var plan = new WorkPlan(new Progress<WorkProgress>(p => PreviewStep = p.Step), cts.Token);
+                PreviewResult result;
+                try
+                {
+                    result = await Task.Run(() => Render(job, plan), cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    continue;   // neuere Einstellungen warten schon (_renderDirty)
+                }
                 // Inzwischen ein anderes Bild gewählt: Ergebnis verwerfen, die Schleife
                 // rechnet ohnehin neu (RequestPreview hat _renderDirty gesetzt)
                 if (!ReferenceEquals(job.Doc, _history?.Current)) continue;
@@ -371,6 +388,7 @@ public partial class MainViewModel
     private async Task StopPreviewAsync()
     {
         _renderDirty = false;
+        _renderCts?.Cancel();
         try { await _renderTask; } catch { /* Fehler zeigt die Schleife selbst an */ }
 
         // Auch eine laufende Größenschätzung liest das Bild noch
@@ -415,7 +433,7 @@ public partial class MainViewModel
     }
 
     /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>
-    private PreviewResult Render(PreviewJob job)
+    private PreviewResult Render(PreviewJob job, WorkPlan plan)
     {
         // 1) Skalieren — teuer, nur bei Größe/Filter/Gamma neu
         var key = new ResizeKey(job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
@@ -454,10 +472,15 @@ public partial class MainViewModel
                 var prepared = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise && e.PrepareKey == prepareKey)?.Prepared;
                 if (prepared is null)
                 {
-                    prepared = Adjust.Prepare(denoised, job.Width, job.Height, j);
+                    Adjust.PlanSteps(j, plan, (double)job.Width * job.Height / 1e6);   // Dunst je Durchlauf … und Licht und Farbe
+                    prepared = Adjust.Prepare(denoised, job.Width, job.Height, j, plan);
                     AddCached(_tonedCache, (key, job.Noise, prepareKey, prepared), null, PreparedCacheSize);
                 }
-                adjusted = Adjust.Apply(prepared, job.Width, job.Height, j);
+                else
+                {
+                    plan.Add(Tr.T("Licht und Farbe"), 1);
+                }
+                adjusted = Adjust.Apply(prepared, job.Width, job.Height, j, plan);
                 AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Pixels: adjusted), null, PixelCacheSize);
             }
         }
@@ -468,7 +491,10 @@ public partial class MainViewModel
             : adjusted;
 
         // Einmal runden, mit Dither — erst hier wird aus 32 Bit die Anzeige in 8 Bit
-        return new PreviewResult(Pixels.ToBytes(final, dither: true), job.Width, job.Height);
+        var bgra = Pixels.ToBytes(final, dither: true);
+        // Die Zwischenstände dieser Rechnung (Dunst-Durchläufe …) sollen nicht belegt bleiben
+        PixelPool.Trim();
+        return new PreviewResult(bgra, job.Width, job.Height);
     }
 
     /// <summary>Treffer nach vorn holen (zuletzt benutzt bleibt am längsten).</summary>

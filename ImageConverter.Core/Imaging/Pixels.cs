@@ -34,43 +34,64 @@ public static class Pixels
     /// <summary>Die Pixel eines Magick-Bildes mit voller Tiefe (Q16). Das Bild bleibt unverändert.</summary>
     public static float[] FromMagick(MagickImage image)
     {
-        ushort[] data;
         lock (image)
         {
+            int w = (int)image.Width, h = (int)image.Height;
+            var px = PixelPool.Rent(w * h * 4);
             using var pixels = image.GetPixelsUnsafe();
-            data = pixels.ToShortArray("BGRA")
-                   ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+            // In Streifen lesen: ein 16-Bit-Zwischenpuffer des ganzen Bildes wären bei 28 MP weitere 230 MB
+            for (var y0 = 0; y0 < h; y0 += StripRows)
+            {
+                var rows = Math.Min(StripRows, h - y0);
+                var data = pixels.ToShortArray(0, y0, (uint)w, (uint)rows, "BGRA")
+                           ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+                var offset = y0 * w * 4;
+                Parallel.For(0, rows, r =>
+                {
+                    for (int i = r * w * 4, end = i + w * 4; i < end; i++) px[offset + i] = data[i] / Q16;
+                });
+            }
+            return px;
         }
-        var px = new float[data.Length];
-        Parallel.For(0, data.Length / 4, p =>
-        {
-            var i = p * 4;
-            px[i] = data[i] / Q16;
-            px[i + 1] = data[i + 1] / Q16;
-            px[i + 2] = data[i + 2] / Q16;
-            px[i + 3] = data[i + 3] / Q16;
-        });
-        return px;
     }
 
-    /// <summary>Ein neues Magick-Bild mit 16 Bit je Kanal aus dem Puffer.</summary>
+    /// <summary>Zeilen je Streifen beim Lesen aus Magick.</summary>
+    private const int StripRows = 256;
+
+    /// <summary>Ein neues Magick-Bild mit 16 Bit je Kanal aus dem Puffer — in Streifen geschrieben, ohne
+    /// 16-Bit-Kopie des ganzen Bildes.</summary>
     /// <param name="alpha">Ob das Ergebnis einen Alphakanal haben soll (sonst wird er verworfen).</param>
     public static MagickImage ToMagick16(float[] px, int width, int height, bool alpha)
     {
-        var data = new ushort[px.Length];
-        Parallel.For(0, px.Length / 4, p =>
-        {
-            var i = p * 4;
-            for (var c = 0; c < 4; c++)
-            {
-                var v = px[i + c] * Q16;
-                data[i + c] = (ushort)(v <= 0 ? 0 : v >= Q16 ? 65535 : v + 0.5f);
-            }
-        });
-        var image = new MagickImage();
-        image.ReadPixels(data, new PixelReadSettings((uint)width, (uint)height, StorageType.Quantum, "BGRA"));
-        if (!alpha) image.Alpha(AlphaOption.Off);
+        var image = new MagickImage(MagickColors.Black, (uint)width, (uint)height);
+        if (alpha) image.Alpha(AlphaOption.Set);
         image.Depth = 16;
+        using var pixels = image.GetPixelsUnsafe();
+        var channels = (int)pixels.Channels;
+        // Reihenfolge der Kanäle im Bild (meist R, G, B[, A]) → Quelle im Puffer (B, G, R, A)
+        var from = new int[channels];
+        for (var c = 0; c < channels; c++) from[c] = 3;
+        foreach (var (channel, source) in new[] { (PixelChannel.Blue, 0), (PixelChannel.Green, 1), (PixelChannel.Red, 2), (PixelChannel.Alpha, 3) })
+            if (pixels.GetChannelIndex(channel) is uint index && index < channels) from[index] = source;
+        var strip = new ushort[StripRows * width * channels];
+        for (var y0 = 0; y0 < height; y0 += StripRows)
+        {
+            var rows = Math.Min(StripRows, height - y0);
+            Parallel.For(0, rows, r =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var i = ((y0 + r) * width + x) * 4;
+                    var o = (r * width + x) * channels;
+                    for (var c = 0; c < channels; c++)
+                    {
+                        var v = px[i + from[c]] * Q16;
+                        strip[o + c] = (ushort)(v <= 0 ? 0 : v >= Q16 ? 65535 : v + 0.5f);
+                    }
+                }
+            });
+            pixels.SetArea(0, y0, (uint)width, (uint)rows, rows == StripRows ? strip : strip[..(rows * width * channels)]);
+        }
         return image;
     }
 

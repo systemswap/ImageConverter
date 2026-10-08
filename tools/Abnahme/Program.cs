@@ -168,14 +168,14 @@ void Performance(string name)
     }
 }
 
+// Ein Fall in einem frischen Prozess, ohne Aufwärmlauf: Die Spitze des Arbeitsspeichers gilt für genau
+// diese Rechnung (ein Aufwärmlauf ließ Puffer liegen und verfälschte sie). Zeit inkl. JIT (~0,3 s).
 void Single(string imageName, string caseName, int edge)
 {
     var image = config.Bilder.First(b => b.Name == imageName);
     var c = Cases.All.First(x => x.Name == caseName);
     using var source = new MagickImage(Path.Combine(root, image.Datei));
     if (edge > 0) config.Kante = edge; else config.Kante = int.MaxValue;
-    Render(source, c, out _, out _, encode: false);   // warm (JIT, Tabellen)
-    GC.Collect();
     var watch = Stopwatch.StartNew();
     Render(source, c, out var w, out var h, encode: false);
     watch.Stop();

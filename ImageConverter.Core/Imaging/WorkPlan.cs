@@ -13,7 +13,8 @@ public readonly record struct WorkProgress(double Fraction, string Step);
 /// Aufwand in Sekunden je Megapixel, gemessen an 0.4.45 (16 Kerne, Release). Die Werte müssen
 /// nicht genau stimmen — sie verteilen nur den Balken auf die Schritte.
 /// </remarks>
-public sealed class WorkPlan(IProgress<WorkProgress>? sink)
+/// <param name="cancel">Abbrechen zwischen zwei Schritten (die Vorschau bricht ab, wenn der Regler weiterläuft).</param>
+public sealed class WorkPlan(IProgress<WorkProgress>? sink, CancellationToken cancel = default)
 {
     // Aufwand je Megapixel in Sekunden
     internal const double ResizeCost = 0.05;
@@ -36,9 +37,10 @@ public sealed class WorkPlan(IProgress<WorkProgress>? sink)
         _total += Math.Max(weight, 1e-6);
     }
 
-    /// <summary>Den nächsten vorgemerkten Schritt beginnen.</summary>
+    /// <summary>Den nächsten vorgemerkten Schritt beginnen — vorher abbrechen, falls verlangt.</summary>
     public void Next()
     {
+        cancel.ThrowIfCancellationRequested();
         if (_index >= 0 && _index < _steps.Count) _before += _steps[_index].Weight;
         _index++;
         if (_index < _steps.Count) sink?.Report(new WorkProgress(_before / _total, _steps[_index].Text));

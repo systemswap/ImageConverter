@@ -38,7 +38,10 @@ internal static class LocalLaplacian
         // Ausgabe-Pyramide: Laplace-Stufen 0 … top-1, Rest auf der gröbsten Stufe
         var output = gauss.EmptyLike();
         var step = 1f / (Levels - 1);
-        var twoSigma2 = 2 * sigma * sigma;
+        // Gewicht „nah am Umgebungswert“ exp(−d²/2σ²) als Tabelle über d ∈ [−1, 1] — vorher je Pixel und
+        // Umgebungswert eine Exponentialfunktion (bei 28 MP über 200 Millionen je Filter)
+        var nearTable = NearTable(sigma);
+        float[]? remapped = null;
 
         for (var k = 0; k < Levels; k++)
         {
@@ -47,14 +50,14 @@ internal static class LocalLaplacian
             var slope = Slope(curve, gamma);
 
             // Bild so umgerechnet, als läge überall die Umgebung gamma vor
-            var remapped = new float[lum.Length];
+            remapped ??= PixelPool.Rent(lum.Length);   // einmal, für alle Umgebungswerte (vollständig geschrieben)
             Parallel.For(0, height, y =>
             {
                 for (int x = 0, i = y * width; x < width; x++, i++)
                 {
                     var d = lum[i] - gamma;
                     var curved = target + slope * d;                     // Kurve, um gamma linearisiert
-                    var near = MathF.Exp(-d * d / twoSigma2);            // 1 nah, 0 jenseits der Kante
+                    var near = Near(nearTable, d);                         // 1 nah, 0 jenseits der Kante
                     remapped[i] = lum[i] + (curved - lum[i]) * near;
                 }
             });
@@ -62,7 +65,7 @@ internal static class LocalLaplacian
             var r = Pyramid.Gaussian(remapped, width, height, gauss.Count);
             for (var l = 0; l <= top; l++)
             {
-                var band = l < top ? r.Laplacian(l) : r[top];
+                var band = l < top ? r.Laplacian(l) : r[top];   // Laplace-Stufe aus dem Pool, unten zurück
                 var g = guides[l];
                 var o = output[l];
                 Parallel.For(0, o.Length / 4096 + 1, chunk =>
@@ -74,10 +77,36 @@ internal static class LocalLaplacian
                         if (w > 0) o[i] += w * band[i];
                     }
                 });
+                if (l < top) PixelPool.Return(band);
             }
+            r.ReturnLevels(from: 1);   // Stufe 0 ist remapped, wird weiterverwendet
         }
 
+        PixelPool.Return(remapped);
+        gauss.ReturnLevels(from: 1);   // Stufe 0 ist der Eingang
         return output.Collapse();
+    }
+
+    private const int NearSize = 4096;
+
+    private static float[] NearTable(float sigma)
+    {
+        var table = new float[NearSize + 1];
+        var twoSigma2 = 2 * sigma * sigma;
+        for (var i = 0; i <= NearSize; i++)
+        {
+            var d = 2f * i / NearSize - 1;
+            table[i] = MathF.Exp(-d * d / twoSigma2);
+        }
+        return table;
+    }
+
+    /// <summary>Tabelle linear gelesen; d liegt zwischen −1 und 1 (Helligkeiten 0–1).</summary>
+    private static float Near(float[] table, float d)
+    {
+        var x = (Math.Clamp(d, -1, 1) + 1) * (NearSize / 2f);
+        var i = Math.Min((int)x, NearSize - 1);
+        return table[i] + (table[i + 1] - table[i]) * (x - i);
     }
 
     private static float Slope(Func<float, float> curve, float x)
@@ -131,15 +160,20 @@ internal sealed class Pyramid
         return p;
     }
 
-    /// <summary>Detailschicht: Stufe minus die vergrößerte nächstgröbere Stufe.</summary>
+    /// <summary>Detailschicht: Stufe minus die vergrößerte nächstgröbere Stufe (Puffer aus dem Pool).</summary>
     public float[] Laplacian(int level)
     {
         var (fine, w, h) = _levels[level];
         var (coarse, cw, ch) = _levels[level + 1];
-        var up = Up(coarse, cw, ch, w, h);
-        var band = new float[fine.Length];
-        for (var i = 0; i < band.Length; i++) band[i] = fine[i] - up[i];
+        var band = Up(coarse, cw, ch, w, h);
+        for (var i = 0; i < band.Length; i++) band[i] = fine[i] - band[i];
         return band;
+    }
+
+    /// <summary>Stufen ab <paramref name="from"/> zurück in den Pool (die Pyramide ist danach unbrauchbar).</summary>
+    public void ReturnLevels(int from)
+    {
+        for (var l = from; l < _levels.Count; l++) PixelPool.Return(_levels[l].Data);
     }
 
     /// <summary>Gröbste Stufe auf die Größe von <paramref name="level"/> vergrößert.</summary>
@@ -174,7 +208,7 @@ internal sealed class Pyramid
     private static (float[], int, int) Down(float[] src, int w, int h)
     {
         int cw = (w + 1) / 2, ch = (h + 1) / 2;
-        var rows = new float[cw * h];
+        var rows = PixelPool.Rent(cw * h);
         Parallel.For(0, h, y =>
         {
             var row = y * w;
@@ -185,7 +219,7 @@ internal sealed class Pyramid
                 rows[y * cw + x] = acc;
             }
         });
-        var dst = new float[cw * ch];
+        var dst = PixelPool.Rent(cw * ch);
         Parallel.For(0, ch, y =>
         {
             for (var x = 0; x < cw; x++)
@@ -195,13 +229,14 @@ internal sealed class Pyramid
                 dst[y * cw + x] = acc;
             }
         });
+        PixelPool.Return(rows);
         return (dst, cw, ch);
     }
 
     /// <summary>Vergrößern auf fw × fh: Nullen einfügen und mit doppeltem Kernel glätten.</summary>
     private static float[] Up(float[] src, int cw, int ch, int fw, int fh)
     {
-        var rows = new float[fw * ch];
+        var rows = PixelPool.Rent(fw * ch);
         Parallel.For(0, ch, y =>
         {
             for (var x = 0; x < fw; x++)
@@ -217,7 +252,7 @@ internal sealed class Pyramid
                 rows[y * fw + x] = acc;
             }
         });
-        var dst = new float[fw * fh];
+        var dst = PixelPool.Rent(fw * fh);
         Parallel.For(0, fh, y =>
         {
             for (var x = 0; x < fw; x++)
@@ -232,6 +267,7 @@ internal sealed class Pyramid
                 dst[y * fw + x] = acc;
             }
         });
+        PixelPool.Return(rows);
         return dst;
     }
 }
