@@ -402,6 +402,33 @@ vielen Stellen einzeln geschützt.
    Sonnenstrahlen (Schwankung im Ring), Treppen im Himmel, Detail, Kontrast — jede
    Änderung wird gegen die Referenz geprüft.
 
+**Entschieden (08.10.2026):** Puffer in linearem Licht (wie Referenzwerkzeug; Kurven und Farbe
+je Pixel über Oklab). 16-Bit-Export zuerst als PNG und TIFF; JPEG XL/AVIF mit 10/12 Bit
+später als eigener Punkt.
+
+**Stufenplan** — jede Phase endet mit einer Beta, die der Benutzer mit dem Auge abnimmt,
+bevor die nächste beginnt. Ab Phase 1 liegt `ImageConverter-0.4.45-Referenz.exe` neben der
+aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-Ordner.
+
+| Phase | Version | Inhalt | Abnahme |
+|---|---|---|---|
+| 0 Sicherheitsnetz | 0.4.48 beta | Werkzeug `tools/Abnahme`: Testbilder und Fälle rechnen, messen, mit der Referenz vergleichen; Referenzlauf mit dem Code von 0.4.45 | Prüflauf gegen 0.4.45: alles ≈ |
+| 1 Durchgehend 32 Bit | 0.4.49 beta | Gemeinsamer Pixelpuffer (Fließkomma, linear), Q16 direkt aus Magick; Dunst/Entstufen, Tools, Tiefen/Lichter, Schärfen umgestellt; 8 Bit nur für Anzeige und 8-Bit-Formate; Export 16-Bit-PNG/TIFF | Abweichung < 1 Tonstufe außer gewollt; Treppen ≤ Referenz |
+| 2 Speicher & Tempo | 0.4.50 beta | Puffer wiederverwenden, Kacheln, SIMD; Abbrechen mitten in der Rechnung; Fortschritt auch in der Vorschau | 28,7 MP × 3: < 3 GB, < 10 s; 80 MP läuft |
+| 3 Szenenkarte | 0.4.51 beta | Himmel, Sonnenhof, Landschaft einmal am Anfang; alle Schritte lesen sie | Sonne und Himmel wie 0.4.45 |
+| 4 Dunst neu gegliedert | 0.4.52 beta | Stufe A Physik (Luftlicht hierarchisch), Stufe B Look an einer Stelle | kein Messwert schlechter; Auge des Benutzers |
+| 5 Abschluss | Meilenstein (z. B. 0.5.0) | Linux-Bau, Doku, Zip-Sicherung | Benutzer |
+
+**Abnahme-Werkzeug** (`tools/Abnahme`, nicht in der Solution): Arbeitsordner
+`<LocalAppData>/imageconverter-build/abnahme` (oder `IC_ABNAHME`) mit `abnahme.json`
+(Testbilder, Messbereiche), Testbilder unter `bilder/` — Bilder kommen nie ins Repo.
+`abnahme referenz <name>` / `pruefen <name>` / `leistung <name>` / `raster`. Gemessen:
+Kontrast, Helligkeit, Farbton/Buntheit/Detail der Ferne, Treppen im Himmel, Sonnenstrahlen
+(im Verhältnis zum Original), Abweichung zur Referenz (ΔE nach 3×3-Mittel, damit Dither
+nicht zählt), bei künstlichem Dunst der Abstand zur Wahrheit. ✗ = schlechter als die
+Referenz, ↑/↓ = geändert, ≈ = gleich. Die Referenz wird mit dem Core der Referenzversion
+gebaut (`-p:CoreProject=…` auf einen Worktree).
+
 **Leistung (Ziel: flüssige Bearbeitung, auch bei großen Bildern):**
 - **Echter Fortschritt** (umgesetzt in 0.4.46 beta): Beim Speichern ein Balken, der
   einmal von 0 bis 100 % über alle Schritte läuft (Größe, Rauschen, jeder Dunst-Durchlauf,
