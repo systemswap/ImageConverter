@@ -39,7 +39,9 @@ public partial class MainViewModel
         string SelectedTint, double TintHue, double MatchLuminance, double Neutralize, double Warmth,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
-        int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
+        int SourceWidth, int SourceHeight,   // Bildgröße, für die dieser Stand gilt
+        double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
+        double DehazeSharpen, double DehazeEdge, double DehazeBrightness);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -67,6 +69,13 @@ public partial class MainViewModel
         [nameof(SharpenRadius)] = "Radius",
         [nameof(NoiseReduction)] = "Rauschen",
         [nameof(Dehaze)] = "Dunst",
+        [nameof(DehazePasses)] = "Durchläufe",
+        [nameof(DehazeClarity)] = "Klarheit",
+        [nameof(DehazeContrast)] = "Dunst-Kontrast",
+        [nameof(DehazeVibrance)] = "Dunst-Dynamik",
+        [nameof(DehazeSharpen)] = "Schärfe fein",
+        [nameof(DehazeEdge)] = "Kanten",
+        [nameof(DehazeBrightness)] = "Helligkeit halten",
         [nameof(Brightness)] = "Helligkeit",
         [nameof(Contrast)] = "Kontrast",
         [nameof(Shadows)] = "Tiefen",
@@ -206,7 +215,8 @@ public partial class MainViewModel
         MatchLuminance, Neutralize, Warmth,
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
-        SourceWidth, SourceHeight);
+        SourceWidth, SourceHeight,
+        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -244,6 +254,13 @@ public partial class MainViewModel
                 SharpenRadius = s.SharpenRadius;
                 NoiseReduction = s.NoiseReduction;
                 Dehaze = s.Dehaze;
+                DehazePasses = s.DehazePasses;
+                DehazeClarity = s.DehazeClarity;
+                DehazeContrast = s.DehazeContrast;
+                DehazeVibrance = s.DehazeVibrance;
+                DehazeSharpen = s.DehazeSharpen;
+                DehazeEdge = s.DehazeEdge;
+                DehazeBrightness = s.DehazeBrightness;
                 Brightness = s.Brightness;
                 Contrast = s.Contrast;
                 Shadows = s.Shadows;

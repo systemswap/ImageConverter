@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -11,10 +12,16 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Version kommt aus Directory.Build.props, z. B. "ImageConverter 0.4.1"
+        // Version kommt aus Directory.Build.props, z. B. "ImageConverter 0.4.1" — mit Zusatz
+        // ("0.4.41-beta" → "0.4.41 beta"); die Angabe hinter "+" ist der Commit
+        var info = typeof(MainWindow).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
         var v = typeof(MainWindow).Assembly.GetName().Version;
-        if (v is not null)
-            Title = $"ImageConverter {v.Major}.{v.Minor}.{v.Build}";
+        var text = info is not null ? info.Split('+')[0].Replace('-', ' ')
+            : v is not null ? $"{v.Major}.{v.Minor}.{v.Build}" : null;
+        if (text is not null)
+            Title = $"ImageConverter {text}";
     }
 
     /// <summary>

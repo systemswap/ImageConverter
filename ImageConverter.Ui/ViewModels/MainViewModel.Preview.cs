@@ -301,7 +301,7 @@ public partial class MainViewModel
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
     private readonly List<(ResizeKey Key, double Noise, byte[] Bgra)> _denoisedCache = [];
     // Dunst + Tiefen/Lichter gesondert: der teure Teil, hängt nur von diesen drei Reglern ab
-    private readonly List<(ResizeKey Key, double Noise, double Dehaze, double Shadows, double Highlights, Adjust.Prepared Prepared)> _tonedCache = [];
+    private readonly List<(ResizeKey Key, double Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
     private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, byte[] Bgra)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
@@ -446,12 +446,12 @@ public partial class MainViewModel
             if (adjusted is null)
             {
                 var j = job.Adjust;
-                var prepared = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise
-                    && e.Dehaze == j.Dehaze && e.Shadows == j.Shadows && e.Highlights == j.Highlights)?.Prepared;
+                var prepareKey = j.PrepareKey;
+                var prepared = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise && e.PrepareKey == prepareKey)?.Prepared;
                 if (prepared is null)
                 {
                     prepared = Adjust.Prepare(denoised, job.Width, job.Height, j);
-                    AddCached(_tonedCache, (key, job.Noise, j.Dehaze, j.Shadows, j.Highlights, prepared), null);
+                    AddCached(_tonedCache, (key, job.Noise, prepareKey, prepared), null);
                 }
                 adjusted = Adjust.Apply(prepared, job.Width, job.Height, j);
                 AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Bgra: adjusted), null);

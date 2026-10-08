@@ -540,3 +540,41 @@ Test oder Nachweis.
   Sichtprüfung als Maß, nicht ΔE gegen die künstliche Wahrheit.
 - **Lehre:** Jede Laborverbesserung erst am echten Bild gegen den letzten
   Stand ansehen (`cropstack`), dann erst übernehmen.
+
+## 19. Dunst (Beta 0.4.41): Durchläufe statt Stärke, Luftlicht in Bereichen, Feineinstellung
+
+- **Anlass:** Benutzer (08.10.2026): So denkt sich das Auge den Dunst weg — in
+  Runden (Farbe erkennen, Kontrast, Sättigung, feine Schärfe, dann Kanten),
+  jede Runde auf dem Ergebnis der vorigen; und „wo er weg ist, nicht noch mal“.
+  Außerdem: Ring um die Sonne, Farben kippen je Bereich in andere Richtungen.
+- **Messungen (Labor, Turmlandschaft und Panorama, volle Auflösung):**
+  - Ungebremste Schleife 3 × 40 schlug den Einmal-Filter 100 klar (Wiese
+    hinten: Farbton 93° → 95°, Buntheit 0,060 → 0,065 = Wiese vorn), 3 × 70
+    ≈ das Rezept des Benutzers (Dunst 211). Ab 4 Runden kippte es: Himmel
+    körnig, Vordergrund heller und bunter, Ferne magenta — Kontrast, Dynamik
+    und Schärfe summierten sich je Runde, und die Schätzung fand im Himmel
+    immer wieder „Dunst“.
+  - Harte Bremse (Dunstkarte nur einmal schätzen, je Runde den Rest anwenden):
+    kippt nicht, aber zu schwach — 3 Runden schwächer als ungebremst.
+  - Luftlicht je Kachel (6 × 4, bilinear) beseitigt den Ring um die Sonne;
+    senkrecht nur abweichen, wo die Kachel so dichten Dunst enthält wie ihre
+    Spalte am Horizont (sonst halbe Farbrückgewinnung im Labor: Kacheln im
+    Tal sehen Szenenfarbe, kein Luftlicht).
+- **Umgesetzt:** Durchläufe 1–10 (Regler): jeder schätzt am Zwischenstand neu;
+  Luftlicht und Himmel aus dem ersten; Himmel ab dem zweiten unverändert;
+  Klarheit, Schärfe, Kurve, Dynamik einmal am Schluss. Dazu die bisher festen
+  Werte als Regler (Vorgaben = alte Konstanten, Durchläufe 1 → Bild wie
+  0.4.40), neu „Kanten“ (Unscharfmaskierung σ 2 nach allen Durchläufen). Die
+  Feinregler erscheinen nur, wenn Dunst > 0; „Vorgaben“ setzt sie zurück.
+  Versionszusatz: `<Version>0.4.41-beta</Version>` → Fenstertitel aus der
+  InformationalVersion („0.4.41 beta“), AssemblyVersion bleibt 0.4.41.
+- **Offen:** rosa Horizont (Farbton in dichtem Dunst); Standardwerte der
+  Feineinstellung sucht der Benutzer in der Software; Luftlicht ohne Himmel
+  (Haze-Lines) noch nicht gebaut.
+- **Nicht tun:** Wahrnehmungsanteile je Durchlauf anwenden; Himmel in jedem
+  Durchlauf neu schätzen; Luftlicht je Kachel ohne Rückfall auf die Spalte.
+- **Wo:** `Dehaze.cs` (`Apply` mit `Pass`/`Settings`, `AirLightField`),
+  `Adjustments.cs` (`DehazePasses` …, `PrepareKey`), `MainViewModel.Tools.cs`,
+  `MainView.axaml` (Gruppe „DUNST · BETA“), `MainWindow.axaml.cs` (Titel).
+- **Test:** `DehazeTests.Passes_RemoveMoreHaze_AndDetailsOnlyCountWithDehaze`.
+  Vergleichsbilder: `%LOCALAPPDATA%\imageconverter-build\vergleich`.

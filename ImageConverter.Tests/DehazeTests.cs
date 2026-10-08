@@ -171,6 +171,25 @@ public class DehazeTests
         }
     }
 
+    /// <summary>
+    /// Durchläufe (Beta): Jeder Durchlauf schätzt am Zwischenstand neu — mehr Durchläufe, mehr
+    /// Kontrast, ohne dass das Bild kippt; die Feineinstellung zählt nur mit Dunst.
+    /// </summary>
+    [Fact]
+    public void Passes_RemoveMoreHaze_AndDetailsOnlyCountWithDehaze()
+    {
+        var hazy = Haze(Scene(), 0.5f, Air);
+        var once = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 40));
+        var thrice = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 40, DehazePasses: 3));
+        Assert.True(Contrast(thrice) > Contrast(once) * 1.1, $"Kontrast 1×: {Contrast(once):F1}, 3×: {Contrast(thrice):F1}");
+        Assert.InRange(Mean(thrice) / Mean(hazy), 0.6, 1.05);
+
+        Assert.True(new Adjustments(DehazePasses: 5, DehazeClarity: 90, DehazeEdge: 50).IsNone);
+        Assert.False(new Adjustments(Dehaze: 10, DehazePasses: 5).IsNone);
+        Assert.Equal(new Adjustments(Dehaze: 10, Brightness: 30).PrepareKey, new Adjustments(Dehaze: 10, Contrast: -20).PrepareKey);
+        Assert.NotEqual(new Adjustments(Dehaze: 10).PrepareKey, new Adjustments(Dehaze: 10, DehazePasses: 2).PrepareKey);
+    }
+
     [Fact]
     public void NegativeAmount_AddsHaze()
     {

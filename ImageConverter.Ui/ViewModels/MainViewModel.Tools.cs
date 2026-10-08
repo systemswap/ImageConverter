@@ -13,6 +13,19 @@ namespace ImageConverter.ViewModels;
 public partial class MainViewModel
 {
     [ObservableProperty] public partial double Dehaze { get; set; }
+
+    // Dunst, Feineinstellung (Beta) — Vorgaben wie bis 0.4.40 fest eingebaut
+    [ObservableProperty] public partial double DehazePasses { get; set; } = 1;
+    [ObservableProperty] public partial double DehazeClarity { get; set; } = Adjustments.None.DehazeClarity;
+    [ObservableProperty] public partial double DehazeContrast { get; set; } = Adjustments.None.DehazeContrast;
+    [ObservableProperty] public partial double DehazeVibrance { get; set; } = Adjustments.None.DehazeVibrance;
+    [ObservableProperty] public partial double DehazeSharpen { get; set; } = Adjustments.None.DehazeSharpen;
+    [ObservableProperty] public partial double DehazeEdge { get; set; }
+    [ObservableProperty] public partial double DehazeBrightness { get; set; } = Adjustments.None.DehazeBrightness;
+
+    /// <summary>Die Feineinstellung erscheint nur, wenn Dunst entfernt wird.</summary>
+    public bool HasDehaze => Math.Round(Dehaze) > 0;
+
     [ObservableProperty] public partial double Brightness { get; set; }
     [ObservableProperty] public partial double Contrast { get; set; }
     [ObservableProperty] public partial double Shadows { get; set; }
@@ -46,7 +59,16 @@ public partial class MainViewModel
     public IReadOnlyList<string> Tints { get; } = TintLabels.Select(t => t.Label).ToList();
 
     public string DehazeLabel => Signed(Dehaze);
+    public string DehazePassesLabel => $"{Math.Round(DehazePasses):0}×";
+    public string DehazeClarityLabel => Percent(DehazeClarity);
+    public string DehazeContrastLabel => Percent(DehazeContrast);
+    public string DehazeVibranceLabel => Percent(DehazeVibrance);
+    public string DehazeSharpenLabel => Percent(DehazeSharpen);
+    public string DehazeEdgeLabel => Percent(DehazeEdge);
+    public string DehazeBrightnessLabel => Percent(DehazeBrightness);
     public string BrightnessLabel => Signed(Brightness);
+
+    private static string Percent(double v) => v < 0.5 ? Tr.T("aus") : $"{Math.Round(v):0} %";
     public string ContrastLabel => Signed(Contrast);
     public string ShadowsLabel => Signed(Shadows);
     public string HighlightsLabel => Signed(Highlights);
@@ -64,7 +86,19 @@ public partial class MainViewModel
         var n => $"{n}",
     };
 
-    partial void OnDehazeChanged(double value) => ToolChanged(nameof(DehazeLabel));
+    partial void OnDehazeChanged(double value)
+    {
+        OnPropertyChanged(nameof(HasDehaze));
+        ToolChanged(nameof(DehazeLabel));
+    }
+
+    partial void OnDehazePassesChanged(double value) => ToolChanged(nameof(DehazePassesLabel));
+    partial void OnDehazeClarityChanged(double value) => ToolChanged(nameof(DehazeClarityLabel));
+    partial void OnDehazeContrastChanged(double value) => ToolChanged(nameof(DehazeContrastLabel));
+    partial void OnDehazeVibranceChanged(double value) => ToolChanged(nameof(DehazeVibranceLabel));
+    partial void OnDehazeSharpenChanged(double value) => ToolChanged(nameof(DehazeSharpenLabel));
+    partial void OnDehazeEdgeChanged(double value) => ToolChanged(nameof(DehazeEdgeLabel));
+    partial void OnDehazeBrightnessChanged(double value) => ToolChanged(nameof(DehazeBrightnessLabel));
     partial void OnBrightnessChanged(double value) => ToolChanged(nameof(BrightnessLabel));
     partial void OnContrastChanged(double value) => ToolChanged(nameof(ContrastLabel));
     partial void OnShadowsChanged(double value) => ToolChanged(nameof(ShadowsLabel));
@@ -96,13 +130,30 @@ public partial class MainViewModel
         Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Neutralize = Warmth = Vibrance = Saturation = 0;
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
+        ResetDehazeDetails();
+    }
+
+    /// <summary>Nur die Dunst-Feineinstellung auf die Vorgaben — ein Rückgängig-Schritt.</summary>
+    [RelayCommand]
+    private void ResetDehazeDetails()
+    {
+        CommitPendingSettings();
+        DehazePasses = 1;
+        DehazeClarity = Adjustments.None.DehazeClarity;
+        DehazeContrast = Adjustments.None.DehazeContrast;
+        DehazeVibrance = Adjustments.None.DehazeVibrance;
+        DehazeSharpen = Adjustments.None.DehazeSharpen;
+        DehazeEdge = 0;
+        DehazeBrightness = Adjustments.None.DehazeBrightness;
     }
 
     /// <summary>Die Reglerstände als Auftrag für Vorschau und Export.</summary>
     private Adjustments CurrentAdjustments() => new(
         Round(Brightness), Round(Contrast), Round(Shadows), Round(Highlights), Round(Saturation),
         TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze), Round(MatchLuminance),
-        Round(Neutralize), Round(Warmth));
+        Round(Neutralize), Round(Warmth),
+        (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
+        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness));
 
     internal static Tint TintOf(string? label) =>
         TintLabels.FirstOrDefault(t => t.Label == label).Tint;

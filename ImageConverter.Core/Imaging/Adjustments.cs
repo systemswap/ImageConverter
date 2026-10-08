@@ -25,15 +25,44 @@ public sealed record Adjustments(
     double Dehaze = 0,
     double MatchLuminance = 0,
     double Neutralize = 0,
-    double Warmth = 0)
+    double Warmth = 0,
+    // Dunst, Feineinstellung (Beta): Durchläufe und die Wahrnehmungsanteile in Prozent.
+    // Die Vorgaben sind die Werte, die bis 0.4.40 fest eingebaut waren.
+    int DehazePasses = 1,
+    double DehazeClarity = Imaging.Dehaze.DefaultClarity,
+    double DehazeContrast = Imaging.Dehaze.DefaultCurve,
+    double DehazeVibrance = Imaging.Dehaze.DefaultVibrance,
+    double DehazeSharpen = Imaging.Dehaze.DefaultSharpen,
+    double DehazeEdge = 0,
+    double DehazeBrightness = Imaging.Dehaze.DefaultBrightness)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
 
     public static readonly Adjustments None = new();
 
-    /// <summary>Nichts zu tun — der Farbton zählt nur, wenn auch gefärbt wird.</summary>
-    public bool IsNone => (Tint == Tint.Color ? this : this with { TintHue = SepiaHue }) == None;
+    /// <summary>Nichts zu tun — der Farbton zählt nur, wenn auch gefärbt wird, die Dunst-Feineinstellung nur mit Dunst.</summary>
+    public bool IsNone => Normalized == None;
+
+    /// <summary>Ohne Einstellungen, die gerade nicht wirken (Farbton ohne Färben, Dunst-Feineinstellung ohne Dunst).</summary>
+    private Adjustments Normalized
+    {
+        get
+        {
+            var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
+            return Dehaze == 0 ? n with { DehazePasses = 1, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
+                DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness } : n;
+        }
+    }
+
+    /// <summary>Nur die Teile, von denen <see cref="Adjust.Prepare"/> abhängt — Schlüssel für die Vorschau.</summary>
+    public Adjustments PrepareKey => None with
+    {
+        Shadows = Shadows, Highlights = Highlights, Dehaze = Normalized.Dehaze,
+        DehazePasses = Normalized.DehazePasses, DehazeClarity = Normalized.DehazeClarity, DehazeContrast = Normalized.DehazeContrast,
+        DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
+        DehazeBrightness = Normalized.DehazeBrightness,
+    };
 }
 
 /// <summary>
@@ -77,7 +106,24 @@ public static class Adjust
     public static Prepared Prepare(byte[] bgra, int width, int height, Adjustments a)
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
-        var source = dehaze != 0 ? Dehaze.Apply(bgra, width, height, dehaze) : bgra;
+        var source = bgra;
+        if (dehaze != 0)
+        {
+            // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
+            // schätzen — wo er weg ist, findet die Schätzung nichts mehr, die Ferne wird weiter
+            // klar. Luftlicht und Himmel stammen aus dem ersten Durchlauf; Klarheit, Schärfe,
+            // Kurve und Dynamik kommen einmal am Schluss (je Durchlauf summierten sie sich:
+            // körniger Himmel, Vordergrund heller und bunter).
+            var settings = new Dehaze.Settings(
+                (float)(a.DehazeClarity / 100), (float)(a.DehazeSharpen / 100), (float)(a.DehazeContrast / 100),
+                (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100));
+            var passes = dehaze > 0 ? Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses) : 1;
+            var pass = new Dehaze.Pass();
+            for (var i = 0; i < passes; i++)
+                source = Dehaze.Apply(source, width, height, dehaze, pass, settings, final: i == passes - 1);
+            var edge = Math.Clamp(a.DehazeEdge / 100, 0, 1) * Math.Min(1, Math.Abs(dehaze));
+            if (edge > 0) source = Sharpen.UnsharpMask(source, width, height, edge, Dehaze.EdgeSigma);
+        }
         return new Prepared(source, ToneMap(source, width, height, a));
     }
 

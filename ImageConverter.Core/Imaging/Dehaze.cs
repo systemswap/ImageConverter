@@ -35,8 +35,32 @@ internal static class Dehaze
     /// <summary>Helligkeitsausgleich: Glättung der Helligkeit (großräumig), relativ.</summary>
     private const double BrightnessPerEdge = 0.05;
 
-    /// <summary>Anteil des Helligkeitsausgleichs (1 = voll ans Original).</summary>
-    private const float BrightnessMatch = 0.85f;
+    // Vorgaben der Feineinstellung in Prozent (Regler in der Kachel Tools, Beta): die Werte, die
+    // bis 0.4.40 fest eingebaut waren. Adjustments nimmt sie als Standard.
+    /// <summary>Anteil des Helligkeitsausgleichs (100 = voll ans Original).</summary>
+    internal const double DefaultBrightness = 85;
+    /// <summary>Klarheit (lokaler Kontrast, großer Radius) bei Regler 100.</summary>
+    internal const double DefaultClarity = 35;
+    /// <summary>Feine Schärfe (3×3-Unscharfmaskierung) bei Regler 100.</summary>
+    internal const double DefaultSharpen = 60;
+    /// <summary>S-Kurve auf der Helligkeit bei Regler 100 (Steigung in der Mitte 1 + Wert).</summary>
+    internal const double DefaultCurve = 12;
+    /// <summary>Dynamik bei Regler 100: blasse Farben bis zu so viel mehr Buntheit.</summary>
+    internal const double DefaultVibrance = 25;
+
+    /// <summary>Höchstzahl der Durchläufe.</summary>
+    internal const int MaxPasses = 10;
+
+    /// <summary>Kantenschärfe (Unscharfmaskierung nach allen Durchläufen): Gauß-Sigma in Pixeln.</summary>
+    internal const double EdgeSigma = 2.0;
+
+    /// <summary>Wahrnehmungsanteile als Faktoren (Prozent / 100); siehe die Default-Konstanten.</summary>
+    internal sealed record Settings(float Clarity, float Sharpen, float Curve, float Vibrance, float BrightnessMatch)
+    {
+        public static readonly Settings Default = new(
+            (float)(DefaultClarity / 100), (float)(DefaultSharpen / 100), (float)(DefaultCurve / 100),
+            (float)(DefaultVibrance / 100), (float)(DefaultBrightness / 100));
+    }
 
     /// <summary>Toleranz (lineares Licht): Farben näher am Luftlicht gelten nicht als dichter Dunst.</summary>
     private const float Tolerance = 0.08f;
@@ -49,20 +73,8 @@ internal static class Dehaze
     /// </summary>
     private const float ChromaPerUnit = 0.15f;
 
-    /// <summary>Klarheit (lokaler Kontrast, großer Radius) bei Regler 100.</summary>
-    private const float ClarityPerUnit = 0.35f;
-
     /// <summary>Radius der Klarheit (Gauß-Sigma des Guided Filters), relativ zur längsten Kante.</summary>
     private const double ClarityPerEdge = 0.02;
-
-    /// <summary>Feine Schärfe (3×3-Unscharfmaskierung) bei Regler 100.</summary>
-    private const float SharpenPerUnit = 0.6f;
-
-    /// <summary>S-Kurve auf der Helligkeit bei Regler 100 (Steigung in der Mitte 1 + Wert).</summary>
-    private const float CurvePerUnit = 0.12f;
-
-    /// <summary>Dynamik bei Regler 100: blasse Farben bis zu so viel mehr Buntheit.</summary>
-    private const float VibrancePerUnit = 0.25f;
 
     /// <summary>Ab dieser Oklab-Buntheit wirkt die Dynamik nicht mehr (kräftige Farben bleiben).</summary>
     private const float VibranceFull = 0.12f;
@@ -71,7 +83,23 @@ internal static class Dehaze
     private const float MinTransmission = 0.1f;
 
     /// <param name="amount">−1 … +3: rechts Dunst entfernen (über 1 verstärkt), links Dunst hinzufügen.</param>
-    public static byte[] Apply(byte[] bgra, int width, int height, float amount)
+    public static byte[] Apply(byte[] bgra, int width, int height, float amount) =>
+        Apply(bgra, width, height, amount, null, Settings.Default, final: true);
+
+    /// <summary>Was ein Durchlauf an den nächsten weitergibt: Luftlichtfeld und Himmel der kleinen Fassung.</summary>
+    internal sealed class Pass
+    {
+        public float[] Air = [];      // B, G, R je Pixel der kleinen Fassung
+        public float[] Sky = [];      // Himmel je Pixel der kleinen Fassung (0 … 1)
+        public int W, H;
+    }
+
+    /// <param name="pass">Durchläufe: Luftlicht und Himmel aus dem ersten weiterverwenden. Die Dunstmenge wird
+    /// jedes Mal neu am Zwischenstand geschätzt — wo der Dunst weg ist, findet sie nichts mehr, die Ferne wird
+    /// weiter klar. Im Himmel nur der erste Durchlauf: Dort fand die Schätzung sonst immer wieder „Dunst“
+    /// (Rauschen, Verlauf), der Himmel wurde körnig und fleckig.</param>
+    /// <param name="final">Letzter Durchlauf: Klarheit, Schärfe, Kurve und Dynamik anwenden (einmal, nicht je Durchlauf).</param>
+    internal static byte[] Apply(byte[] bgra, int width, int height, float amount, Pass? pass, Settings s, bool final)
     {
         if (amount == 0) return (byte[])bgra.Clone();
         var strength = Math.Abs(amount);
@@ -86,9 +114,13 @@ internal static class Dehaze
         // Kopie in Fließkomma bräuchte Gigabytes.
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)WorkEdge));
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
-        var sky = SkyMap(small, sw, sh);
-        var air = AirLightColumns(small, sw, sh, sky);   // je Spalte der kleinen Fassung
-        var t =Transmission(small, sw, sh, air, 0.95f);
+        var fresh = pass is null || pass.Air.Length == 0;
+        var sky = fresh ? SkyMap(small, sw, sh) : pass!.Sky;
+        var air = fresh ? AirLightField(small, sw, sh, sky) : pass!.Air;   // B, G, R je Pixel der kleinen Fassung
+        if (pass is not null && fresh) { pass.Air = air; pass.Sky = sky; pass.W = sw; pass.H = sh; }
+        var t = Transmission(small, sw, sh, air, 0.95f);
+        if (!fresh)
+            for (var p = 0; p < t.Length; p++) t[p] += (1 - t[p]) * sky[p];   // Himmel: nur im ersten Durchlauf
         var boosted = ProtectSky(sky, t, boost);
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         var guide = Encode(small);
@@ -96,22 +128,18 @@ internal static class Dehaze
         var plain = GuidedColor.Coefficients(guide, t, sw, sh, refine, eps: 1e-3f);
         var strong = boosted == null ? default : GuidedColor.Coefficients(guide, boosted, sw, sh, refine, eps: 1e-3f);
 
-        // Luftlicht je Spalte des großen Bildes (zwischen den Spalten der kleinen Fassung gemittelt)
-        var airFull = new float[width * 3];
-        for (var x = 0; x < width; x++)
+        // Luftlicht an einer Stelle des großen Bildes: bilinear aus dem Feld der kleinen Fassung
+        void AirAt(float sx, float sy, float[] into)
         {
-            var sx = Math.Clamp((x + 0.5f) / f - 0.5f, 0, sw - 1);
-            int x0 = (int)sx, x1 = Math.Min(x0 + 1, sw - 1);
-            for (var c = 0; c < 3; c++)
-                airFull[x * 3 + c] = air[x0 * 3 + c] + (air[x1 * 3 + c] - air[x0 * 3 + c]) * (sx - x0);
+            for (var c = 0; c < 3; c++) into[c] = At(air, sw, sh, sx, sy, c);
         }
 
         // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
-        float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r, float[] a, int o)
+        float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r, float[] a)
         {
-            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, o);
+            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0);
             if (boosted == null) return tt;
-            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, o);
+            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0);
             return Math.Min(tt, strongT);
         }
 
@@ -120,16 +148,18 @@ internal static class Dehaze
         if (amount > 0)
         {
             var after = new float[small.Length];
+            var a3 = new float[3];
             for (var p = 0; p < sw * sh; p++)
             {
-                var o = p % sw * 3;
+                var o = p * 3;
+                a3[0] = air[o]; a3[1] = air[o + 1]; a3[2] = air[o + 2];
                 var tt = TransmitAt(p % sw, p / sw, guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
-                    small[p * 3], small[p * 3 + 1], small[p * 3 + 2], air, o);
+                    small[p * 3], small[p * 3 + 1], small[p * 3 + 2], a3);
                 for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[o + c], tt, mix);
             }
             gain = BrightnessGain(small, after, guide, sw, sh);
         }
-        var k = BrightnessMatch * mix;
+        var k = s.BrightnessMatch * mix;
         // Buntheit: Dunst nimmt sie um den Faktor t — bis 1/t zurück ist berechtigt, dazu ein
         // kleiner Rest; dünner Dunst (Felder in mittlerer Ferne) bekommt so kaum mehr Farbe
 
@@ -138,10 +168,11 @@ internal static class Dehaze
         // dazu lokaler Kontrast (Klarheit), feine Schärfe, sanfte S-Kurve und Dynamik, mit dem
         // Regler wachsend, über 100 langsamer. Klarheit und Schärfe nicht im Himmel (Rauschen).
         var over = Math.Max(0, strength - 1);
-        var clarity = ClarityPerUnit * mix + ClarityPerUnit * 0.4f * over;
-        var sharpen = SharpenPerUnit * mix + SharpenPerUnit * 0.4f * over;
-        var curve = CurvePerUnit * mix + CurvePerUnit * 0.5f * over;
-        var vibrance = VibrancePerUnit * mix + VibrancePerUnit * 0.4f * over;
+        var perceptual = final ? 1f : 0f;
+        var clarity = perceptual * (s.Clarity * mix + s.Clarity * 0.4f * over);
+        var sharpen = perceptual * (s.Sharpen * mix + s.Sharpen * 0.4f * over);
+        var curve = perceptual * (s.Curve * mix + s.Curve * 0.5f * over);
+        var vibrance = perceptual * (s.Vibrance * mix + s.Vibrance * 0.4f * over);
         (float[] A, float[] B) baseL = default;
         if (amount > 0)
         {
@@ -157,22 +188,23 @@ internal static class Dehaze
         {
             var sy = (y + 0.5f) / f - 0.5f;
             Span<float> lin = stackalloc float[3];
+            var airHere = new float[3];
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
                 var sx = (x + 0.5f) / f - 0.5f;
                 var i = p * 4;
-                var o = x * 3;
+                AirAt(sx, sy, airHere);
                 float gB = bgra[i] / 255f, gG = bgra[i + 1] / 255f, gR = bgra[i + 2] / 255f;   // Führungsbild = Original
                 for (var c = 0; c < 3; c++) lin[c] = Srgb.ToLinear(bgra[i + c]);
 
-                var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2], airFull, o);
+                var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2], airHere);
 
                 float oB, oG, oR;
                 if (amount > 0)
                 {
-                    oB = Recover(lin[0], airFull[o], tt, mix);
-                    oG = Recover(lin[1], airFull[o + 1], tt, mix);
-                    oR = Recover(lin[2], airFull[o + 2], tt, mix);
+                    oB = Recover(lin[0], airHere[0], tt, mix);
+                    oG = Recover(lin[1], airHere[1], tt, mix);
+                    oR = Recover(lin[2], airHere[2], tt, mix);
 
                     // Helligkeit großräumig ans Original — aber nie heller als das Original
                     // (sonst heller Streifen über dem Horizont)
@@ -215,9 +247,9 @@ internal static class Dehaze
                 {
                     // Dunst hinzufügen: Grundschleier plus mehr, wo es schon dunstig/fern ist
                     var add = strength * (0.3f + 0.5f * (1 - tt));
-                    oB = lin[0] + (airFull[o] - lin[0]) * add;
-                    oG = lin[1] + (airFull[o + 1] - lin[1]) * add;
-                    oR = lin[2] + (airFull[o + 2] - lin[2]) * add;
+                    oB = lin[0] + (airHere[0] - lin[0]) * add;
+                    oG = lin[1] + (airHere[1] - lin[1]) * add;
+                    oR = lin[2] + (airHere[2] - lin[2]) * add;
                 }
 
                 result[i] = Srgb.ToByte(oB);
@@ -307,7 +339,7 @@ internal static class Dehaze
         var floor = new float[w * h];
         for (var p = 0; p < floor.Length; p++)
         {
-            var o = p % w * 3;
+            var o = p * 3;
             floor[p] = Math.Max(Keep(lin[p * 3], air[o], KeepShare),
                 Math.Max(Keep(lin[p * 3 + 1], air[o + 1], KeepShare), Keep(lin[p * 3 + 2], air[o + 2], KeepShare)));
         }
@@ -330,7 +362,7 @@ internal static class Dehaze
         var minRgb = new float[n];
         for (var p = 0; p < n; p++)
         {
-            var o = p % w * 3;
+            var o = p * 3;
             minRgb[p] = Math.Min(lin[p * 3] / air[o], Math.Min(lin[p * 3 + 1] / air[o + 1], lin[p * 3 + 2] / air[o + 2]));
         }
         var dark = MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
@@ -404,6 +436,82 @@ internal static class Dehaze
             int k0 = (int)pos, k1 = Math.Min(k0 + 1, AirStrips - 1);
             for (var c = 0; c < 3; c++)
                 air[x * 3 + c] = strips[k0][c] + (strips[k1][c] - strips[k0][c]) * (pos - k0);
+        }
+        return air;
+    }
+
+
+    /// <summary>Kacheln für das Luftlichtfeld (Spalten × Zeilen).</summary>
+    private const int AirCols = 6, AirRows = 4;
+
+    /// <summary>
+    /// Luftlicht als Feld (B, G, R je Pixel der kleinen Fassung): wie <see cref="AirLightColumns"/>,
+    /// aber je Kachel statt je Streifen, zwischen den Kachelmitten bilinear. Die Farbe des Schleiers
+    /// kippt in verschiedene Richtungen — um die Sonne gelbweiß, abseits bläulich, im Tal grau. Ein
+    /// Wert je Spalte zog überall dieselbe Farbe ab: Ring um die Sonne, rosa Ferne.
+    /// </summary>
+    internal static float[] AirLightField(float[] lin, int w, int h, float[]? sky = null)
+    {
+        var dark = DarkChannel(lin, w, h);
+        int[] Landscape(int[] pixels)
+        {
+            if (sky is null) return pixels;
+            var land = pixels.Where(p => sky[p] < 0.5f).ToArray();
+            return land.Length >= pixels.Length / 20 ? land : pixels;
+        }
+        // Senkrecht nur dort abweichen, wo die Kachel so dichten Dunst enthält wie ihre Spalte am
+        // Horizont: Das Luftlicht ist die Farbe in unendlicher Ferne — eine Kachel im Tal sieht vor
+        // allem Szenenfarbe, ihr „Luftlicht“ wäre zu dunkel (gemessen: halbe Farbrückgewinnung).
+        var columns = AirLightColumns(lin, w, h, sky);
+        var columnDark = new float[AirCols];
+        for (var tx = 0; tx < AirCols; tx++)
+        {
+            int x0 = tx * w / AirCols, x1 = Math.Max(x0 + 1, (tx + 1) * w / AirCols);
+            var pixels = new int[(x1 - x0) * h];
+            for (int y = 0, i = 0; y < h; y++)
+                for (var x = x0; x < x1; x++) pixels[i++] = y * w + x;
+            pixels = Landscape(pixels);
+            columnDark[tx] = (float)pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).Average(p => dark[p]);
+        }
+
+        var tiles = new float[AirCols * AirRows][];
+        for (var ty = 0; ty < AirRows; ty++)
+        for (var tx = 0; tx < AirCols; tx++)
+        {
+            int x0 = tx * w / AirCols, x1 = Math.Max(x0 + 1, (tx + 1) * w / AirCols);
+            int y0 = ty * h / AirRows, y1 = Math.Max(y0 + 1, (ty + 1) * h / AirRows);
+            var pixels = new int[(x1 - x0) * (y1 - y0)];
+            for (int y = y0, i = 0; y < y1; y++)
+                for (var x = x0; x < x1; x++) pixels[i++] = y * w + x;
+            pixels = Landscape(pixels);
+            var a = AirLightOf(lin, dark, pixels);
+            var candidates = pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).Average(p => dark[p]);
+            var trust = SmoothStep(0.7f, 0.95f, (float)candidates / Math.Max(1e-3f, columnDark[tx]));
+            var cx = Math.Clamp((x0 + x1) / 2, 0, w - 1) * 3;
+            for (var c = 0; c < 3; c++)
+            {
+                var col = columns[cx + c];
+                a[c] = col + (Math.Clamp(a[c], 0.5f * col, 1.25f * col) - col) * trust;
+            }
+            tiles[ty * AirCols + tx] = a;
+        }
+
+        var air = new float[w * h * 3];
+        for (var y = 0; y < h; y++)
+        {
+            var py = Math.Clamp((y + 0.5f) / h * AirRows - 0.5f, 0, AirRows - 1);
+            int r0 = (int)py, r1 = Math.Min(r0 + 1, AirRows - 1); var fy = py - r0;
+            for (var x = 0; x < w; x++)
+            {
+                var px = Math.Clamp((x + 0.5f) / w * AirCols - 0.5f, 0, AirCols - 1);
+                int c0 = (int)px, c1 = Math.Min(c0 + 1, AirCols - 1); var fx = px - c0;
+                for (var c = 0; c < 3; c++)
+                {
+                    var top = tiles[r0 * AirCols + c0][c] * (1 - fx) + tiles[r0 * AirCols + c1][c] * fx;
+                    var bottom = tiles[r1 * AirCols + c0][c] * (1 - fx) + tiles[r1 * AirCols + c1][c] * fx;
+                    air[(y * w + x) * 3 + c] = top * (1 - fy) + bottom * fy;
+                }
+            }
         }
         return air;
     }
