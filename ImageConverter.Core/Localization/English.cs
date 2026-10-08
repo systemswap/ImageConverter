@@ -199,6 +199,8 @@ public static class English
         ["Entstufen"] = "Deband",
         ["Glättet Treppen in weichen Verläufen wie dem Himmel (Debanding): am Original, bevor der Kontrast die 8-Bit-Stufen spreizt, und nach jedem Durchlauf. Kanten und Struktur bleiben. Gerechnet wird ohnehin in 32 Bit, auf 8 Bit gerundet erst am Schluss, mit feinem Korn."] = "Smooths steps in soft gradients such as the sky (debanding): on the original, before contrast spreads the 8-bit levels apart, and after every pass. Edges and texture stay. Processing is in 32 bit anyway, rounded to 8 bit only at the end, with fine grain.",
         ["Vorgaben"] = "Defaults",
+        ["16 Bit je Kanal"] = "16 bits per channel",
+        ["Speichert mit 65 536 statt 256 Stufen je Farbe — für die Weiterbearbeitung in anderen Programmen, ohne Stufen in Verläufen. Doppelt so große Datei. Bilder, die schon 16 Bit haben, bleiben es auch ohne Haken."] = "Saves with 65,536 instead of 256 levels per colour — for further editing in other programs, without steps in gradients. File twice as large. Images that already have 16 bits keep them even without the tick.",
         // Fortschritt beim Speichern
         ["Vorbereiten …"] = "Preparing …",
         ["Laden …"] = "Loading …",

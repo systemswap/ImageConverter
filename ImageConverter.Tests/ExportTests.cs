@@ -24,6 +24,71 @@ public sealed class ExportTests : IDisposable
 
     private string Out(string name) => Path.Combine(_dir, name);
 
+    /// <summary>Waagerechter Verlauf mit 16 Bit: Werte zwischen den 8-Bit-Stufen.</summary>
+    private static MagickImage Gradient16(int w = 512, int h = 64)
+    {
+        var data = new ushort[w * h * 3];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var v = (ushort)(20000 + x * 37);   // 37/257 ≈ 0,14 Stufe je Pixel
+            data[(y * w + x) * 3] = data[(y * w + x) * 3 + 1] = data[(y * w + x) * 3 + 2] = v;
+        }
+        var img = new MagickImage();
+        img.ReadPixels(data, new PixelReadSettings((uint)w, (uint)h, StorageType.Quantum, "RGB"));
+        img.Depth = 16;
+        return img;
+    }
+
+    /// <summary>
+    /// 32-Bit-Kette (0.4.49): Eine 16-Bit-Quelle bleibt auch mit Tools-Reglern 16 Bit — früher ging
+    /// sie für die Tools durch 8 Bit. Die Zwischenwerte bleiben erhalten.
+    /// </summary>
+    [Fact]
+    public void SixteenBitSource_StaysSixteenBit_ThroughTheTools()
+    {
+        using var src = Gradient16();
+        var path = Out("verlauf16.png");
+        ImageExporter.Export(src, Options(OutputFormat.Png, 512, 64) with { Adjustments = new Adjustments(Brightness: 1) }, path);
+
+        using var result = new MagickImage(path);
+        Assert.Equal(16u, result.Depth);
+        using var pixels = result.GetPixelsUnsafe();
+        var row = pixels.ToShortArray(0, 32, 512, 1, "R")!;
+        var between = row.Count(v => v % 257 != 0);
+        Assert.True(between > 400, $"nur {between} von 512 Werten zwischen den 8-Bit-Stufen");
+    }
+
+    /// <summary>Ein unbearbeitetes 8-Bit-Bild bleibt beim Speichern pixelgenau — der Dither lässt exakte Stufen stehen.</summary>
+    [Fact]
+    public void EightBitSource_WithoutChanges_StaysExact()
+    {
+        using var photo = Photo();
+        using var src = ImageOps.FromBgra(ImageOps.ToBgra(photo), 400, 300);   // echte 8-Bit-Werte wie ein JPEG
+        var path = Out("gleich.png");
+        ImageExporter.Export(src, Options(OutputFormat.Png, 400, 300), path);
+
+        using var result = new MagickImage(path);
+        Assert.Equal(8u, result.Depth);
+        Assert.Equal(ImageOps.ToBgra(src), ImageOps.ToBgra(result));
+        Assert.Null(result.GetAttribute("imageconverter:source-depth"));
+    }
+
+    /// <summary>Haken „16 Bit je Kanal“: auch eine 8-Bit-Quelle wird mit 16 Bit gespeichert; JPEG bleibt 8 Bit.</summary>
+    [Fact]
+    public void HighBitDepth_OnlyWhereTheFormatCan()
+    {
+        using var photo = Photo();
+        using var src = ImageOps.FromBgra(ImageOps.ToBgra(photo), 400, 300);
+        var png = Out("tief.png");
+        ImageExporter.Export(src, Options(OutputFormat.Png) with { HighBitDepth = true, Adjustments = new Adjustments(Contrast: 20) }, png);
+        using (var p = new MagickImage(png)) Assert.Equal(16u, p.Depth);
+
+        var jpg = Out("tief.jpg");
+        ImageExporter.Export(src, Options(OutputFormat.Jpeg) with { HighBitDepth = true }, jpg);
+        using (var j = new MagickImage(jpg)) Assert.Equal(8u, j.Depth);
+    }
+
     /// <summary>Meldet sofort im selben Thread (Progress&lt;T&gt; liefe über den UI-Kontext).</summary>
     private sealed class Collect : IProgress<WorkProgress>
     {

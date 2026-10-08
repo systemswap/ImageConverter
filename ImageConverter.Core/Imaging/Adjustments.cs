@@ -94,8 +94,13 @@ public static class Adjust
     // Gewichte der Helligkeit (Rec. 709) auf den sRGB-Werten
     private const float Kr = 0.2126f, Kg = 0.7152f, Kb = 0.0722f;
 
+    /// <summary>8-Bit-Zugang (Tests, einfache Aufrufer): rechnet in 32 Bit, rundet am Ende mit Dither.</summary>
     public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a, WorkPlan? plan = null) =>
-        Apply(Prepare(bgra, width, height, a, plan), width, height, a, plan);
+        Pixels.ToBytes(Apply(Pixels.FromBytes(bgra), width, height, a, plan), dither: true);
+
+    /// <param name="px">Pixelpuffer (B, G, R, A, sRGB-kodiert 0–1, siehe <see cref="Pixels"/>); bleibt unverändert.</param>
+    public static float[] Apply(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null) =>
+        Apply(Prepare(px, width, height, a, plan), width, height, a, plan);
 
     /// <summary>
     /// Trägt die Schritte von <see cref="Prepare"/> und <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/>
@@ -121,17 +126,17 @@ public static class Adjust
 
     /// <summary>Ergebnis des teuren Teils: Bild nach „Dunst entfernen“ und die Zielhelligkeit
     /// aus Tiefen/Lichtern (null, wenn beide auf 0).</summary>
-    public sealed record Prepared(byte[] Source, float[]? Toned);
+    public sealed record Prepared(float[] Source, float[]? Toned);
 
     /// <summary>
     /// Der teure Teil — Dunst entfernen und Tiefen/Lichter über den Local Laplacian Filter.
     /// Hängt nur von Bild, Dunst, Tiefen und Lichtern ab; die Vorschau merkt sich das
     /// Ergebnis, damit die übrigen Regler flüssig bleiben.
     /// </summary>
-    public static Prepared Prepare(byte[] bgra, int width, int height, Adjustments a, WorkPlan? plan = null)
+    public static Prepared Prepare(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
-        var source = bgra;
+        var source = px;
         if (dehaze != 0)
         {
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
@@ -151,11 +156,11 @@ public static class Adjust
                 (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100));
             var pass = new Dehaze.Pass();
             var deband = (float)Math.Clamp(a.DehazeDeband / 100, 0, 1);
-            var px = Deband.Apply(Pixels.FromBytes(source), width, height, deband * Dehaze.SourceDebandShare, seed: 0);
+            var work = Deband.Apply(source, width, height, deband * Dehaze.SourceDebandShare, seed: 0);
             plan?.Next();   // Entstufen der Quelle zählt zum ersten Schritt
             if (dehaze < 0)
             {
-                px = Dehaze.Apply(px, width, height, dehaze, pass, settings, 1f);   // Dunst hinzufügen: ein Schritt
+                work = Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f);   // Dunst hinzufügen: ein Schritt
             }
             else
             {
@@ -172,14 +177,14 @@ public static class Adjust
                 for (var i = 0; i < passes; i++)
                 {
                     if (i > 0) plan?.Next();
-                    px = Dehaze.Apply(px, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f);
-                    ContrastVibrance(px, width, height, contrast / 100, vibrance / 100);
-                    px = Deband.Apply(px, width, height, deband, seed: (uint)i + 1);
-                    if (fine > 0) px = Sharpen.UnsharpMask(px, width, height, fine, Dehaze.FineSigma);
-                    if (edge > 0) px = Sharpen.UnsharpMask(px, width, height, edge, Dehaze.EdgeSigma);
+                    work = Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f);
+                    ContrastVibrance(work, width, height, contrast / 100, vibrance / 100);
+                    work = Deband.Apply(work, width, height, deband, seed: (uint)i + 1);
+                    if (fine > 0) work = Sharpen.UnsharpMask(work, width, height, fine, Dehaze.FineSigma);
+                    if (edge > 0) work = Sharpen.UnsharpMask(work, width, height, edge, Dehaze.EdgeSigma);
                 }
             }
-            source = Pixels.ToBytes(px, dither: true);
+            source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
         }
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
         return new Prepared(source, ToneMap(source, width, height, a));
@@ -222,7 +227,7 @@ public static class Adjust
         return curve[i] + (curve[i + 1] - curve[i]) * (x - i);
     }
 
-    private static float[]? ToneMap(byte[] bgra, int width, int height, Adjustments a)
+    private static float[]? ToneMap(float[] bgra, int width, int height, Adjustments a)
     {
         var shadows = (float)Math.Clamp(a.Shadows / 100, -1, 1);
         var highlights = (float)Math.Clamp(a.Highlights / 100, -1, 1);
@@ -232,12 +237,12 @@ public static class Adjust
     }
 
     /// <param name="prepared">Ergebnis von <see cref="Prepare"/> für dasselbe Bild.</param>
-    public static byte[] Apply(Prepared prepared, int width, int height, Adjustments a, WorkPlan? plan = null)
+    public static float[] Apply(Prepared prepared, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var (bgra, toned) = (prepared.Source, prepared.Toned);
         ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(prepared));
 
-        var result = (byte[])bgra.Clone();
+        var result = (float[])bgra.Clone();
         if (a.IsNone) return result;
         plan?.Next();
 
@@ -258,7 +263,7 @@ public static class Adjust
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
                 var i = p * 4;
-                float b = bgra[i] / 255f, g = bgra[i + 1] / 255f, r = bgra[i + 2] / 255f;
+                float b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
 
                 if (toned is not null)
                 {
@@ -276,7 +281,7 @@ public static class Adjust
                     }
                 }
 
-                r = curve[Index(r)]; g = curve[Index(g)]; b = curve[Index(b)];
+                r = Lookup(curve, r); g = Lookup(curve, g); b = Lookup(curve, b);
 
                 if (oklab)
                 {
@@ -307,9 +312,9 @@ public static class Adjust
                 if (a.Tint != Tint.None)
                     (r, g, b) = Colorize(Math.Clamp(Kr * r + Kg * g + Kb * b, 0, 1), a.Tint, (float)a.TintHue);
 
-                result[i] = ToByte(b);
-                result[i + 1] = ToByte(g);
-                result[i + 2] = ToByte(r);
+                result[i] = Math.Clamp(b, 0, 1);
+                result[i + 1] = Math.Clamp(g, 0, 1);
+                result[i + 2] = Math.Clamp(r, 0, 1);
             }
         });
 
@@ -362,13 +367,13 @@ public static class Adjust
     /// jeweils mit der weiten Umgebung als zweitem Maßstab (Tiefen: der hellere, Lichter:
     /// der dunklere der beiden Umgebungswerte).
     /// </summary>
-    private static float[] ShadowsHighlights(byte[] bgra, int width, int height, float shadows, float highlights)
+    private static float[] ShadowsHighlights(float[] bgra, int width, int height, float shadows, float highlights)
     {
         var lum = new float[width * height];
         Parallel.For(0, height, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
-                lum[p] = (Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2]) / 255f;
+                lum[p] = Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2];
         });
 
         // Pyramidenstufe, deren Glättung etwa der weiten Umgebung entspricht (Stufe l ≈ 2^l px)
@@ -444,14 +449,14 @@ public static class Adjust
     /// — ein rotes T-Shirt, blauer Himmel — zählen nicht, sonst würden sie „ausgeglichen“.
     /// Rechnet auf jedem 4. Pixel jeder 4. Zeile, das reicht für einen Mittelwert.
     /// </summary>
-    internal static (float A, float B) ColourCast(byte[] bgra, int width, int height)
+    internal static (float A, float B) ColourCast(float[] bgra, int width, int height)
     {
         double sa = 0, sb = 0, n = 0;
         for (var y = 0; y < height; y += 4)
         for (var x = 0; x < width; x += 4)
         {
             var i = (y * width + x) * 4;
-            var (L, a, b) = Oklab.FromSrgb(bgra[i + 2] / 255f, bgra[i + 1] / 255f, bgra[i] / 255f);
+            var (L, a, b) = Oklab.FromSrgb(bgra[i + 2], bgra[i + 1], bgra[i]);
             if (L < 0.15f || L > 0.97f || a * a + b * b > 0.1f * 0.1f) continue;
             sa += a; sb += b; n++;
         }
@@ -560,8 +565,4 @@ public static class Adjust
         var t = Math.Clamp((x - edge0) / (edge1 - edge0), 0, 1);
         return t * t * (3 - 2 * t);
     }
-
-    private static int Index(float v) => (int)(Math.Clamp(v, 0, 1) * (CurveSize - 1) + 0.5f);
-
-    private static byte ToByte(float v) => (byte)(Math.Clamp(v, 0, 1) * 255 + 0.5f);
 }

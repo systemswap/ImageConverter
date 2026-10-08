@@ -361,7 +361,8 @@ public class AdjustTests
             0, 0, 1, 96, MetadataMode.KeepAll, ColorMode.KeepProfile, new Adjustments(Brightness: 50));
 
         using var rendered = ImageExporter.Render(src, options);
-        var expected = Adjust.Apply(ImageOps.ToBgra(src), 300, 200, options.Adjustments!);
+        // Wie die Vorschau: 32-Bit-Puffer, gerundet erst am Ende (hier ohne Dither, damit Pixel vergleichbar)
+        var expected = Pixels.ToBytes(Adjust.Apply(Pixels.FromMagick(src), 300, 200, options.Adjustments!), dither: false);
 
         Assert.Equal(expected[(100 * 300 + 150) * 4 + 1], ImageOps.ToBgra(rendered)[(100 * 300 + 150) * 4 + 1]);
     }

@@ -109,7 +109,7 @@ void Run(string name, string? compareTo)
         Console.WriteLine(Report.Failures == 0 ? "Abnahme: nichts schlechter als die Referenz." : $"Abnahme: {Report.Failures} Werte schlechter als die Referenz (✗).");
 }
 
-byte[] Render(MagickImage source, Case c, out int w, out int h)
+byte[] Render(MagickImage source, Case c, out int w, out int h, bool encode = true)
 {
     var edge = Math.Max((int)source.Width, (int)source.Height);
     var scale = Math.Min(1.0, (double)config.Kante / edge);
@@ -118,7 +118,14 @@ byte[] Render(MagickImage source, Case c, out int w, out int h)
     var options = new ExportOptions(OutputFormat.Png, 95, false, w, h, ResampleFilter.Lanczos3, true,
         c.Denoise, c.Sharpen, c.SharpenSigma, 300, MetadataMode.KeepAll, ColorMode.ConvertToSrgb, c.Adjust);
     using var rendered = ImageExporter.Render(source, options);
-    return ImageOps.ToBgra(rendered);
+    if (!encode) return ImageOps.ToBgra(rendered);
+    // Messen, was gespeichert wird: als PNG kodieren und wieder lesen — seit 0.4.49 rundet erst das
+    // Kodieren (mit Dither) auf 8 Bit; das gerechnete Bild selbst hat 16 Bit
+    using var file = new MemoryStream();
+    ImageExporter.Encode(rendered, options, file);
+    file.Position = 0;
+    using var saved = new MagickImage(file);
+    return ImageOps.ToBgra(saved);
 }
 
 static void Save(byte[] px, int w, int h, string path)
@@ -167,10 +174,10 @@ void Single(string imageName, string caseName, int edge)
     var c = Cases.All.First(x => x.Name == caseName);
     using var source = new MagickImage(Path.Combine(root, image.Datei));
     if (edge > 0) config.Kante = edge; else config.Kante = int.MaxValue;
-    Render(source, c, out _, out _);   // warm (JIT, Tabellen)
+    Render(source, c, out _, out _, encode: false);   // warm (JIT, Tabellen)
     GC.Collect();
     var watch = Stopwatch.StartNew();
-    Render(source, c, out var w, out var h);
+    Render(source, c, out var w, out var h, encode: false);
     watch.Stop();
     using var self = Process.GetCurrentProcess();
     self.Refresh();

@@ -41,7 +41,8 @@ public partial class MainViewModel
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight,   // Bildgröße, für die dieser Stand gilt
         double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
-        double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband);
+        double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband,
+        bool HighBitDepth);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -53,6 +54,7 @@ public partial class MainViewModel
         [nameof(SelectedFormat)] = null,
         [nameof(Quality)] = "Qualität",
         [nameof(Lossless)] = null,
+        [nameof(HighBitDepth)] = null,
         [nameof(SelectedSizeUnit)] = null,
         [nameof(KeepAspectRatio)] = null,
         [nameof(TargetWidth)] = "Größe",
@@ -217,7 +219,8 @@ public partial class MainViewModel
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
-        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband);
+        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband,
+        HighBitDepth);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -235,6 +238,7 @@ public partial class MainViewModel
                 SelectedFormat = s.SelectedFormat;
                 Quality = s.Quality;
                 Lossless = s.Lossless;
+                HighBitDepth = s.HighBitDepth;
                 SelectedSizeUnit = s.SelectedSizeUnit;
                 KeepAspectRatio = s.KeepAspectRatio;
                 Dpi = s.Dpi;

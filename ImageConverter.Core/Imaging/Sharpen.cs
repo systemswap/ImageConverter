@@ -62,8 +62,8 @@ public static class Sharpen
         return result;
     }
 
-    /// <summary>Wie oben auf Fließkomma-Pixeln (sRGB-kodiert 0–1), ohne Rundung — für die Dunst-Durchläufe.</summary>
-    internal static float[] UnsharpMask(float[] px, int width, int height,
+    /// <summary>Wie oben auf dem 32-Bit-Puffer (<see cref="Pixels"/>), ohne Rundung — Vorschau, Export und Dunst-Durchläufe.</summary>
+    public static float[] UnsharpMask(float[] px, int width, int height,
         double amount, double sigma, double threshold = 2)
     {
         var result = (float[])px.Clone();

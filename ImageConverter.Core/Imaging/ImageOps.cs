@@ -71,6 +71,19 @@ public static class ImageOps
         return ToBgra(display);
     }
 
+    /// <summary>Wie <see cref="ToDisplayBgra"/>, aber als 32-Bit-Puffer mit voller Tiefe (siehe <see cref="Pixels"/>).</summary>
+    public static float[] ToDisplayPixels(MagickImage image)
+    {
+        IColorProfile? profile;
+        lock (image) profile = image.GetColorProfile();
+        if (profile is null || ImageExporter.IsSrgb(profile))
+            return Pixels.FromMagick(image);
+
+        using var display = CloneOf(image);
+        display.TransformColorSpace(ColorProfiles.SRGB);
+        return Pixels.FromMagick(display);
+    }
+
     /// <summary>Liest 8-Bit-BGRA-Pixel zurück in ein ImageMagick-Bild (z. B. nach dem Schärfen).</summary>
     public static MagickImage FromBgra(byte[] bgra, int width, int height)
     {

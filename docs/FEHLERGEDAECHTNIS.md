@@ -655,3 +655,12 @@ Test oder Nachweis.
   already set for Placement on Control“, Absturz beim Start!) — darum für
   `TemplatedControl`, `TextBlock`, `Border`, `Panel`, `Image` einzeln. Neue
   Tooltip-Träger anderer Art dort ergänzen.
+- **Phase 1, 32-Bit-Kette (0.4.49 beta):** Magick erwartet beim Einlesen von
+  `ushort`-Pixeln `StorageType.Quantum`, nicht `Short` („Storage type should be
+  Quantum“). Im Speicher erzeugte Testbilder haben 16 Bit; `Depth = 8` setzt nur
+  die Angabe, die Pixel bleiben dazwischen — echte 8-Bit-Testbilder über
+  `ImageOps.FromBgra`. Die Abnahme muss messen, was gespeichert wird (über
+  `Encode`), seit erst das Kodieren mit Dither rundet; sonst meldet das
+  Lückenmaß „Treppen“ falsche Verschlechterungen. Dieses Maß ist mit Dither
+  ohnehin unzuverlässig (Dither füllt Lücken) — geurteilt wird über die
+  Stufenhöhe. Ergebnis gegen 0.4.45: mittleres ΔE ≤ 0,38, alle Messwerte ≈.

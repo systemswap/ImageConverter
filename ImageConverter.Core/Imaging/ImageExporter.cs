@@ -41,7 +41,8 @@ public sealed record ExportOptions(
     int Dpi,
     MetadataMode Metadata,
     ColorMode Color,
-    Adjustments? Adjustments = null);   // Kachel „Tools“; null = keine
+    Adjustments? Adjustments = null,   // Kachel „Tools“; null = keine
+    bool HighBitDepth = false);        // PNG/TIFF mit 16 Bit je Kanal (sonst 8 Bit mit Dither)
 
 /// <summary>
 /// Die Export-Kette: Skalieren → Entrauschen → Tools (Licht, Farbe) → Schärfen → Farbprofil
@@ -68,12 +69,21 @@ public static class ImageExporter
         format is OutputFormat.Png or OutputFormat.Tiff or OutputFormat.Bmp or OutputFormat.Ico;
 
     /// <summary>Formate ohne Transparenz — Alpha wird auf Weiß gelegt.</summary>
+    /// <summary>Bittiefe der Quelle am gerechneten Bild (das selbst immer 16 Bit hat).</summary>
+    private const string SourceDepthArtifact = "imageconverter:source-depth";
+
+    /// <summary>Formate, die mit 16 Bit je Kanal gespeichert werden können.</summary>
+    public static bool SupportsHighBitDepth(OutputFormat format) =>
+        format is OutputFormat.Png or OutputFormat.Tiff;
+
     public static bool SupportsAlpha(OutputFormat format) =>
         format is not (OutputFormat.Jpeg or OutputFormat.Bmp);
 
     /// <summary>Wendet die Bildkette an. Die Quelle bleibt unverändert.</summary>
     public static MagickImage Render(MagickImage source, ExportOptions o, WorkPlan? plan = null)
     {
+        uint sourceDepth;
+        lock (source) sourceDepth = source.Depth;
         plan?.Next();
         var result = ImageOps.Resize(source, o.Width, o.Height, o.Filter, o.GammaCorrect);
 
@@ -88,18 +98,18 @@ public static class ImageExporter
         var adjust = o.Adjustments is { IsNone: false } a ? a : null;
         if (adjust is not null || o.SharpenAmount > 0.01)
         {
-            // Tools und Schärfen arbeiten auf 8-Bit-BGRA wie die Vorschau — in einem
-            // Durchgang. Dabei gehen Profile verloren, sie werden vom Zwischenstand übernommen.
+            // Tools und Schärfen rechnen im 32-Bit-Puffer wie die Vorschau, gelesen mit voller Tiefe (Q16)
+            // und als 16-Bit-Bild zurück — gerundet wird erst beim Kodieren. Profile werden übernommen.
             var w = (int)result.Width;
             var h = (int)result.Height;
-            var pixels = ImageOps.ToBgra(result);
+            var pixels = Pixels.FromMagick(result);
             if (adjust is not null) pixels = Adjust.Apply(pixels, w, h, adjust, plan);
             if (o.SharpenAmount > 0.01)
             {
                 plan?.Next();
                 pixels = Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma);
             }
-            var processed = ImageOps.FromBgra(pixels, w, h);
+            var processed = Pixels.ToMagick16(pixels, w, h, result.HasAlpha);
             CopyProfiles(result, processed);
             result.Dispose();
             result = processed;
@@ -109,6 +119,7 @@ public static class ImageExporter
         ApplyColor(result, o.Color);
         ApplyMetadata(result, o.Metadata);
         result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
+        result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
         return result;
     }
 
@@ -122,6 +133,15 @@ public static class ImageExporter
             img.BackgroundColor = MagickColors.White;
             img.Alpha(AlphaOption.Remove);
         }
+
+        // Bittiefe: 16 Bit, wo das Format es kann und es gewünscht ist oder die Quelle schon 16 Bit hatte;
+        // sonst einmal mit Dither auf 8 Bit (Magick würde ohne Dither runden — weiche Verläufe bekämen
+        // dabei wieder Stufen)
+        var sourceDepth = int.TryParse(img.GetArtifact(SourceDepthArtifact), out var d) ? d : (int)img.Depth;
+        if (SupportsHighBitDepth(o.Format) && (o.HighBitDepth || sourceDepth > 8))
+            img.Depth = 16;
+        else
+            Pixels.DitherTo8Bit(img);
 
         var quality = (uint)Math.Clamp(o.Quality, 1, 100);
         switch (o.Format)

@@ -406,6 +406,17 @@ vielen Stellen einzeln geschützt.
 je Pixel über Oklab). 16-Bit-Export zuerst als PNG und TIFF; JPEG XL/AVIF mit 10/12 Bit
 später als eigener Punkt.
 
+**Umgesetzt in Phase 1 (0.4.49 beta), mit einer Abweichung:** Der Puffer (`Pixels`) ist
+32-Bit-Fließkomma, die Werte aber **sRGB-kodiert**, nicht linear. Kurven, Schärfen,
+Tiefen/Lichter und Dynamik sind auf kodierte Werte abgestimmt und so abgenommen — linear
+gespeichert hätten sie anders ausgesehen; die physikalischen Schritte (Dunst, Skalieren)
+rechnen ohnehin intern linear. In 32 Bit ist beides gleich genau. Linear-native Schritte
+kommen mit dem Dunst-Neubau (Phase 4), dann wird die Kodierung neu entschieden. Magick
+liefert Q16 direkt in den Puffer (`Pixels.FromMagick`), zurück als 16-Bit-Bild
+(`ToMagick16`); 8-Bit-Formate bekommen beim Kodieren einmal Dither (`DitherTo8Bit`,
+exakte Stufen bleiben unverändert — unbearbeitete 8-Bit-Bilder bleiben pixelgenau).
+16-Bit-Quellen bleiben bei PNG/TIFF 16 Bit, sonst Haken „16 Bit je Kanal“.
+
 **Stufenplan** — jede Phase endet mit einer Beta, die der Benutzer mit dem Auge abnimmt,
 bevor die nächste beginnt. Ab Phase 1 liegt `ImageConverter-0.4.45-Referenz.exe` neben der
 aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-Ordner.

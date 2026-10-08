@@ -313,7 +313,8 @@ public static class Report
             Cell(m.FerneFarbton, r?.FerneFarbton, "F1", 9, abs: 3, worse: d => Math.Abs(d) > 5),
             Cell(m.FerneBuntheit, r?.FerneBuntheit, "F3", 7, rel: 0.08),
             Cell(m.FerneDetail, r?.FerneDetail, "F2", 7, rel: 0.10),
-            Cell(m.Treppen, r?.Treppen, "F1", 8, abs: 0.5, worse: d => d > 1.0),
+            // Lücken im Tonwertvorrat: nur zur Information — Dither füllt Lücken auf, das Urteil fällt über die Stufenhöhe
+            Cell(m.Treppen, r?.Treppen, "F1", 8, abs: 0.5),
             Cell(m.Stufen, r?.Stufen, "F2", 7, abs: 0.03, worse: d => d > 0.06),
             Cell(m.Strahlen, r?.Strahlen, "F2", 9, abs: 0.05, worse: d => d < -0.08),
             Cell(m.AbweichungMittel, null, "F2", 7),

@@ -254,6 +254,9 @@
                             <CheckBox IsChecked="{Binding Lossless}" IsVisible="{Binding LosslessAvailable}"
                                       Content="{l:T 'Verlustfrei'}" FontSize="12"
                                       ToolTip.Tip="{l:T 'Jedes Pixel bleibt exakt erhalten. Ideal für Grafiken, Screenshots und Buttons — bei Fotos deutlich größer.'}" />
+                            <CheckBox IsChecked="{Binding HighBitDepth}" IsVisible="{Binding HighBitDepthAvailable}"
+                                      Content="{l:T '16 Bit je Kanal'}" FontSize="12"
+                                      ToolTip.Tip="{l:T 'Speichert mit 65 536 statt 256 Stufen je Farbe — für die Weiterbearbeitung in anderen Programmen, ohne Stufen in Verläufen. Doppelt so große Datei. Bilder, die schon 16 Bit haben, bleiben es auch ohne Haken.'}" />
                             <TextBlock Classes="hint" IsVisible="{Binding !QualityApplies}" Margin="0,0,0,2"
                                        Text="{l:T 'Dieses Format speichert immer verlustfrei.'}" />
 

@@ -40,7 +40,7 @@ public partial class MainViewModel
     // -------------------------------------------------------------- Format
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowTransparencyWarning), nameof(QualityApplies), nameof(LosslessAvailable))]
+    [NotifyPropertyChangedFor(nameof(ShowTransparencyWarning), nameof(QualityApplies), nameof(LosslessAvailable), nameof(HighBitDepthAvailable))]
     public partial string SelectedFormat { get; set; }
 
     [ObservableProperty] public partial double Quality { get; set; } = 82;
@@ -58,6 +58,13 @@ public partial class MainViewModel
     partial void OnSelectedFormatChanged(string value) => RequestEstimate();
     partial void OnQualityChanged(double value) => RequestEstimate();
     partial void OnLosslessChanged(bool value) => RequestEstimate();
+
+    /// <summary>PNG und TIFF wahlweise mit 16 Bit je Kanal (Quellen mit 16 Bit bleiben es ohnehin).</summary>
+    [ObservableProperty] public partial bool HighBitDepth { get; set; }
+
+    public bool HighBitDepthAvailable => ImageExporter.SupportsHighBitDepth(CurrentFormat);
+
+    partial void OnHighBitDepthChanged(bool value) => RequestEstimate();
 
     // ------------------------------------------------- Metadaten und Farbe
 
@@ -150,7 +157,8 @@ public partial class MainViewModel
         Dpi,
         MetadataByLabel.TryGetValue(SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
         ColorByLabel.TryGetValue(SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
-        CurrentAdjustments());
+        CurrentAdjustments(),
+        HighBitDepth && HighBitDepthAvailable);
 
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()

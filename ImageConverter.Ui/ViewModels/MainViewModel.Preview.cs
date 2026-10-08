@@ -297,12 +297,16 @@ public partial class MainViewModel
 
     // Zwischenspeicher der Stufen — nur im Render-Task benutzt, nie gleichzeitig.
     // Je ein paar Ergebnisse, damit Rückgängig/Wiederholen zwischen Ständen nicht neu rechnet.
+    // Bildstufen in 32 Bit sind viermal so groß wie früher in 8 Bit (bei 2048 px ~30 MB je Stufe):
+    // skaliert vier, die Pixelstufen je zwei (Dunst + Tiefen/Lichter als teuerste drei).
     private const int StageCacheSize = 4;
+    private const int PixelCacheSize = 2;
+    private const int PreparedCacheSize = 3;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
-    private readonly List<(ResizeKey Key, double Noise, byte[] Bgra)> _denoisedCache = [];
+    private readonly List<(ResizeKey Key, double Noise, float[] Pixels)> _denoisedCache = [];
     // Dunst + Tiefen/Lichter gesondert: der teure Teil, hängt nur von diesen drei Reglern ab
     private readonly List<(ResizeKey Key, double Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
-    private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, byte[] Bgra)> _adjustedCache = [];
+    private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, float[] Pixels)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
 
@@ -423,26 +427,26 @@ public partial class MainViewModel
         }
 
         // 2) Entrauschen — mittel, nur bei geändertem Regler neu
-        var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Bgra;
+        var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Pixels;
         if (denoised is null)
         {
             if (job.Noise > 0)
             {
                 using var d = ImageOps.Denoise(resized, job.Noise);
-                denoised = ImageOps.ToDisplayBgra(d);
+                denoised = ImageOps.ToDisplayPixels(d);
             }
             else
             {
-                denoised = ImageOps.ToDisplayBgra(resized);
+                denoised = ImageOps.ToDisplayPixels(resized);
             }
-            AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Bgra: denoised), null);
+            AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Pixels: denoised), null, PixelCacheSize);
         }
 
         // 3) Tools (Licht, Farbe) — schnell, nur bei geänderten Reglern neu
         var adjusted = denoised;
         if (!job.Adjust.IsNone)
         {
-            adjusted = Cached(_adjustedCache, e => e.Key == key && e.Noise == job.Noise && e.Adjust == job.Adjust)?.Bgra;
+            adjusted = Cached(_adjustedCache, e => e.Key == key && e.Noise == job.Noise && e.Adjust == job.Adjust)?.Pixels;
             if (adjusted is null)
             {
                 var j = job.Adjust;
@@ -451,10 +455,10 @@ public partial class MainViewModel
                 if (prepared is null)
                 {
                     prepared = Adjust.Prepare(denoised, job.Width, job.Height, j);
-                    AddCached(_tonedCache, (key, job.Noise, prepareKey, prepared), null);
+                    AddCached(_tonedCache, (key, job.Noise, prepareKey, prepared), null, PreparedCacheSize);
                 }
                 adjusted = Adjust.Apply(prepared, job.Width, job.Height, j);
-                AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Bgra: adjusted), null);
+                AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Pixels: adjusted), null, PixelCacheSize);
             }
         }
 
@@ -463,7 +467,8 @@ public partial class MainViewModel
             ? Sharpen.UnsharpMask(adjusted, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
             : adjusted;
 
-        return new PreviewResult(final, job.Width, job.Height);
+        // Einmal runden, mit Dither — erst hier wird aus 32 Bit die Anzeige in 8 Bit
+        return new PreviewResult(Pixels.ToBytes(final, dither: true), job.Width, job.Height);
     }
 
     /// <summary>Treffer nach vorn holen (zuletzt benutzt bleibt am längsten).</summary>
@@ -477,10 +482,10 @@ public partial class MainViewModel
         return hit;
     }
 
-    private static void AddCached<T>(List<T> cache, T entry, Action<T>? evicted)
+    private static void AddCached<T>(List<T> cache, T entry, Action<T>? evicted, int size = StageCacheSize)
     {
         cache.Insert(0, entry);
-        while (cache.Count > StageCacheSize)
+        while (cache.Count > size)
         {
             evicted?.Invoke(cache[^1]);
             cache.RemoveAt(cache.Count - 1);

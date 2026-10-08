@@ -1,12 +1,22 @@
+using ImageMagick;
+
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Pixel in Fließkomma (32 Bit je Kanal, B, G, R, A, sRGB-kodiert 0–1) für Ketten aus mehreren
-/// Schritten wie die Dunst-Durchläufe: Zwischen den Schritten wird nicht auf 8 Bit gerundet,
-/// erst einmal am Ende — mit Dither, damit dabei keine neuen Stufen entstehen.
+/// Der Pixelpuffer der Bildkette: 32-Bit-Fließkomma je Kanal (B, G, R, A), Werte 0–1, sRGB-kodiert.
+/// Zwischen den Schritten wird nicht gerundet; auf 8 Bit erst für die Anzeige und beim Speichern in
+/// 8-Bit-Formate — einmal, mit Dither, damit dabei keine neuen Stufen entstehen.
 /// </summary>
-internal static class Pixels
+/// <remarks>
+/// Bewusst sRGB-kodiert und nicht linear: Kurven, Schärfen, Tiefen/Lichter und Dynamik sind auf
+/// kodierte Werte abgestimmt (so abgenommen); die physikalischen Schritte (Dunst, Skalieren) rechnen
+/// intern linear. In 32 Bit ist beides gleich genau — linear gespeichert hieße nur doppelt umrechnen.
+/// Aus Magick (Q16) kommen die Werte direkt mit 16 Bit, ohne Umweg über 8 Bit.
+/// </remarks>
+public static class Pixels
 {
+    private const float Q16 = 65535f;
+
     public static float[] FromBytes(byte[] bgra)
     {
         var px = new float[bgra.Length];
@@ -21,6 +31,49 @@ internal static class Pixels
         return px;
     }
 
+    /// <summary>Die Pixel eines Magick-Bildes mit voller Tiefe (Q16). Das Bild bleibt unverändert.</summary>
+    public static float[] FromMagick(MagickImage image)
+    {
+        ushort[] data;
+        lock (image)
+        {
+            using var pixels = image.GetPixelsUnsafe();
+            data = pixels.ToShortArray("BGRA")
+                   ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        }
+        var px = new float[data.Length];
+        Parallel.For(0, data.Length / 4, p =>
+        {
+            var i = p * 4;
+            px[i] = data[i] / Q16;
+            px[i + 1] = data[i + 1] / Q16;
+            px[i + 2] = data[i + 2] / Q16;
+            px[i + 3] = data[i + 3] / Q16;
+        });
+        return px;
+    }
+
+    /// <summary>Ein neues Magick-Bild mit 16 Bit je Kanal aus dem Puffer.</summary>
+    /// <param name="alpha">Ob das Ergebnis einen Alphakanal haben soll (sonst wird er verworfen).</param>
+    public static MagickImage ToMagick16(float[] px, int width, int height, bool alpha)
+    {
+        var data = new ushort[px.Length];
+        Parallel.For(0, px.Length / 4, p =>
+        {
+            var i = p * 4;
+            for (var c = 0; c < 4; c++)
+            {
+                var v = px[i + c] * Q16;
+                data[i + c] = (ushort)(v <= 0 ? 0 : v >= Q16 ? 65535 : v + 0.5f);
+            }
+        });
+        var image = new MagickImage();
+        image.ReadPixels(data, new PixelReadSettings((uint)width, (uint)height, StorageType.Quantum, "BGRA"));
+        if (!alpha) image.Alpha(AlphaOption.Off);
+        image.Depth = 16;
+        return image;
+    }
+
     /// <param name="dither">Dreieck-Rauschen von ±1 Stufe vor dem Runden (TPDF): Ein weicher Verlauf
     /// zwischen zwei 8-Bit-Stufen wird so zu einem feinen Korn statt zu einer sichtbaren Kante.
     /// Fest je Pixelort — die Vorschau flimmert nicht.</param>
@@ -33,8 +86,7 @@ internal static class Pixels
             for (var c = 0; c < 3; c++)
             {
                 var v = px[i + c] * 255;
-                // Schwarz und Weiß bleiben rein (Rauschen läuft zu den Enden hin aus)
-                if (dither) v += (Noise((uint)(i + c)) + Noise((uint)(i + c) ^ 0x9E3779B9u) - 1) * Math.Clamp(Math.Min(v, 255 - v), 0, 1);
+                if (dither) v += Dither(v, (uint)(i + c));
                 bgra[i + c] = ToByte(v);
             }
             bgra[i + 3] = ToByte(px[i + 3] * 255);
@@ -42,7 +94,43 @@ internal static class Pixels
         return bgra;
     }
 
+    /// <summary>
+    /// Ein 16-Bit-Bild für ein 8-Bit-Format vorbereiten: jeden Farbkanal mit Dither auf eine 8-Bit-Stufe
+    /// setzen (an Ort und Stelle, Profile und Metadaten bleiben). Magick rundet danach verlustfrei.
+    /// </summary>
+    public static void DitherTo8Bit(MagickImage image)
+    {
+        using var pixels = image.GetPixelsUnsafe();
+        var data = pixels.GetValues() ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        var channels = (int)pixels.Channels;
+        // Farbkanäle: bei Graustufen der erste, sonst die ersten drei; Alpha wird nur gerundet
+        var colour = channels >= 3 ? 3 : 1;
+        Parallel.For(0, data.Length / channels, p =>
+        {
+            var i = p * channels;
+            for (var c = 0; c < channels; c++)
+            {
+                var v = data[i + c] / 257f;   // 65535 / 255
+                if (c < colour) v += Dither(v, (uint)(i + c));
+                data[i + c] = (ushort)(ToByte(v) * 257);
+            }
+        });
+        pixels.SetPixels(data);
+        image.Depth = 8;
+    }
+
     private static byte ToByte(float v) => (byte)(v <= 0 ? 0 : v >= 255 ? 255 : v + 0.5f);
+
+    /// <summary>
+    /// TPDF-Rauschen (−1 … +1 Stufe) für einen Wert in 8-Bit-Stufen. Werte, die schon genau auf einer
+    /// Stufe liegen, bleiben unverändert — ein unbearbeitetes 8-Bit-Bild ändert sich so nicht; Schwarz
+    /// und Weiß bleiben rein (das Rauschen läuft zu den Enden hin aus).
+    /// </summary>
+    private static float Dither(float v, uint key)
+    {
+        if (MathF.Abs(v - MathF.Round(v)) < 1f / 512) return 0;
+        return (Noise(key) + Noise(key ^ 0x9E3779B9u) - 1) * Math.Clamp(Math.Min(v, 255 - v), 0, 1);
+    }
 
     /// <summary>Gleichverteilte Zahl 0 … 1 aus einem Ganzzahl-Schlüssel (Hash, ohne Zustand).</summary>
     internal static float Noise(uint key)
