@@ -145,7 +145,9 @@ public partial class MainViewModel
             s.SharpenRadius,
             s.Dpi,
             MetadataByLabel.TryGetValue(s.SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
-            ColorByLabel.TryGetValue(s.SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb);
+            ColorByLabel.TryGetValue(s.SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
+            new Adjustments(Math.Round(s.Brightness), Math.Round(s.Contrast), Math.Round(s.Shadows),
+                Math.Round(s.Highlights), Math.Round(s.Saturation), TintOf(s.SelectedTint)));
     }
 
     // ------------------------------------------------- für das Export-Fenster

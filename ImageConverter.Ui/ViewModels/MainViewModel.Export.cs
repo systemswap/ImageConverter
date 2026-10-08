@@ -143,7 +143,8 @@ public partial class MainViewModel
         SharpenRadius * sharpenScale,
         Dpi,
         MetadataByLabel.TryGetValue(SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
-        ColorByLabel.TryGetValue(SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb);
+        ColorByLabel.TryGetValue(SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
+        CurrentAdjustments());
 
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()

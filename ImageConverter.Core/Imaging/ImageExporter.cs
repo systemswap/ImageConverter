@@ -39,10 +39,12 @@ public sealed record ExportOptions(
     double SharpenSigma,
     int Dpi,
     MetadataMode Metadata,
-    ColorMode Color);
+    ColorMode Color,
+    Adjustments? Adjustments = null);   // Kachel „Tools“; null = keine
 
 /// <summary>
-/// Die Export-Kette: Skalieren → Entrauschen → Schärfen → Farbe → Metadaten → Kodieren.
+/// Die Export-Kette: Skalieren → Entrauschen → Tools (Licht, Farbe) → Schärfen → Farbprofil
+/// → Metadaten → Kodieren.
 /// Dieselben Schritte wie die Vorschau, hier in voller Auflösung.
 /// </summary>
 public static class ImageExporter
@@ -80,17 +82,20 @@ public static class ImageExporter
             result = denoised;
         }
 
-        if (o.SharpenAmount > 0.01)
+        var adjust = o.Adjustments is { IsNone: false } a ? a : null;
+        if (adjust is not null || o.SharpenAmount > 0.01)
         {
-            // Eigenes Schärfen arbeitet auf 8-Bit-BGRA — dabei gehen Profile verloren,
-            // sie werden danach vom Zwischenstand übernommen.
+            // Tools und Schärfen arbeiten auf 8-Bit-BGRA wie die Vorschau — in einem
+            // Durchgang. Dabei gehen Profile verloren, sie werden vom Zwischenstand übernommen.
             var w = (int)result.Width;
             var h = (int)result.Height;
-            var sharp = Sharpen.UnsharpMask(ImageOps.ToBgra(result), w, h, o.SharpenAmount, o.SharpenSigma);
-            var sharpened = ImageOps.FromBgra(sharp, w, h);
-            CopyProfiles(result, sharpened);
+            var pixels = ImageOps.ToBgra(result);
+            if (adjust is not null) pixels = Adjust.Apply(pixels, w, h, adjust);
+            if (o.SharpenAmount > 0.01) pixels = Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma);
+            var processed = ImageOps.FromBgra(pixels, w, h);
+            CopyProfiles(result, processed);
             result.Dispose();
-            result = sharpened;
+            result = processed;
         }
 
         ApplyColor(result, o.Color);

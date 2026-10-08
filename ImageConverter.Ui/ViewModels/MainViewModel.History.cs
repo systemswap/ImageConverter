@@ -35,6 +35,7 @@ public partial class MainViewModel
         int Dpi, bool DpiMetadataOnly,
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
         double SharpenAmount, double SharpenRadius, double NoiseReduction,
+        double Brightness, double Contrast, double Shadows, double Highlights, double Saturation, string SelectedTint,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
@@ -64,6 +65,12 @@ public partial class MainViewModel
         [nameof(SharpenAmount)] = "Schärfen",
         [nameof(SharpenRadius)] = "Radius",
         [nameof(NoiseReduction)] = "Rauschen",
+        [nameof(Brightness)] = "Helligkeit",
+        [nameof(Contrast)] = "Kontrast",
+        [nameof(Shadows)] = "Tiefen",
+        [nameof(Highlights)] = "Lichter",
+        [nameof(Saturation)] = "Sättigung",
+        [nameof(SelectedTint)] = null,
         [nameof(SelectedMetadataMode)] = null,
         [nameof(SelectedColorMode)] = null,
         [nameof(OutputFolder)] = "Ordner",
@@ -179,7 +186,7 @@ public partial class MainViewModel
         _committedSettings = _settled = CaptureSettings();
     }
 
-    private SettingsState CaptureSettings() => new(
+    internal SettingsState CaptureSettings() => new(
         SelectedFormat, Quality, Lossless,
         SelectedSizeUnit, KeepAspectRatio, WidthIsLeading,
         TargetWidth, TargetHeight, _printWidthIn, _printHeightIn,
@@ -188,6 +195,7 @@ public partial class MainViewModel
         Dpi, DpiMetadataOnly,
         SelectedAspectPreset, CropSelection, CornerRadius,
         SharpenAmount, SharpenRadius, NoiseReduction,
+        Brightness, Contrast, Shadows, Highlights, Saturation, SelectedTint,
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight);
@@ -227,6 +235,12 @@ public partial class MainViewModel
                 SharpenAmount = s.SharpenAmount;
                 SharpenRadius = s.SharpenRadius;
                 NoiseReduction = s.NoiseReduction;
+                Brightness = s.Brightness;
+                Contrast = s.Contrast;
+                Shadows = s.Shadows;
+                Highlights = s.Highlights;
+                Saturation = s.Saturation;
+                SelectedTint = s.SelectedTint;
                 SelectedMetadataMode = s.SelectedMetadataMode;
                 SelectedColorMode = s.SelectedColorMode;
                 OutputFolder = s.OutputFolder;

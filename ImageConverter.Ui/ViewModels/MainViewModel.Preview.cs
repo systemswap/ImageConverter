@@ -13,8 +13,8 @@ namespace ImageConverter.ViewModels;
 // Anzeige und Live-Vorschau.
 //
 // Die Vorschau rechnet dieselbe Kette wie später der Export —
-// Skalieren → Entrauschen → Schärfen — auf einer Kopie mit höchstens
-// PreviewMaxEdge Pixeln Kantenlänge. Die drei Stufen werden einzeln
+// Skalieren → Entrauschen → Tools → Schärfen — auf einer Kopie mit höchstens
+// PreviewMaxEdge Pixeln Kantenlänge. Die Stufen werden einzeln
 // zwischengespeichert: Ziehen am Schärfe-Regler rechnet nur die letzte,
 // schnelle Stufe neu.
 public partial class MainViewModel
@@ -238,7 +238,7 @@ public partial class MainViewModel
     private sealed record PreviewJob(
         MagickImage Doc, int Width, int Height,
         ResampleFilter Filter, bool Gamma,
-        double Noise, double SharpenAmount, double SharpenSigma);
+        double Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma);
 
     private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
 
@@ -251,6 +251,7 @@ public partial class MainViewModel
     private const int StageCacheSize = 4;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
     private readonly List<(ResizeKey Key, double Noise, byte[] Bgra)> _denoisedCache = [];
+    private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, byte[] Bgra)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
 
@@ -332,6 +333,7 @@ public partial class MainViewModel
         foreach (var (_, image) in _resizedCache) image.Dispose();
         _resizedCache.Clear();
         _denoisedCache.Clear();
+        _adjustedCache.Clear();
     }
 
     /// <summary>Momentaufnahme der Einstellungen (UI-Thread). null = Original zeigen.</summary>
@@ -343,7 +345,8 @@ public partial class MainViewModel
         var resize = tw != (int)doc.Width || th != (int)doc.Height;
         var noise = NoiseReduction > 0.01 ? NoiseReduction : 0;
         var sharpen = SharpenAmount > 0.01 ? SharpenAmount : 0;
-        if (!resize && noise == 0 && sharpen == 0) return null;
+        var adjust = CurrentAdjustments();
+        if (!resize && noise == 0 && sharpen == 0 && adjust.IsNone) return null;
 
         // Vorschau höchstens PreviewMaxEdge groß; der Schärferadius wird
         // mitskaliert, damit er relativ zum Ergebnis gleich wirkt.
@@ -352,10 +355,10 @@ public partial class MainViewModel
         var ph = Math.Max(1, (int)Math.Round(th * scale));
 
         return new PreviewJob(doc, pw, ph, SelectedFilter.Filter, GammaCorrect,
-            noise, sharpen, SharpenRadius * scale);
+            noise, adjust, sharpen, SharpenRadius * scale);
     }
 
-    /// <summary>Hintergrund: die drei Stufen, jede nur wenn nötig neu.</summary>
+    /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>
     private PreviewResult Render(PreviewJob job)
     {
         // 1) Skalieren — teuer, nur bei Größe/Filter/Gamma neu
@@ -383,10 +386,22 @@ public partial class MainViewModel
             AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Bgra: denoised), null);
         }
 
-        // 3) Schärfen — schnell, bei jeder Reglerbewegung
+        // 3) Tools (Licht, Farbe) — schnell, nur bei geänderten Reglern neu
+        var adjusted = denoised;
+        if (!job.Adjust.IsNone)
+        {
+            adjusted = Cached(_adjustedCache, e => e.Key == key && e.Noise == job.Noise && e.Adjust == job.Adjust)?.Bgra;
+            if (adjusted is null)
+            {
+                adjusted = Adjust.Apply(denoised, job.Width, job.Height, job.Adjust);
+                AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Bgra: adjusted), null);
+            }
+        }
+
+        // 4) Schärfen — schnell, bei jeder Reglerbewegung
         var final = job.SharpenAmount > 0
-            ? Sharpen.UnsharpMask(denoised, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
-            : denoised;
+            ? Sharpen.UnsharpMask(adjusted, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
+            : adjusted;
 
         return new PreviewResult(final, job.Width, job.Height);
     }

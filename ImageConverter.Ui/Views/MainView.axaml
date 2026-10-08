@@ -523,29 +523,33 @@
                     <!-- ############################## Rubrik KI (eigenes Modul, Ordner Ai/) -->
                     <ai:AiPanel DataContext="{Binding Ai}" IsVisible="{Binding #TabAi.IsChecked}" />
 
-                    <!-- ############################## Rubrik Tools — ENTWURF: Regler noch ohne Funktion -->
+                    <!-- ############################## Rubrik Tools — je Funktion ein Regler -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
                         <HeaderedContentControl Header="LICHT">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Helligkeit" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Brightness}"
+                                            ToolTip.Tip="Hellt die Mitten auf oder dunkelt sie ab. Schwarz und Weiß bleiben, nichts frisst aus." />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrightnessLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Kontrast" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Contrast}"
+                                            ToolTip.Tip="Rechts: Helles heller, Dunkles dunkler — knackiger. Links: weicher, flacher." />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ContrastLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Tiefen" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Shadows}"
+                                            ToolTip.Tip="Rechts: dunkle Bereiche aufhellen, z. B. Gesichter im Gegenlicht. Wirkt nur dort, wo die Umgebung dunkel ist — helle Bereiche bleiben." />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ShadowsLabel}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Lichter" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Highlights}"
+                                            ToolTip.Tip="Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist." />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding HighlightsLabel}" />
                                 </Grid>
                             </StackPanel>
                         </HeaderedContentControl>
@@ -554,20 +558,21 @@
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Sättigung" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Saturation}"
+                                            ToolTip.Tip="Rechts: kräftigere Farben. Ganz links: Schwarzweiß." />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding SaturationLabel}" />
                                 </Grid>
-                                <Grid Classes="row" ColumnDefinitions="76,*">
+                                <Grid ColumnDefinitions="76,*">
                                     <TextBlock Grid.Column="0" Classes="label" Text="Färben" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="0">
-                                        <ComboBoxItem Content="Aus" />
-                                        <ComboBoxItem Content="Schwarzweiß" />
-                                        <ComboBoxItem Content="Sepia" />
-                                    </ComboBox>
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Tints}" SelectedItem="{Binding SelectedTint}"
+                                              ToolTip.Tip="Das ganze Bild in einem Farbton: Schwarzweiß, Sepia (alter Fotoabzug) oder kühles Blau." />
                                 </Grid>
-                                <TextBlock Classes="hint" Text="Entwurf — die Regler haben noch keine Funktion." />
                             </StackPanel>
                         </HeaderedContentControl>
+
+                        <Button Classes="subtle" HorizontalAlignment="Left" Content="Zurücksetzen"
+                                Command="{Binding ResetToolsCommand}"
+                                ToolTip.Tip="Alle Regler dieser Kachel auf 0, Färben aus. Rückgängig mit Strg+Z." />
                     </StackPanel>
 
                     <!-- ############################## Rubrik Ausgabe -->
@@ -659,7 +664,7 @@
                                       IsChecked="{Binding ShowOriginal}"
                                       IsEnabled="{Binding CanCompare}"
                                       Content="◧  Vorher / Nachher" FontSize="12"
-                                      ToolTip.Tip="Eingedrückt: Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen und Schärfe. Sonst: Ergebnis, so wie es exportiert wird. Zoom und Ausschnitt bleiben beim Umschalten gleich." />
+                                      ToolTip.Tip="Eingedrückt: Vorher — das Bild vor den KI-Schritten, ohne Größe, Entrauschen, Tools und Schärfe. Sonst: Ergebnis, so wie es exportiert wird. Zoom und Ausschnitt bleiben beim Umschalten gleich." />
                     </Grid>
                 </Border>
 
