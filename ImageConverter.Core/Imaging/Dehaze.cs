@@ -110,11 +110,11 @@ internal static class Dehaze
     public static byte[] Apply(byte[] bgra, int width, int height, float amount) =>
         Apply(bgra, width, height, amount, null, Settings.Default, share: 1f);
 
-    /// <summary>Was ein Durchlauf an den nächsten weitergibt: Luftlichtfeld und Himmel der kleinen Fassung.</summary>
+    /// <summary>Was ein Durchlauf an den nächsten weitergibt: Luftlichtfeld und Szenenkarte (Himmel, Lichthof).</summary>
     internal sealed class Pass
     {
         public float[] Air = [];      // B, G, R je Pixel der kleinen Fassung
-        public float[] Sky = [];      // Himmel je Pixel der kleinen Fassung (0 … 1)
+        public SceneMap? Scene;       // einmal aus dem ersten Durchlauf, von allen Schritten gelesen
         public int W, H;
     }
 
@@ -147,9 +147,10 @@ internal static class Dehaze
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)WorkEdge));
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
         var fresh = pass is null || pass.Air.Length == 0;
-        var sky = fresh ? SkyMap(small, sw, sh) : pass!.Sky;
+        var scene = pass?.Scene ?? SceneMap.Of(small, sw, sh, f);
+        var sky = scene.Sky;
         var air = fresh ? AirLightField(small, sw, sh, sky) : pass!.Air;   // B, G, R je Pixel der kleinen Fassung
-        if (pass is not null && fresh) { pass.Air = air; pass.Sky = sky; pass.W = sw; pass.H = sh; }
+        if (pass is not null && fresh) { pass.Air = air; pass.Scene = scene; pass.W = sw; pass.H = sh; }
         var t = Transmission(small, sw, sh, air, 0.95f);
         if (!fresh)
             for (var p = 0; p < t.Length; p++) t[p] += (1 - t[p]) * Math.Min(1, sky[p]);   // Himmel: nur im ersten Durchlauf

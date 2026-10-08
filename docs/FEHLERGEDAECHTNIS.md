@@ -679,3 +679,9 @@ Test oder Nachweis.
   (Speicherzugriff bremst, nicht die Rechnung), Helligkeitsebene für die feine
   Schärfe. Offen: Local Laplacian (6 s bei 28 MP), Farbumrechnung je Pixel im
   Dunst (1,8 s je Durchlauf), Entstufen (1 s je Aufruf, Speicherlatenz).
+- **Phase 3, Szenenkarte (0.4.51 beta):** Himmel und Lichthof als eigener
+  Baustein `SceneMap` (Kodierung unverändert: 0 Land, 1 Himmel, über 1 Hof),
+  einmal im ersten Durchlauf bestimmt und über `Dehaze.Pass.Scene` für alle
+  weiteren Schritte zugänglich. Reine Umstrukturierung — alle 48 Abnahmebilder
+  byte-gleich mit 0.4.50. Was die Karte zusätzlich schonen soll (Kontrast und
+  Schärfe je Durchlauf im Himmel), ändert das Bild und gehört zu Phase 4.
