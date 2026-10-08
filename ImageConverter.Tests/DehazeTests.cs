@@ -80,7 +80,9 @@ public class DehazeTests
         // was der geschätzte Dunst genommen hat (sonst wurde Grün ocker, siehe ThinHaze_…)
         Assert.True(Chroma(result) > 1.8 * Chroma(hazy),
             $"Buntheit {Chroma(hazy):F3} → {Chroma(result):F3} (klar {Chroma(clear):F3})");
-        Assert.True(Mean(result) > Mean(hazy) * 0.85, $"Helligkeit {Mean(hazy):F1} → {Mean(result):F1}");
+        // Helligkeitsausgleich nur zur Hälfte: Die Szene ohne Dunst ist dunkler (am künstlichen Dunst
+        // mit bekannter Wahrheit gemessen); ganz zurück aufs Original war der größte Einzelfehler
+        Assert.True(Mean(result) > Mean(hazy) * 0.7, $"Helligkeit {Mean(hazy):F1} → {Mean(result):F1}");
     }
 
     private static double Mean(byte[] bgra) =>

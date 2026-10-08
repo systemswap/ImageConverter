@@ -491,3 +491,41 @@ Test oder Nachweis.
 - **Test:** `DehazeTests.ThinHaze_KeepsTheHueOfVegetation`,
   `ClearImage_GetsOnlyModeratelyCrisper`. Sichtprüfung an vier Bildern bei 100,
   200, 300. Rechenzeit 78 MP: etwa 4 s (vorher 2,5 s); Vorschau ≈ 0,2 s.
+
+## 18. Dunst: Messumgebung mit bekannter Wahrheit – Himmelsschutz hielt den Dunst fest
+
+- **Entdeckt:** 0.4.38 (08.10.2026), Benutzer: „als ob der Nebel gar nicht da
+  gewesen wäre“, Wiesen hinten (Turmlandschaft) noch bräunlich. **Behoben:** 0.4.39.
+- **Messumgebung** (`%LOCALAPPDATA%\imageconverter-build\bench`,
+  `Program.labor.cs.txt`, `labor.sh`): Aus dem klaren Vordergrund von
+  Turmlandschaft und Berglandschaft wird künstlicher Dunst erzeugt (Dichte nach oben,
+  Luftlicht links bläulich → rechts warm, wahlweise Himmelsstreifen). Gemessen:
+  ΔE (Oklab ×100) gegen die Wahrheit, Farbtonfehler auf Grün, Buntheit und
+  Helligkeit relativ zur Wahrheit, geschätzte gegen wahre Dichte je Höhe,
+  Luftlicht. Dazu am echten Turmlandschaft: Farbton/Buntheit der Wiese hinten
+  gegen die Wiese vorn.
+- **Befunde (Fehler oben, Turmlandschaft mit Himmel, Regler 100):** Start 36 →
+  12,5 nach Horizontregel → 11,8 nach niedrigem Fenster → 13 mit halbem
+  Helligkeitsausgleich. Wiese hinten: Farbton 93° → 95–96° (vorn 98°),
+  Buntheit 0,051 → 0,063 (vorn 0,064).
+  - Farbton aus dem **dunstigen** Pixel trug den Stich des Dunstes
+    (Farbtonfehler blieb −25° bei jeder Stärke) → Farbton aus der
+    ungeklemmten Rückrechnung, im Himmel aus dem Original.
+  - **Himmelsschutz** griff für dichten Dunst über Land (genauso glatt und
+    hell) → nur, was vom oberen Rand herabhängt, ist Himmel (Horizontsuche je
+    Spalte, waagerecht 12 % ausgedehnt, Wolken überbrückt, wenn darunter ein
+    langer, ähnlich heller Himmelsstreifen folgt).
+  - **Quadratisches Fenster** des dunklen Kanals griff nach unten in Zeilen
+    mit weniger Dunst (Dichte um 0,1 unterschätzt) → senkrecht nur ein Viertel.
+  - Luftlicht ohne Himmel wird unterschätzt (Mittel der Kandidaten liegt im
+    endlichen Dunst) → hellste 30 % der Kandidaten; bleibt eine Schwäche.
+  - Helligkeitsausgleich: 85 % → 0 % halbiert den Fehler; 50 % als Mittelweg.
+- **Fehlversuche (nicht wiederholen):** Himmel über Farbe/Helligkeit gegen das
+  Luftlicht erkennen (Abendhimmel abseits der Sonne ist dunkler, ähnlich warm
+  → türkis); absolute Helligkeit als Himmelsmerkmal (heller dichter Dunst);
+  Grau-Regel für den Farbton (dichter Dunst ist grau); höhere Struktur-Schwelle
+  für Wolken (dichter Dunst hat dieselbe Struktur 0,02–0,06); Fortsetzung unter
+  Wolken ab 60 % Helligkeit ohne Mindestlänge (helle Felder im Dunst).
+- **Wo:** `Dehaze.cs` (`SkyMap`, `ReachFromTop`, `AirLightOf`, `Apply`).
+- **Test:** DehazeTests, Sichtprüfung an 4 Bildern (Sonne, Wolken, Smog, Äste).
+  Rechenzeit 78 MP: 6–7 s (vorher 4 s).

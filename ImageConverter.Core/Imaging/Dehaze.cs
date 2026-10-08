@@ -29,6 +29,17 @@ internal static class Dehaze
     /// <summary>Fenster des dunklen Kanals (Radius), relativ zur längsten Kante.</summary>
     private const double PatchPerEdge = 0.012;
 
+    /// <summary>
+    /// Senkrecht nur ein Viertel davon: In Landschaften ändert sich der Dunst mit der Entfernung,
+    /// also von Zeile zu Zeile. Ein quadratisches Fenster griff nach unten in Zeilen mit weniger
+    /// Dunst und nahm deren dunklere Werte — die Dichte wurde unter dem Horizont um 0,1
+    /// unterschätzt (gemessen am künstlichen Dunst mit bekannter Dichte).
+    /// </summary>
+    private const double PatchPerEdgeY = 0.003;
+
+    private static int PatchRadius(int w, int h) => Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h)));
+    private static int PatchRadiusY(int w, int h) => Math.Max(1, (int)Math.Round(PatchPerEdgeY * Math.Max(w, h)));
+
     /// <summary>Guided Filter für die Durchlässigkeit (Radius als Gauß-Sigma), relativ.</summary>
     private const double RefinePerEdge = 0.025;
 
@@ -36,7 +47,7 @@ internal static class Dehaze
     private const double BrightnessPerEdge = 0.05;
 
     /// <summary>Anteil des Helligkeitsausgleichs (1 = voll ans Original).</summary>
-    private const float BrightnessMatch = 0.85f;
+    private const float BrightnessMatch = 0.5f;
 
     /// <summary>Toleranz (lineares Licht): Farben näher am Luftlicht gelten nicht als dichter Dunst.</summary>
     private const float Tolerance = 0.08f;
@@ -88,6 +99,7 @@ internal static class Dehaze
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
         var sky = SkyMap(small, sw, sh);
         var air = AirLightColumns(small, sw, sh, sky);   // je Spalte der kleinen Fassung
+        sky = SkyMap(small, sw, sh, air);   // endgültig, mit dem Luftlicht
         var t =Transmission(small, sw, sh, air, 0.95f);
         var boosted = ProtectSky(sky, t, boost);
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
@@ -184,18 +196,37 @@ internal static class Dehaze
                     }
                     oB *= g; oG *= g; oR *= g;
 
-                    // Farbe: Helligkeit aus dem Modell, Farbton aus dem Original, Buntheit
-                    // begrenzt (Oklab). Das Modell rechnet den dunkelsten Kanal gegen null —
-                    // bei Grün das Blau, Felder wurden ocker und braun.
+                    // Farbe (Oklab): Helligkeit aus dem geklemmten Modell; Farbton aus der ungeklemmten
+                    // Rückrechnung — ein Kanal unter null bleibt dort unter null, statt abgeschnitten zu
+                    // werden (abgeschnitten wurde Grün zu Ocker); Buntheit begrenzt. Der Farbton des
+                    // dunstigen Pixels taugte nicht: Er trägt schon den Stich des Dunstes (gemessen am
+                    // künstlichen Dunst: Farbtonfehler blieb bei −25°, egal wie stark der Regler).
                     var was = Oklab.FromLinear(lin[2], lin[1], lin[0]);
                     var now = Oklab.FromLinear(Math.Max(0, oR), Math.Max(0, oG), Math.Max(0, oB));
+                    var free = Oklab.FromLinear(oR, oG, oB);
                     var c0 = MathF.Sqrt(was.A * was.A + was.B * was.B);
-                    var c1 = MathF.Sqrt(now.A * now.A + now.B * now.B);
-                    var chromaCap = 1 + mix * (1 / tt - 1) + strength * ChromaPerUnit;   // tt ist über 100 schon verstärkt
-                    var ratio = c0 > 1e-3f ? Math.Min(c1 / c0, chromaCap) : 1;
+                    var cu = MathF.Sqrt(free.A * free.A + free.B * free.B);
+                    // Im Himmel bleibt der Farbton des Originals, und die Buntheit steigt nur durch die Dynamik:
+                    // Die Rückrechnung zieht dem Lichthof der Sonne das warme Luftlicht ab — er kippte ins Magenta.
+                    var landHere = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
+                    var chromaCap = 1 + landHere * mix * (1 / tt - 1) + strength * ChromaPerUnit;   // tt ist über 100 schon verstärkt
+                    var ratio = c0 > 1e-3f ? Math.Min(cu / c0, chromaCap) : 1;
+                    // Richtung aus der Rückrechnung, Länge c0 (× ratio unten). Läuft die Rückrechnung weit
+                    // unter null (Lichthof der Sonne: kaum Dunst, Luftlicht fast gleich), ist ihre Richtung
+                    // Zufall — dann bleibt der Farbton des Originals (sonst Magenta um die Sonne).
+                    float dirA = was.A, dirB = was.B;
+                    if (cu > 1e-4f && c0 > 1e-4f)
+                    {
+                        var neg = -Math.Min(oB, Math.Min(oG, oR));
+                        var trust = landHere * (neg <= 0 ? 1 : 1 - SmoothStep(0.3f, 1f, neg / (Luma(Math.Max(0, oB), Math.Max(0, oG), Math.Max(0, oR)) + neg)));
+                        dirA = trust * free.A / cu + (1 - trust) * was.A / c0;
+                        dirB = trust * free.B / cu + (1 - trust) * was.B / c0;
+                        var len = MathF.Sqrt(dirA * dirA + dirB * dirB);
+                        if (len > 1e-4f) { dirA *= c0 / len; dirB *= c0 / len; } else { dirA = was.A; dirB = was.B; }
+                    }
 
                     // Klarheit, Schärfe, Kurve (auf der Helligkeit), Dynamik (auf der Buntheit)
-                    var land = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
+                    var land = landHere;
                     var L = now.L
                           + clarity * land * (was.L - Sample(baseL, sw, sh, sx, sy, gB, gG, gR))
                           + sharpen * land * FineDetail(bgra, width, height, x, y);
@@ -204,7 +235,7 @@ internal static class Dehaze
                     var chroma = c0 * ratio;
                     ratio *= 1 + vibrance * (1 - Math.Min(1, chroma / VibranceFull));
 
-                    var (sR, sG, sB) = Oklab.ToSrgb(L, was.A * ratio, was.B * ratio);
+                    var (sR, sG, sB) = Oklab.ToSrgb(L, dirA * ratio, dirB * ratio);
                     result[i] = (byte)(sB * 255 + 0.5f);
                     result[i + 1] = (byte)(sG * 255 + 0.5f);
                     result[i + 2] = (byte)(sR * 255 + 0.5f);
@@ -333,7 +364,7 @@ internal static class Dehaze
             var o = p % w * 3;
             minRgb[p] = Math.Min(lin[p * 3] / air[o], Math.Min(lin[p * 3 + 1] / air[o + 1], lin[p * 3 + 2] / air[o + 2]));
         }
-        var dark = MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
+        var dark = MinFilter(minRgb, w, h, PatchRadius(w, h), PatchRadiusY(w, h));
         var t = new float[n];
         for (var p = 0; p < n; p++) t[p] = 1 - omega * dark[p];
         return t;
@@ -413,17 +444,21 @@ internal static class Dehaze
     {
         var minRgb = new float[w * h];
         for (var p = 0; p < minRgb.Length; p++) minRgb[p] = Math.Min(lin[p * 3], Math.Min(lin[p * 3 + 1], lin[p * 3 + 2]));
-        return MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
+        return MinFilter(minRgb, w, h, PatchRadius(w, h), PatchRadiusY(w, h));
     }
 
     /// <summary>Luftlicht aus einer Auswahl von Pixeln: hellste 1 % des dunklen Kanals, davon die mittleren 20 %.</summary>
     private static float[] AirLightOf(float[] lin, float[] dark, int[] pixels)
     {
         var top = pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).ToArray();
-        var from = (int)(top.Length * 0.4);
-        var count = Math.Max(1, (int)(top.Length * 0.2));
+        // Davon die hellsten 30 % (nach Helligkeit): Die Kandidaten liegen im dichtesten Dunst, aber
+        // nicht unendlich fern — ihr Mittel ist dunkler als das Luftlicht. Gemessen am künstlichen Dunst
+        // ohne Himmel: Mittel 0,51–0,60 bei wahrem 0,80–0,95. Sonne und Himmel sind schon ausgeschlossen.
+        var bright = top.OrderByDescending(p => 0.0722f * lin[p * 3] + 0.7152f * lin[p * 3 + 1] + 0.2126f * lin[p * 3 + 2]).ToArray();
+        var from = 0;
+        var count = Math.Max(1, (int)(top.Length * 0.3));
         var air = new float[3];
-        foreach (var p in top.Skip(from).Take(count))
+        foreach (var p in bright.Skip(from).Take(count))
             for (var c = 0; c < 3; c++) air[c] += lin[p * 3 + c];
         for (var c = 0; c < 3; c++) air[c] = Math.Max(0.25f, air[c] / count);
         return air;
@@ -464,7 +499,53 @@ internal static class Dehaze
     }
 
     /// <summary>Himmel je Pixel (0 … 1): hell und ohne Struktur — siehe <see cref="ProtectSky"/>.</summary>
+    /// <summary>
+    /// Endgültiger Himmel, mit bekanntem Luftlicht: wie <see cref="SkyMap(float[], int, int)"/>, dazu
+    /// voller Schutz (über 1, gegen <see cref="SkyProtection"/> gerechnet), wo der Himmel mindestens
+    /// so hell ist wie das Luftlicht — der Lichthof um die Sonne. Dort ist kaum Dunst, die Rückrechnung
+    /// verstärkt nur die kleine Abweichung der Farbe: violetter Hof.
+    /// </summary>
+    /// <remarks>
+    /// Regeln über Farbe oder Helligkeit gegenüber dem Luftlicht taugen nicht als Himmelsmerkmal:
+    /// Der Abendhimmel abseits der Sonne ist dunkler als das Glühen am Horizont und ähnlich warm —
+    /// er verlor den Schutz und kippte ins Türkis. Nur die Lage (vom oberen Rand herab) ist verlässlich.
+    /// </remarks>
+    internal static float[] SkyMap(float[] lin, int w, int h, float[] air)
+    {
+        var sky = SmoothBright(lin, w, h, out var pass);
+        var full = 1 / SkyProtection;
+        var shield = new float[sky.Length];
+        for (var p = 0; p < sky.Length; p++)
+        {
+            var o = p % w * 3;
+            var lI = Luma(lin[p * 3], lin[p * 3 + 1], lin[p * 3 + 2]);
+            var lA = Math.Max(1e-3f, Luma(air[o], air[o + 1], air[o + 2]));
+            // Mindestens so hell wie das Luftlicht: Sonne, ihre Strahlen, Lichthof, helle Wolken —
+            // strukturiert, aber nie dunstbedeckte Landschaft (die ist höchstens so hell wie das
+            // Luftlicht, abzüglich der Durchlässigkeit). Sonst brach die Suche vom oberen Rand an der
+            // Sonne ab, und alles darunter bis zum Horizont galt als Landschaft: breiter violetter
+            // Streifen unter der Sonne. Ein absoluter Wert taugte nicht — heller dichter Dunst zählte mit.
+            shield[p] = SmoothStep(0.95f, 1.1f, lI / lA);
+            pass[p] = Math.Max(pass[p], shield[p]);
+        }
+        ReachFromTop(pass, sky, w, h, lin);
+        for (var p = 0; p < sky.Length; p++) sky[p] *= 1 + (full - 1) * shield[p];
+        return sky;
+    }
+
     internal static float[] SkyMap(float[] lin, int w, int h)
+    {
+        var sky = SmoothBright(lin, w, h, out var pass);
+        ReachFromTop(pass, sky, w, h, lin);
+        return sky;
+    }
+
+    /// <summary>Glatt und nicht dunkel, je Pixel 0 … 1 — der Rohstoff für <see cref="SkyMap"/>.</summary>
+    /// <param name="pass">Was die Horizontsuche passieren darf (hier gleich dem Schutz; die Sonne kommt
+    /// in <see cref="SkyMap(float[], int, int, float[])"/> dazu). Eine höhere Struktur-Schwelle für
+    /// Wolken taugte nicht: Dichter Dunst über weicher Landschaft hat dieselbe schwache Struktur
+    /// (0,02–0,06) — mit ihr galt der ganze Testdunst als Himmel.</param>
+    private static float[] SmoothBright(float[] lin, int w, int h, out float[] pass)
     {
         var l = Luma(lin);
         var edge = Math.Max(w, h);
@@ -480,14 +561,81 @@ internal static class Dehaze
         Blur.Gauss(mean, w, h, sigma);
 
         var sky = new float[l.Length];
+        pass = new float[l.Length];
         for (var i = 0; i < sky.Length; i++)
         {
             var structure = band[i] / Math.Max(mean[i], 1e-3f);
             var smooth = 1 - SmoothStep(0.008f, 0.02f, structure);
             var bright = SmoothStep(0.03f, 0.1f, l[i]);   // dunkle glatte Schatten sind kein Himmel
             sky[i] = bright * smooth;
+            pass[i] = sky[i];
         }
         return sky;
+    }
+
+    /// <summary>Alles unterhalb des Horizonts auf 0 setzen.</summary>
+    private static void ReachFromTop(float[] pass, float[] sky, int w, int h, float[] lin)
+    {
+        // Nur, was vom oberen Bildrand herabhängt, ist Himmel: Dichter Dunst über der Landschaft ist
+        // genauso glatt und hell — er wurde als Himmel geschützt, der Dunst am Horizont blieb stehen
+        // (gemessen am künstlichen Dunst: Buntheit nur 0,4× der Wahrheit trotz richtiger Dichte).
+        // Je Spalte reicht der Himmel bis zur ersten strukturierten Zone; ein paar Zeilen (Vogel,
+        // dünner Ast) überbrückt er. Eine Wolke überbrückt er auch: wenn darunter wieder glatter
+        // Himmel kommt, ähnlich hell wie der darüber — sonst endete die Linie an der grauen
+        // Unterseite, und die Wolke darunter wurde als Landschaft gerechnet (magenta). Dichter Dunst
+        // unter dem Horizont ist deutlich dunkler als der Himmel, er zählt nicht als Fortsetzung.
+        // Die Grenze wird waagerecht ausgedehnt, damit Äste vom oberen Rand (Bäume am Bildrand) und
+        // die Sonne (ihre Strahlen sind strukturiert) den Himmel darunter nicht ungeschützt lassen.
+        var horizon = new int[w];
+        var gap = Math.Max(2, h / 50);
+        var cloud = h * 3 / 10;
+        float L(int x, int y) { var i = (y * w + x) * 3; return 0.0722f * lin[i] + 0.7152f * lin[i + 1] + 0.2126f * lin[i + 2]; }
+        for (var x = 0; x < w; x++)
+        {
+            var structured = 0;
+            var end = 0;                     // Ende des Himmels (erste Zeile darunter)
+            float skySum = 0; var skyRows = 0;
+            for (var y = 0; y < h; y++)
+            {
+                if (pass[y * w + x] >= 0.5f) { structured = 0; end = y + 1; skySum += L(x, y); skyRows++; continue; }
+                if (++structured <= gap) continue;
+
+                // Wolke? Darunter wieder Himmel: ein langer glatter Streifen (8 % der Höhe), im Mittel
+                // mindestens 85 % so hell wie der Himmel darüber. Dichter Dunst unter dem Horizont
+                // erreicht höchstens 65 % — helle Felder darin zwar mehr, aber nur ein paar Zeilen
+                // am Stück, dann kommen Hecken und Kanten.
+                var meanSky = skyRows > 0 ? skySum / skyRows : 0;
+                var resume = -1;
+                var run = Math.Max(gap, h * 8 / 100);
+                for (var y2 = y + 1; y2 + run <= Math.Min(h, y + cloud); y2++)
+                {
+                    if (pass[y2 * w + x] < 0.5f) continue;
+                    var ok = true; float sum = 0;
+                    for (var k = 0; k < run && ok; k++) { if (pass[(y2 + k) * w + x] < 0.5f) ok = false; else sum += L(x, y2 + k); }
+                    if (ok && sum / run >= 0.85f * meanSky) resume = y2;
+                    break;
+                }
+                if (resume < 0) break;
+                y = resume - 1;
+                structured = 0;
+            }
+            horizon[x] = end;
+        }
+
+        var reach = Math.Max(1, w * 12 / 100);
+        var dilated = new int[w];
+        for (var x = 0; x < w; x++)
+        {
+            var best = 0;
+            for (var k = Math.Max(0, x - reach); k <= Math.Min(w - 1, x + reach); k++) best = Math.Max(best, horizon[k]);
+            dilated[x] = best;
+        }
+        // Oberhalb der Linie ist alles Himmel — auch Wolken, Sonne und ihre Strahlen: strukturiert,
+        // aber nie dunstbedeckte Landschaft. Als „Landschaft“ wurden Wolken magenta (die Rückrechnung
+        // zog ihnen das Luftlicht ab).
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+            sky[y * w + x] = y < dilated[x] ? 1 : 0;
     }
 
     /// <summary>Anteil, um den der Himmel geschützt wird (1 = gar nicht verändert).</summary>
@@ -579,12 +727,15 @@ internal static class Dehaze
     }
 
     /// <summary>Minimum über ein Quadrat mit Radius r — zerlegt in Zeilen und Spalten, O(n).</summary>
-    internal static float[] MinFilter(float[] src, int width, int height, int r)
+    internal static float[] MinFilter(float[] src, int width, int height, int r) => MinFilter(src, width, height, r, r);
+
+    /// <summary>Minimum über ein Rechteck mit den Radien rx (waagerecht) und ry (senkrecht).</summary>
+    internal static float[] MinFilter(float[] src, int width, int height, int rx, int ry)
     {
         var rows = new float[src.Length];
-        Parallel.For(0, height, y => SlidingMin(src, rows, y * width, 1, width, r));
+        Parallel.For(0, height, y => SlidingMin(src, rows, y * width, 1, width, rx));
         var dst = new float[src.Length];
-        Parallel.For(0, width, x => SlidingMin(rows, dst, x, width, height, r));
+        Parallel.For(0, width, x => SlidingMin(rows, dst, x, width, height, ry));
         return dst;
     }
 
