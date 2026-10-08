@@ -223,6 +223,82 @@
         <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentBrush}" />
     </Style>
 
+    <!-- ===================================================================
+         Kachelleiste links: Rubriken (Standard, KI, Tools, Ausgabe)
+         =================================================================== -->
+    <Style Selector="Border.rail">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="Padding" Value="6,10" />
+    </Style>
+
+    <Style Selector="RadioButton.tile">
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="Padding" Value="0,5" />
+        <Setter Property="MinWidth" Value="40" />
+        <Setter Property="MaxWidth" Value="196" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="bg" Background="{TemplateBinding Background}"
+                        CornerRadius="{DynamicResource RadiusControl}">
+                    <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center"
+                                      Padding="{TemplateBinding Padding}"
+                                      Margin="0,0,10,0" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="RadioButton.tile:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector="RadioButton.tile:checked">
+        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="RadioButton.tile Path, ToggleButton.railToggle Path">
+        <Setter Property="Stroke" Value="{Binding $parent[TemplatedControl].Foreground}" />
+        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+    </Style>
+    <Style Selector="TextBlock.tileName">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{Binding $parent[RadioButton].Foreground}" />
+    </Style>
+    <Style Selector="TextBlock.tileHint">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="MaxWidth" Value="140" />
+    </Style>
+
+    <!-- Auf-/Zuklappen der Leiste: Pfeile drehen sich beim Aufklappen um -->
+    <Style Selector="ToggleButton.railToggle">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.railToggle:checked /template/ ContentPresenter,
+                     ToggleButton.railToggle:checked:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.railToggle:checked Viewbox">
+        <Setter Property="RenderTransform" Value="rotate(180deg)" />
+    </Style>
+
     <!-- Reihe "Label ... Steuerelement" in den GroupBoxen -->
     <Style Selector="Grid.row">
         <Setter Property="Margin" Value="0,0,0,10" />

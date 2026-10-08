@@ -111,10 +111,87 @@
         <!-- ============================================================ -->
         <!-- Hauptbereich: Einstellungen links, Bild rechts               -->
         <!-- ============================================================ -->
-        <Grid ColumnDefinitions="352,Auto,*">
+        <Grid ColumnDefinitions="Auto,352,Auto,*">
 
-            <!-- Einstellungen links -->
-            <ScrollViewer Grid.Column="0"
+            <!-- Kachelleiste ganz links: wählt die Rubrik. Zugeklappt nur Icons, aufgeklappt
+                 mit Name und Inhalt. Icons nach Lucide (ISC-Lizenz), 24er-Raster. -->
+            <Border Grid.Column="0" Classes="rail">
+                <DockPanel>
+                    <ToggleButton x:Name="RailExpand" DockPanel.Dock="Bottom" Classes="railToggle"
+                                  ToolTip.Tip="Leiste aufklappen: zeigt, was in jeder Rubrik steckt">
+                        <Viewbox Width="18" Height="18">
+                            <Canvas Width="24" Height="24">
+                                <Path Data="M 6,17 L 11,12 L 6,7 M 13,17 L 18,12 L 13,7" />
+                            </Canvas>
+                        </Viewbox>
+                    </ToggleButton>
+
+                    <StackPanel Spacing="4">
+                        <RadioButton x:Name="TabStandard" Classes="tile" GroupName="rubrik" IsChecked="True"
+                                     ToolTip.Tip="Standard: Format · Zuschnitt · Größe · DPI · Schärfen">
+                            <Grid ColumnDefinitions="40,Auto">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M 5,3 H 19 A 2,2 0 0 1 21,5 V 19 A 2,2 0 0 1 19,21 H 5 A 2,2 0 0 1 3,19 V 5 A 2,2 0 0 1 5,3 Z M 7,9 A 2,2 0 1 0 11,9 A 2,2 0 1 0 7,9 Z M 21,15 L 17.9,11.9 A 2,2 0 0 0 15.1,11.9 L 6,21" />
+                                    </Canvas>
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
+                                    <TextBlock Classes="tileName" Text="Standard" />
+                                    <TextBlock Classes="tileHint" Text="Format · Zuschnitt · Größe · DPI · Schärfen" />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+
+                        <RadioButton x:Name="TabAi" Classes="tile" GroupName="rubrik"
+                                     ToolTip.Tip="KI: Bilder vergrößern und verbessern, Gesichter wiederherstellen">
+                            <Grid ColumnDefinitions="40,Auto">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M 12,3 L 10.1,8.8 A 2,2 0 0 1 8.8,10.1 L 3,12 L 8.8,13.9 A 2,2 0 0 1 10.1,15.2 L 12,21 L 13.9,15.2 A 2,2 0 0 1 15.2,13.9 L 21,12 L 15.2,10.1 A 2,2 0 0 1 13.9,8.8 Z M 5,3 V 7 M 3,5 H 7 M 19,17 V 21 M 17,19 H 21" />
+                                    </Canvas>
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
+                                    <TextBlock Classes="tileName" Text="KI" />
+                                    <TextBlock Classes="tileHint" Text="Vergrößern · Verbessern · Gesichter" />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+
+                        <RadioButton x:Name="TabTools" Classes="tile" GroupName="rubrik"
+                                     ToolTip.Tip="Tools: Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben">
+                            <Grid ColumnDefinitions="40,Auto">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M 21,4 H 14 M 10,4 H 3 M 21,12 H 12 M 8,12 H 3 M 21,20 H 16 M 12,20 H 3 M 14,2 V 6 M 8,10 V 14 M 16,18 V 22" />
+                                    </Canvas>
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
+                                    <TextBlock Classes="tileName" Text="Tools" />
+                                    <TextBlock Classes="tileHint" Text="Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben" />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+
+                        <RadioButton x:Name="TabOutput" Classes="tile" GroupName="rubrik"
+                                     ToolTip.Tip="Ausgabe: Metadaten · Farbprofil · Dateiname">
+                            <Grid ColumnDefinitions="40,Auto">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M 15,2 H 6 A 2,2 0 0 0 4,4 V 20 A 2,2 0 0 0 6,22 H 18 A 2,2 0 0 0 20,20 V 7 Z M 14,2 V 6 A 2,2 0 0 0 16,8 H 20 M 10,9 H 8 M 16,13 H 8 M 16,17 H 8" />
+                                    </Canvas>
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
+                                    <TextBlock Classes="tileName" Text="Ausgabe" />
+                                    <TextBlock Classes="tileHint" Text="Metadaten · Farbprofil · Dateiname" />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Einstellungen der gewählten Rubrik -->
+            <ScrollViewer Grid.Column="1"
                           HorizontalScrollBarVisibility="Disabled"
                           Padding="12,12,8,12"
                           Classes="settings">
@@ -143,6 +220,9 @@
                                        Text="Einstellungen gelten nur für dieses Bild." />
                         </StackPanel>
                     </Border>
+
+                    <!-- ############################## Rubrik Standard -->
+                    <StackPanel Spacing="10" IsVisible="{Binding #TabStandard.IsChecked}">
 
                     <!-- ============================== Format -->
                     <HeaderedContentControl Header="FORMAT">
@@ -409,12 +489,8 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
-                    <!-- ============================== KI (eigenes Modul, Ordner Ai/) — vor dem Schärfen,
-                         das als letzter Schritt auf das KI-Ergebnis wirkt -->
-                    <ai:AiPanel DataContext="{Binding Ai}" />
-
-                    <!-- ============================== Bildverbesserung -->
-                    <HeaderedContentControl Header="BILDVERBESSERUNG">
+                    <!-- ============================== Schärfen (wirkt als letzter Schritt, auch auf das KI-Ergebnis) -->
+                    <HeaderedContentControl Header="SCHÄRFEN &amp; RAUSCHEN">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Schärfen" />
@@ -441,6 +517,61 @@
                             </Grid>
                         </StackPanel>
                     </HeaderedContentControl>
+
+                    </StackPanel>
+
+                    <!-- ############################## Rubrik KI (eigenes Modul, Ordner Ai/) -->
+                    <ai:AiPanel DataContext="{Binding Ai}" IsVisible="{Binding #TabAi.IsChecked}" />
+
+                    <!-- ############################## Rubrik Tools — ENTWURF: Regler noch ohne Funktion -->
+                    <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
+                        <HeaderedContentControl Header="LICHT">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Helligkeit" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Kontrast" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Tiefen" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                </Grid>
+                                <Grid ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Lichter" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                </Grid>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="FARBE">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Sättigung" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="0" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="0" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Färben" />
+                                    <ComboBox Grid.Column="1" SelectedIndex="0">
+                                        <ComboBoxItem Content="Aus" />
+                                        <ComboBoxItem Content="Schwarzweiß" />
+                                        <ComboBoxItem Content="Sepia" />
+                                    </ComboBox>
+                                </Grid>
+                                <TextBlock Classes="hint" Text="Entwurf — die Regler haben noch keine Funktion." />
+                            </StackPanel>
+                        </HeaderedContentControl>
+                    </StackPanel>
+
+                    <!-- ############################## Rubrik Ausgabe -->
+                    <StackPanel Spacing="10" IsVisible="{Binding #TabOutput.IsChecked}">
 
                     <!-- ============================== Metadaten und Farbe -->
                     <HeaderedContentControl Header="METADATEN &amp; FARBE">
@@ -474,14 +605,16 @@
                         </Grid>
                     </HeaderedContentControl>
 
+                    </StackPanel>
+
                 </StackPanel>
             </ScrollViewer>
 
             <!-- Trennlinie -->
-            <Rectangle Grid.Column="1" Width="1" Fill="{DynamicResource BorderBrush2}" />
+            <Rectangle Grid.Column="2" Width="1" Fill="{DynamicResource BorderBrush2}" />
 
             <!-- Bildfläche rechts -->
-            <DockPanel Grid.Column="2" LastChildFill="True">
+            <DockPanel Grid.Column="3" LastChildFill="True">
 
                 <!-- Werkzeugleiste unter dem Bild -->
                 <Border DockPanel.Dock="Bottom"

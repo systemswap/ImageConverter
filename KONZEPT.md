@@ -204,6 +204,23 @@ so sieht man auf einen Blick, welcher Wert abgeleitet ist.
 Auf Linux dem GNOME-Look folgen (Headerbar statt Menüleiste), unter Windows
 native Titelleiste.
 
+### Kachelleiste (festgelegt am 08.10.2026, umgesetzt in 0.4.24)
+
+Die Einstellungen stehen inzwischen links neben dem Bild. Ganz links eine schmale
+Kachelleiste (nur Icons); `»` klappt sie auf und zeigt Name und Inhalt jeder Rubrik.
+Ziel: schlank bleiben, nicht aufblähen.
+
+| Kachel | Inhalt |
+|---|---|
+| Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
+| KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
+| Tools | Helligkeit, Kontrast, Tiefen, Lichter, Sättigung, Färben, „Gleiche Farbe“, evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
+| Ausgabe | Metadaten, Farbprofil, Dateiname |
+
+„Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von
+der gewählten Kachel, und erscheint nur bei mehreren Bildern. Zieht man im Bild einen
+Ausschnitt auf, springt die Leiste auf „Standard“ (dort liegt der Zuschnitt).
+
 ---
 
 ## 4. Technik-Empfehlung

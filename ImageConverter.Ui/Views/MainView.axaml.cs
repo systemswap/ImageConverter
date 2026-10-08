@@ -87,7 +87,10 @@ public partial class MainView : UserControl
 
         var has = _vm.HasCropSelection;
         if (has && !_hadSelection)
+        {
+            TabStandard.IsChecked = true;   // Zuschnitt liegt in der Rubrik Standard
             Dispatcher.UIThread.Post(() => CropGroup.BringIntoView());
+        }
         _hadSelection = has;
     }
 
