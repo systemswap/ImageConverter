@@ -76,7 +76,9 @@ public class DehazeTests
         var result = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100));
 
         Assert.True(Contrast(result) > Contrast(hazy) * 1.5, $"Kontrast {Contrast(hazy):F1} → {Contrast(result):F1}");
-        Assert.True(Chroma(result) > Chroma(hazy) + 0.5 * (Chroma(clear) - Chroma(hazy)),
+        // Farbe deutlich zurück, aber nicht ganz bis zum Modell: die Buntheit ist auf das begrenzt,
+        // was der geschätzte Dunst genommen hat (sonst wurde Grün ocker, siehe ThinHaze_…)
+        Assert.True(Chroma(result) > 1.8 * Chroma(hazy),
             $"Buntheit {Chroma(hazy):F3} → {Chroma(result):F3} (klar {Chroma(clear):F3})");
         Assert.True(Mean(result) > Mean(hazy) * 0.85, $"Helligkeit {Mean(hazy):F1} → {Mean(result):F1}");
     }
@@ -123,12 +125,50 @@ public class DehazeTests
         Assert.True(previous > Contrast(at100) * 1.03, $"Kontrast 100: {Contrast(at100):F1}, 300: {previous:F1}");
     }
 
+    /// <summary>
+    /// Klares Bild: Wie in Referenzwerkzeug wirken Kontrast, Klarheit und Schärfe auch ohne Dunst —
+    /// aber maßvoll (kein HDR-Look), die Helligkeit bleibt.
+    /// </summary>
     [Fact]
-    public void ClearImage_StaysAlmostTheSame()
+    public void ClearImage_GetsOnlyModeratelyCrisper()
     {
         var clear = Haze(Scene(), 1, 0);
         var result = Adjust.Apply(clear, W, H, new Adjustments(Dehaze: 100));
-        Assert.True(Distance(result, clear) < 6, $"mittlere Änderung {Distance(result, clear):F1}");
+        Assert.InRange(Contrast(result) / Contrast(clear), 0.95, 1.3);
+        Assert.InRange(Mean(result) / Mean(clear), 0.9, 1.1);
+    }
+
+    /// <summary>
+    /// Farbton bleibt: Dünner Dunst über olivgrünem Feld (wenig Blau) — das Modell rechnete
+    /// Blau gegen null, Felder wurden ocker und braun.
+    /// </summary>
+    [Fact]
+    public void ThinHaze_KeepsTheHueOfVegetation()
+    {
+        var scene = new float[W * H * 3];
+        for (var y = 0; y < H; y++)
+        for (var x = 0; x < W; x++)
+        {
+            var i = (y * W + x) * 3;
+            if (y < SkyRows) { scene[i] = scene[i + 1] = scene[i + 2] = Air; continue; }
+            var shade = 0.4f + 0.6f * (((x * 7 + y * 3) % 20) / 19f);
+            (scene[i], scene[i + 1], scene[i + 2]) = (0.05f * shade, 0.20f * shade, 0.16f * shade);   // B, G, R
+            if ((x + y) % 23 == 0) scene[i] = scene[i + 1] = scene[i + 2] = 0.005f;                  // Schattenpunkte
+        }
+        var hazy = Haze(scene, 0.85f, Air);
+
+        static float Hue(byte[] px, int from) => Enumerable.Range(from, W * H - from).Select(p =>
+        {
+            var c = Oklab.FromSrgb(px[p * 4 + 2] / 255f, px[p * 4 + 1] / 255f, px[p * 4] / 255f);
+            return (c.A, c.B);
+        }).Aggregate((A: 0f, B: 0f), (s, c) => (s.A + c.A, s.B + c.B)) is var (a, b) ? Oklab.Hue(a, b) : 0;
+
+        var before = Hue(hazy, SkyRows * W);
+        foreach (var amount in new[] { 100, 300 })
+        {
+            var after = Hue(Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: amount)), SkyRows * W);
+            Assert.True(Math.Abs(after - before) < 6, $"Dunst {amount}: Farbton {before:F0}° → {after:F0}°");
+        }
     }
 
     [Fact]

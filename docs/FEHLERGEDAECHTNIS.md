@@ -459,3 +459,35 @@ Test oder Nachweis.
 - **Wo:** `ImageConverter.Core/Imaging/Dehaze.cs` (`AirLightColumns`, `Tolerate`).
 - **Test:** `DehazeTests.AirLight_FollowsTheDirection_AndIgnoresStripsWithoutSky`.
   Zwischenkarten und Zeilenmittel der Durchlässigkeit an beiden Panoramen.
+
+## 17. Dunst: Grün wurde ocker und braun, Smog blieb fast unverändert
+
+- **Entdeckt:** 0.4.37 (08.10.2026), vom Benutzer: „aus grünen Flächen werden eher
+  rötlich-braune … es wird alles sehr unnatürlich“; dazu zwei Testbilder (Berge
+  mit Seen, Stadt im Smog). **Behoben:** 0.4.38.
+- **Was:** Felder in mittlerer Ferne kippten ins Ocker/Braun (bei 300 deutlich);
+  ein Bild mit dichtem Smog über einer Stadt änderte sich kaum.
+- **Warum:**
+  - Das Modell rechnet den dunkelsten Kanal gegen null – bei Vegetation ist das
+    Blau. Gemessen an einem Feld (linear): Blau 0,12 → 0,07 (100) → 0,02 (300),
+    Rot fast gleich: Olivgrün wird bunter und dunkler, also braun. Eine
+    gedämpfte Farbe des Luftlichts half nicht (eher schlimmer).
+  - Smog: Das Luftlicht kam vom überbelichteten Himmel (≈ 1,0), der Smog über
+    der Stadt liegt bei 0,3–0,45 – an „Weiß“ gemessen wirkte er dünn (erkannt
+    1–12 %). Dazu findet der dunkle Kanal zwischen Häusern und Bäumen immer
+    Schwarzes; das Modell allein bleibt bei dünnem Dunst und Smog zahm.
+- **Wie behoben:**
+  - Ausgabe in Oklab: Helligkeit aus dem Modell, **Farbton aus dem Original**,
+    Buntheit höchstens 1 + (1/t − 1) + 0,15 je Regler-Einheit (Dunst nimmt die
+    Buntheit um t – so viel zurück ist berechtigt).
+  - Luftlicht nur aus der Landschaft (Himmelskarte < 0,5), nicht aus dem Himmel.
+  - Wie Referenzwerkzeug zusätzlich Klarheit (lokaler Kontrast, kantentreu über Guided
+    Filter), feine Schärfe (3×3), sanfte S-Kurve, Dynamik (blasse Farben mehr);
+    Klarheit und Schärfe nicht im Himmel (Rauschen in Wolken).
+- **Nicht tun:** Die physikalische Rückrechnung direkt als Farbe ausgeben;
+  Luftlicht aus dem hellsten Bereich des ganzen Bildes nehmen.
+- **Wo:** `ImageConverter.Core/Imaging/Dehaze.cs` (`Apply`, `AirLightColumns`,
+  `SkyMap`).
+- **Test:** `DehazeTests.ThinHaze_KeepsTheHueOfVegetation`,
+  `ClearImage_GetsOnlyModeratelyCrisper`. Sichtprüfung an vier Bildern bei 100,
+  200, 300. Rechenzeit 78 MP: etwa 4 s (vorher 2,5 s); Vorschau ≈ 0,2 s.

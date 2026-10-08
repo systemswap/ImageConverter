@@ -226,7 +226,7 @@ Ziel: schlank bleiben, nicht aufblähen.
 |---|---|
 | Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
 | KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
-| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior, Luftlicht je Richtung, Regler bis 300), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
+| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior, Luftlicht je Richtung aus der Landschaft, Farbton bleibt, dazu Klarheit/Schärfe/Dynamik wie Referenzwerkzeug, Regler bis 300), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
 | Ausgabe | Metadaten, Farbprofil, Dateiname |
 
 „Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von

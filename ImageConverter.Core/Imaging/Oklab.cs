@@ -32,11 +32,12 @@ internal static class Oklab
     }
 
     /// <summary>sRGB-kodiert (0–1) → Oklab.</summary>
-    public static (float L, float A, float B) FromSrgb(float r, float g, float b)
+    public static (float L, float A, float B) FromSrgb(float r, float g, float b) =>
+        FromLinear(Lookup(ToLinearTable, r), Lookup(ToLinearTable, g), Lookup(ToLinearTable, b));
+
+    /// <summary>Lineares Licht (0–1) → Oklab.</summary>
+    public static (float L, float A, float B) FromLinear(float r, float g, float b)
     {
-        r = Lookup(ToLinearTable, r);
-        g = Lookup(ToLinearTable, g);
-        b = Lookup(ToLinearTable, b);
         var l = MathF.Cbrt(0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b);
         var m = MathF.Cbrt(0.2119034982f * r + 0.6806995451f * g + 0.1073969566f * b);
         var s = MathF.Cbrt(0.0883024619f * r + 0.2817188376f * g + 0.6299787005f * b);

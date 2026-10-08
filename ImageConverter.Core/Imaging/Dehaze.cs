@@ -41,6 +41,32 @@ internal static class Dehaze
     /// <summary>Toleranz (lineares Licht): Farben näher am Luftlicht gelten nicht als dichter Dunst.</summary>
     private const float Tolerance = 0.08f;
 
+    /// <summary>
+    /// Buntheit: höchstens so viel mehr als im Original, je Einheit Regler, zusätzlich zu dem,
+    /// was der Dunst genommen hat (1/t). Das Modell selbst gäbe bei dünnem Dunst viel mehr —
+    /// es rechnet den dunkelsten Kanal gegen null, bei Grün ist das Blau: Felder wurden ocker
+    /// und braun.
+    /// </summary>
+    private const float ChromaPerUnit = 0.15f;
+
+    /// <summary>Klarheit (lokaler Kontrast, großer Radius) bei Regler 100.</summary>
+    private const float ClarityPerUnit = 0.35f;
+
+    /// <summary>Radius der Klarheit (Gauß-Sigma des Guided Filters), relativ zur längsten Kante.</summary>
+    private const double ClarityPerEdge = 0.02;
+
+    /// <summary>Feine Schärfe (3×3-Unscharfmaskierung) bei Regler 100.</summary>
+    private const float SharpenPerUnit = 0.6f;
+
+    /// <summary>S-Kurve auf der Helligkeit bei Regler 100 (Steigung in der Mitte 1 + Wert).</summary>
+    private const float CurvePerUnit = 0.12f;
+
+    /// <summary>Dynamik bei Regler 100: blasse Farben bis zu so viel mehr Buntheit.</summary>
+    private const float VibrancePerUnit = 0.25f;
+
+    /// <summary>Ab dieser Oklab-Buntheit wirkt die Dynamik nicht mehr (kräftige Farben bleiben).</summary>
+    private const float VibranceFull = 0.12f;
+
     /// <summary>Kleinste Durchlässigkeit: begrenzt die Verstärkung.</summary>
     private const float MinTransmission = 0.1f;
 
@@ -60,9 +86,10 @@ internal static class Dehaze
         // Kopie in Fließkomma bräuchte Gigabytes.
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)WorkEdge));
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
-        var air = AirLightColumns(small, sw, sh);   // je Spalte der kleinen Fassung
-        var t = Transmission(small, sw, sh, air, 0.95f);
-        var boosted = ProtectSky(small, sw, sh, t, boost);
+        var sky = SkyMap(small, sw, sh);
+        var air = AirLightColumns(small, sw, sh, sky);   // je Spalte der kleinen Fassung
+        var t =Transmission(small, sw, sh, air, 0.95f);
+        var boosted = ProtectSky(sky, t, boost);
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         var guide = Encode(small);
         var refine = Math.Max(1.0, RefinePerEdge * Math.Max(sw, sh));
@@ -103,6 +130,27 @@ internal static class Dehaze
             gain = BrightnessGain(small, after, guide, sw, sh);
         }
         var k = BrightnessMatch * mix;
+        // Buntheit: Dunst nimmt sie um den Faktor t — bis 1/t zurück ist berechtigt, dazu ein
+        // kleiner Rest; dünner Dunst (Felder in mittlerer Ferne) bekommt so kaum mehr Farbe
+
+        // Wahrnehmung wie Referenzwerkzeug: Das Modell allein lässt Smog und dünnen Dunst fast
+        // unverändert (der dunkle Kanal findet zwischen Häusern und Bäumen immer Schwarzes) —
+        // dazu lokaler Kontrast (Klarheit), feine Schärfe, sanfte S-Kurve und Dynamik, mit dem
+        // Regler wachsend, über 100 langsamer. Klarheit und Schärfe nicht im Himmel (Rauschen).
+        var over = Math.Max(0, strength - 1);
+        var clarity = ClarityPerUnit * mix + ClarityPerUnit * 0.4f * over;
+        var sharpen = SharpenPerUnit * mix + SharpenPerUnit * 0.4f * over;
+        var curve = CurvePerUnit * mix + CurvePerUnit * 0.5f * over;
+        var vibrance = VibrancePerUnit * mix + VibrancePerUnit * 0.4f * over;
+        (float[] A, float[] B) baseL = default;
+        if (amount > 0)
+        {
+            // Grundhelligkeit für die Klarheit: Oklab-L des Originals, kantentreu geglättet —
+            // ein einfacher Weichzeichner gäbe Lichthöfe an Horizont und Häuserkanten
+            var l = new float[sw * sh];
+            for (var p = 0; p < l.Length; p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
+            baseL = GuidedColor.Coefficients(guide, l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
+        }
 
         var result = new byte[bgra.Length];
         Parallel.For(0, height, y =>
@@ -135,6 +183,33 @@ internal static class Dehaze
                         g = Math.Min(g, Math.Max(1, before / Math.Max(Luma(oB, oG, oR), 1e-4f)));
                     }
                     oB *= g; oG *= g; oR *= g;
+
+                    // Farbe: Helligkeit aus dem Modell, Farbton aus dem Original, Buntheit
+                    // begrenzt (Oklab). Das Modell rechnet den dunkelsten Kanal gegen null —
+                    // bei Grün das Blau, Felder wurden ocker und braun.
+                    var was = Oklab.FromLinear(lin[2], lin[1], lin[0]);
+                    var now = Oklab.FromLinear(Math.Max(0, oR), Math.Max(0, oG), Math.Max(0, oB));
+                    var c0 = MathF.Sqrt(was.A * was.A + was.B * was.B);
+                    var c1 = MathF.Sqrt(now.A * now.A + now.B * now.B);
+                    var chromaCap = 1 + mix * (1 / tt - 1) + strength * ChromaPerUnit;   // tt ist über 100 schon verstärkt
+                    var ratio = c0 > 1e-3f ? Math.Min(c1 / c0, chromaCap) : 1;
+
+                    // Klarheit, Schärfe, Kurve (auf der Helligkeit), Dynamik (auf der Buntheit)
+                    var land = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
+                    var L = now.L
+                          + clarity * land * (was.L - Sample(baseL, sw, sh, sx, sy, gB, gG, gR))
+                          + sharpen * land * FineDetail(bgra, width, height, x, y);
+                    L = Math.Clamp(L, 0, 1);
+                    L -= curve * MathF.Sin(2 * MathF.PI * L) / (2 * MathF.PI);
+                    var chroma = c0 * ratio;
+                    ratio *= 1 + vibrance * (1 - Math.Min(1, chroma / VibranceFull));
+
+                    var (sR, sG, sB) = Oklab.ToSrgb(L, was.A * ratio, was.B * ratio);
+                    result[i] = (byte)(sB * 255 + 0.5f);
+                    result[i + 1] = (byte)(sG * 255 + 0.5f);
+                    result[i + 2] = (byte)(sR * 255 + 0.5f);
+                    result[i + 3] = bgra[i + 3];
+                    continue;
                 }
                 else
                 {
@@ -152,6 +227,23 @@ internal static class Dehaze
             }
         });
         return result;
+    }
+
+    /// <summary>
+    /// Feine Struktur an einem Pixel: Helligkeit (gamma-kodiert) minus 3×3-Binomialmittel —
+    /// das, was eine leichte Unscharfmaskierung verstärkt.
+    /// </summary>
+    private static float FineDetail(byte[] bgra, int w, int h, int x, int y)
+    {
+        float Y(int xx, int yy)
+        {
+            var i = (Math.Clamp(yy, 0, h - 1) * w + Math.Clamp(xx, 0, w - 1)) * 4;
+            return (0.0722f * bgra[i] + 0.7152f * bgra[i + 1] + 0.2126f * bgra[i + 2]) / 255f;
+        }
+        var blur = (4 * Y(x, y)
+                    + 2 * (Y(x - 1, y) + Y(x + 1, y) + Y(x, y - 1) + Y(x, y + 1))
+                    + Y(x - 1, y - 1) + Y(x + 1, y - 1) + Y(x - 1, y + 1) + Y(x + 1, y + 1)) / 16;
+        return Y(x, y) - blur;
     }
 
     /// <summary>Szene zurückrechnen, mit der Stärke zwischen Original und voller Wirkung.</summary>
@@ -271,10 +363,20 @@ internal static class Dehaze
     /// der Wert für das ganze Bild, mit weichem Übergang. Jeder Kanal bleibt zwischen 30 % und
     /// 125 % des Gesamtwerts.
     /// </remarks>
-    internal static float[] AirLightColumns(float[] lin, int w, int h)
+    internal static float[] AirLightColumns(float[] lin, int w, int h, float[]? sky = null)
     {
         var dark = DarkChannel(lin, w, h);
-        var global = AirLightOf(lin, dark, Enumerable.Range(0, w * h).ToArray());
+        // Nur aus der Landschaft, wo sie im Dunst verschwindet — nicht aus dem Himmel: Der ist
+        // oft heller als der Dunst vor der Landschaft (überbelichtet, Glühen um die Sonne), und an
+        // „Weiß“ gemessen wirkte dichter Smog über einer Stadt dünn (erkannt 1–12 %).
+        int[] Landscape(int[] pixels)
+        {
+            if (sky is null) return pixels;
+            var land = pixels.Where(p => sky[p] < 0.5f).ToArray();
+            return land.Length >= pixels.Length / 20 ? land : pixels;
+        }
+
+        var global = AirLightOf(lin, dark, Landscape(Enumerable.Range(0, w * h).ToArray()));
         var globalDark = Math.Min(global[0], Math.Min(global[1], global[2]));
 
         var strips = new float[AirStrips][];
@@ -284,6 +386,7 @@ internal static class Dehaze
             var pixels = new int[(x1 - x0) * h];
             for (int y = 0, i = 0; y < h; y++)
                 for (var x = x0; x < x1; x++) pixels[i++] = y * w + x;
+            pixels = Landscape(pixels);
             var a = AirLightOf(lin, dark, pixels);
 
             // Wie verlässlich: dunkler Kanal der Kandidaten im Vergleich zum ganzen Bild
@@ -341,7 +444,27 @@ internal static class Dehaze
     /// drückt die Schwankung der Landschaft — dichter Nebel galt als Himmel.
     /// </remarks>
     /// <returns>Die verstärkte Durchlässigkeit für den Regler über 100, sonst null.</returns>
-    private static float[]? ProtectSky(float[] lin, int w, int h, float[] t, float boost)
+    private static float[]? ProtectSky(float[] sky, float[] t, float boost)
+    {
+        var boosted = boost > 1 ? new float[t.Length] : null;
+        for (var i = 0; i < t.Length; i++)
+        {
+            // Regler über 100: Dunstmenge verstärken — nur in der Landschaft. Die Verstärkung klingt
+            // zum Himmel hin viel schneller ab als der Schutz greift; sonst bildeten sich bei 200–300
+            // im Übergang Himmel/Horizont Bänder (blau, weiß-rosa) und ein dunkler Bogen.
+            if (boosted != null)
+            {
+                var landscape = (1 - sky[i]) * (1 - sky[i]) * (1 - sky[i]) * (1 - sky[i]);
+                var tb = Math.Max(0, 1 - (1 - t[i]) * (1 + (boost - 1) * landscape));
+                boosted[i] = tb + (1 - tb) * SkyProtection * sky[i];
+            }
+            t[i] += (1 - t[i]) * SkyProtection * sky[i];
+        }
+        return boosted;
+    }
+
+    /// <summary>Himmel je Pixel (0 … 1): hell und ohne Struktur — siehe <see cref="ProtectSky"/>.</summary>
+    internal static float[] SkyMap(float[] lin, int w, int h)
     {
         var l = Luma(lin);
         var edge = Math.Max(w, h);
@@ -352,30 +475,19 @@ internal static class Dehaze
         var band = new float[l.Length];
         for (var i = 0; i < band.Length; i++) band[i] = Math.Abs(fine[i] - coarse[i]);
         var mean = (float[])l.Clone();
-        var boosted = boost > 1 ? new float[t.Length] : null;
         var sigma = Math.Max(1.0, PatchPerEdge * edge);
         Blur.Gauss(band, w, h, sigma);
         Blur.Gauss(mean, w, h, sigma);
 
-        for (var i = 0; i < t.Length; i++)
+        var sky = new float[l.Length];
+        for (var i = 0; i < sky.Length; i++)
         {
             var structure = band[i] / Math.Max(mean[i], 1e-3f);
             var smooth = 1 - SmoothStep(0.008f, 0.02f, structure);
             var bright = SmoothStep(0.03f, 0.1f, l[i]);   // dunkle glatte Schatten sind kein Himmel
-            var sky = bright * smooth;
-
-            // Regler über 100: Dunstmenge verstärken — nur in der Landschaft. Die Verstärkung klingt
-            // zum Himmel hin viel schneller ab als der Schutz greift; sonst bildeten sich bei 200–300
-            // im Übergang Himmel/Horizont Bänder (blau, weiß-rosa) und ein dunkler Bogen.
-            if (boosted != null)
-            {
-                var landscape = (1 - sky) * (1 - sky) * (1 - sky) * (1 - sky);
-                var tb = Math.Max(0, 1 - (1 - t[i]) * (1 + (boost - 1) * landscape));
-                boosted[i] = tb + (1 - tb) * SkyProtection * sky;
-            }
-            t[i] += (1 - t[i]) * SkyProtection * sky;
+            sky[i] = bright * smooth;
         }
-        return boosted;
+        return sky;
     }
 
     /// <summary>Anteil, um den der Himmel geschützt wird (1 = gar nicht verändert).</summary>
