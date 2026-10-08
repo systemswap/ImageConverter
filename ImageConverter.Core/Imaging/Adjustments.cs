@@ -22,7 +22,9 @@ public sealed record Adjustments(
     Tint Tint = Tint.None,
     double Vibrance = 0,
     double TintHue = Adjustments.SepiaHue,
-    double Dehaze = 0)
+    double Dehaze = 0,
+    double MatchLuminance = 0,
+    bool Neutralize = false)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -37,7 +39,8 @@ public sealed record Adjustments(
 /// Wendet <see cref="Adjustments"/> auf 8-Bit-BGRA-Pixel an — wie <see cref="Sharpen"/>
 /// für Vorschau und Export dieselbe Funktion, damit man exportiert, was man gesehen hat.
 ///
-/// Reihenfolge: Dunst → Tiefen/Lichter → Helligkeit → Kontrast → Dynamik → Sättigung → Färben.
+/// Reihenfolge: Dunst → Tiefen/Lichter → Helligkeit → Kontrast → Gleiche Farbe (Ausgleichen,
+/// Luminanz) → Dynamik → Sättigung → Färben.
 /// Tiefen und Lichter wirken lokal wie in Referenzwerkzeug: Ob eine Stelle als dunkel oder hell
 /// gilt, entscheidet ihre Umgebung auf jeder Größenordnung (Local Laplacian Filter, wie
 /// Referenzwerkzeug), nicht das einzelne Pixel. Ein dunkles
@@ -98,6 +101,9 @@ public static class Adjust
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
+        var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 1));   // wie Referenzwerkzeug 1–200 %
+        var (castA, castB) = a.Neutralize ? ColourCast(bgra, width, height) : (0f, 0f);
+        var oklab = vibrance != 0 || saturation != 0 || luminance != 1 || a.Neutralize;
 
         Parallel.For(0, height, y =>
         {
@@ -124,11 +130,22 @@ public static class Adjust
 
                 r = curve[Index(r)]; g = curve[Index(g)]; b = curve[Index(b)];
 
-                if (vibrance != 0 || saturation != 0)
+                if (oklab)
                 {
-                    // Buntheit in Oklab: Farbton und Helligkeit bleiben stehen
+                    // In Oklab: Buntheit ändern lässt Farbton und Helligkeit stehen
                     var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
+                    oa -= castA;                                       // Gleiche Farbe: Ausgleichen
+                    ob -= castB;
                     var factor = 1f;
+                    if (luminance != 1 && L > 1e-4f)
+                    {
+                        // Gleiche Farbe, Luminanz: wie mehr Licht — Helligkeit und Buntheit im
+                        // selben Verhältnis (in Oklab exakt eine stärkere Beleuchtung). Nur die
+                        // Helligkeit zu heben ließ die Farben blass wirken.
+                        var lifted = Shoulder(L * luminance);
+                        factor = lifted / L;
+                        L = lifted;
+                    }
                     if (vibrance != 0) factor *= VibranceFactor(L, oa, ob, vibrance);
                     if (saturation != 0) factor *= 1 + saturation;
                     (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);
@@ -255,6 +272,38 @@ public static class Adjust
     /// Hauttöne — Bilder werden lebendiger, Gesichter nicht orange. Nach links werden
     /// zuerst die blassen Farben grau, kräftige bleiben länger.
     /// </summary>
+    /// <summary>
+    /// „Gleiche Farbe“ (Referenzwerkzeug CS5, ohne Quellbild), Regler Luminanz: Helligkeit wird
+    /// <em>multipliziert</em> wie in Referenzwerkzeug (Lab-L, 1–200 %) — die Kontrastverhältnisse
+    /// bleiben, das Bild wirkt leuchtender als mit einem Gamma, das nur die Mitten anhebt.
+    /// Über 0,8 läuft es weich gegen Weiß aus, damit nichts ausfrisst.
+    /// </summary>
+    private static float Shoulder(float l)
+    {
+        const float knee = 0.8f;
+        return l <= knee ? Math.Max(0, l) : knee + (1 - knee) * (1 - MathF.Exp(-(l - knee) / (1 - knee)));
+    }
+
+    /// <summary>
+    /// „Gleiche Farbe“, Ausgleichen: Farbstich als mittlere Oklab-Farbrichtung der nicht
+    /// kräftig bunten, nicht zu dunklen/hellen Bildteile (Grauwelt-Annahme). Kräftige Farben
+    /// — ein rotes T-Shirt, blauer Himmel — zählen nicht, sonst würden sie „ausgeglichen“.
+    /// Rechnet auf jedem 4. Pixel jeder 4. Zeile, das reicht für einen Mittelwert.
+    /// </summary>
+    internal static (float A, float B) ColourCast(byte[] bgra, int width, int height)
+    {
+        double sa = 0, sb = 0, n = 0;
+        for (var y = 0; y < height; y += 4)
+        for (var x = 0; x < width; x += 4)
+        {
+            var i = (y * width + x) * 4;
+            var (L, a, b) = Oklab.FromSrgb(bgra[i + 2] / 255f, bgra[i + 1] / 255f, bgra[i] / 255f);
+            if (L < 0.15f || L > 0.97f || a * a + b * b > 0.1f * 0.1f) continue;
+            sa += a; sb += b; n++;
+        }
+        return n > 0 ? ((float)(sa / n), (float)(sb / n)) : (0, 0);
+    }
+
     /// <summary>Buntheit, ab der eine Farbe als kräftig gilt (Oklab-C; sRGB-Primärfarben ≈ 0,26–0,32).</summary>
     private const float StrongChroma = 0.2f;
 

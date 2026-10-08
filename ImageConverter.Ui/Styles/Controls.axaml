@@ -300,18 +300,6 @@
         <Setter Property="RenderTransform" Value="rotate(180deg)" />
     </Style>
 
-    <!-- Farbton-Regler: Spur durchsichtig, darunter liegt der Farbkreis als Verlauf -->
-    <Style Selector="Slider.hue">
-        <Style.Resources>
-            <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
-            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
-            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
-            <SolidColorBrush x:Key="SliderTrackValueFill" Color="Transparent" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="Transparent" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="Transparent" />
-        </Style.Resources>
-    </Style>
-
     <!-- Listen, deren Werte deutsche Texte sind (Kennungen im ViewModel): angezeigt wird
          die Übersetzung, der Wert bleibt. -->
     <Style Selector="ComboBox.tr">

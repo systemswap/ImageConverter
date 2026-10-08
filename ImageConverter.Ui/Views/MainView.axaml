@@ -159,7 +159,7 @@
                         </RadioButton>
 
                         <RadioButton x:Name="TabTools" Classes="tile" GroupName="rubrik"
-                                     ToolTip.Tip="{l:T 'Tools: Helligkeit · Kontrast · Tiefen · Lichter · Dunst · Dynamik · Sättigung · Färben'}">
+                                     ToolTip.Tip="{l:T 'Tools: Helligkeit · Kontrast · Tiefen · Lichter · Dunst · Dynamik · Sättigung · Färben · Gleiche Farbe'}">
                             <Grid ColumnDefinitions="40,Auto">
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="24" Height="24">
@@ -168,7 +168,7 @@
                                 </Viewbox>
                                 <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
                                     <TextBlock Classes="tileName" Text="{l:T 'Tools'}" />
-                                    <TextBlock Classes="tileHint" Text="{l:T 'Helligkeit · Kontrast · Tiefen · Lichter · Dunst · Dynamik · Sättigung · Färben'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Helligkeit · Kontrast · Tiefen · Lichter · Dunst · Dynamik · Sättigung · Färben · Gleiche Farbe'}" />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
@@ -600,11 +600,37 @@
                                                 </LinearGradientBrush>
                                             </Border.Background>
                                         </Border>
-                                        <Slider Classes="hue" Minimum="0" Maximum="360" Value="{Binding TintHue}"
-                                                ToolTip.Tip="{l:T 'Farbe der Tönung. Um 30°: Sepia, um 210°: kühles Blau.'}" />
+                                        <!-- Spur durchsichtig, darunter liegt der Farbkreis. Die Ressourcen hier am
+                                             Regler, nicht in einem Stil: Stil-Ressourcen gelten in Avalonia für alle
+                                             Regler der Anwendung (in 0.4.28 waren dadurch alle Spuren unsichtbar). -->
+                                        <Slider Minimum="0" Maximum="360" Value="{Binding TintHue}"
+                                                ToolTip.Tip="{l:T 'Farbe der Tönung. Um 30°: Sepia, um 210°: kühles Blau.'}">
+                                            <Slider.Resources>
+                                                <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFill" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="Transparent" />
+                                            </Slider.Resources>
+                                        </Slider>
                                     </Panel>
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding TintHueLabel}" />
                                 </Grid>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <!-- Nachbau von Referenzwerkzeug CS5 „Bild > Korrekturen > Gleiche Farbe“ ohne Quellbild -->
+                        <HeaderedContentControl Header="{l:T 'GLEICHE FARBE'}">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Luminanz'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding MatchLuminance}"
+                                            ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
+                                </Grid>
+                                <CheckBox IsChecked="{Binding Neutralize}" Content="{l:T 'Ausgleichen'}" FontSize="12"
+                                          ToolTip.Tip="{l:T 'Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Kräftige Farben zählen dabei nicht mit.'}" />
                             </StackPanel>
                         </HeaderedContentControl>
 

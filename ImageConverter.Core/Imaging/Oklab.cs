@@ -65,14 +65,22 @@ internal static class Oklab
     /// nicht mehr darstellbar wäre, wird in der Buntheit zurückgenommen (statt Kanäle hart zu
     /// kappen, was den Farbton verschiebt). Ergebnis sRGB-kodiert, 0–1.
     /// </summary>
-    public static (float R, float G, float B) ScaleChroma(float L, float a, float b, float factor)
+    public static (float R, float G, float B) ScaleChroma(float L, float a, float b, float factor) =>
+        ToSrgb(L, a * factor, b * factor);
+
+    /// <summary>
+    /// Oklab → sRGB-kodiert (0–1). Nicht darstellbare Farben werden in der Buntheit so weit
+    /// zurückgenommen, dass sie passen — Farbton und Helligkeit bleiben.
+    /// </summary>
+    public static (float R, float G, float B) ToSrgb(float L, float a, float b)
     {
-        var lin = ToLinear(L, a * factor, b * factor);
-        if (!InGamut(lin) && factor > 1)
+        L = Math.Clamp(L, 0, 1);
+        var lin = ToLinear(L, a, b);
+        if (!InGamut(lin))
         {
-            // Größten darstellbaren Faktor zwischen 1 und factor suchen
-            float lo = 1, hi = factor;
-            for (var k = 0; k < 8; k++)
+            // Größten darstellbaren Anteil der Buntheit suchen (Grau ist immer darstellbar)
+            float lo = 0, hi = 1;
+            for (var k = 0; k < 10; k++)
             {
                 var mid = (lo + hi) / 2;
                 if (InGamut(ToLinear(L, a * mid, b * mid))) lo = mid; else hi = mid;

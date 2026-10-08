@@ -214,6 +214,42 @@ public class AdjustTests
         }
     }
 
+    /// <summary>Gleiche Farbe, Luminanz: multipliziert die Helligkeit — Mitten deutlich heller, Weiß frisst nicht aus.</summary>
+    [Fact]
+    public void MatchLuminance_ScalesBrightness_WithoutClippingWhite()
+    {
+        var result = Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 50));
+
+        var mid = Oklab.FromSrgb(Gray(result, 100) / 255f, Gray(result, 100) / 255f, Gray(result, 100) / 255f).L;
+        var midBefore = Oklab.FromSrgb(100 / 255f, 100 / 255f, 100 / 255f).L;
+        Assert.InRange(mid / midBefore, 1.4, 1.55);              // ×1,5 (Referenzwerkzeug: Luminanz 150)
+        Assert.True(Gray(result, 200) < Gray(result, 255));       // helle Töne bleiben unterscheidbar
+        Assert.Equal(0, Gray(result, 0));                        // Schwarz bleibt
+    }
+
+    /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
+    [Fact]
+    public void Neutralize_RemovesColourCast_ButKeepsStrongColours()
+    {
+        const int w = 64, h = 64;
+        var bgra = new byte[w * h * 4];
+        for (var p = 0; p < w * h; p++)
+        {
+            // Wand mit Kunstlicht-Stich, links unten ein kräftig blaues Kissen
+            var cushion = p % w < 16 && p / w > 48;
+            (bgra[p * 4], bgra[p * 4 + 1], bgra[p * 4 + 2]) = cushion ? ((byte)200, (byte)60, (byte)30) : ((byte)150, (byte)180, (byte)195);
+            bgra[p * 4 + 3] = 255;
+        }
+
+        var result = Adjust.Apply(bgra, w, h, new Adjustments(Neutralize: true));
+        var wall = Oklab.FromSrgb(result[2] / 255f, result[1] / 255f, result[0] / 255f);
+        var i = (60 * w + 5) * 4;
+        var blue = Oklab.FromSrgb(result[i + 2] / 255f, result[i + 1] / 255f, result[i] / 255f);
+
+        Assert.True(Math.Sqrt(wall.A * wall.A + wall.B * wall.B) < 0.01, "Wand soll grau sein");
+        Assert.True(Math.Sqrt(blue.A * blue.A + blue.B * blue.B) > 0.12, "Kissen bleibt kräftig blau");
+    }
+
     [Fact]
     public void Vibrance_ProtectsSkinTones()
     {
@@ -311,11 +347,18 @@ public class AdjustTests
         vm.SelectedTint = "Farbe";
         vm.TintHue = 210;
         vm.Vibrance = 25;
+        vm.MatchLuminance = 30;
+        vm.Neutralize = true;
         vm.CommitPendingSettings();
 
         var options = MainViewModel.OptionsFor(vm.CaptureSettings());
-        Assert.Equal(new Adjustments(Shadows: 40, Tint: Tint.Color, Vibrance: 25, TintHue: 210), options.Adjustments);
+        Assert.Equal(new Adjustments(Shadows: 40, Tint: Tint.Color, Vibrance: 25, TintHue: 210, MatchLuminance: 30, Neutralize: true),
+            options.Adjustments);
 
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.False(vm.Neutralize);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(0, vm.MatchLuminance);
         await vm.UndoCommand.ExecuteAsync(null);
         Assert.Equal(0, vm.Vibrance);
         await vm.UndoCommand.ExecuteAsync(null);

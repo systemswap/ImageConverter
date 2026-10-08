@@ -314,3 +314,23 @@ Test oder Nachweis.
 - **Wo:** `ImageConverter.Core/Imaging/Adjustments.cs` (`ShadowCurve`,
   `HighlightCurve`, `Raise`).
 - **Test:** `AdjustTests.ShadowAndHighlightCurves_AreMonotonic` (±50, ±100).
+
+## 12. Alle Regler ohne sichtbare Spur (Stil-Ressourcen gelten global)
+
+- **Entdeckt:** 0.4.31 (08.10.2026), auf einem Bildschirmfoto: beim Regler
+  „Qualität“ war nur der Knopf zu sehen. **Behoben:** 0.4.32.
+  **Eingeführt:** 0.4.28 (Commit `b205056`).
+- **Was:** Für den Farbton-Regler (Regenbogen dahinter) wurden die
+  Spur-Farben `SliderTrackFill` … in `<Style Selector="Slider.hue">
+  <Style.Resources>` durchsichtig gesetzt – dadurch waren die Spuren *aller*
+  Regler der Anwendung unsichtbar.
+- **Warum:** In Avalonia sind Ressourcen in `Style.Resources` nicht an den
+  Selektor gebunden; sie landen in der Ressourcensuche des Stil-Besitzers
+  (hier die Anwendung) und gelten für alle Steuerelemente.
+- **Wie behoben:** Die Ressourcen direkt am Regler (`<Slider.Resources>`) –
+  dort gelten sie nur für ihn.
+- **Nicht tun:** Theme-Ressourcen per `Style.Resources` „für eine Klasse“
+  überschreiben. Nach Stiländerungen ein Bildschirmfoto der ganzen Oberfläche
+  ansehen, nicht nur der geänderten Stelle.
+- **Wo:** `ImageConverter.Ui/Views/MainView.axaml` (Farbton-Regler),
+  `ImageConverter.Ui/Styles/Controls.axaml`.
