@@ -334,3 +334,27 @@ Test oder Nachweis.
   ansehen, nicht nur der geänderten Stelle.
 - **Wo:** `ImageConverter.Ui/Views/MainView.axaml` (Farbton-Regler),
   `ImageConverter.Ui/Styles/Controls.axaml`.
+
+## 13. publish.ps1: halb geleerter published-Ordner, ZIP scheitert an gesperrter EXE
+
+- **Entdeckt:** 0.4.33 (08.10.2026), beim Veröffentlichen unter Windows.
+  **Behoben:** 0.4.34.
+- **Was:** Zwei Fehlerbilder. (1) Der Bau lief, während ImageConverter aus
+  `published\windows-x64` gestartet war: `Clear-ProgramFolder` löschte
+  `licenses\` und brach dann an der geladenen `Magick.Native-Q16-x64.dll` ab –
+  Ordner halb leer, ZIP weg. (2) Auch ohne laufendes Programm schlug
+  `Compress-Archive` fehl: Die eben kopierte `ImageConverter.exe` war „von einem
+  anderen Prozess verwendet“.
+- **Warum:** (1) `publish.ps1` prüfte – anders als `publish.sh` – nicht, ob das
+  Programm aus `published\` läuft; die Prüfung von außen vor dem Aufruf reicht
+  nicht, weil der Benutzer es während der Tests starten kann. (2) Ein anderer
+  Prozess hält neue Programmdateien kurz fest, vermutlich der Virenscanner.
+- **Wie behoben:** `Assert-NotRunning` vor dem Bau und noch einmal unmittelbar
+  vor `Clear-ProgramFolder` (bricht mit Meldung ab, beendet nichts). Das Packen
+  versucht es bis zu sechsmal im Abstand von 5 s.
+- **Nicht tun:** Das laufende Programm beenden, um bauen zu können. Den
+  Wiederholungsversuch als Erklärung für (1) nehmen – eine geladene DLL wird
+  nicht nach 5 s frei.
+- **Wo:** `publish.ps1`.
+- **Nachweis:** Bau nach dem Fix: „ZIP: Datei noch gesperrt, neuer Versuch …
+  (1/5)“, danach fertig; `licenses\` und ZIP wieder da, `KI-Modelle\` unberührt.

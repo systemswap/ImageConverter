@@ -72,6 +72,18 @@ $onnxVersion   = Get-PackageVersion 'Microsoft.ML.OnnxRuntime'
 
 Write-Step "ImageConverter $version"
 
+# Nicht, solange das Programm aus published\ laeuft: Es wandelt vielleicht gerade um, und
+# halb geleerte Ordner (Lizenzen weg, DLL gesperrt) waeren die Folge. Geprueft wird vor dem
+# Bau und noch einmal unmittelbar vor dem Ersetzen - die Tests dauern eine Weile.
+function Assert-NotRunning {
+    $running = Get-Process ImageConverter -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and $_.Path.StartsWith($outDir, [StringComparison]::OrdinalIgnoreCase) }
+    if ($running) {
+        throw "ImageConverter laeuft gerade aus published\ ($($running[0].Path)) - bitte erst beenden, dann neu bauen."
+    }
+}
+Assert-NotRunning
+
 if (Test-Path $workDir) { Remove-Item $workDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $workDir, $outDir | Out-Null
 
@@ -116,6 +128,7 @@ if ($Target -in @('windows', 'beides')) {
     Write-Step "Windows (win-x64) -> $winDir"
     $build = Join-Path $workDir 'windows'
     Publish-Runtime 'win-x64' $build
+    Assert-NotRunning
     Clear-ProgramFolder $winDir
     Copy-Item (Join-Path $build '*') $winDir -Recurse -Force
     Copy-Notices $winDir
@@ -124,7 +137,16 @@ if ($Target -in @('windows', 'beides')) {
     $zip = Join-Path $outDir 'ImageConverter-windows-x64.zip'
     if (Test-Path $zip) { Remove-Item $zip -Force }
     $items = Get-ChildItem $winDir | Where-Object { $_.Name -ne 'KI-Modelle' }
-    Compress-Archive -Path $items.FullName -DestinationPath $zip
+    # Die frisch kopierte EXE haelt kurz ein anderer Prozess fest, auch wenn ImageConverter
+    # nicht laeuft (vermutlich der Virenscanner) - dann warten und erneut versuchen.
+    for ($try = 1; ; $try++) {
+        try { Compress-Archive -Path $items.FullName -DestinationPath $zip -Force -ErrorAction Stop; break }
+        catch {
+            if ($try -ge 6) { throw }
+            Write-Host "  ZIP: Datei noch gesperrt, neuer Versuch in 5 s ($try/5) ..."
+            Start-Sleep -Seconds 5
+        }
+    }
 }
 
 # -------------------------------------------------------------------- Linux
@@ -133,6 +155,7 @@ if ($Target -in @('linux', 'beides')) {
     Write-Step "Linux (linux-x64, ohne AppImage) -> $linuxDir"
     $build = Join-Path $workDir 'linux'
     Publish-Runtime 'linux-x64' $build
+    Assert-NotRunning
     Clear-ProgramFolder $linuxDir
     Copy-Item (Join-Path $build '*') $linuxDir -Recurse -Force
     Copy-Notices $linuxDir
