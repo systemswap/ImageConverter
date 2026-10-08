@@ -572,7 +572,7 @@
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Durchläufe'}" />
                                         <Slider Grid.Column="1" Minimum="1" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DehazePasses}"
-                                                ToolTip.Tip="{l:T 'Wie oft der Dunst nacheinander entfernt wird — wie das Auge: Ergebnis ansehen, wieder schätzen. Wo der Dunst weg ist, passiert nichts mehr; die Ferne wird mit jedem Durchlauf klarer. 3 bis 4 sind meist gut, der Himmel bleibt ab dem zweiten unverändert.'}" />
+                                                ToolTip.Tip="{l:T 'Wie oft der Dunst nacheinander entfernt wird — wie das Auge: Ergebnis ansehen, wieder schätzen. Je Durchlauf wirken auch Kontrast, Dynamik und Schärfe aus dieser Gruppe mit ihrem Reglerwert; der nächste Durchlauf schätzt den kontrastreicheren Stand neu. Wo der Dunst weg ist, passiert nichts mehr; die Ferne wird klarer. 3 bis 4 sind meist gut, der Himmel bleibt ab dem zweiten unverändert.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazePassesLabel}" />
                                     </Grid>
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">

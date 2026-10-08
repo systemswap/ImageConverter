@@ -111,18 +111,41 @@ public static class Adjust
         {
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
             // schätzen — wo er weg ist, findet die Schätzung nichts mehr, die Ferne wird weiter
-            // klar. Luftlicht und Himmel stammen aus dem ersten Durchlauf; Klarheit, Schärfe,
-            // Kurve und Dynamik kommen einmal am Schluss (je Durchlauf summierten sie sich:
-            // körniger Himmel, Vordergrund heller und bunter).
+            // klar. Luftlicht und Himmel stammen aus dem ersten Durchlauf, der Himmel bleibt danach
+            // unverändert (sonst körnig). Wahrnehmung (Klarheit, Kurve, Dynamik, Schärfe) und die
+            // Tools-Kurven wirken in jedem Durchlauf — das Laborrezept, das gefiel.
             var settings = new Dehaze.Settings(
                 (float)(a.DehazeClarity / 100), (float)(a.DehazeSharpen / 100), (float)(a.DehazeContrast / 100),
                 (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100));
             var passes = dehaze > 0 ? Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses) : 1;
             var pass = new Dehaze.Pass();
-            for (var i = 0; i < passes; i++)
-                source = Dehaze.Apply(source, width, height, dehaze, pass, settings, final: i == passes - 1);
             var edge = Math.Clamp(a.DehazeEdge / 100, 0, 1) * Math.Min(1, Math.Abs(dehaze));
-            if (edge > 0) source = Sharpen.UnsharpMask(source, width, height, edge, Dehaze.EdgeSigma);
+            if (passes == 1)
+            {
+                source = Dehaze.Apply(source, width, height, dehaze, pass, settings, 1f);
+                if (edge > 0) source = Sharpen.UnsharpMask(source, width, height, edge, Dehaze.EdgeSigma);
+            }
+            else
+            {
+                // Je Durchlauf wie das Auge: Dunst weg, dann Kontrast, Dynamik und Schärfe auf das
+                // Ergebnis — die nächste Schätzung sieht den kontrastreicheren Stand. Das war der
+                // Unterschied zur Laborschleife, die gefiel: Nur am Schluss angewandt, brachten die
+                // Durchläufe fast nichts (Wiese hinten 93° / 0,058 statt 95° / 0,072).
+                // Kontrast und Dynamik über die Tools-Kurven (Kontrast, Dynamik), Schärfe fein und
+                // Kanten über Unscharfmaskierung; die Dunst-eigenen Anteile bleiben beim ersten Durchlauf.
+                var contrast = a.DehazeContrast / 100 * Dehaze.LoopContrast;
+                var vibrance = a.DehazeVibrance / 100 * Dehaze.LoopVibrance;
+                var fine = a.DehazeSharpen / 100 * Dehaze.LoopSharpen;
+                var loopEdge = edge * Dehaze.LoopEdgeShare;
+                var step = new Adjustments(Contrast: contrast, Vibrance: vibrance);
+                for (var i = 0; i < passes; i++)
+                {
+                    source = Dehaze.Apply(source, width, height, dehaze, pass, settings, 1f);   // Wahrnehmung jede Runde, wie das Labor
+                    if (!step.IsNone) source = Apply(new Prepared(source, null), width, height, step);
+                    if (fine > 0) source = Sharpen.UnsharpMask(source, width, height, fine, Dehaze.FineSigma);
+                    if (loopEdge > 0) source = Sharpen.UnsharpMask(source, width, height, loopEdge, Dehaze.EdgeSigma);
+                }
+            }
         }
         return new Prepared(source, ToneMap(source, width, height, a));
     }

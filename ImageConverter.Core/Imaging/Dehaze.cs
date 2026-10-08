@@ -51,6 +51,20 @@ internal static class Dehaze
     /// <summary>Höchstzahl der Durchläufe.</summary>
     internal const int MaxPasses = 10;
 
+    // Schleife (Durchläufe > 1): Was die Regler je Durchlauf über die Tools-Kette bewirken, bei
+    // Reglerstand 100 % — die Vorgaben (Kontrast 12, Dynamik 25, Schärfe 60) ergeben dann je Runde
+    // Kontrast +8, Dynamik +8, feine Schärfe 0,3 wie die Laborschleife, die gefiel.
+    /// <summary>Tools-Kontrast je Durchlauf bei 100 %.</summary>
+    internal const double LoopContrast = 67;
+    /// <summary>Tools-Dynamik je Durchlauf bei 100 %.</summary>
+    internal const double LoopVibrance = 32;
+    /// <summary>Feine Unscharfmaskierung je Durchlauf bei 100 %.</summary>
+    internal const double LoopSharpen = 0.5;
+    /// <summary>Gauß-Sigma der feinen Unscharfmaskierung in der Schleife.</summary>
+    internal const double FineSigma = 0.7;
+    /// <summary>Anteil des Kanten-Reglers je Durchlauf.</summary>
+    internal const double LoopEdgeShare = 0.5;
+
     /// <summary>Kantenschärfe (Unscharfmaskierung nach allen Durchläufen): Gauß-Sigma in Pixeln.</summary>
     internal const double EdgeSigma = 2.0;
 
@@ -84,7 +98,7 @@ internal static class Dehaze
 
     /// <param name="amount">−1 … +3: rechts Dunst entfernen (über 1 verstärkt), links Dunst hinzufügen.</param>
     public static byte[] Apply(byte[] bgra, int width, int height, float amount) =>
-        Apply(bgra, width, height, amount, null, Settings.Default, final: true);
+        Apply(bgra, width, height, amount, null, Settings.Default, share: 1f);
 
     /// <summary>Was ein Durchlauf an den nächsten weitergibt: Luftlichtfeld und Himmel der kleinen Fassung.</summary>
     internal sealed class Pass
@@ -99,7 +113,10 @@ internal static class Dehaze
     /// weiter klar. Im Himmel nur der erste Durchlauf: Dort fand die Schätzung sonst immer wieder „Dunst“
     /// (Rauschen, Verlauf), der Himmel wurde körnig und fleckig.</param>
     /// <param name="final">Letzter Durchlauf: Klarheit, Schärfe, Kurve und Dynamik anwenden (einmal, nicht je Durchlauf).</param>
-    internal static byte[] Apply(byte[] bgra, int width, int height, float amount, Pass? pass, Settings s, bool final)
+    /// <param name="share">Anteil der Wahrnehmung (Klarheit, Schärfe, Kurve, Dynamik) in diesem Durchlauf;
+    /// die Schleife nimmt 1 in jeder Runde — wie das Auge: Kontrast und Farbe nach jeder Runde, die nächste
+    /// schätzt den kontrastreicheren Stand neu. Nur am Schluss angewandt, brachten die Durchläufe fast nichts.</param>
+    internal static byte[] Apply(byte[] bgra, int width, int height, float amount, Pass? pass, Settings s, float share)
     {
         if (amount == 0) return (byte[])bgra.Clone();
         var strength = Math.Abs(amount);
@@ -120,7 +137,7 @@ internal static class Dehaze
         if (pass is not null && fresh) { pass.Air = air; pass.Sky = sky; pass.W = sw; pass.H = sh; }
         var t = Transmission(small, sw, sh, air, 0.95f);
         if (!fresh)
-            for (var p = 0; p < t.Length; p++) t[p] += (1 - t[p]) * sky[p];   // Himmel: nur im ersten Durchlauf
+            for (var p = 0; p < t.Length; p++) t[p] += (1 - t[p]) * Math.Min(1, sky[p]);   // Himmel: nur im ersten Durchlauf
         var boosted = ProtectSky(sky, t, boost);
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         var guide = Encode(small);
@@ -137,11 +154,16 @@ internal static class Dehaze
         // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
         float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r, float[] a)
         {
-            var landHere = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
+            var skyAt = At(sky, sw, sh, sx, sy, 0, 1);
+            var landHere = 1 - Math.Clamp(skyAt, 0, 1);   // über 1 = Lichthof, zählt als Himmel
+            var haloHere = Math.Clamp(skyAt - 1, 0, 1);
             var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere);
-            if (boosted == null) return tt;
-            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere);
-            return Math.Min(tt, strongT);
+            if (boosted != null)
+                tt = Math.Min(tt, Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, a, 0, landHere));
+            // Lichthof der Sonne: Licht, kein Dunst — nichts zurückrechnen. 0.4.38 erreichte das über die
+            // Regel „heller als das Luftlicht“; ohne sie hellte die Rückrechnung den Hof auf, die
+            // Strahlen liefen ins Weiß (Schwankung bei r 120: ±8,5 statt ±11,3 im Labor).
+            return tt + (1 - tt) * haloHere;
         }
 
         // Helligkeitsausgleich: Verhältnis Original/Ergebnis auf der kleinen Fassung
@@ -169,7 +191,7 @@ internal static class Dehaze
         // dazu lokaler Kontrast (Klarheit), feine Schärfe, sanfte S-Kurve und Dynamik, mit dem
         // Regler wachsend, über 100 langsamer. Klarheit und Schärfe nicht im Himmel (Rauschen).
         var over = Math.Max(0, strength - 1);
-        var perceptual = final ? 1f : 0f;
+        var perceptual = share;
         var clarity = perceptual * (s.Clarity * mix + s.Clarity * 0.4f * over);
         var sharpen = perceptual * (s.Sharpen * mix + s.Sharpen * 0.4f * over);
         var curve = perceptual * (s.Curve * mix + s.Curve * 0.5f * over);
@@ -199,6 +221,9 @@ internal static class Dehaze
                 for (var c = 0; c < 3; c++) lin[c] = Srgb.ToLinear(bgra[i + c]);
 
                 var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2], airHere);
+                var skyHere = At(sky, sw, sh, sx, sy, 0, 1);
+                var land = 1 - Math.Clamp(skyHere, 0, 1);
+                var halo = Math.Clamp(skyHere - 1, 0, 1);   // Lichthof der Sonne (Himmel über 1)
 
                 float oB, oG, oR;
                 if (amount > 0)
@@ -215,6 +240,9 @@ internal static class Dehaze
                         var before = Luma(lin[0], lin[1], lin[2]);
                         g = Math.Min(g, Math.Max(1, before / Math.Max(Luma(oB, oG, oR), 1e-4f)));
                     }
+                    // Nur in der Landschaft: Das lineare Modell des Ausgleichs extrapoliert auf die Sonne (heller
+                    // als jeder Dunst) — Zentrum dunkler, Hof heller, die Strahlen verschwammen.
+                    g = 1 + (g - 1) * land;
                     oB *= g; oG *= g; oR *= g;
 
                     // Farbe: Helligkeit aus dem Modell, Farbton aus dem Original, Buntheit
@@ -226,7 +254,6 @@ internal static class Dehaze
                     var c1 = MathF.Sqrt(now.A * now.A + now.B * now.B);
                     // Im Himmel keine zusätzliche Buntheit: Die Rückrechnung machte den Himmel blauer,
                     // der Lichthof der Sonne (dunstfarben, bleibt stehen) wirkte dann als pinker Ring.
-                    var land = 1 - Math.Clamp(At(sky, sw, sh, sx, sy, 0, 1), 0, 1);
                     var chromaCap = 1 + land * (mix * (1 / tt - 1) + strength * ChromaPerUnit);   // tt ist über 100 schon verstärkt
                     var ratio = c0 > 1e-3f ? Math.Min(c1 / c0, chromaCap) : 1;
 
@@ -235,9 +262,10 @@ internal static class Dehaze
                           + clarity * land * (was.L - Sample(baseL, sw, sh, sx, sy, gB, gG, gR))
                           + sharpen * land * FineDetail(bgra, width, height, x, y);
                     L = Math.Clamp(L, 0, 1);
-                    L -= curve * MathF.Sin(2 * MathF.PI * L) / (2 * MathF.PI);
+                    // Kurve nicht im Lichthof: Ihre Schulter staucht die Strahlen (gemessen −11 % Schwankung)
+                    L -= curve * (1 - halo) * MathF.Sin(2 * MathF.PI * L) / (2 * MathF.PI);
                     var chroma = c0 * ratio;
-                    ratio *= 1 + vibrance * land * (1 - Math.Min(1, chroma / VibranceFull));   // nicht im Himmel: Lichthof wurde pinker
+                    ratio *= 1 + vibrance * land * (1 - Math.Min(1, chroma / VibranceFull));   // nicht im Himmel, auch nicht im Lichthof
 
                     var (sR, sG, sB) = Oklab.ToSrgb(L, was.A * ratio, was.B * ratio);
                     result[i] = (byte)(sB * 255 + 0.5f);
@@ -572,11 +600,12 @@ internal static class Dehaze
             // im Übergang Himmel/Horizont Bänder (blau, weiß-rosa) und ein dunkler Bogen.
             if (boosted != null)
             {
-                var landscape = (1 - sky[i]) * (1 - sky[i]) * (1 - sky[i]) * (1 - sky[i]);
+                var skyHere = Math.Min(1, sky[i]);   // über 1 = Lichthof, zählt als Himmel
+                var landscape = (1 - skyHere) * (1 - skyHere) * (1 - skyHere) * (1 - skyHere);
                 var tb = Math.Max(0, 1 - (1 - t[i]) * (1 + (boost - 1) * landscape));
-                boosted[i] = tb + (1 - tb) * SkyProtection * sky[i];
+                boosted[i] = tb + (1 - tb) * SkyProtection * skyHere;
             }
-            t[i] += (1 - t[i]) * SkyProtection * sky[i];
+            t[i] += (1 - t[i]) * SkyProtection * Math.Min(1, sky[i]);
         }
         return boosted;
     }
@@ -603,6 +632,11 @@ internal static class Dehaze
         var hot = new float[l.Length];
         for (var i = 0; i < hot.Length; i++) hot[i] = l[i] > HotLuma ? 1 : 0;
         Blur.Gauss(hot, w, h, Math.Max(2.0, HaloPerEdge * edge));
+        // Auf den Scheitel normiert: Der Hof reicht so bei jeder Bildgröße gleich weit (bis in die
+        // Strahlen); unnormiert war er bei kleinen Bildern fast leer und wurde nach außen zu schwach —
+        // die Rückrechnung hellte die Strahlen auf. Ein einzelnes heißes Pixel zählt nicht (Gate).
+        var peak = hot.Max();
+        var haloScale = peak > 0.001f ? 1 / peak : 0;   // Gate: eine ausgefressene Scheibe, kein einzelnes Pixel
 
         var sky = new float[l.Length];
         for (var i = 0; i < sky.Length; i++)
@@ -610,7 +644,14 @@ internal static class Dehaze
             var structure = band[i] / Math.Max(mean[i], 1e-3f);
             var smooth = 1 - SmoothStep(0.008f, 0.02f, structure);
             var bright = SmoothStep(0.03f, 0.1f, l[i]);   // dunkle glatte Schatten sind kein Himmel
-            sky[i] = Math.Max(bright * smooth, SmoothStep(0.01f, 0.05f, hot[i]));
+            // Hof: nahe der Sonne und hell — die Grenze folgt der Helligkeit des Himmels, nicht einem
+            // Radius; ein reiner Radius ergab eine sichtbar hellere Scheibe um die Sonne (innen
+            // unverändert, außen entdunstet). 0.4.38 schonte ebenfalls pixelweise (heller als Luftlicht).
+            var halo = SmoothStep(0.02f, 0.3f, hot[i] * haloScale) * SmoothStep(0.45f, 0.75f, l[i]);
+            // Werte über 1 markieren den Lichthof (Himmel = 1 + Hof): Die feine Schärfe bleibt dort
+            // voll — die Strahlen der Sonne sind Struktur, die man sehen will (in der App waren sie
+            // weich, im Labor mit normaler Schärfe kräftig); nur dunstiger Himmel wird geschont.
+            sky[i] = Math.Max(bright * smooth, halo) + halo;
         }
         return sky;
     }

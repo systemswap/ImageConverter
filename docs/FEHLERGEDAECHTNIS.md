@@ -587,3 +587,39 @@ Test oder Nachweis.
   die Pixelregeln; im Himmel keine zusätzliche Buntheit und keine Dynamik.
   Feinregler immer sichtbar (Wunsch). Der Block rechnet bei jeder
   Reglerbewegung vom Original — nichts kumuliert.
+- **Nachtrag 0.4.43-beta (Durchläufe wirkten nicht, Sonne ohne Strahlen):**
+  Abnahme gegen die Laborschleife (Stapel `Abnahme*` im Vergleichsordner):
+  App 3 × 40 war flacher als das Labor (Wiese hinten 93° / 0,058 statt 95° /
+  0,072), 6 Durchläufe brachten fast nichts. Ursache (Ausschluss-Messung über
+  fünf Schleifen-Varianten): Das Labor hat je Runde Kontrast +8, Dynamik +8 und
+  Schärfe über die **Tools-Kette** angewendet, die App alles nur einmal am
+  Schluss. Jetzt gilt bei Durchläufen > 1 jeder Feinregler „je Durchlauf“ über
+  die Tools-Kurven (Vorgaben = Laborrezept), die Dunst-eigene Wahrnehmung nur im
+  ersten. Messung danach: 3 × 40 → 94° / 0,063, 6 × 40 → 97° / 0,069.
+  Sonne (Strahlen weich): Messung der Schwankung über den Winkel je Radius
+  (= Strahlenstärke) für Original, App 1×, App 3× und Labor. Befund: 0.4.38
+  lässt die Sonne bei 1× unverändert (±13,4 wie das Original) — der Hof ist
+  dort glatter Himmel ohne Klarheit, Schärfe, Dynamik; die Regel „heller als
+  das Luftlicht“ gibt t = 1. Die App hatte ±7,7 (1×) / ±6,3 (3×). Ursachen und
+  Abhilfen: (1) Hof galt als Landschaft → Himmelskarte trägt den Lichthof als
+  Wert über 1 (auf den Scheitel normiert, damit er bei jeder Bildgröße gleich
+  weit reicht; Gate gegen einzelne heiße Pixel); dort t = 1, keine Klarheit,
+  Schärfe, Dynamik, kein Helligkeitsausgleich. (2) Die S-Kurve staucht die
+  Strahlen um 11 % (Schulter) → nicht im Lichthof. Danach 1× = Original
+  (±13,6), 3× ±11,1 (Labor ±11,3). Fehlversuche: Klarheit/Dynamik/Schärfe in
+  den Hof wie vermeintlich 0.4.38 (±8,6 — falsche Annahme), Helligkeits-
+  ausgleich im Hof (±7,4), Kanten-Regler (wirkungslos an der Sonne).
+  Konsumenten der Himmelskarte klemmen auf 0–1 (ProtectSky, Einfrieren).
+- **Lehre (Abnahme):** Vergleiche gegen das Labor immer mit demselben Code-
+  stand rechnen, den das Labor hatte (`bench-0438` im Worktree `wt-0438`), und
+  Strukturen (Strahlen, Wiese) messen statt Ringmittel — Ringmittel glätten
+  genau das weg, was das Auge sieht. Bei Durchläufen > 1 wirkt jeder
+  Feinregler je Durchlauf (Semantik des Benutzers); 6 Durchläufe mit den
+  Vorgaben kippen (L 0,44, Buntheit 0,085) — das ist Reglersache, 3–4 sind gut.
+- **Nachtrag (Hof-Grenze):** Ein Hof nach Radius (Gauß um die ausgefressene
+  Scheibe, auf den Scheitel normiert) ergab im glatten Himmel eine sichtbar
+  hellere Scheibe um die Sonne – innen unverändert, außen entdunstet. Jetzt
+  folgt der Hof zusätzlich der Helligkeit (SmoothStep 0,45–0,75 linear), wie
+  0.4.38 pixelweise schonte; die Grenze liegt damit im eigenen Verlauf des
+  Himmels und ist unsichtbar. Messung danach: 1× = Original bis r 120, bei
+  r 200 ±16,6 statt 19,5; 3× ±10,7 (Labor ±11,3).
