@@ -92,6 +92,12 @@ public partial class MainViewModel
 
     [ObservableProperty] public partial string? StatusMessage { get; set; }
 
+    /// <summary>Fortschritt des Speicherns über alle Schritte, 0–100.</summary>
+    [ObservableProperty] public partial double ExportProgress { get; set; }
+
+    /// <summary>Was beim Speichern gerade passiert (unter dem Balken).</summary>
+    [ObservableProperty] public partial string ExportStep { get; set; } = "";
+
     /// <summary>Ordner des zuletzt exportierten Bildes — für „Ordner öffnen".</summary>
     [ObservableProperty] public partial string? LastExportFolder { get; set; }
 
@@ -165,6 +171,8 @@ public partial class MainViewModel
         var (w, h) = EffectiveTarget();
         var options = BuildExportOptions(w, h);
 
+        ExportProgress = 0;
+        ExportStep = Tr.T("Vorbereiten …");
         IsExporting = true;
         StatusMessage = null;
         ErrorMessage = null;
@@ -174,11 +182,17 @@ public partial class MainViewModel
             var fileName = OutputNaming.BuildFileName(NamePattern, sourcePath, w, h,
                 _fileIndex + 1, DateTime.Now, ImageExporter.Extension(options.Format));
 
+            // Meldungen kommen aus dem Rechen-Thread und landen über den UI-Kontext hier
+            var progress = new Progress<WorkProgress>(p =>
+            {
+                ExportProgress = p.Fraction * 100;
+                ExportStep = p.Step;
+            });
             var (path, bytes) = await Task.Run(() =>
             {
                 Directory.CreateDirectory(folder);
                 var target = OutputNaming.MakeUnique(folder, fileName);
-                return (target, ImageExporter.Export(doc, options, target));
+                return (target, ImageExporter.Export(doc, options, target, progress));
             });
 
             LastExportFolder = folder;

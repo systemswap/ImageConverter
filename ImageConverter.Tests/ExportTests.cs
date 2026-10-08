@@ -24,6 +24,39 @@ public sealed class ExportTests : IDisposable
 
     private string Out(string name) => Path.Combine(_dir, name);
 
+    /// <summary>Meldet sofort im selben Thread (Progress&lt;T&gt; liefe über den UI-Kontext).</summary>
+    private sealed class Collect : IProgress<WorkProgress>
+    {
+        public readonly List<WorkProgress> Reports = [];
+        public void Report(WorkProgress value) => Reports.Add(value);
+    }
+
+    /// <summary>
+    /// Fortschritt beim Speichern: ein Balken, der einmal von 0 bis 100 % läuft (vorher lief eine
+    /// Endlos-Animation ohne Text), jeder Schritt einmal gemeldet — Größe, Rauschen, 3 Dunst-Durchläufe,
+    /// Tiefen/Lichter, Licht und Farbe, Schärfen, Farbprofil, Datei schreiben — und am Ende „fertig“.
+    /// </summary>
+    [Fact]
+    public void Export_ReportsEveryStep_InOneSteadyRun()
+    {
+        using var src = Photo();
+        var progress = new Collect();
+        var options = Options(OutputFormat.Jpeg) with
+        {
+            Denoise = 0.3, SharpenAmount = 0.5,
+            Adjustments = new Adjustments(Dehaze: 60, DehazePasses: 3, Shadows: 20),
+        };
+        ImageExporter.Export(src, options, Out("fortschritt.jpg"), progress);
+
+        var r = progress.Reports;
+        Assert.Equal(10 + 1, r.Count);
+        Assert.Equal(0, r[0].Fraction);
+        Assert.Equal(1, r[^1].Fraction);
+        for (var i = 1; i < r.Count; i++) Assert.True(r[i].Fraction > r[i - 1].Fraction, $"Schritt {i}: {r[i - 1].Fraction:P0} → {r[i].Fraction:P0}");
+        Assert.All(r, p => Assert.False(string.IsNullOrWhiteSpace(p.Step)));
+        Assert.Equal(10 + 1, r.Select(p => p.Step).Distinct().Count());
+    }
+
     [Theory]
     [InlineData(OutputFormat.WebP, MagickFormat.WebP)]
     [InlineData(OutputFormat.Png, MagickFormat.Png)]

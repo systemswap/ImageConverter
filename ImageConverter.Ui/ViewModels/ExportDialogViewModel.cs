@@ -67,6 +67,9 @@ public partial class ExportDialogViewModel : ViewModelBase
 
     [ObservableProperty] public partial bool IsDone { get; set; }
     [ObservableProperty] public partial double Progress { get; set; }
+
+    /// <summary>Was gerade passiert: Bild n von m und der Schritt darin.</summary>
+    [ObservableProperty] public partial string Step { get; set; } = "";
     [ObservableProperty] public partial string Summary { get; set; } = "";
 
     private void NotifySelection()
@@ -133,6 +136,7 @@ public partial class ExportDialogViewModel : ViewModelBase
     {
         IsExporting = true;
         IsDone = false;
+        Progress = 0;
         _cancelRequested = false;
 
         var selected = Items.Where(i => i.Include).ToList();
@@ -147,9 +151,18 @@ public partial class ExportDialogViewModel : ViewModelBase
             var item = selected[n];
             item.Status = Tr.T("wird exportiert …");
             item.Failed = false;
+            // Ein Balken über alle Bilder: jedes Bild ein gleich großes Stück, darin seine Schritte
+            var index = n;
+            Step = Tr.T("Bild {0} von {1} · {2}", index + 1, selected.Count, Tr.T("Laden …"));
+            var progress = new Progress<WorkProgress>(p =>
+            {
+                Progress = (index + p.Fraction) * 100 / selected.Count;
+                Step = Tr.T("Bild {0} von {1} · {2}", index + 1, selected.Count, p.Step);
+                item.Status = p.Step;
+            });
             try
             {
-                var (path, bytes) = await _main.ExportFileAsync(item.Path);
+                var (path, bytes) = await _main.ExportFileAsync(item.Path, progress);
                 item.Status = $"✓  {FormatBytes(bytes)}";
                 item.Details = Path.GetFileName(path);   // tatsächlicher Name, ggf. mit „ (2)"
                 item.Done = true;

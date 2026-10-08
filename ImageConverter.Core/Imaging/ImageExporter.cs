@@ -1,4 +1,5 @@
 using System.Text;
+using ImageConverter.Core.Localization;
 using ImageMagick;
 
 namespace ImageConverter.Core.Imaging;
@@ -71,12 +72,14 @@ public static class ImageExporter
         format is not (OutputFormat.Jpeg or OutputFormat.Bmp);
 
     /// <summary>Wendet die Bildkette an. Die Quelle bleibt unverändert.</summary>
-    public static MagickImage Render(MagickImage source, ExportOptions o)
+    public static MagickImage Render(MagickImage source, ExportOptions o, WorkPlan? plan = null)
     {
+        plan?.Next();
         var result = ImageOps.Resize(source, o.Width, o.Height, o.Filter, o.GammaCorrect);
 
         if (o.Denoise > 0.01)
         {
+            plan?.Next();
             var denoised = ImageOps.Denoise(result, o.Denoise);
             result.Dispose();
             result = denoised;
@@ -90,14 +93,19 @@ public static class ImageExporter
             var w = (int)result.Width;
             var h = (int)result.Height;
             var pixels = ImageOps.ToBgra(result);
-            if (adjust is not null) pixels = Adjust.Apply(pixels, w, h, adjust);
-            if (o.SharpenAmount > 0.01) pixels = Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma);
+            if (adjust is not null) pixels = Adjust.Apply(pixels, w, h, adjust, plan);
+            if (o.SharpenAmount > 0.01)
+            {
+                plan?.Next();
+                pixels = Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma);
+            }
             var processed = ImageOps.FromBgra(pixels, w, h);
             CopyProfiles(result, processed);
             result.Dispose();
             result = processed;
         }
 
+        plan?.Next();
         ApplyColor(result, o.Color);
         ApplyMetadata(result, o.Metadata);
         result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
@@ -166,9 +174,13 @@ public static class ImageExporter
     }
 
     /// <summary>Rechnen und schreiben. Gibt die Dateigröße in Bytes zurück.</summary>
-    public static long Export(MagickImage source, ExportOptions o, string path)
+    /// <param name="progress">Fortschritt über alle Schritte bis zur fertigen Datei, mit dem
+    /// Schritt, der gerade läuft.</param>
+    public static long Export(MagickImage source, ExportOptions o, string path, IProgress<WorkProgress>? progress = null)
     {
-        using var rendered = Render(source, o);
+        var plan = progress is null ? null : Plan(source, o, progress);
+        using var rendered = Render(source, o, plan);
+        plan?.Next();
 
         // Erst in eine temporäre Datei, dann umbenennen: ein Abbruch hinterlässt
         // nie eine halb geschriebene Zieldatei.
@@ -184,8 +196,35 @@ public static class ImageExporter
             if (File.Exists(temp)) File.Delete(temp);
         }
 
+        plan?.Done(Tr.T("Gespeichert"));
         return new FileInfo(path).Length;
     }
+
+    /// <summary>Die Schritte von <see cref="Render"/> und dem Speichern, in ihrer Reihenfolge.</summary>
+    private static WorkPlan Plan(MagickImage source, ExportOptions o, IProgress<WorkProgress> progress)
+    {
+        var plan = new WorkPlan(progress);
+        var mp = (double)o.Width * o.Height / 1e6;
+        plan.Add(Tr.T("Größe anpassen"), WorkPlan.ResizeCost * Math.Max(mp, (double)source.Width * source.Height / 1e6));
+        if (o.Denoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * mp);
+        if (o.Adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, mp);
+        if (o.SharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * mp);
+        plan.Add(Tr.T("Farbprofil und Metadaten"), WorkPlan.ColorCost * mp);
+        plan.Add(Tr.T("Datei schreiben ({0})", Extension(o.Format).TrimStart('.').ToUpperInvariant()), EncodeCost(o) * mp);
+        return plan;
+    }
+
+    /// <summary>Aufwand des Kodierens je Megapixel in Sekunden (grob gemessen; AVIF und JPEG XL sind langsam).</summary>
+    private static double EncodeCost(ExportOptions o) => o.Format switch
+    {
+        OutputFormat.Jpeg => 0.04,
+        OutputFormat.Png => 0.15,
+        OutputFormat.WebP => o.Lossless ? 0.4 : 0.15,
+        OutputFormat.Avif => 0.8,
+        OutputFormat.JpegXl => 0.4,
+        OutputFormat.Tiff => 0.06,
+        _ => 0.03,
+    };
 
     // ------------------------------------------------------------ Farbe
 

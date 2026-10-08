@@ -179,7 +179,7 @@ public partial class MainViewModel
              _files.IndexOf(path) + 1, DateTime.Now, ImageExporter.Extension(o.Format)));
 
     /// <summary>Exportiert eine Datei mit ihrem Stand. Gibt Zielpfad und Größe zurück.</summary>
-    internal async Task<(string Path, long Bytes)> ExportFileAsync(string path)
+    internal async Task<(string Path, long Bytes)> ExportFileAsync(string path, IProgress<WorkProgress>? progress = null)
     {
         var (image, owned, _) = await GetImageAsync(path);
         try
@@ -192,7 +192,7 @@ public partial class MainViewModel
             {
                 Directory.CreateDirectory(folder);
                 var target = OutputNaming.MakeUnique(folder, fileName);
-                return (target, ImageExporter.Export(image, options, target));
+                return (target, ImageExporter.Export(image, options, target, progress));
             });
         }
         finally

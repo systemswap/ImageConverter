@@ -403,6 +403,12 @@ vielen Stellen einzeln geschützt.
    Änderung wird gegen die Referenz geprüft.
 
 **Leistung (Ziel: flüssige Bearbeitung, auch bei großen Bildern):**
+- **Echter Fortschritt** (umgesetzt in 0.4.46 beta): Beim Speichern ein Balken, der
+  einmal von 0 bis 100 % über alle Schritte läuft (Größe, Rauschen, jeder Dunst-Durchlauf,
+  Tiefen/Lichter, Licht und Farbe, Schärfen, Farbprofil, Datei schreiben), darunter der
+  laufende Schritt; im Export-Fenster „Bild n von m · Schritt“. Vorher lief eine
+  Endlos-Animation ohne Text. Aufwand je Schritt geschätzt (`WorkPlan`, Sekunden je MP) —
+  die neue Bildkette meldet ihre Schritte genauso, auch für lange Vorschau-Rechnungen.
 - Vorschau in Bildschirmauflösung rechnen, volle Auflösung nur beim Export; laufende
   Rechnung bei neuer Reglerbewegung abbrechen.
 - Zwischenergebnisse je Stufe zwischenspeichern: Ein Look-Regler rechnet die Physik

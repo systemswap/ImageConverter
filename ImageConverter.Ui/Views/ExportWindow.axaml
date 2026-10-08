@@ -31,6 +31,8 @@
                 <StackPanel Grid.Column="2" Margin="16,0" VerticalAlignment="Center" Spacing="4">
                     <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4" MinHeight="4"
                                  IsVisible="{Binding IsExporting}" />
+                    <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Step}"
+                               TextTrimming="CharacterEllipsis" IsVisible="{Binding IsExporting}" />
                     <TextBlock Classes="hint" FontSize="11.5" Text="{Binding Summary}"
                                IsVisible="{Binding IsDone}" />
                 </StackPanel>

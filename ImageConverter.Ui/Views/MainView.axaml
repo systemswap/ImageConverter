@@ -71,8 +71,14 @@
                     <Button Classes="tool" Content="{l:T 'Ordner öffnen'}" Click="OnOpenExportFolderClick"
                             IsVisible="{Binding LastExportFolder, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
-                <ProgressBar Grid.Column="0" IsIndeterminate="True" Width="160"
-                             HorizontalAlignment="Left" IsVisible="{Binding IsExporting}" />
+                <!-- Speichern: ein Balken über alle Schritte, darunter der laufende Schritt -->
+                <StackPanel Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center" Spacing="3"
+                            Margin="0,0,12,0" IsVisible="{Binding IsExporting}">
+                    <ProgressBar Value="{Binding ExportProgress}" Maximum="100" Width="240"
+                                 Height="4" MinHeight="4" HorizontalAlignment="Left" />
+                    <TextBlock Classes="hint" FontSize="11.5" Text="{Binding ExportStep}"
+                               TextTrimming="CharacterEllipsis" MaxWidth="320" />
+                </StackPanel>
 
                 <TextBlock Grid.Column="1" Classes="label" Margin="0,0,8,0" Text="{l:T 'Ziel'}" />
 

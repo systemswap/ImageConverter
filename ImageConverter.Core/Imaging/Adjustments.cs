@@ -1,3 +1,5 @@
+using ImageConverter.Core.Localization;
+
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>Einfärben des ganzen Bildes (Kachel „Tools“).</summary>
@@ -92,8 +94,30 @@ public static class Adjust
     // Gewichte der Helligkeit (Rec. 709) auf den sRGB-Werten
     private const float Kr = 0.2126f, Kg = 0.7152f, Kb = 0.0722f;
 
-    public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a) =>
-        Apply(Prepare(bgra, width, height, a), width, height, a);
+    public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a, WorkPlan? plan = null) =>
+        Apply(Prepare(bgra, width, height, a, plan), width, height, a, plan);
+
+    /// <summary>
+    /// Trägt die Schritte von <see cref="Prepare"/> und <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/>
+    /// in den Fortschritt ein — in derselben Reihenfolge, in der sie dort beginnen.
+    /// </summary>
+    /// <param name="megapixels">Bildgröße, für den geschätzten Aufwand.</param>
+    public static void PlanSteps(Adjustments a, WorkPlan plan, double megapixels)
+    {
+        if (a.IsNone) return;
+        var dehaze = Math.Clamp(a.Dehaze / 100, -1, 3);
+        if (dehaze < 0)
+            plan.Add(Tr.T("Dunst hinzufügen"), WorkPlan.DehazePassCost * megapixels);
+        else if (dehaze > 0)
+        {
+            var passes = Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses);
+            for (var i = 1; i <= passes; i++)
+                plan.Add(Tr.T("Dunst entfernen – Durchlauf {0} von {1}", i, passes), WorkPlan.DehazePassCost * megapixels);
+        }
+        if (a.Shadows != 0 || a.Highlights != 0)
+            plan.Add(Tr.T("Tiefen und Lichter"), WorkPlan.ToneMapCost * megapixels);
+        plan.Add(Tr.T("Licht und Farbe"), WorkPlan.ToolsCost * megapixels);
+    }
 
     /// <summary>Ergebnis des teuren Teils: Bild nach „Dunst entfernen“ und die Zielhelligkeit
     /// aus Tiefen/Lichtern (null, wenn beide auf 0).</summary>
@@ -104,7 +128,7 @@ public static class Adjust
     /// Hängt nur von Bild, Dunst, Tiefen und Lichtern ab; die Vorschau merkt sich das
     /// Ergebnis, damit die übrigen Regler flüssig bleiben.
     /// </summary>
-    public static Prepared Prepare(byte[] bgra, int width, int height, Adjustments a)
+    public static Prepared Prepare(byte[] bgra, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = bgra;
@@ -128,6 +152,7 @@ public static class Adjust
             var pass = new Dehaze.Pass();
             var deband = (float)Math.Clamp(a.DehazeDeband / 100, 0, 1);
             var px = Deband.Apply(Pixels.FromBytes(source), width, height, deband * Dehaze.SourceDebandShare, seed: 0);
+            plan?.Next();   // Entstufen der Quelle zählt zum ersten Schritt
             if (dehaze < 0)
             {
                 px = Dehaze.Apply(px, width, height, dehaze, pass, settings, 1f);   // Dunst hinzufügen: ein Schritt
@@ -146,6 +171,7 @@ public static class Adjust
                 var edge = Math.Clamp(a.DehazeEdge / 100, 0, 1) * Dehaze.LoopEdgeShare * t;
                 for (var i = 0; i < passes; i++)
                 {
+                    if (i > 0) plan?.Next();
                     px = Dehaze.Apply(px, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f);
                     ContrastVibrance(px, width, height, contrast / 100, vibrance / 100);
                     px = Deband.Apply(px, width, height, deband, seed: (uint)i + 1);
@@ -155,6 +181,7 @@ public static class Adjust
             }
             source = Pixels.ToBytes(px, dither: true);
         }
+        if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
         return new Prepared(source, ToneMap(source, width, height, a));
     }
 
@@ -205,13 +232,14 @@ public static class Adjust
     }
 
     /// <param name="prepared">Ergebnis von <see cref="Prepare"/> für dasselbe Bild.</param>
-    public static byte[] Apply(Prepared prepared, int width, int height, Adjustments a)
+    public static byte[] Apply(Prepared prepared, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var (bgra, toned) = (prepared.Source, prepared.Toned);
         ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(prepared));
 
         var result = (byte[])bgra.Clone();
         if (a.IsNone) return result;
+        plan?.Next();
 
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
