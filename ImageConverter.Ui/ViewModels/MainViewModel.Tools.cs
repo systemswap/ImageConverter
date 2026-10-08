@@ -7,7 +7,8 @@ using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.ViewModels;
 
-// Kachel „Tools“: Licht und Farbe, je Funktion ein Regler von −100 bis +100.
+// Kachel „Tools“: Licht und Farbe, je Funktion ein Regler von −100 bis +100
+// (Farbton beim Färben 0–360°).
 // Wirkt in der Kette nach dem Entrauschen und vor dem Schärfen (Core: Adjust).
 public partial class MainViewModel
 {
@@ -15,15 +16,21 @@ public partial class MainViewModel
     [ObservableProperty] public partial double Contrast { get; set; }
     [ObservableProperty] public partial double Shadows { get; set; }
     [ObservableProperty] public partial double Highlights { get; set; }
+    [ObservableProperty] public partial double Vibrance { get; set; }
     [ObservableProperty] public partial double Saturation { get; set; }
     [ObservableProperty] public partial string SelectedTint { get; set; } = TintLabels[0].Label;
+
+    /// <summary>Farbton beim Färben „Farbe“, 0–360°.</summary>
+    [ObservableProperty] public partial double TintHue { get; set; } = Adjustments.SepiaHue;
+
+    /// <summary>Der Farbton-Regler erscheint nur, wenn farbig getönt wird.</summary>
+    public bool IsTintColor => TintOf(SelectedTint) == Tint.Color;
 
     internal static readonly (string Label, Tint Tint)[] TintLabels =
     [
         ("Aus", Tint.None),
         ("Schwarzweiß", Tint.BlackWhite),
-        ("Sepia", Tint.Sepia),
-        ("Kühles Blau", Tint.Cool),
+        ("Farbe", Tint.Color),
     ];
 
     public IReadOnlyList<string> Tints { get; } = TintLabels.Select(t => t.Label).ToList();
@@ -32,7 +39,9 @@ public partial class MainViewModel
     public string ContrastLabel => Signed(Contrast);
     public string ShadowsLabel => Signed(Shadows);
     public string HighlightsLabel => Signed(Highlights);
+    public string VibranceLabel => Signed(Vibrance);
     public string SaturationLabel => Signed(Saturation);
+    public string TintHueLabel => $"{Math.Round(TintHue):0}°";
 
     private static string Signed(double v) => (int)Math.Round(v) switch
     {
@@ -45,8 +54,15 @@ public partial class MainViewModel
     partial void OnContrastChanged(double value) => ToolChanged(nameof(ContrastLabel));
     partial void OnShadowsChanged(double value) => ToolChanged(nameof(ShadowsLabel));
     partial void OnHighlightsChanged(double value) => ToolChanged(nameof(HighlightsLabel));
+    partial void OnVibranceChanged(double value) => ToolChanged(nameof(VibranceLabel));
     partial void OnSaturationChanged(double value) => ToolChanged(nameof(SaturationLabel));
-    partial void OnSelectedTintChanged(string value) => ToolChanged(null);
+    partial void OnTintHueChanged(double value) => ToolChanged(nameof(TintHueLabel));
+
+    partial void OnSelectedTintChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsTintColor));
+        ToolChanged(null);
+    }
 
     private void ToolChanged(string? label)
     {
@@ -59,14 +75,15 @@ public partial class MainViewModel
     private void ResetTools()
     {
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
-        Brightness = Contrast = Shadows = Highlights = Saturation = 0;
+        Brightness = Contrast = Shadows = Highlights = Vibrance = Saturation = 0;
         SelectedTint = TintLabels[0].Label;
+        TintHue = Adjustments.SepiaHue;
     }
 
     /// <summary>Die Reglerstände als Auftrag für Vorschau und Export.</summary>
     private Adjustments CurrentAdjustments() => new(
         Round(Brightness), Round(Contrast), Round(Shadows), Round(Highlights), Round(Saturation),
-        TintOf(SelectedTint));
+        TintOf(SelectedTint), Round(Vibrance), Round(TintHue));
 
     internal static Tint TintOf(string? label) =>
         TintLabels.FirstOrDefault(t => t.Label == label).Tint;

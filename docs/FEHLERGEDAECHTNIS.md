@@ -251,3 +251,45 @@ Test oder Nachweis.
   (Vergleich mit dem einfachen Weg, mit Alpha, Adobe-RGB-Profil, EXIF, 8 Bit),
   `ConcurrentOperations_OnSameSource_AreSafe` jetzt über der Schwelle.
   Messung mit einem Testprogramm unter `%LOCALAPPDATA%\imageconverter-build\bench`.
+
+## 9. Tiefen hellte Gesichter mit auf
+
+- **Entdeckt:** 0.4.27 (Commit `06baede`, 08.10.2026), vom Benutzer an einem
+  Familienfoto (Innenraum, dunkler Flur hinten). **Behoben:** 0.4.28.
+- **Was:** „Tiefen“ sollte nur den dunklen Flur aufhellen, hellte aber auch
+  Gesichter, Haare und Augenpartie merklich auf.
+- **Warum:** Zwei Gründe. (1) Die Wirkung reichte bis Umgebungshelligkeit 0,6 –
+  gemessen lagen Flur 0,08, Türrahmen 0,15, Haare/Augenpartie 0,36–0,40,
+  Wangen 0,6; bei +80 bekam die Augenpartie rund ein Drittel mehr Helligkeit.
+  (2) Der kantenerhaltende Filter (Guided Filter, eingeführt gegen Lichthöfe)
+  folgt auch kleinen dunklen Stellen – Pupillen, Nasenlöcher, Haarschatten
+  galten als „dunkle Umgebung“.
+- **Wie behoben:** Tiefen wirkt voll im Dunklen und endet bei 0,35, Lichter
+  beginnt erst bei 0,65. Zusätzlich zählt eine Stelle nur als dunkel, wenn auch
+  eine weite Umgebung (Gauß, 3 % der Kante) dunkel ist – für Tiefen gilt der
+  hellere, für Lichter der dunklere der beiden Werte. Am Foto: Flur 0,08 → 0,21,
+  Türrahmen 0,15 → 0,31, Gesichter unverändert.
+- **Nicht tun:** Den Bereich wieder bis in die Mitteltöne ziehen oder nur den
+  Guided Filter als Umgebung nehmen. Wirkung an echten Fotos mit Personen
+  prüfen, nicht nur an Verläufen.
+- **Wo:** `ImageConverter.Core/Imaging/Adjustments.cs` (`ShadowsHighlights`,
+  `Apply`).
+- **Test:** `AdjustTests.Shadows_LeaveMidtonesLikeFaces`,
+  `Shadows_LeaveSmallDarkSpotsInBrightAreas`, `Shadows_NoHaloAtHardEdges`.
+
+## 10. Umlaute zerstört durch PowerShell 5.1 (Get-Content/Set-Content)
+
+- **Entdeckt:** 0.4.27 (08.10.2026), beim Lesen von `Adjustments.cs`.
+  **Behoben:** 0.4.28. **Eingeführt:** 0.4.26 (Commit `2aae62a`).
+- **Was:** In Kommentaren stand „FlÃ¤che“ statt „Fläche“, „â€”“ statt „—“.
+- **Warum:** Eine Ersetzung mit `(Get-Content -Raw) -replace … | Set-Content
+  -Encoding utf8` unter Windows PowerShell 5.1: `Get-Content` liest UTF-8 ohne
+  BOM als ANSI (Windows-1252), `Set-Content` schreibt das als UTF-8 (mit BOM)
+  zurück – jedes Nicht-ASCII-Zeichen wird doppelt kodiert.
+- **Wie behoben:** Rückwandlung: Text als UTF-8 lesen, als Windows-1252 in
+  Bytes, diese als UTF-8 lesen; ohne BOM geschrieben. Nur diese Datei betroffen
+  (`git grep "Ã¤"`).
+- **Nicht tun:** Quelltext mit `Get-Content`/`Set-Content` unter PowerShell 5.1
+  bearbeiten. Stattdessen Editor-Werkzeuge, `sed`/`perl` in Git Bash oder
+  `[IO.File]::ReadAllText/WriteAllText` mit ausdrücklichem UTF-8 ohne BOM.
+- **Prüfen:** `git grep -n "Ã|â€" -- ":!docs"` muss leer sein (hier im Eintrag stehen die Zeichen absichtlich).\|â€"` muss leer sein.

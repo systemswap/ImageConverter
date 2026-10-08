@@ -1,17 +1,17 @@
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>EinfÃ¤rben des ganzen Bildes (Kachel â€žToolsâ€œ).</summary>
+/// <summary>Einfärben des ganzen Bildes (Kachel „Tools“).</summary>
 public enum Tint
 {
     None,
     BlackWhite,
-    Sepia,
-    Cool,
+    /// <summary>Einfarbig im Farbton <see cref="Adjustments.TintHue"/>.</summary>
+    Color,
 }
 
 /// <summary>
-/// Licht und Farbe aus der Kachel â€žToolsâ€œ. Jeder Regler lÃ¤uft von âˆ’100 bis +100,
-/// 0 heiÃŸt unverÃ¤ndert.
+/// Licht und Farbe aus der Kachel „Tools“. Jeder Regler läuft von −100 bis +100,
+/// 0 heißt unverändert; <see cref="TintHue"/> ist ein Farbwinkel 0–360°.
 /// </summary>
 public sealed record Adjustments(
     double Brightness = 0,
@@ -19,27 +19,38 @@ public sealed record Adjustments(
     double Shadows = 0,
     double Highlights = 0,
     double Saturation = 0,
-    Tint Tint = Tint.None)
+    Tint Tint = Tint.None,
+    double Vibrance = 0,
+    double TintHue = Adjustments.SepiaHue)
 {
+    /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
+    public const double SepiaHue = 30;
+
     public static readonly Adjustments None = new();
 
-    public bool IsNone => this == None;
+    /// <summary>Nichts zu tun — der Farbton zählt nur, wenn auch gefärbt wird.</summary>
+    public bool IsNone => (Tint == Tint.Color ? this : this with { TintHue = SepiaHue }) == None;
 }
 
 /// <summary>
-/// Wendet <see cref="Adjustments"/> auf 8-Bit-BGRA-Pixel an â€” wie <see cref="Sharpen"/>
-/// fÃ¼r Vorschau und Export dieselbe Funktion, damit man exportiert, was man gesehen hat.
+/// Wendet <see cref="Adjustments"/> auf 8-Bit-BGRA-Pixel an — wie <see cref="Sharpen"/>
+/// für Vorschau und Export dieselbe Funktion, damit man exportiert, was man gesehen hat.
 ///
-/// Reihenfolge: Tiefen/Lichter â†’ Helligkeit â†’ Kontrast â†’ SÃ¤ttigung â†’ FÃ¤rben.
+/// Reihenfolge: Tiefen/Lichter → Helligkeit → Kontrast → Dynamik → Sättigung → Färben.
 /// Tiefen und Lichter wirken lokal wie in Referenzwerkzeug: Ob eine Stelle als dunkel oder hell
-/// gilt, entscheidet ihre Umgebung (kantenerhaltend geglÃ¤ttet), nicht das einzelne Pixel. Ein dunkles
-/// Detail in einer hellen FlÃ¤che bleibt so dunkel, und das Bild wird nicht flau.
+/// gilt, entscheidet ihre Umgebung (kantenerhaltend geglättet), nicht das einzelne Pixel. Ein dunkles
+/// Detail in einer hellen Fläche bleibt so dunkel, und das Bild wird nicht flau.
 /// </summary>
 public static class Adjust
 {
-    /// <summary>Radius der Umgebung fÃ¼r Tiefen/Lichter, relativ zur lÃ¤ngsten Kante â€”
+    /// <summary>Radius der Umgebung für Tiefen/Lichter, relativ zur längsten Kante —
     /// so wirkt es in der kleinen Vorschau und im Export gleich.</summary>
     private const double NeighbourhoodPerEdge = 0.01;
+
+    /// <summary>Weitere Umgebung: Ein Bereich zählt nur als dunkel (bzw. hell), wenn auch
+    /// sie es ist. Kleine dunkle Stellen in hellen Flächen — Pupillen, Nasenlöcher,
+    /// Haarsträhnen im Gesicht — bleiben so unverändert.</summary>
+    private const double WideNeighbourhoodPerEdge = 0.03;
 
     // Gewichte der Helligkeit (Rec. 709) auf den sRGB-Werten
     private const float Kr = 0.2126f, Kg = 0.7152f, Kb = 0.0722f;
@@ -55,20 +66,37 @@ public static class Adjust
         var shadows = (float)Math.Clamp(a.Shadows / 100, -1, 1);
         var highlights = (float)Math.Clamp(a.Highlights / 100, -1, 1);
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
+        var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
 
         // Umgebungshelligkeit nur, wenn Tiefen oder Lichter gebraucht werden
-        float[]? surround = null;
+        float[]? dark = null, bright = null;
         if (shadows != 0 || highlights != 0)
         {
-            surround = new float[pixels];
+            var surround = new float[pixels];
             Parallel.For(0, height, y =>
             {
                 for (int x = 0, p = y * width; x < width; x++, p++)
                     surround[p] = (Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2]) / 255f;
             });
-            var sigma = Math.Max(1.0, NeighbourhoodPerEdge * Math.Max(width, height));
-            surround = GuidedSmooth(surround, width, height, sigma);
+            var edge = Math.Max(width, height);
+            var wide = (float[])surround.Clone();
+            Blur.Gauss(wide, width, height, Math.Max(1.0, WideNeighbourhoodPerEdge * edge));
+            surround = GuidedSmooth(surround, width, height, Math.Max(1.0, NeighbourhoodPerEdge * edge));
+
+            // Tiefen: dunkel nur, wenn nah UND weit dunkel (der hellere Wert gilt).
+            // Lichter: hell nur, wenn nah UND weit hell (der dunklere Wert gilt).
+            dark = new float[pixels];
+            bright = new float[pixels];
+            var near = surround;
+            Parallel.For(0, height, y =>
+            {
+                for (int x = 0, p = y * width; x < width; x++, p++)
+                {
+                    dark[p] = Math.Max(near[p], wide[p]);
+                    bright[p] = Math.Min(near[p], wide[p]);
+                }
+            });
         }
 
         Parallel.For(0, height, y =>
@@ -78,13 +106,13 @@ public static class Adjust
                 var i = p * 4;
                 float b = bgra[i] / 255f, g = bgra[i + 1] / 255f, r = bgra[i + 2] / 255f;
 
-                if (surround is not null)
+                if (dark is not null && bright is not null)
                 {
                     var lum = Kr * r + Kg * g + Kb * b;
-                    var target = ShadowsHighlights(lum, surround[p], shadows, highlights);
+                    var target = ShadowsHighlights(lum, dark[p], bright[p], shadows, highlights);
                     if (lum > 1f / 512)
                     {
-                        // Farbton behalten: alle KanÃ¤le im selben VerhÃ¤ltnis
+                        // Farbton behalten: alle Kanäle im selben Verhältnis
                         var f = Math.Min(target / lum, 8f);
                         r *= f; g *= f; b *= f;
                     }
@@ -96,9 +124,16 @@ public static class Adjust
 
                 r = curve[Index(r)]; g = curve[Index(g)]; b = curve[Index(b)];
 
-                if (saturation != 0 || a.Tint != Tint.None)
+                if (vibrance != 0 || saturation != 0 || a.Tint != Tint.None)
                 {
                     var lum = Kr * r + Kg * g + Kb * b;
+                    if (vibrance != 0)
+                    {
+                        var s = VibranceFactor(r, g, b, vibrance);
+                        r = lum + (r - lum) * s;
+                        g = lum + (g - lum) * s;
+                        b = lum + (b - lum) * s;
+                    }
                     if (saturation != 0)
                     {
                         var s = 1 + saturation;
@@ -107,7 +142,7 @@ public static class Adjust
                         b = lum + (b - lum) * s;
                     }
                     if (a.Tint != Tint.None)
-                        (r, g, b) = Colorize(Math.Clamp(lum, 0, 1), a.Tint);
+                        (r, g, b) = Colorize(Math.Clamp(lum, 0, 1), a.Tint, (float)a.TintHue);
                 }
 
                 result[i] = ToByte(b);
@@ -119,40 +154,47 @@ public static class Adjust
         return result;
     }
 
-    /// <summary>
-    /// Zielhelligkeit eines Pixels. Tiefen hebt (oder senkt) dort, wo die Umgebung dunkel
-    /// ist, Lichter dort, wo sie hell ist â€” als Belichtung in Blendenstufen, bei den
-    /// Lichtern von WeiÃŸ aus gerechnet, damit nichts ausfrisst.
-    /// </summary>
-    /// <summary>Wirkung bei Â±100: zwei Blendenstufen.</summary>
+    /// <summary>Wirkung bei ±100: zwei Blendenstufen.</summary>
     private const float MaxStops = 2f;
 
-    internal static float ShadowsHighlights(float lum, float surround, float shadows, float highlights)
+    /// <summary>
+    /// Zielhelligkeit eines Pixels. Tiefen hebt (oder senkt) dort, wo die Umgebung dunkel
+    /// ist, Lichter dort, wo sie hell ist — als Belichtung in Blendenstufen, bei den
+    /// Lichtern von Weiß aus gerechnet, damit nichts ausfrisst.
+    /// </summary>
+    /// <remarks>
+    /// Die Bereiche sind bewusst schmal: Tiefen wirkt voll im wirklich Dunklen und endet
+    /// bei Umgebungshelligkeit 0,35, Lichter beginnt erst bei 0,65. Gesichter in
+    /// Innenräumen liegen typisch bei 0,4–0,6 und bleiben so unberührt (gemessen an einem
+    /// Familienfoto: Flur 0,08, Türrahmen 0,15, Haare/Augenpartie 0,36–0,40, Wangen 0,6).
+    /// Vorher reichte Tiefen bis 0,6 und hellte Gesichter merklich mit auf.
+    /// </remarks>
+    internal static float ShadowsHighlights(float lum, float darkSurround, float brightSurround, float shadows, float highlights)
     {
         var result = lum;
         if (shadows != 0)
         {
-            var w = 1 - SmoothStep(0f, 0.6f, surround);
+            var w = 1 - SmoothStep(0.02f, 0.35f, darkSurround);
             result *= MathF.Pow(2, MaxStops * shadows * w);
         }
         if (highlights != 0)
         {
-            var w = SmoothStep(0.4f, 1f, surround);
+            var w = SmoothStep(0.65f, 0.98f, brightSurround);
             result = 1 - (1 - result) * MathF.Pow(2, -MaxStops * highlights * w);
         }
         return Math.Clamp(result, 0, 1);
     }
 
     /// <summary>
-    /// Kantenerhaltendes GlÃ¤tten der Helligkeit (Guided Filter, He et al. 2010, mit sich
-    /// selbst als FÃ¼hrung). FlÃ¤chen werden zur Umgebungshelligkeit gemittelt, an harten
-    /// Kanten folgt das Ergebnis der Kante. Ein einfacher GauÃŸ blutete Ã¼ber die Kante:
-    /// Himmel direkt an dunklen Bergen galt als â€ždunkle Umgebungâ€œ und bekam einen hellen
+    /// Kantenerhaltendes Glätten der Helligkeit (Guided Filter, He et al. 2010, mit sich
+    /// selbst als Führung). Flächen werden zur Umgebungshelligkeit gemittelt, an harten
+    /// Kanten folgt das Ergebnis der Kante. Ein einfacher Gauß blutete über die Kante:
+    /// Himmel direkt an dunklen Bergen galt als „dunkle Umgebung“ und bekam einen hellen
     /// Lichthof (Halo).
     /// </summary>
     internal static float[] GuidedSmooth(float[] lum, int width, int height, double sigma)
     {
-        // Îµ: ab welcher Helligkeitsschwankung (als Varianz, Werte 0â€“1) eine Kante zÃ¤hlt
+        // ε: ab welcher Helligkeitsschwankung (als Varianz, Werte 0–1) eine Kante zählt
         const float eps = 0.003f;
         var n = lum.Length;
 
@@ -162,7 +204,7 @@ public static class Adjust
         Blur.Gauss(mean, width, height, sigma);
         Blur.Gauss(meanSq, width, height, sigma);
 
-        // Pro Umgebung: lineares Modell q = aÂ·I + b
+        // Pro Umgebung: lineares Modell q = a·I + b
         var a = new float[n];
         var b = new float[n];
         Parallel.For(0, height, y =>
@@ -186,11 +228,43 @@ public static class Adjust
         return result;
     }
 
+    /// <summary>
+    /// Dynamik wie in Referenzwerkzeug: verstärkt blasse Farben stark, kräftige kaum und schont
+    /// Hauttöne — Bilder werden lebendiger, Gesichter nicht orange. Nach links werden
+    /// zuerst die blassen Farben grau, kräftige bleiben länger.
+    /// </summary>
+    /// <returns>Faktor für den Abstand jedes Kanals zur Helligkeit (1 = unverändert).</returns>
+    internal static float VibranceFactor(float r, float g, float b, float vibrance)
+    {
+        var max = MathF.Max(r, MathF.Max(g, b));
+        var min = MathF.Min(r, MathF.Min(g, b));
+        var sat = max > 1e-3f ? Math.Clamp((max - min) / max, 0, 1) : 0;
+
+        if (vibrance < 0)
+            return Math.Max(0, 1 + vibrance * (1 - 0.6f * sat));
+
+        var room = MathF.Pow(1 - sat, 1.5f);                  // blass: viel Spielraum
+        return 1 + vibrance * room * (1 - 0.7f * SkinTone(r, g, b, sat));
+    }
+
+    /// <summary>
+    /// Wie sehr ein Farbton nach Haut aussieht (0–1): Rot vor Grün vor Blau, Farbwinkel um
+    /// 25° (orange-rötlich), mäßig gesättigt.
+    /// </summary>
+    private static float SkinTone(float r, float g, float b, float sat)
+    {
+        if (!(r >= g && g >= b) || r - b < 1e-3f) return 0;
+        var hue = 60 * (g - b) / (r - b);                     // 0° rot … 60° gelb
+        var onHue = Math.Clamp(1 - MathF.Abs(hue - 25) / 20, 0, 1);
+        var onSat = 1 - SmoothStep(0.55f, 0.8f, sat);        // sehr kräftig = keine Haut
+        return onHue * onSat;
+    }
+
     private const int CurveSize = 4096;
 
     /// <summary>
-    /// Helligkeit als Gamma auf die Mitten (Schwarz und WeiÃŸ bleiben), Kontrast als
-    /// S-Kurve um die Mitte. Als Tabelle, damit der Export groÃŸer Bilder schnell bleibt.
+    /// Helligkeit als Gamma auf die Mitten (Schwarz und Weiß bleiben), Kontrast als
+    /// S-Kurve um die Mitte. Als Tabelle, damit der Export großer Bilder schnell bleibt.
     /// </summary>
     internal static float[] ToneCurve(double brightness, double contrast)
     {
@@ -206,18 +280,16 @@ public static class Adjust
         return curve;
     }
 
-    /// <summary>Verlauf Schwarz â†’ TÃ¶nung â†’ WeiÃŸ; die TÃ¶nung hat mittlere Helligkeit.</summary>
-    private static (float R, float G, float B) Colorize(float lum, Tint tint)
+    /// <summary>
+    /// Verlauf Schwarz → Tönung → Weiß. Die Tönung ist eine gedämpfte Farbe im gewählten
+    /// Farbton (HSL mit S 0,38, L 0,48 — bei 30° das klassische Sepia, bei 210° kühles Blau).
+    /// </summary>
+    private static (float R, float G, float B) Colorize(float lum, Tint tint, float hue)
     {
-        var (mr, mg, mb) = tint switch
-        {
-            Tint.Sepia => (0.66f, 0.48f, 0.30f),
-            Tint.Cool => (0.38f, 0.50f, 0.64f),
-            _ => (0.5f, 0.5f, 0.5f),
-        };
         if (tint == Tint.BlackWhite) return (lum, lum, lum);
+        var (mr, mg, mb) = Hsl(hue, 0.38f, 0.48f);
 
-        // Mitte so verschieben, dass die TÃ¶nung bei ihrer eigenen Helligkeit liegt
+        // Mitte so verschieben, dass die Tönung bei ihrer eigenen Helligkeit liegt
         var mid = Kr * mr + Kg * mg + Kb * mb;
         if (lum <= mid)
         {
@@ -229,6 +301,25 @@ public static class Adjust
             var t = (lum - mid) / (1 - mid);
             return (mr + (1 - mr) * t, mg + (1 - mg) * t, mb + (1 - mb) * t);
         }
+    }
+
+    /// <summary>HSL → RGB, Farbwinkel in Grad, S und L 0–1.</summary>
+    internal static (float R, float G, float B) Hsl(float hue, float s, float l)
+    {
+        var h = ((hue % 360) + 360) % 360 / 60f;
+        var c = (1 - MathF.Abs(2 * l - 1)) * s;
+        var x = c * (1 - MathF.Abs(h % 2 - 1));
+        var (r, g, b) = (int)h switch
+        {
+            0 => (c, x, 0f),
+            1 => (x, c, 0f),
+            2 => (0f, c, x),
+            3 => (0f, x, c),
+            4 => (x, 0f, c),
+            _ => (c, 0f, x),
+        };
+        var m = l - c / 2;
+        return (r + m, g + m, b + m);
     }
 
     private static float SmoothStep(float edge0, float edge1, float x)

@@ -147,7 +147,8 @@ public partial class MainViewModel
             MetadataByLabel.TryGetValue(s.SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
             ColorByLabel.TryGetValue(s.SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
             new Adjustments(Math.Round(s.Brightness), Math.Round(s.Contrast), Math.Round(s.Shadows),
-                Math.Round(s.Highlights), Math.Round(s.Saturation), TintOf(s.SelectedTint)));
+                Math.Round(s.Highlights), Math.Round(s.Saturation), TintOf(s.SelectedTint),
+                Math.Round(s.Vibrance), Math.Round(s.TintHue)));
     }
 
     // ------------------------------------------------- für das Export-Fenster

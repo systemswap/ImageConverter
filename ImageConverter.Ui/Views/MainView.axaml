@@ -159,7 +159,7 @@
                         </RadioButton>
 
                         <RadioButton x:Name="TabTools" Classes="tile" GroupName="rubrik"
-                                     ToolTip.Tip="{l:T 'Tools: Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben'}">
+                                     ToolTip.Tip="{l:T 'Tools: Helligkeit · Kontrast · Tiefen · Lichter · Dynamik · Sättigung · Färben'}">
                             <Grid ColumnDefinitions="40,Auto">
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="24" Height="24">
@@ -168,7 +168,7 @@
                                 </Viewbox>
                                 <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
                                     <TextBlock Classes="tileName" Text="{l:T 'Tools'}" />
-                                    <TextBlock Classes="tileHint" Text="{l:T 'Helligkeit · Kontrast · Tiefen · Lichter · Sättigung · Färben'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Helligkeit · Kontrast · Tiefen · Lichter · Dynamik · Sättigung · Färben'}" />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
@@ -560,15 +560,44 @@
                         <HeaderedContentControl Header="{l:T 'FARBE'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dynamik'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Vibrance}"
+                                            ToolTip.Tip="{l:T 'Rechts: blasse Farben kräftiger, schon kräftige kaum — Hauttöne bleiben natürlich. Lebendiger als Sättigung, ohne bunt zu wirken.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding VibranceLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Sättigung'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Saturation}"
-                                            ToolTip.Tip="{l:T 'Rechts: kräftigere Farben. Ganz links: Schwarzweiß.'}" />
+                                            ToolTip.Tip="{l:T 'Rechts: alle Farben gleich stark kräftiger. Ganz links: Schwarzweiß.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding SaturationLabel}" />
                                 </Grid>
                                 <Grid ColumnDefinitions="76,*">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Färben'}" />
                                     <ComboBox Classes="tr" Grid.Column="1" ItemsSource="{Binding Tints}" SelectedItem="{Binding SelectedTint}"
-                                              ToolTip.Tip="{l:T 'Das ganze Bild in einem Farbton: Schwarzweiß, Sepia (alter Fotoabzug) oder kühles Blau.'}" />
+                                              ToolTip.Tip="{l:T 'Das ganze Bild in einem Farbton: Schwarzweiß oder eine Farbe nach Wahl — z. B. Sepia wie ein alter Fotoabzug.'}" />
+                                </Grid>
+                                <!-- Farbton: die Leiste dahinter zeigt den Farbkreis -->
+                                <Grid ColumnDefinitions="76,*,Auto" Margin="0,8,0,0" IsVisible="{Binding IsTintColor}">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbton'}" />
+                                    <Panel Grid.Column="1">
+                                        <Border Height="6" CornerRadius="3" VerticalAlignment="Center" Margin="10,0">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                    <GradientStop Offset="0" Color="#B5583F" />
+                                                    <GradientStop Offset="0.0833" Color="#B57F3F" />
+                                                    <GradientStop Offset="0.1667" Color="#B5A63F" />
+                                                    <GradientStop Offset="0.3333" Color="#58B53F" />
+                                                    <GradientStop Offset="0.5" Color="#3FB5A6" />
+                                                    <GradientStop Offset="0.6667" Color="#3F58B5" />
+                                                    <GradientStop Offset="0.8333" Color="#A63FB5" />
+                                                    <GradientStop Offset="1" Color="#B5583F" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <Slider Classes="hue" Minimum="0" Maximum="360" Value="{Binding TintHue}"
+                                                ToolTip.Tip="{l:T 'Farbe der Tönung. Um 30°: Sepia, um 210°: kühles Blau.'}" />
+                                    </Panel>
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding TintHueLabel}" />
                                 </Grid>
                             </StackPanel>
                         </HeaderedContentControl>

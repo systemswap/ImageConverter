@@ -76,7 +76,7 @@ public class AdjustTests
         var dark = result[(50 * w + 50) * 4 + 1];
         var bright = result[(50 * w + 350) * 4 + 1];
 
-        Assert.True(dark > 80, $"dunkler Bereich nur auf {dark}");
+        Assert.True(dark > 70, $"dunkler Bereich nur auf {dark}");
         Assert.InRange(bright, 228, 233);
     }
 
@@ -150,13 +150,98 @@ public class AdjustTests
     }
 
     [Fact]
-    public void Sepia_IsWarm_AndKeepsBlackAndWhite()
+    public void TintColor_DefaultIsWarmSepia_AndKeepsBlackAndWhite()
     {
-        var result = Adjust.Apply(Ramp(), 256, 1, new Adjustments(Tint: Tint.Sepia));
+        var result = Adjust.Apply(Ramp(), 256, 1, new Adjustments(Tint: Tint.Color));
 
         Assert.True(result[128 * 4 + 2] > result[128 * 4], "Mitte soll warm sein (R > B)");
         Assert.Equal(0, Gray(result, 0));
         Assert.Equal(255, Gray(result, 255));
+    }
+
+    [Fact]
+    public void TintHue_ChoosesTheColour()
+    {
+        var blue = Adjust.Apply(Ramp(), 256, 1, new Adjustments(Tint: Tint.Color, TintHue: 210));
+        Assert.True(blue[128 * 4] > blue[128 * 4 + 2], "bei 210° soll die Mitte blau sein (B > R)");
+    }
+
+    [Fact]
+    public void TintHue_DoesNotCount_WithoutTinting()
+    {
+        Assert.True(new Adjustments(TintHue: 200).IsNone);
+        Assert.False(new Adjustments(Tint: Tint.Color, TintHue: 200).IsNone);
+    }
+
+    private static double Chroma(byte[] bgra) =>
+        bgra[..3].Max() - (double)bgra[..3].Min();
+
+    /// <summary>Dynamik: Blasses gewinnt viel, Kräftiges wenig — anders als Sättigung.</summary>
+    [Fact]
+    public void Vibrance_BoostsMutedColours_MoreThanStrongOnes()
+    {
+        byte[] muted = [150, 135, 120, 255];    // blasses Blaugrau (B, G, R)
+        byte[] strong = [20, 60, 220, 255];     // kräftiges Rot
+
+        var a = new Adjustments(Vibrance: 80);
+        var mutedGain = Chroma(Adjust.Apply(muted, 1, 1, a)) / Chroma(muted);
+        var strongGain = Chroma(Adjust.Apply(strong, 1, 1, a)) / Chroma(strong);
+
+        Assert.True(mutedGain > 1.4, $"blass nur ×{mutedGain:F2}");
+        Assert.True(strongGain < 1.15, $"kräftig ×{strongGain:F2}");
+    }
+
+    [Fact]
+    public void Vibrance_ProtectsSkinTones()
+    {
+        byte[] skin = [140, 170, 215, 255];     // heller Hautton (B, G, R)
+        byte[] sky = [215, 170, 140, 255];      // gleich blass, aber blau
+
+        var a = new Adjustments(Vibrance: 80);
+        var skinGain = Chroma(Adjust.Apply(skin, 1, 1, a)) / Chroma(skin);
+        var skyGain = Chroma(Adjust.Apply(sky, 1, 1, a)) / Chroma(sky);
+
+        Assert.True(skinGain < skyGain - 0.2, $"Haut ×{skinGain:F2}, Himmel ×{skyGain:F2}");
+    }
+
+    /// <summary>
+    /// Tiefen lässt Mitteltöne in Ruhe: Gesichter in Innenräumen liegen um 0,4–0,6
+    /// (gemessen an einem Familienfoto, das Wangen und Augenpartie mit aufhellte).
+    /// </summary>
+    [Fact]
+    public void Shadows_LeaveMidtonesLikeFaces()
+    {
+        const int w = 200, h = 200;
+        var bgra = new byte[w * h * 4];
+        for (var i = 0; i < w * h; i++)
+        {
+            bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = 102;   // ≈ 0,4
+            bgra[i * 4 + 3] = 255;
+        }
+
+        var result = Adjust.Apply(bgra, w, h, new Adjustments(Shadows: 100));
+
+        Assert.InRange(result[(100 * w + 100) * 4 + 1], 100, 104);
+    }
+
+    /// <summary>Eine Pupille im hellen Gesicht bleibt dunkel — nur weite dunkle Flächen zählen.</summary>
+    [Fact]
+    public void Shadows_LeaveSmallDarkSpotsInBrightAreas()
+    {
+        const int w = 400, h = 400;
+        var bgra = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var spot = Math.Abs(x - 200) < 3 && Math.Abs(y - 200) < 3;
+            var i = (y * w + x) * 4;
+            bgra[i] = bgra[i + 1] = bgra[i + 2] = (byte)(spot ? 25 : 170);
+            bgra[i + 3] = 255;
+        }
+
+        var result = Adjust.Apply(bgra, w, h, new Adjustments(Shadows: 100));
+
+        Assert.InRange(result[(200 * w + 200) * 4 + 1], 20, 35);
     }
 
     [Fact]
@@ -177,12 +262,18 @@ public class AdjustTests
     {
         var vm = new MainViewModel { DeferHistoryTurns = false };
         vm.Shadows = 40;
-        vm.SelectedTint = "Sepia";
+        vm.SelectedTint = "Farbe";
+        vm.TintHue = 210;
+        vm.Vibrance = 25;
         vm.CommitPendingSettings();
 
         var options = MainViewModel.OptionsFor(vm.CaptureSettings());
-        Assert.Equal(new Adjustments(Shadows: 40, Tint: Tint.Sepia), options.Adjustments);
+        Assert.Equal(new Adjustments(Shadows: 40, Tint: Tint.Color, Vibrance: 25, TintHue: 210), options.Adjustments);
 
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(0, vm.Vibrance);
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(Adjustments.SepiaHue, vm.TintHue);
         await vm.UndoCommand.ExecuteAsync(null);
         Assert.Equal("Aus", vm.SelectedTint);
         await vm.UndoCommand.ExecuteAsync(null);

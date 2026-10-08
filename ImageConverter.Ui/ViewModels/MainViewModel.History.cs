@@ -35,7 +35,8 @@ public partial class MainViewModel
         int Dpi, bool DpiMetadataOnly,
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
         double SharpenAmount, double SharpenRadius, double NoiseReduction,
-        double Brightness, double Contrast, double Shadows, double Highlights, double Saturation, string SelectedTint,
+        double Brightness, double Contrast, double Shadows, double Highlights, double Vibrance, double Saturation,
+        string SelectedTint, double TintHue,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight);   // Bildgröße, für die dieser Stand gilt
@@ -69,8 +70,10 @@ public partial class MainViewModel
         [nameof(Contrast)] = "Kontrast",
         [nameof(Shadows)] = "Tiefen",
         [nameof(Highlights)] = "Lichter",
+        [nameof(Vibrance)] = "Dynamik",
         [nameof(Saturation)] = "Sättigung",
         [nameof(SelectedTint)] = null,
+        [nameof(TintHue)] = "Farbton",
         [nameof(SelectedMetadataMode)] = null,
         [nameof(SelectedColorMode)] = null,
         [nameof(OutputFolder)] = "Ordner",
@@ -195,7 +198,7 @@ public partial class MainViewModel
         Dpi, DpiMetadataOnly,
         SelectedAspectPreset, CropSelection, CornerRadius,
         SharpenAmount, SharpenRadius, NoiseReduction,
-        Brightness, Contrast, Shadows, Highlights, Saturation, SelectedTint,
+        Brightness, Contrast, Shadows, Highlights, Vibrance, Saturation, SelectedTint, TintHue,
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight);
@@ -239,8 +242,10 @@ public partial class MainViewModel
                 Contrast = s.Contrast;
                 Shadows = s.Shadows;
                 Highlights = s.Highlights;
+                Vibrance = s.Vibrance;
                 Saturation = s.Saturation;
                 SelectedTint = s.SelectedTint;
+                TintHue = s.TintHue;
                 SelectedMetadataMode = s.SelectedMetadataMode;
                 SelectedColorMode = s.SelectedColorMode;
                 OutputFolder = s.OutputFolder;

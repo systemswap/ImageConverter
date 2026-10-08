@@ -225,7 +225,7 @@ Ziel: schlank bleiben, nicht aufblähen.
 |---|---|
 | Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
 | KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
-| Tools | Helligkeit, Kontrast, Tiefen, Lichter, Sättigung, Färben, „Gleiche Farbe“, evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
+| Tools | Helligkeit, Kontrast, Tiefen, Lichter, Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), Dunst entfernen, evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
 | Ausgabe | Metadaten, Farbprofil, Dateiname |
 
 „Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von
