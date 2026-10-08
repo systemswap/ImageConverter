@@ -26,7 +26,7 @@ public sealed record Adjustments(
     double MatchLuminance = 0,
     double Neutralize = 0,
     double Warmth = 0,
-    // Dunst, Feineinstellung (Beta): Durchläufe und die Wahrnehmungsanteile in Prozent.
+    // Dunst, Feineinstellung: Durchläufe und die Wahrnehmungsanteile in Prozent.
     // Die Vorgaben sind die Werte, die bis 0.4.40 fest eingebaut waren; Entstufen (Debanding) seit 0.4.44.
     int DehazePasses = Imaging.Dehaze.DefaultPasses,
     double DehazeClarity = Imaging.Dehaze.DefaultClarity,

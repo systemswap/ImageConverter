@@ -184,7 +184,7 @@ public static class English
         ["Lichter"] = "Highlights",
         ["Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist."] = "Left: darken bright areas and recover detail, e.g. in the sky. Only works where the surroundings are bright.",
         ["Dunst"] = "Dehaze",
-        ["DUNST · BETA"] = "DEHAZE · BETA",
+        ["DUNST"] = "DEHAZE",
         ["Durchläufe"] = "Passes",
         ["Wie oft der Dunst nacheinander entfernt wird — wie das Auge: Ergebnis ansehen, wieder schätzen. Jeder Durchlauf ist ein sachter Schritt mit Kontrast, Dynamik und Schärfe aus dieser Gruppe; der nächste schätzt den klareren Stand neu. Mehr Durchläufe wirken kräftiger. Vorgabe 3; der Himmel bleibt ab dem zweiten unverändert."] = "How many times the haze is removed in succession — like the eye: look at the result, estimate again. Each pass is a gentle step with contrast, vibrance and sharpening from this group; the next one re-estimates the clearer result. More passes act more strongly. Default 3; the sky stays unchanged from the second pass on.",
         ["Klarheit"] = "Clarity",

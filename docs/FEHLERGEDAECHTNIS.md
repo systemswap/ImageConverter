@@ -642,3 +642,9 @@ Test oder Nachweis.
   als Vorgabe. 100 × 3 liegt zwischen 0.4.43 60 × 1 und 60 × 2 (Kontrast 62,1,
   Buntheit Wiese 0,059). Die Tests für den einzelnen Schritt (bis 300, klares
   Bild) laufen deshalb ausdrücklich mit einem Durchlauf.
+- **Meilenstein 0.4.45 (Referenz für den Neubau):** Stand 0.4.44 beta, vom
+  Benutzer abgenommen („3–4 Durchläufe sehen sehr gut aus, das Abschwächen hat
+  viel gebracht“). Exe gesichert unter
+  `%LOCALAPPDATA%\imageconverter-build\publish-0445\`. Folgende Versionen bis
+  zum nächsten Meilenstein tragen wieder `-beta`. Leistung als Ausgangswert in
+  KONZEPT.md §6 — Speicher ist der Engpass (28,7 MP, 3 Durchläufe: 8,3 GB Spitze).

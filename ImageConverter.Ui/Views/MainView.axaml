@@ -557,10 +557,10 @@
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <!-- Dunst mit Feineinstellung (Beta): Die Feinregler wirken nur, wenn Dunst
-                             entfernt wird; ihre Vorgaben sind die bis 0.4.40 fest eingebauten Werte.
+                        <!-- Dunst mit Feineinstellung: Die Feinregler wirken nur, wenn Dunst
+                             entfernt wird; Vorgabe sind 3 sachte Durchläufe (seit 0.4.44).
                              Der ganze Block rechnet bei jeder Reglerbewegung vom Original neu. -->
-                        <HeaderedContentControl Header="{l:T 'DUNST · BETA'}">
+                        <HeaderedContentControl Header="{l:T 'DUNST'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dunst'}" />

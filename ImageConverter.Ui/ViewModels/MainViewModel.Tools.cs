@@ -14,7 +14,7 @@ public partial class MainViewModel
 {
     [ObservableProperty] public partial double Dehaze { get; set; }
 
-    // Dunst, Feineinstellung (Beta) — Vorgaben wie bis 0.4.40 fest eingebaut
+    // Dunst, Feineinstellung — Vorgaben siehe Adjustments
     [ObservableProperty] public partial double DehazePasses { get; set; } = Adjustments.None.DehazePasses;
     [ObservableProperty] public partial double DehazeClarity { get; set; } = Adjustments.None.DehazeClarity;
     [ObservableProperty] public partial double DehazeContrast { get; set; } = Adjustments.None.DehazeContrast;

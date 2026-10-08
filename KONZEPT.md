@@ -226,7 +226,7 @@ Ziel: schlank bleiben, nicht aufblähen.
 |---|---|
 | Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
 | KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
-| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior, Luftlicht je Bereich, Farbton bleibt, Beta: Durchläufe 1–10 mit Feineinstellung Klarheit/Kontrast/Dynamik/Schärfe/Kanten/Helligkeit, Regler bis 300), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
+| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior, Luftlicht je Bereich, Farbton bleibt, Sonnenhof geschützt; Durchläufe 1–10, Vorgabe 3 sachte; Feineinstellung Klarheit/Kontrast/Dynamik/Schärfe/Kanten/Helligkeit/Entstufen; in 32 Bit gerechnet, Regler bis 300 — Stand 0.4.45 ist die Referenz), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
 | Ausgabe | Metadaten, Farbprofil, Dateiname |
 
 „Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von
@@ -371,7 +371,70 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
 
 ---
 
-## 6. Roadmap
+## 6. Neuaufbau der Bildkette (beschlossen am 08.10.2026, ab 0.4.46 beta)
+
+**Referenz:** 0.4.45 (= 0.4.44 beta ohne den Zusatz „Beta“). Jede Stufe des Neubaus
+muss sie im Auge und in der Messumgebung mindestens erreichen; die Exe liegt als
+`ImageConverter-0.4.45-Referenz.exe` neben der aktuellen, sobald sich die Bildkette ändert.
+
+**Warum:** Beim Dunst zeigte sich, dass die Methode trägt (Dark Channel Prior,
+kantentreue Glättung, Luftlichtfeld, Farbe in Oklab, Himmel- und Sonnenhofschutz),
+der Datenweg aber nicht: 8 Bit zwischen den Schritten gab Treppen, physikalisches
+Modell und „Look“ waren vermischt (Dynamik wirkte doppelt), und der Himmel wurde an
+vielen Stellen einzeln geschützt.
+
+1. **Durchgehend 32-Bit-Fließkomma in linearem Licht.** Magick.NET liest schon mit 16 Bit
+   (Q16) — diese Werte direkt übernehmen statt erst auf 8 Bit (`ToBgra`). Alle Schritte
+   (Dunst, Tools, Tiefen/Lichter, Schärfen, Entrauschen, Skalieren) arbeiten auf einem
+   gemeinsamen Pixelpuffer; 8 Bit nur für die Anzeige und beim Speichern in 8-Bit-Formate
+   (mit Dither). Export zusätzlich als 16-Bit-PNG/TIFF.
+2. **Modell und Look trennen.** Stufe A rechnet nur die Physik (Luftlicht, Durchlässigkeit,
+   Rückrechnung, Helligkeitsausgleich). Stufe B ist der Look (Klarheit, Kontrast, Dynamik,
+   Schärfe) — genau einmal je Durchlauf, an einer Stelle, mit einem Regler je Wirkung.
+3. **Himmel zuerst.** Eine Szenenkarte (Himmel, Sonnenhof, Landschaft, weiche Übergänge)
+   wird einmal am Anfang bestimmt und von allen Schritten gelesen, statt dass jeder
+   Schritt seinen eigenen Schutz rechnet.
+4. **Luftlicht hierarchisch.** Grob über das ganze Bild, dann fein in überlappenden
+   Fenstern mit weicher Gewichtung, die feine Stufe nur als begrenzte Korrektur der
+   groben (kleine Fenster ohne Himmel/Dunst finden allein keinen Bezug — Farben kippten).
+5. **Messumgebung als feste Tests.** Synthetischer Dunst mit bekannter Wahrheit plus
+   echte Bilder (Turmlandschaft, Panorama, Berglandschaft): Wiese hinten (Farbton/Buntheit),
+   Sonnenstrahlen (Schwankung im Ring), Treppen im Himmel, Detail, Kontrast — jede
+   Änderung wird gegen die Referenz geprüft.
+
+**Leistung (Ziel: flüssige Bearbeitung, auch bei großen Bildern):**
+- Vorschau in Bildschirmauflösung rechnen, volle Auflösung nur beim Export; laufende
+  Rechnung bei neuer Reglerbewegung abbrechen.
+- Zwischenergebnisse je Stufe zwischenspeichern: Ein Look-Regler rechnet die Physik
+  nicht neu.
+- Puffer wiederverwenden statt je Schritt neu anlegen (ArrayPool), SIMD
+  (`System.Numerics.Vector`/`Vector256`) in den inneren Schleifen, Kacheln, die in den
+  Prozessor-Cache passen, statt ganzer Bildzeilen über 80 MP.
+- Speicher: 32 Bit × 4 Kanäle = 16 Byte je Pixel; ein 80-MP-Panorama braucht so 1,3 GB
+  je Zwischenbild — Kacheln und wenige gleichzeitige Puffer halten das in Grenzen.
+- Erst messen, dann optimieren: Ausgangswerte 0.4.45 siehe unten; später ggf. GPU
+  (Compute-Shader) für die teuren Filter.
+- Sprache: C# bleibt. .NET 10 mit SIMD und Parallelisierung liegt in solchen
+  Pixelschleifen nahe an C++; der große Gewinn kommt aus Algorithmus, Speicherzugriff
+  und GPU, nicht aus der Sprache. Einzelne heiße Kerne ließen sich bei Bedarf als
+  native Bibliothek anbinden — nur nach Messung.
+
+**Ausgangswerte 0.4.45** (Dunst 100, Panorama, ganze Dunstkette inkl. Entstufen):
+16 Kerne, Release, gemessen mit `bench-zeit` am 08.10.2026.
+
+| Bildgröße | 1 Durchlauf | 3 Durchläufe | 4 Durchläufe | Speicher-Spitze (3×) |
+|---|---|---|---|---|
+| 1200 × 539 (0,6 MP, Vorschau) | 0,8 s | 0,8 s | 1,2 s | 0,4 GB |
+| 4000 × 1796 (7,2 MP) | 2,2 s | 5,5 s | 6,8 s | 1,9 GB |
+| 8000 × 3591 (28,7 MP) | 7,7 s | 19,7 s | 24,3 s | 8,3 GB |
+
+Belegt werden je Lauf ein Vielfaches davon (28,7 MP, 4×: 12,7 GB über die Zeit) —
+jeder Schritt legt neue Puffer an. Ein 80-MP-Panorama passt so nicht mehr sicher in
+den Speicher; das ist die erste Baustelle der Leistung.
+
+---
+
+## 7. Roadmap
 
 **MVP (v0.1) — der nützliche Kern**
 Öffnen (Drag&Drop + CLI-Argumente) · JPEG/PNG/WebP/BMP/TIFF I/O ·
@@ -402,7 +465,7 @@ KI-Entrauschung und -Upscaling · SVG-Rasterung · Wasserzeichen/Rahmen
 
 ---
 
-## 7. Offene Entscheidungen
+## 8. Offene Entscheidungen
 
 1. ~~**Bildbibliothek**~~ — **entschieden: Magick.NET-Q16-AnyCPU 14.17.2** als einzige
    Bibliothek (alle Formate inkl. ICO/BMP/RAW, Async-I/O mit CancellationToken).

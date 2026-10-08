@@ -35,7 +35,7 @@ internal static class Dehaze
     /// <summary>Helligkeitsausgleich: Glättung der Helligkeit (großräumig), relativ.</summary>
     private const double BrightnessPerEdge = 0.05;
 
-    // Vorgaben der Feineinstellung in Prozent (Regler in der Kachel Tools, Beta): die Werte, die
+    // Vorgaben der Feineinstellung in Prozent (Regler in der Kachel Tools): die Werte, die
     // bis 0.4.40 fest eingebaut waren. Adjustments nimmt sie als Standard.
     /// <summary>Anteil des Helligkeitsausgleichs (100 = voll ans Original).</summary>
     internal const double DefaultBrightness = 85;

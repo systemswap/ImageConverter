@@ -172,7 +172,7 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Durchläufe (Beta): Jeder Durchlauf schätzt am Zwischenstand neu — mehr Durchläufe, mehr
+    /// Durchläufe: Jeder Durchlauf schätzt am Zwischenstand neu — mehr Durchläufe, mehr
     /// Kontrast, ohne dass das Bild kippt; die Feineinstellung zählt nur mit Dunst.
     /// </summary>
     [Fact]
