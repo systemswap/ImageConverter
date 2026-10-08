@@ -91,6 +91,38 @@ public class DehazeTests
         return Math.Sqrt(c.A * c.A + c.B * c.B);
     });
 
+    /// <summary>
+    /// Regler bis 300: stufenlos kräftiger, ohne Stillstand und ohne Sprung; kaum ein Kanal
+    /// säuft ins Schwarz ab, der bei 100 noch Zeichnung hatte — ohne Grenze gab es schwarze und
+    /// rote Bänder, mit einer harten Grenze blieb der Regler ab 150 wirkungslos.
+    /// </summary>
+    [Fact]
+    public void UpTo300_GetsStrongerSteadily_ButNothingCrushes()
+    {
+        var scene = Scene();
+        for (var i = SkyRows * W * 3; i < scene.Length; i++) scene[i] = 0.15f + 0.6f * scene[i];
+        var hazy = Haze(scene, 0.6f, Air);
+        var at100 = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100));
+
+        var previous = Contrast(at100);
+        foreach (var amount in new[] { 150, 200, 250, 300 })
+        {
+            var result = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: amount));
+            var contrast = Contrast(result);
+            Assert.True(contrast > previous, $"Kontrast bei {amount}: {contrast:F1}, davor {previous:F1}");
+            Assert.True(contrast < previous * 1.5, $"Sprung bei {amount}: {previous:F1} → {contrast:F1}");
+            previous = contrast;
+
+            // Abgesoffen: Kanal schwarz, der bei 100 noch Zeichnung hatte
+            var crushed = Enumerable.Range(0, hazy.Length).Count(i => i % 4 != 3 && result[i] < 8 && at100[i] >= 8)
+                          / (W * H * 3.0);
+            Assert.True(crushed < 0.03, $"{amount}: {crushed:P1} der Kanäle abgesoffen");
+        }
+        // Hier rechnet 100 schon fast alles frei (jede Fläche hat einen dunklen Kanal); in Fotos
+        // bleibt mehr Spielraum, weil Himmelsschutz und Glättung bei 100 zurückhalten
+        Assert.True(previous > Contrast(at100) * 1.03, $"Kontrast 100: {Contrast(at100):F1}, 300: {previous:F1}");
+    }
+
     [Fact]
     public void ClearImage_StaysAlmostTheSame()
     {

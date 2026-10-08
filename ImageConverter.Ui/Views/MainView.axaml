@@ -556,8 +556,8 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dunst'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Dehaze}"
-                                            ToolTip.Tip="{l:T 'Rechts: Dunst und Nebel entfernen — ferne Berge, Stadt im Smog, Aufnahmen durchs Fenster bekommen wieder Kontrast und Farbe. Links: Dunst hinzufügen, für eine weiche Stimmung.'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="300" Value="{Binding Dehaze}"
+                                            ToolTip.Tip="{l:T 'Rechts: Dunst und Nebel entfernen — ferne Berge, Stadt im Smog, Aufnahmen durchs Fenster bekommen wieder Kontrast und Farbe. Bis 100 so viel, wie physikalisch geschätzt wird, darüber kräftiger (bis 300). Links: Dunst hinzufügen, für eine weiche Stimmung.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeLabel}" />
                                 </Grid>
                             </StackPanel>

@@ -44,11 +44,16 @@ internal static class Dehaze
     /// <summary>Kleinste Durchlässigkeit: begrenzt die Verstärkung.</summary>
     private const float MinTransmission = 0.1f;
 
-    /// <param name="amount">−1 … +1: rechts Dunst entfernen, links Dunst hinzufügen.</param>
+    /// <param name="amount">−1 … +3: rechts Dunst entfernen (über 1 verstärkt), links Dunst hinzufügen.</param>
     public static byte[] Apply(byte[] bgra, int width, int height, float amount)
     {
         if (amount == 0) return (byte[])bgra.Clone();
         var strength = Math.Abs(amount);
+        // Regler −100 … +300: bis 100 wie das physikalische Modell (Mischung Original → Ergebnis),
+        // darüber wird die geschätzte Dunstmenge stufenlos bis aufs Dreifache verstärkt — das Modell
+        // allein wirkte bei Gegenlicht und leichtem Dunst sehr dezent.
+        var mix = Math.Min(1, strength);
+        var boost = amount > 0 ? Math.Max(1, strength) : 1;
 
         // Alle Schätzungen auf einer verkleinerten Fassung (Flächenmittel in linearem Licht);
         // das große Bild wird danach nur einmal durchlaufen — Panoramen haben 80 MP, eine
@@ -57,24 +62,36 @@ internal static class Dehaze
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
         var air = AirLight(small, sw, sh);
         var t = Transmission(small, sw, sh, air, 0.95f);
-        ProtectSky(small, sw, sh, air, t);
+        var boosted = ProtectSky(small, sw, sh, air, t, boost);
+        if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         var guide = Encode(small);
         var refine = Math.Max(1.0, RefinePerEdge * Math.Max(sw, sh));
-        var (ta, tb) = GuidedColor.Coefficients(guide, t, sw, sh, refine, eps: 1e-3f);
+        var plain = GuidedColor.Coefficients(guide, t, sw, sh, refine, eps: 1e-3f);
+        var strong = boosted == null ? default : GuidedColor.Coefficients(guide, boosted, sw, sh, refine, eps: 1e-3f);
+
+        // Durchlässigkeit an einer Stelle (Koordinaten der kleinen Fassung), Führungsbild gamma-kodiert
+        float TransmitAt(float sx, float sy, float gB, float gG, float gR, float b, float g, float r)
+        {
+            var tt = Tolerate(Math.Clamp(Sample(plain, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, air);
+            if (boosted == null) return tt;
+            var strongT = Tolerate(Math.Clamp(Sample(strong, sw, sh, sx, sy, gB, gG, gR), 0, 1), b, g, r, air);
+            return Math.Min(tt, strongT);
+        }
 
         // Helligkeitsausgleich: Verhältnis Original/Ergebnis auf der kleinen Fassung
-        float[]? ga = null, gb = null;
+        (float[] A, float[] B) gain = default;
         if (amount > 0)
         {
             var after = new float[small.Length];
             for (var p = 0; p < sw * sh; p++)
             {
-                var tt = Transmit(ta, tb, sw, sh, p % sw, p / sw, guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2], small, p, air);
-                for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[c], tt, strength);
+                var tt = TransmitAt(p % sw, p / sw, guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
+                    small[p * 3], small[p * 3 + 1], small[p * 3 + 2]);
+                for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[c], tt, mix);
             }
-            (ga, gb) = BrightnessGain(small, after, guide, sw, sh);
+            gain = BrightnessGain(small, after, guide, sw, sh);
         }
-        var k = BrightnessMatch * strength;
+        var k = BrightnessMatch * mix;
 
         var result = new byte[bgra.Length];
         Parallel.For(0, height, y =>
@@ -88,22 +105,18 @@ internal static class Dehaze
                 float gB = bgra[i] / 255f, gG = bgra[i + 1] / 255f, gR = bgra[i + 2] / 255f;   // Führungsbild = Original
                 for (var c = 0; c < 3; c++) lin[c] = Srgb.ToLinear(bgra[i + c]);
 
-                var tt = Math.Clamp(At(ta, sw, sh, sx, sy, 0) * gB + At(ta, sw, sh, sx, sy, 1) * gG
-                                  + At(ta, sw, sh, sx, sy, 2) * gR + At(tb, sw, sh, sx, sy, 0, 1), 0, 1);
-                tt = Tolerate(tt, lin[0], lin[1], lin[2], air);
+                var tt = TransmitAt(sx, sy, gB, gG, gR, lin[0], lin[1], lin[2]);
 
                 float oB, oG, oR;
                 if (amount > 0)
                 {
-                    oB = Recover(lin[0], air[0], tt, strength);
-                    oG = Recover(lin[1], air[1], tt, strength);
-                    oR = Recover(lin[2], air[2], tt, strength);
+                    oB = Recover(lin[0], air[0], tt, mix);
+                    oG = Recover(lin[1], air[1], tt, mix);
+                    oR = Recover(lin[2], air[2], tt, mix);
 
                     // Helligkeit großräumig ans Original — aber nie heller als das Original
                     // (sonst heller Streifen über dem Horizont)
-                    var lg = At(ga!, sw, sh, sx, sy, 0) * gB + At(ga!, sw, sh, sx, sy, 1) * gG
-                           + At(ga!, sw, sh, sx, sy, 2) * gR + At(gb!, sw, sh, sx, sy, 0, 1);
-                    var g = MathF.Exp(Math.Clamp(lg, -0.7f, 1.1f) * k);
+                    var g = MathF.Exp(Math.Clamp(Sample(gain, sw, sh, sx, sy, gB, gG, gR), -0.7f, 1.1f) * k);
                     if (g > 1)
                     {
                         var before = Luma(lin[0], lin[1], lin[2]);
@@ -133,24 +146,70 @@ internal static class Dehaze
     private static float Recover(float v, float air, float t, float strength) =>
         v + ((v - air) / t + air - v) * strength;
 
+    /// <summary>Lineares Modell des Guided Filters an einer Stelle: aᵀ·I + b (bilinear aus der kleinen Fassung).</summary>
+    private static float Sample((float[] A, float[] B) m, int sw, int sh, float x, float y, float gB, float gG, float gR) =>
+        At(m.A, sw, sh, x, y, 0) * gB + At(m.A, sw, sh, x, y, 1) * gG + At(m.A, sw, sh, x, y, 2) * gR + At(m.B, sw, sh, x, y, 0, 1);
+
     /// <summary>
     /// Toleranz: Was dem Luftlicht sehr ähnlich ist (Himmel am Horizont, weiße Wände), gilt
-    /// nicht als dichter Dunst — sonst Farbstiche und Rauschen. Dazu die Untergrenze.
+    /// nicht als dichter Dunst — sonst Farbstiche und Rauschen. Dazu die Grenzen je Kanal.
     /// </summary>
     private static float Tolerate(float t, float b, float g, float r, float[] air)
     {
         var dist = Math.Max(Math.Abs(b - air[0]), Math.Max(Math.Abs(g - air[1]), Math.Abs(r - air[2])));
         if (dist < Tolerance) t = Math.Min(1, t * Tolerance / Math.Max(dist, 1e-4f));
+        t = Math.Max(t, Math.Max(Keep(b, air[0], 0), Math.Max(Keep(g, air[1], 0), Keep(r, air[2], 0))));
+
+        // Heller als das Luftlicht — kanalweise: eine Lichtquelle (Sonne, ihr bläulicher
+        // Lichthof, Lampe), kein Dunst. Sonst bekam die Sonne bei kräftigem Regler einen
+        // violetten Saum (der Lichthof ist nur im Blaukanal heller als das warme Luftlicht).
+        var over = Math.Max(b / air[0], Math.Max(g / air[1], r / air[2]));
+        t += (1 - t) * SmoothStep(0.9f, 1.05f, over);
+        // Sehr hell (Helligkeit über ~75 % linear): Licht oder Weiß, praktisch nie Dunst — auch
+        // wenn das Luftlicht selbst aus der Gegend der Sonne stammt und noch heller ist. Nach der
+        // Helligkeit, nicht dem hellsten Kanal: Dunst über kräftigen Farben bleibt Dunst.
+        t += (1 - t) * SmoothStep(0.7f, 0.9f, Luma(b, g, r));
         return Math.Clamp(t, MinTransmission, 1);
     }
 
-    /// <summary>Durchlässigkeit an einem Pixel der kleinen Fassung (für den Helligkeitsausgleich).</summary>
-    private static float Transmit(float[] ta, float[] tb, int sw, int sh, int x, int y,
-        float gB, float gG, float gR, float[] lin, int p, float[] air)
+    /// <summary>Anteil, den jeder Farbkanal bei verstärktem Regler (über 100) mindestens behält.</summary>
+    private const float KeepShare = 0.3f;
+
+    /// <summary>
+    /// Kleinste Durchlässigkeit, bei der ein Kanal im erlaubten Bereich bleibt: unter dem
+    /// Luftlicht behält er mindestens <paramref name="share"/> seines Werts (0: nicht unter
+    /// Schwarz), darüber läuft er nicht über Weiß. Ohne diese Grenze rechnete ein kräftiger
+    /// Regler über das Ziel hinaus — Kanäle wurden abgeschnitten, rote und schwarze Bänder am
+    /// Horizont, Farbsäume an der Sonne.
+    /// </summary>
+    private static float Keep(float v, float air, float share) => v < air
+        ? (air - v) / Math.Max(air - share * v, 1e-4f)
+        : air < 1 ? (v - air) / (1 - air) : 0;
+
+    /// <summary>
+    /// Regler über 100: Die Verstärkung nähert sich weich der Grenze, bei der im Mittel der
+    /// Umgebung (Fenster des dunklen Kanals) jeder Kanal noch <see cref="KeepShare"/> behält —
+    /// nie unter die Wirkung bei 100.
+    /// </summary>
+    /// <remarks>
+    /// Eine Grenze je Pixel hielt die dunklen Stellen fest, während die helleren daneben weiter
+    /// abgesenkt wurden — der Kontrast nahm wieder ab. Das Maximum der Umgebung liegt nie unter
+    /// der Wirkung bei 100 (der dunkle Kanal rechnet das dunkelste Pixel dort schon auf ~5 %) —
+    /// der Regler wirkte über 100 kaum. Eine harte Grenze ließ ihn ab etwa 150 stillstehen.
+    /// </remarks>
+    private static void LimitBoost(float[] lin, int w, int h, float[] air, float[] t, float[] boosted)
     {
-        var t = Math.Clamp(At(ta, sw, sh, x, y, 0) * gB + At(ta, sw, sh, x, y, 1) * gG
-                         + At(ta, sw, sh, x, y, 2) * gR + At(tb, sw, sh, x, y, 0, 1), 0, 1);
-        return Tolerate(t, lin[p * 3], lin[p * 3 + 1], lin[p * 3 + 2], air);
+        var floor = new float[w * h];
+        for (var p = 0; p < floor.Length; p++)
+            floor[p] = Math.Max(Keep(lin[p * 3], air[0], KeepShare),
+                Math.Max(Keep(lin[p * 3 + 1], air[1], KeepShare), Keep(lin[p * 3 + 2], air[2], KeepShare)));
+        Blur.Gauss(floor, w, h, Math.Max(1.0, PatchPerEdge * Math.Max(w, h)));
+        for (var p = 0; p < floor.Length; p++)
+        {
+            // Weich an die Grenze: anfangs voll, dann immer langsamer — keine Stufe, kein Stillstand
+            var room = t[p] - floor[p];
+            boosted[p] = room <= 0 ? t[p] : t[p] - room * (1 - MathF.Exp(-Math.Max(0, t[p] - boosted[p]) / room));
+        }
     }
 
     /// <summary>
@@ -205,7 +264,8 @@ internal static class Dehaze
     /// Helligkeitsschwankung taugte nicht: Ein Himmel mit Verlauf schwankt auch, und Nebel
     /// drückt die Schwankung der Landschaft — dichter Nebel galt als Himmel.
     /// </remarks>
-    private static void ProtectSky(float[] lin, int w, int h, float[] air, float[] t)
+    /// <returns>Die verstärkte Durchlässigkeit für den Regler über 100, sonst null.</returns>
+    private static float[]? ProtectSky(float[] lin, int w, int h, float[] air, float[] t, float boost)
     {
         var l = Luma(lin);
         var edge = Math.Max(w, h);
@@ -216,6 +276,7 @@ internal static class Dehaze
         var band = new float[l.Length];
         for (var i = 0; i < band.Length; i++) band[i] = Math.Abs(fine[i] - coarse[i]);
         var mean = (float[])l.Clone();
+        var boosted = boost > 1 ? new float[t.Length] : null;
         var sigma = Math.Max(1.0, PatchPerEdge * edge);
         Blur.Gauss(band, w, h, sigma);
         Blur.Gauss(mean, w, h, sigma);
@@ -225,8 +286,20 @@ internal static class Dehaze
             var structure = band[i] / Math.Max(mean[i], 1e-3f);
             var smooth = 1 - SmoothStep(0.008f, 0.02f, structure);
             var bright = SmoothStep(0.03f, 0.1f, l[i]);   // dunkle glatte Schatten sind kein Himmel
-            t[i] += (1 - t[i]) * SkyProtection * bright * smooth;
+            var sky = bright * smooth;
+
+            // Regler über 100: Dunstmenge verstärken — nur in der Landschaft. Die Verstärkung klingt
+            // zum Himmel hin viel schneller ab als der Schutz greift; sonst bildeten sich bei 200–300
+            // im Übergang Himmel/Horizont Bänder (blau, weiß-rosa) und ein dunkler Bogen.
+            if (boosted != null)
+            {
+                var landscape = (1 - sky) * (1 - sky) * (1 - sky) * (1 - sky);
+                var tb = Math.Max(0, 1 - (1 - t[i]) * (1 + (boost - 1) * landscape));
+                boosted[i] = tb + (1 - tb) * SkyProtection * sky;
+            }
+            t[i] += (1 - t[i]) * SkyProtection * sky;
         }
+        return boosted;
     }
 
     /// <summary>Anteil, um den der Himmel geschützt wird (1 = gar nicht verändert).</summary>

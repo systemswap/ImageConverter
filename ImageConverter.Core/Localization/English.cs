@@ -182,7 +182,7 @@ public static class English
         ["Lichter"] = "Highlights",
         ["Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist."] = "Left: darken bright areas and recover detail, e.g. in the sky. Only works where the surroundings are bright.",
         ["Dunst"] = "Dehaze",
-        ["Rechts: Dunst und Nebel entfernen — ferne Berge, Stadt im Smog, Aufnahmen durchs Fenster bekommen wieder Kontrast und Farbe. Links: Dunst hinzufügen, für eine weiche Stimmung."] = "Right: remove haze and fog — distant mountains, a city in smog, shots through a window get their contrast and colour back. Left: add haze for a soft mood.",
+        ["Rechts: Dunst und Nebel entfernen — ferne Berge, Stadt im Smog, Aufnahmen durchs Fenster bekommen wieder Kontrast und Farbe. Bis 100 so viel, wie physikalisch geschätzt wird, darüber kräftiger (bis 300). Links: Dunst hinzufügen, für eine weiche Stimmung."] = "Right: remove haze and fog — distant mountains, a city in smog, shots through a window get their contrast and colour back. Up to 100 as much as is physically estimated, above that stronger (up to 300). Left: add haze for a soft mood.",
         ["FARBE"] = "COLOUR",
         ["Sättigung"] = "Saturation",
         ["Dynamik"] = "Vibrance",

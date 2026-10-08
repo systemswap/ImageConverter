@@ -76,7 +76,7 @@ public static class Adjust
     /// </summary>
     public static Prepared Prepare(byte[] bgra, int width, int height, Adjustments a)
     {
-        var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 1);
+        var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = dehaze != 0 ? Dehaze.Apply(bgra, width, height, dehaze) : bgra;
         return new Prepared(source, ToneMap(source, width, height, a));
     }

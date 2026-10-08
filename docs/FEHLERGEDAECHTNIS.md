@@ -395,3 +395,37 @@ Test oder Nachweis.
 - **Test:** `DehazeTests` (Kontrast und Farbe kommen zurück, Helligkeit bleibt;
   klares Bild bleibt; Luftlicht aus dem Himmel; Nebel hinzufügen).
   Sichtprüfung an zwei Panoramen bei Dunst +60 und +100.
+
+## 15. Dunst über 100: Bänder, Sonnensaum – dann Regler wirkungslos
+
+- **Entdeckt:** 0.4.35 (08.10.2026), Regler auf Wunsch des Benutzers bis 300
+  erweitert (bei Gegenlicht und leichtem Dunst wirkte 100 zu dezent).
+  **Behoben:** 0.4.36.
+- **Was:** Die Dunstmenge einfach zu vervielfachen ergab schwarze und rote
+  Bänder am Horizont, einen violetten Saum um die Sonne, einen dunklen Bogen
+  im Übergang Himmel/Land. Die ersten Gegenmittel machten den Regler über 100
+  dann nahezu wirkungslos oder ließen ihn ab 150 stillstehen.
+- **Warum:**
+  - Über 100 rechnet das Modell über das Ziel hinaus, Kanäle fallen unter
+    null bzw. über Weiß und werden abgeschnitten.
+  - Die Sonne und ihr Lichthof sind kanalweise heller als das Luftlicht – eine
+    Lichtquelle, kein Dunst.
+  - Eine Untergrenze je Pixel („jeder Kanal behält 30 %“) hielt dunkle Stellen
+    fest, die helleren daneben sanken weiter – der Kontrast nahm ab. Das
+    Maximum der Untergrenze in der Umgebung liegt dagegen immer über der
+    Wirkung bei 100 (der dunkle Kanal rechnet das dunkelste Pixel dort schon
+    auf ~5 %) – dann wirkte der Regler nicht mehr. Eine harte Grenze ließ ihn
+    ab etwa 150 stillstehen.
+  - Eine Helligkeitsschwelle am hellsten Kanal schloss auch Dunst über
+    kräftigen Farben aus.
+- **Wie behoben:** Bis 100 unverändert; darüber eine zweite, verstärkte
+  Durchlässigkeit (nur in der Landschaft, nicht im Himmel), die sich **weich**
+  der **im Mittel der Umgebung** gesetzten 30-%-Grenze nähert und nie
+  schwächer als 100 wirkt. Lichtquellen (kanalweise heller als das Luftlicht)
+  und sehr Helles (nach Helligkeit, nicht hellstem Kanal) bleiben unberührt.
+- **Nicht tun:** Begrenzungen je Pixel für eine Verstärkung, die je Umgebung
+  geschätzt wird. Grenzen hart setzen, wenn ein Regler dagegen läuft.
+- **Wo:** `ImageConverter.Core/Imaging/Dehaze.cs` (`LimitBoost`, `Tolerate`).
+- **Test:** `DehazeTests.UpTo300_GetsStrongerSteadily_ButNothingCrushes`
+  (Kontrast steigt in jedem Schritt, kein Sprung, < 3 % abgesoffen).
+  Sichtprüfung an beiden Panoramen bei 100, 200, 300.
