@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Avalonia;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Imaging;
@@ -72,27 +70,6 @@ public partial class MainViewModel
     public string DehazeBrightnessLabel => Percent(DehazeBrightness);
     public string DehazeDebandLabel => Percent(DehazeDeband);
     public string DehazeCastLabel => Percent(DehazeCast);
-
-    /// <summary>
-    /// Verlauf hinter dem Regler „Dunstfarbe“: links die geschätzte Farbe des Dunstes in diesem Bild, rechts
-    /// ihre Gegenfarbe — wohin das Abziehen das Bild verschiebt. Bei warmem Dunst (Abendlicht) orange → blau,
-    /// bei bläulichem umgekehrt. Bis eine Vorschau mit Dunst gerechnet ist: grau.
-    /// </summary>
-    [ObservableProperty] public partial IBrush DehazeCastGradient { get; set; } = Gradient(Adjust.HazeGradient(null));
-
-    private void SetHazeGradient(float[] haze) => DehazeCastGradient = Gradient(Adjust.HazeGradient(haze));
-
-    private static IBrush Gradient(((byte R, byte G, byte B) Left, (byte R, byte G, byte B) Right) c) =>
-        new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative),
-            GradientStops =
-            {
-                new GradientStop(Color.FromRgb(c.Left.R, c.Left.G, c.Left.B), 0),
-                new GradientStop(Color.FromRgb(c.Right.R, c.Right.G, c.Right.B), 1),
-            },
-        };
     public string BrightnessLabel => Signed(Brightness);
 
     private static string Percent(double v) => v < 0.5 ? Tr.T("aus") : $"{Math.Round(v):0} %";

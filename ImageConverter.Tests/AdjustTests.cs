@@ -384,21 +384,6 @@ public class AdjustTests
         Assert.Equal(source, prepared.Source);
     }
 
-    /// <summary>Verlauf im Regler „Dunstfarbe“ (0.5.5): links die Farbe des Dunstes, rechts die Gegenfarbe.</summary>
-    [Fact]
-    public void HazeGradient_ShowsHazeColourAndItsOpposite()
-    {
-        var (warmLeft, warmRight) = Adjust.HazeGradient([0.9f, 0.6f, 0.3f]);   // warmer Dunst (Abendlicht)
-        Assert.True(warmLeft.R > warmLeft.B && warmRight.B > warmRight.R, $"{warmLeft} → {warmRight}");
-
-        var (blueLeft, blueRight) = Adjust.HazeGradient([0.6f, 0.7f, 0.95f]);   // bläulicher Dunst
-        Assert.True(blueLeft.B > blueLeft.R && blueRight.R > blueRight.B, $"{blueLeft} → {blueRight}");
-
-        var (grayLeft, grayRight) = Adjust.HazeGradient([0.7f, 0.7f, 0.7f]);
-        Assert.Equal(grayLeft, grayRight);
-        Assert.Equal(Adjust.HazeGradient(null), (grayLeft, grayRight));
-    }
-
     /// <summary>Vorschau (Phase 2): Ein abgebrochener Plan beendet die Rechnung beim nächsten Schritt; der Eingang bleibt.</summary>
     [Fact]
     public void CancelledPlan_StopsBetweenSteps()

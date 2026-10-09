@@ -59,6 +59,10 @@ public static class Cases
         // Einstellungen des Benutzers (Turmlandschaft und Panorama, beispielhaft)
         new("KombiTurm", new Adjustments(Brightness: 4, Contrast: 24, Shadows: 63, Highlights: -59, Dehaze: 59, Vibrance: 20, Saturation: -17)),
         new("KombiPanorama", new Adjustments(Shadows: 27, Highlights: -71, Dehaze: 211), Sharpen: 1.4, SharpenSigma: 1.3),
+        // Vom Benutzer für das Panorama gewählt (09.10.2026: „sehr gut“) — viele sachte Durchläufe, wenig feine Schärfe.
+        // Braucht den Regler Dunstfarbe (ab 0.5.5); für eine Referenz mit älterem Core diesen Fall auskommentieren.
+        new("NutzerPanorama", new Adjustments(Dehaze: 54, DehazePasses: 7, DehazeClarity: 35, DehazeContrast: 12, DehazeVibrance: 25,
+            DehazeSharpen: 29, DehazeEdge: 13, DehazeBrightness: 85, DehazeDeband: 50, DehazeCast: 48)),
         new("ToolsOhneDunst", new Adjustments(Brightness: 10, Contrast: 15, Shadows: 30, Highlights: -30, Vibrance: 15, Warmth: 10)),
         new("RauschenSchaerfen", null, Denoise: 0.4, Sharpen: 0.8, SharpenSigma: 1.0),
     ];

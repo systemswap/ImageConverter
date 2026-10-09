@@ -626,13 +626,33 @@
                                                 ToolTip.Tip="{l:T 'Glättet Treppen in weichen Verläufen wie dem Himmel (Debanding): am Original, bevor der Kontrast die 8-Bit-Stufen spreizt, und nach jedem Durchlauf. Kanten und Struktur bleiben. Gerechnet wird ohnehin in 32 Bit, auf 8 Bit gerundet erst am Schluss, mit feinem Korn.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeDebandLabel}" />
                                     </Grid>
+                                    <!-- Dunstfarbe: fester Verlauf warm → neutral → kühl hinter durchsichtiger Spur (wie „Farbe“).
+                                         Zeigt die Wirkung bei warmem Dunst; bei bläulichem wirkt der Regler umgekehrt — die
+                                         Richtung ist so aber sofort verständlich. -->
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dunstfarbe'}" />
-                                        <!-- Verlauf: links die Farbe des Dunstes in diesem Bild, rechts die Richtung des Abziehens -->
-                                        <Border Grid.Column="1" Height="6" CornerRadius="3" VerticalAlignment="Center"
-                                                Margin="2,0" Background="{Binding DehazeCastGradient}" IsHitTestVisible="False" />
-                                        <Slider Grid.Column="1" Classes="verlauf" Minimum="0" Maximum="100" Value="{Binding DehazeCast}"
-                                                ToolTip.Tip="{l:T 'Wie viel der Farbe des Dunstes aus der Landschaft genommen wird: Smog verliert seinen Gelbstich, ferne Wiesen ihr Blau. Bei 0 bleibt der Farbton wie im Original. Im Abendlicht nimmt viel davon auch Wärme weg.'}" />
+                                        <Panel Grid.Column="1">
+                                            <Border Height="6" CornerRadius="3" VerticalAlignment="Center" Margin="10,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                        <GradientStop Offset="0" Color="#D9703F" />
+                                                        <GradientStop Offset="0.5" Color="#C8C8C8" />
+                                                        <GradientStop Offset="1" Color="#4C7FD0" />
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                            <Slider Minimum="0" Maximum="100" Value="{Binding DehazeCast}"
+                                                    ToolTip.Tip="{l:T 'Wie viel der Farbe des Dunstes aus der Landschaft genommen wird: Smog verliert seinen Gelbstich, ferne Wiesen ihr Blau. Bei 0 bleibt der Farbton wie im Original. Im Abendlicht nimmt viel davon auch Wärme weg.'}">
+                                                <Slider.Resources>
+                                                    <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
+                                                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
+                                                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
+                                                    <SolidColorBrush x:Key="SliderTrackValueFill" Color="Transparent" />
+                                                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="Transparent" />
+                                                    <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="Transparent" />
+                                                </Slider.Resources>
+                                            </Slider>
+                                        </Panel>
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeCastLabel}" />
                                     </Grid>
                                     <Button Classes="tool" HorizontalAlignment="Right" Content="{l:T 'Vorgaben'}"

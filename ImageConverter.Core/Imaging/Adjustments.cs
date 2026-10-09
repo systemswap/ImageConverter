@@ -132,9 +132,7 @@ public static class Adjust
 
     /// <summary>Ergebnis des teuren Teils: Bild nach „Dunst entfernen“ und die Zielhelligkeit
     /// aus Tiefen/Lichtern (null, wenn beide auf 0).</summary>
-    /// <param name="Haze">Mittlere Farbe des geschätzten Luftlichts (R, G, B, linear) — für den Farbverlauf des
-    /// Reglers „Dunstfarbe“; null ohne Dunst entfernen.</param>
-    public sealed record Prepared(float[] Source, float[]? Toned, float[]? Haze = null);
+    public sealed record Prepared(float[] Source, float[]? Toned);
 
     /// <summary>
     /// Der teure Teil — Dunst entfernen und Tiefen/Lichter über den Local Laplacian Filter.
@@ -145,7 +143,6 @@ public static class Adjust
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = px;
-        float[]? haze = null;
         if (dehaze != 0)
         {
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
@@ -207,10 +204,9 @@ public static class Adjust
                 }
             }
             source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
-            haze = MeanAir(pass);
         }
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
-        return new Prepared(source, ToneMap(source, width, height, a), haze);
+        return new Prepared(source, ToneMap(source, width, height, a));
     }
 
     /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>
@@ -222,37 +218,6 @@ public static class Adjust
         return curve[i] + (curve[i + 1] - curve[i]) * (x - i);
     }
 
-
-    /// <summary>Mittel des Luftlichtfelds (R, G, B, linear), null ohne Schätzung.</summary>
-    private static float[]? MeanAir(Dehaze.Pass pass)
-    {
-        if (pass.Air.Length < 3) return null;
-        double b = 0, g = 0, r = 0;
-        var n = pass.Air.Length / 3;
-        for (var p = 0; p < n; p++) { b += pass.Air[p * 3]; g += pass.Air[p * 3 + 1]; r += pass.Air[p * 3 + 2]; }
-        return [(float)(r / n), (float)(g / n), (float)(b / n)];
-    }
-
-    /// <summary>
-    /// Farben für den Verlauf des Reglers „Dunstfarbe“ (sRGB, 0–255): links die Farbe des Dunstes, rechts ihre
-    /// Gegenfarbe — die Richtung, in die das Abziehen das Bild verschiebt (warmer Dunst → kühler, bläulicher →
-    /// wärmer). Beide gleich hell und kräftig genug, um sie zu erkennen; bei grauem Dunst beide grau.
-    /// </summary>
-    public static ((byte R, byte G, byte B) Left, (byte R, byte G, byte B) Right) HazeGradient(float[]? haze)
-    {
-        const float lightness = 0.75f, chroma = 0.11f;
-        if (haze is not { Length: 3 }) return (Gray, Gray);
-        var (_, a, b) = Oklab.FromLinear(haze[0], haze[1], haze[2]);
-        var c = MathF.Sqrt(a * a + b * b);
-        if (c < 0.006f) return (Gray, Gray);
-        var (ua, ub) = (a / c * chroma, b / c * chroma);
-        return (Bytes(Oklab.ToSrgb(lightness, ua, ub)), Bytes(Oklab.ToSrgb(lightness, -ua, -ub)));
-
-        static (byte, byte, byte) Bytes((float R, float G, float B) s) =>
-            ((byte)(Math.Clamp(s.R, 0, 1) * 255 + 0.5f), (byte)(Math.Clamp(s.G, 0, 1) * 255 + 0.5f), (byte)(Math.Clamp(s.B, 0, 1) * 255 + 0.5f));
-    }
-
-    private static readonly (byte, byte, byte) Gray = (176, 176, 176);
     private static float[]? ToneMap(float[] bgra, int width, int height, Adjustments a)
     {
         var shadows = (float)Math.Clamp(a.Shadows / 100, -1, 1);
