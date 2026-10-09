@@ -14,6 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Ai;
 using ImageConverter.Imaging;
 using ImageConverter.ViewModels;
+using ImageMagick;
 
 namespace ImageConverter.Ai;
 
@@ -72,7 +73,7 @@ public partial class AiViewModel : ViewModelBase
     // ------------------------------------------------------------ Auswahl
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint))]
+    [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint), nameof(IsFaceModel), nameof(HasFidelity))]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     public partial AiModel? SelectedModel { get; set; }
 
@@ -95,24 +96,98 @@ public partial class AiViewModel : ViewModelBase
     // ------------------------------------------------------------ Lauf
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(CommitCommand))]
     public partial bool IsRunning { get; set; }
 
     /// <summary>Fortschritt 0…100.</summary>
     [ObservableProperty] public partial double Progress { get; set; }
     [ObservableProperty] public partial string? Status { get; set; }
 
+    /// <summary>
+    /// Ergebnis des Modells, noch nicht übernommen: Stärke und Hautstruktur mischen es live neu
+    /// (<see cref="IAiRun"/>), erst „Übernehmen“ macht daraus einen Bearbeitungsschritt.
+    /// </summary>
+    private IAiRun? _run;
+
+    /// <summary>Bildstand, auf dem <see cref="_run"/> gerechnet wurde.</summary>
+    private MagickImage? _runBase;
+
+    /// <summary>Gefundene Gesichter des offenen Ergebnisses — für ein neues Rechnen mit anderer Natürlichkeit.</summary>
+    private IReadOnlyList<DetectedFace>? _runFaces;
+
+    /// <summary>Letzter übernommener KI-Schritt: Ergebnis und Bild davor — ein neuer Lauf beginnt wieder vor der KI.</summary>
+    private (MagickImage Result, MagickImage Base)? _lastAi;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CommitCommand), nameof(DiscardCommand))]
+    public partial bool HasPending { get; set; }
+
+    /// <summary>Hautstruktur 0…100 %: feine Struktur aus dem Bild davor statt der glatten Modellhaut (nur Gesichter).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TextureLabel))]
+    public partial double Texture { get; set; } = 30;
+
+    public string TextureLabel => $"{Texture:0} %";
+
+    /// <summary>CodeFormer: 0 = stärkste Verbesserung, 100 = möglichst nah am Original. Geht ins Modell — rechnet neu.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FidelityLabel))]
+    public partial double Fidelity { get; set; } = 60;
+
+    public string FidelityLabel => $"{Fidelity:0} %";
+
+    public bool IsFaceModel => SelectedModel?.Kind == AiModelKind.Face;
+    public bool HasFidelity => SelectedModel?.Id == AiModelCatalog.CodeFormer.Id;
+
+    partial void OnSelectedModelChanged(AiModel? value)
+    {
+        // ein offenes Ergebnis gehört zum Modell, mit dem es gerechnet wurde
+        if (HasPending) Discard();
+    }
+
+    partial void OnStrengthChanged(double value) => RequestPreview();
+    partial void OnTextureChanged(double value) => RequestPreview();
+
+    private CancellationTokenSource? _fidelityCts;
+
+    partial void OnFidelityChanged(double value)
+    {
+        // Natürlichkeit geht ins Modell: nach kurzer Ruhe am Regler neu rechnen, wenn schon ein Ergebnis da ist
+        if (!HasPending || !HasFidelity) return;
+        _fidelityCts?.Cancel();
+        var cts = _fidelityCts = new CancellationTokenSource();
+        _ = RerunAfterAsync(cts.Token);
+    }
+
+    private async Task RerunAfterAsync(CancellationToken ct)
+    {
+        try { await Task.Delay(600, ct); }
+        catch (OperationCanceledException) { return; }
+
+        if (IsRunning) _runCts?.Cancel();   // der laufende Lauf hat den alten Wert
+        while (IsRunning && !ct.IsCancellationRequested) await Task.Delay(50, CancellationToken.None);
+        if (!ct.IsCancellationRequested && HasPending) await ComputeAsync(rerun: true);
+    }
+
     private bool CanApply => !IsRunning && SelectedModel is not null && _main.HasImage && !_main.IsEditing;
 
+    /// <summary>Rechnet das Modell und zeigt das Ergebnis — ins Bild kommt es erst mit „Übernehmen“.</summary>
     [RelayCommand(CanExecute = nameof(CanApply))]
-    private async Task Apply()
+    private Task Apply() => ComputeAsync(rerun: false);
+
+    private async Task ComputeAsync(bool rerun)
     {
-        if (SelectedModel is not { } model || _main.CurrentImage is not { } image) return;
+        if (SelectedModel is not { } model || _main.CurrentImage is not { } current) return;
         if (Store.PathOf(model) is not { } modelPath)
         {
             Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
             return;
         }
+
+        // Immer vom Stand vor der KI: Ist das Bild das Ergebnis des letzten KI-Schritts, rechnet der Lauf
+        // auf dem Bild davor — KI auf KI würde Gesichter immer glatter machen.
+        var image = rerun && _runBase is not null ? _runBase
+            : _lastAi is { } last && ReferenceEquals(current, last.Result) ? last.Base : current;
 
         var factor = SelectedSize == SizeOptions[2] ? 4 : SelectedSize == SizeOptions[1] ? 2 : 1;
         if (model.Kind == AiModelKind.Enhance
@@ -123,7 +198,6 @@ public partial class AiViewModel : ViewModelBase
             return;
         }
 
-        var strength = Strength / 100;
         var path = _main.CurrentImagePath;
         using var cts = new CancellationTokenSource();
         _runCts = cts;
@@ -146,9 +220,10 @@ public partial class AiViewModel : ViewModelBase
                 _main.OverrideBitmap = BitmapOps.FromBgra(frame.Bgra, frame.Width, frame.Height);
         });
 
-        var ok = false;
         try
         {
+            IAiRun run;
+            IReadOnlyList<DetectedFace>? faces = null;
             if (model.Kind == AiModelKind.Face)
             {
                 if (Store.PathOf(AiModelCatalog.FaceDetector) is not { } detectorPath)
@@ -157,9 +232,14 @@ public partial class AiViewModel : ViewModelBase
                     return;
                 }
 
-                _main.ActivityText = Tr.T("KI · Gesichter werden gesucht …");
-                var faces = await Task.Run(() =>
-                    AiFaces.Detect(image, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
+                faces = rerun ? _runFaces : null;
+                if (faces is null)
+                {
+                    _main.ActivityText = Tr.T("KI · Gesichter werden gesucht …");
+                    faces = await Task.Run(() =>
+                        AiFaces.Detect(image, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
+                }
+
                 if (faces.Count == 0)
                 {
                     Status = Tr.T("Kein Gesicht gefunden.");
@@ -167,23 +247,29 @@ public partial class AiViewModel : ViewModelBase
                 }
 
                 Status = faces.Count == 1 ? Tr.T("1 Gesicht gefunden …") : Tr.T("{0} Gesichter gefunden …", faces.Count);
-                ok = await _main.ApplyImageEditAsync(img =>
+                var found = faces;
+                var fidelity = Fidelity / 100;
+                run = await Task.Run(() =>
                 {
-                    var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model);
-                    return AiFaces.Restore(img, faces, face, strength, progress, cts.Token, Preview);
-                });
+                    var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model) { Fidelity = fidelity };
+                    return (IAiRun)AiFaces.Run(image, found, face, progress, cts.Token, Preview);
+                }, cts.Token);
             }
             else
             {
-                ok = await _main.ApplyImageEditAsync(img =>
+                run = await Task.Run(() =>
                 {
                     var tiles = new OnnxTileModel(_sessions.Get(model, modelPath), model);
-                    return AiEnhancer.Enhance(img, tiles, factor, strength, progress, cts.Token, Preview);
-                });
+                    return (IAiRun)AiEnhancer.Run(image, tiles, factor, progress, cts.Token, Preview);
+                }, cts.Token);
             }
 
-            Status = ok ? Tr.T("Fertig nach {0} — rückgängig mit Strg+Z.", FormatDuration(clock.Elapsed))
-                : cts.IsCancellationRequested ? Tr.T("Abgebrochen.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
+            if (_main.CurrentImagePath != path) return;   // inzwischen ein anderes Bild gewählt
+
+            (_run, _runBase, _runFaces) = (run, image, faces);
+            HasPending = true;
+            Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
+                FormatDuration(clock.Elapsed));
         }
         catch (OperationCanceledException)
         {
@@ -197,9 +283,109 @@ public partial class AiViewModel : ViewModelBase
         {
             _runCts = null;
             IsRunning = false;
-            _main.OverrideBitmap = null;
             _main.ActivityText = null;
+            if (HasPending) RequestPreview();   // fertiges Ergebnis (oder nach Abbruch das alte) mit den Reglern zeigen
+            else _main.OverrideBitmap = null;
         }
+    }
+
+    // Vorschau beim Ziehen: die letzte Anforderung gewinnt, gerechnet wird nie zweimal gleichzeitig
+    private bool _previewRunning, _previewDirty;
+    private IAiRun? _beforeOf;
+
+    private void RequestPreview()
+    {
+        if (!HasPending || IsRunning) return;
+        if (_previewRunning)
+        {
+            _previewDirty = true;
+            return;
+        }
+
+        _ = ShowPreviewAsync();
+    }
+
+    private async Task ShowPreviewAsync()
+    {
+        _previewRunning = true;
+        try
+        {
+            do
+            {
+                _previewDirty = false;
+                if (_run is not { } run) return;
+                var (strength, texture) = (Strength / 100, Texture / 100);
+                var frame = await Task.Run(() => run.Preview(strength, texture));
+                if (ReferenceEquals(run, _run) && !IsRunning)
+                    _main.OverrideBitmap = BitmapOps.FromBgra(frame.Bgra, frame.Width, frame.Height);
+
+                // Vorher-Seite für „Vorher / Nachher“: dasselbe Ergebnis mit Stärke 0 = Bild vor der KI
+                if (!ReferenceEquals(_beforeOf, run))
+                {
+                    var before = await Task.Run(() => run.Preview(0, 0));
+                    if (ReferenceEquals(run, _run))
+                    {
+                        _beforeOf = run;
+                        _main.OverrideBeforeBitmap = BitmapOps.FromBgra(before.Bgra, before.Width, before.Height);
+                    }
+                }
+            }
+            while (_previewDirty);
+        }
+        catch (Exception ex)
+        {
+            Status = Tr.T("Fehler: {0}", ex.Message);
+        }
+        finally
+        {
+            _previewRunning = false;
+        }
+    }
+
+    private bool CanCommit => HasPending && !IsRunning && !_main.IsEditing;
+
+    /// <summary>Ergebnis mit den aktuellen Reglern in voller Größe ins Bild — ein Schritt, rückgängig mit Strg+Z.</summary>
+    [RelayCommand(CanExecute = nameof(CanCommit))]
+    private async Task Commit()
+    {
+        if (_run is not { } run || _runBase is not { } runBase) return;
+        var (strength, texture) = (Strength / 100, Texture / 100);
+        _fidelityCts?.Cancel();
+
+        // Inzwischen anders bearbeitet (Zuschnitt, Rückgängig …)? Dann passt das Ergebnis nicht mehr.
+        var current = _main.CurrentImage;
+        if (!ReferenceEquals(current, runBase)
+            && !(_lastAi is { } last && ReferenceEquals(current, last.Result) && ReferenceEquals(last.Base, runBase)))
+        {
+            ClearRun();
+            Status = Tr.T("Das Bild wurde inzwischen geändert — bitte neu berechnen.");
+            return;
+        }
+
+        Status = Tr.T("Wird übernommen …");
+
+        // Gerechnet wurde auf dem Stand vor der KI — das Ergebnis ersetzt das aktuelle Bild, statt darauf aufzubauen
+        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(strength, texture));
+        if (ok && _main.CurrentImage is { } result) _lastAi = (result, runBase);
+        ClearRun();
+        Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
+    }
+
+    /// <summary>Ergebnis verwerfen: das Bild bleibt, wie es war.</summary>
+    [RelayCommand(CanExecute = nameof(HasPending))]
+    private void Discard()
+    {
+        ClearRun();
+        Status = null;
+    }
+
+    private void ClearRun()
+    {
+        _fidelityCts?.Cancel();
+        (_run, _runBase, _runFaces, _beforeOf) = (null, null, null, null);
+        HasPending = false;
+        _main.OverrideBitmap = null;
+        _main.OverrideBeforeBitmap = null;
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
@@ -222,11 +408,17 @@ public partial class AiViewModel : ViewModelBase
     private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MainViewModel.HasImage) or nameof(MainViewModel.IsEditing))
+        {
             ApplyCommand.NotifyCanExecuteChanged();
+            CommitCommand.NotifyCanExecuteChanged();
+        }
 
-        // anderes Bild gewählt: Zwischenstand gehört nicht dazu
-        if (e.PropertyName == nameof(MainViewModel.CurrentFileName) && _main.OverrideBitmap is not null)
-            _main.OverrideBitmap = null;
+        // anderes Bild gewählt: Zwischenstand und offenes Ergebnis gehören nicht dazu
+        if (e.PropertyName == nameof(MainViewModel.CurrentFileName))
+        {
+            if (HasPending) Discard();
+            else if (_main.OverrideBitmap is not null) _main.OverrideBitmap = null;
+        }
     }
 
     // ------------------------------------------------------------ Modelle verwalten

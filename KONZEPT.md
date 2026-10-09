@@ -315,8 +315,11 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
 - Keine Checkbox, sondern ein **Button „KI anwenden“** — läuft nur auf Abruf, nie in der Live-Vorschau.
 - **ComboBox zur Modellwahl** daneben: Allround (Rauschen/Artefakte/Upscale), große Variante,
   Gesichtsmodelle (GFPGAN/CodeFormer) — angeboten werden nur heruntergeladene Modelle.
-- **Verkettung:** Jeder Lauf wirkt auf das *aktuelle* Bild, also auf das Ergebnis des vorigen
-  KI-Laufs, nicht wieder auf das Original.
+- ~~**Verkettung:** Jeder Lauf wirkt auf das *aktuelle* Bild, also auf das Ergebnis des vorigen
+  KI-Laufs, nicht wieder auf das Original.~~ Seit 0.5.9: **keine Verkettung** — ist das Bild das
+  Ergebnis des letzten KI-Schritts, rechnet der nächste Lauf auf dem Bild davor und ersetzt es
+  (KI auf KI machte Gesichter immer glatter). Ablauf: „KI berechnen“ → Stärke/Hautstruktur live
+  (ohne neues Rechnen), Natürlichkeit (CodeFormer) rechnet neu → „Übernehmen“ oder „Verwerfen“.
 - **Rückgängig/Wiederholen** wie beim Zuschneiden: Ergebnis wird als eigener Schritt im
   Verlauf zwischengespeichert (Snapshot), Strg+Z/Strg+Y funktionieren.
 - Fortschritt + Abbrechen während der Berechnung (Tiles mit Overlap).

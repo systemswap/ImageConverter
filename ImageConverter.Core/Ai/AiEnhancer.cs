@@ -39,6 +39,15 @@ public static class AiEnhancer
     /// <param name="preview">Zwischenstände: fertige Kacheln neu, der Rest noch alt.</param>
     public static MagickImage Enhance(MagickImage source, ITileModel model, int factor, double strength,
         IProgress<double>? progress, CancellationToken ct,
+        Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048) =>
+        Run(source, model, factor, progress, ct, preview, previewMaxEdge).Compose(strength, 0);
+
+    /// <summary>
+    /// Das Modell mit voller Wirkung über das ganze Bild, noch nicht mit dem Original gemischt
+    /// (<see cref="EnhanceRun"/>) — die Stärke lässt sich danach live ändern, ohne neu zu rechnen.
+    /// </summary>
+    public static EnhanceRun Run(MagickImage source, ITileModel model, int factor,
+        IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048)
     {
         var scale = model.Scale;
@@ -53,10 +62,11 @@ public static class AiEnhancer
         var src = ReadPixels(source, mapping);
         int ow = w * factor, oh = h * factor;
 
-        // Vergleichsbild in Zielgröße: für die Mischung (Stärke < 100 %) und den Alphakanal
-        ushort[]? baseline = null;
+        // Vergleichsbild in Zielgröße: für die Mischung (Stärke) und den Alphakanal — immer, die Stärke
+        // wird erst danach gewählt
+        ushort[] baseline;
         if (factor == 1) baseline = src;
-        else if (strength < 1 || hasAlpha)
+        else
         {
             using var up = ImageOps.CloneOf(source);
             up.FilterType = FilterType.Lanczos;
@@ -70,7 +80,6 @@ public static class AiEnhancer
         var core = tile - 2 * pad;
         var block = scale / factor;          // so viele Modellpixel ergeben einen Ausgabepixel
         var input = new float[3 * tile * tile];
-        var s = (float)Math.Clamp(strength, 0, 1);
 
         var tilesX = (w + core - 1) / core;
         var tilesY = (h + core - 1) / core;
@@ -125,11 +134,10 @@ public static class AiEnhancer
                         }
 
                         var v = Math.Clamp(sum * norm, 0f, 1f) * 65535f;
-                        if (s < 1 && baseline is not null) v = baseline[di + c] * (1 - s) + v * s;
                         result[di + c] = (ushort)(v + 0.5f);
                     }
 
-                    if (hasAlpha) result[di + 3] = baseline![di + 3];
+                    if (hasAlpha) result[di + 3] = baseline[di + 3];
                 }
             }
 
@@ -156,11 +164,7 @@ public static class AiEnhancer
             }
         }
 
-        var image = WritePixels(result, ow, oh, mapping);
-        lock (source) image.Density = source.Density;
-        ImageExporter.CopyProfiles(source, image);
-
-        return image;
+        return new EnhanceRun(source, result, baseline, ow, oh, mapping, channels);
     }
 
     internal static ushort[] ReadPixels(MagickImage image, string mapping)

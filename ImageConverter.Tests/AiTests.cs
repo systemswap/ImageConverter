@@ -160,6 +160,87 @@ public class AiTests
         Assert.True(maxDiff < 65535 * 0.02, $"Abweichung {maxDiff / 655.35:0.0} %");
     }
 
+    /// <summary>Gesichtsmodell, das glättet (Mittel über 9 × 9) — wie ein Modell, das Haut glattbügelt.</summary>
+    private sealed class SmoothFace : IFaceModel
+    {
+        public int Size => 128;
+
+        public float[] Run(float[] input, CancellationToken ct)
+        {
+            var n = Size * Size;
+            var output = new float[input.Length];
+            for (var c = 0; c < 3; c++)
+            for (var y = 0; y < Size; y++)
+            for (var x = 0; x < Size; x++)
+            {
+                float sum = 0;
+                var count = 0;
+                for (var dy = -4; dy <= 4; dy++)
+                for (var dx = -4; dx <= 4; dx++)
+                {
+                    int yy = Math.Clamp(y + dy, 0, Size - 1), xx = Math.Clamp(x + dx, 0, Size - 1);
+                    sum += input[c * n + yy * Size + xx];
+                    count++;
+                }
+                output[c * n + y * Size + x] = sum / count;
+            }
+            return output;
+        }
+    }
+
+    /// <summary>Mittlere Abweichung zum Original in der Gesichtsmitte (0…1).</summary>
+    private static double FaceDistance(MagickImage src, MagickImage result)
+    {
+        var a = AiEnhancer.ReadPixels(src, "RGB");
+        var b = AiEnhancer.ReadPixels(result, "RGB");
+        double sum = 0;
+        var n = 0;
+        for (var y = 130; y < 170; y++)
+        for (var x = 130; x < 170; x++)
+        for (var c = 0; c < 3; c++, n++)
+        {
+            var i = (y * (int)src.Width + x) * 3 + c;
+            sum += Math.Abs(a[i] - b[i]) / 65535.0;
+        }
+        return sum / n;
+    }
+
+    [Fact]
+    public void FaceRun_Texture_BringsFineDetailBack_AndZeroMatchesRestore()
+    {
+        using var src = Noise(300, 300);
+        var face = new DetectedFace(100, 100, 100, 100, 0.9, [(130, 130), (170, 130), (150, 150), (135, 172), (165, 172)]);
+        var run = AiFaces.Run(src, [face], new SmoothFace(), null, default);
+
+        using var smooth = run.Compose(1, 0);
+        using var textured = run.Compose(1, 1);
+        using var restored = AiFaces.Restore(src, [face], new SmoothFace(), 1, null, default);
+
+        Assert.Equal(AiEnhancer.ReadPixels(restored, "RGB"), AiEnhancer.ReadPixels(smooth, "RGB"));
+        var (dSmooth, dTextured) = (FaceDistance(src, smooth), FaceDistance(src, textured));
+        Assert.True(dTextured < dSmooth * 0.6, $"glatt {dSmooth:0.000}, mit Struktur {dTextured:0.000}");
+
+        // Vorschau: verkleinert, aber dieselbe Richtung
+        var preview = run.Preview(1, 1, maxEdge: 150);
+        Assert.Equal(150, preview.Width);
+        Assert.Equal(150 * 150 * 4, preview.Bgra.Length);
+    }
+
+    [Fact]
+    public void EnhanceRun_StrengthLive_MatchesEnhance()
+    {
+        using var src = Noise(90, 70);
+        var run = AiEnhancer.Run(src, new BlackModel(4, 32), 1, null, default);
+
+        using var half = run.Compose(0.5, 0);
+        using var expected = AiEnhancer.Enhance(src, new BlackModel(4, 32), 1, 0.5, null, default);
+        Assert.Equal(AiEnhancer.ReadPixels(expected, "RGB"), AiEnhancer.ReadPixels(half, "RGB"));
+
+        // Stärke 0 in der Vorschau = Original, Stärke 1 = schwarz
+        Assert.Contains(run.Preview(0, 0).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
+        Assert.DoesNotContain(run.Preview(1, 0).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
+    }
+
     [Fact]
     public void Nms_KeepsBestOfOverlappingFaces()
     {

@@ -43,9 +43,22 @@
                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Strength}"
-                            IsEnabled="{Binding !IsRunning}"
-                            ToolTip.Tip="{l:T 'Mischung mit dem Bild davor: 100 % = nur das Ergebnis des Modells, darunter wirkt es schwächer und natürlicher.'}" />
+                            ToolTip.Tip="{l:T 'Mischung mit dem Bild davor: 100 % = nur das Ergebnis des Modells, darunter wirkt es schwächer und natürlicher. Wirkt live, ohne neu zu rechnen.'}" />
                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding StrengthLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Hautstruktur'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Texture}"
+                            ToolTip.Tip="{l:T 'Holt Poren und feine Hautstruktur aus dem Bild davor zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding TextureLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding HasFidelity}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Natürlichkeit'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Fidelity}"
+                            ToolTip.Tip="{l:T 'Wie nah CodeFormer am Original bleibt: niedrig = stärkere Verbesserung, die Person kann sich aber verändern; hoch = näher am Original. Geht ins Modell — nach dem Loslassen wird neu gerechnet.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding FidelityLabel}" />
                 </Grid>
 
                 <Grid Classes="row" ColumnDefinitions="76,*" IsVisible="{Binding IsEnhanceModel}">
@@ -58,14 +71,24 @@
 
                 <!-- Starten oder Fortschritt -->
                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                        Margin="0,4,0,0" Content="{l:T 'KI anwenden'}"
+                        Margin="0,4,0,0" Content="{l:T 'KI berechnen'}"
                         IsVisible="{Binding !IsRunning}" Command="{Binding ApplyCommand}"
-                        ToolTip.Tip="{l:T 'Rechnet auf dem aktuellen Bild — auch auf einem schon verbesserten. Rückgängig mit Strg+Z.'}" />
+                        ToolTip.Tip="{l:T 'Rechnet das Modell und zeigt das Ergebnis. Danach wirken die Regler live; ins Bild kommt es erst mit „Übernehmen“. Gerechnet wird immer auf dem Stand vor der letzten KI — nichts häuft sich an.'}" />
 
                 <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0" IsVisible="{Binding IsRunning}">
                     <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding Progress}"
                                  VerticalAlignment="Center" Margin="0,0,8,0" />
                     <Button Grid.Column="1" Classes="subtle" Content="{l:T 'Abbrechen'}" Command="{Binding CancelCommand}" />
+                </Grid>
+
+                <!-- Offenes Ergebnis: übernehmen oder verwerfen -->
+                <Grid ColumnDefinitions="*,6,*" Margin="0,4,0,0" IsVisible="{Binding HasPending}">
+                    <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Übernehmen'}" Command="{Binding CommitCommand}"
+                            ToolTip.Tip="{l:T 'Schreibt das Ergebnis mit den aktuellen Reglern ins Bild. Rückgängig mit Strg+Z.'}" />
+                    <Button Grid.Column="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Verwerfen'}" Command="{Binding DiscardCommand}"
+                            ToolTip.Tip="{l:T 'Ergebnis verwerfen — das Bild bleibt, wie es war.'}" />
                 </Grid>
 
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"

@@ -750,3 +750,36 @@ Test oder Nachweis.
   Auswahlwerkzeug-Knopf, Verschieben mit Strg + Ziehen. Danach: KI live mischen
   (Stärke/Hautstruktur ohne neues Rechnen), Natürlichkeit für CodeFormer, weitere
   Gesichtsmodelle; DiffBIR/SUPIR als Versuch für später mit Grafikkarte.
+
+## 20. KI: Stärke rechnete das Modell neu, Läufe häuften sich, Vorher/Nachher gesperrt
+
+- **Entdeckt:** 0.5.8 (09.10.2026), Fragen des Benutzers („funktioniert Stärke nur als
+  Overlay?“, „beginnt KI anwenden immer vom Original?“) und Test mit offenem Ergebnis.
+  **Behoben:** 0.5.9 beta.
+- **Was:** (1) „Stärke“ war nur eine Mischung mit dem Bild davor, wurde aber vor dem
+  Lauf festgelegt — jeder andere Wert hieß: Modell noch einmal rechnen (Sekunden bis
+  Minuten). (2) Jeder Lauf wirkte auf das aktuelle Bild, also auf das Ergebnis der
+  vorigen KI — zweimal CodeFormer machte Gesichter immer glatter. (3) Während ein
+  Ergebnis offen war (noch nicht übernommen), blieb „Vorher / Nachher“ gesperrt: der
+  Vergleich kannte nur Stände aus dem Verlauf.
+- **Wie:** Das Modell rechnet einmal mit voller Wirkung (`AiFaces.Run` → `FaceRun`,
+  `AiEnhancer.Run` → `EnhanceRun`, beide `IAiRun`); Stärke und neue Hautstruktur mischen
+  danach live (`Preview` verkleinert, `Compose` in voller Größe beim Übernehmen).
+  „KI berechnen“ zeigt das Ergebnis, „Übernehmen“ macht einen Schritt daraus,
+  „Verwerfen“ lässt das Bild. Ist das aktuelle Bild das Ergebnis des letzten KI-Schritts,
+  rechnet der nächste Lauf auf dem Bild davor (`_lastAi` in `AiViewModel`) — das neue
+  Ergebnis ersetzt es, statt darauf aufzubauen. Die Natürlichkeit (CodeFormer `weight`)
+  geht ins Modell: nach 0,6 s Ruhe am Regler neu rechnen, die Gesichtersuche bleibt.
+  Vorher-Seite eines offenen Ergebnisses: `MainViewModel.OverrideBeforeBitmap`, gefüllt
+  mit `Preview(0, 0)` (Stärke 0 = Bild vor der KI, gleiche Größe wie die Vorschau).
+- **Hautstruktur:** tauscht die feine Struktur des Modells (Ergebnis minus über etwa
+  ein Bildpixel geglättet) gegen die des Bildes davor; Augen, Mund und Form bleiben vom
+  Modell. Vorgabe 30 %. Beide Hochpässe müssen über dieselbe Weite im *Bild* gehen
+  (Ausschnitt: Sigma = Maßstab × 1 px), sonst nimmt der Regler mehr Modelldetail weg,
+  als er Original zurückbringt — das Gesicht würde weicher statt körniger.
+- **Nicht tun:** Die Stärke wieder ins Modell oder in den Lauf geben; einen Lauf auf
+  einem KI-Ergebnis starten; beim Übernehmen das ganze Bild neu rechnen.
+- **Nachweis:** `AiTests.FaceRun_Texture_BringsFineDetailBack_AndZeroMatchesRestore`,
+  `AiTests.EnhanceRun_StrengthLive_MatchesEnhance`; UI-Test an Familienfoto (lokal):
+  Stärke 0 = Original (Abweichung 0), Übernommen = Vorschau, zweiter Lauf + Übernehmen
+  = erster (nichts häuft sich), Vorher/Nachher bei offenem und übernommenem Ergebnis.

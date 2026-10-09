@@ -68,7 +68,8 @@ public partial class MainViewModel
     {
         get
         {
-            if (!ShowOriginal || OverrideBitmap is not null || FullBitmap is null) return null;
+            if (!ShowOriginal || FullBitmap is null) return null;
+            if (OverrideBitmap is not null) return OverrideBeforeBitmap;   // offenes Ergebnis (KI …)
             if (FindBeforeImage() is not null) return BeforeBitmap;   // früherer Bildstand (KI …)
             return AdjustedBitmap is not null && FullPreviewBitmap is { } small && ReferenceEquals(_fullPreviewOf, FullBitmap)
                 ? small
@@ -96,7 +97,7 @@ public partial class MainViewModel
     }
 
     /// <summary>Gibt es etwas zu vergleichen: Einstellungen oder ein früherer Bildstand (KI …)?</summary>
-    public bool CanCompare => HasAdjustments || FindBeforeImage() is not null;
+    public bool CanCompare => OverrideBeforeBitmap is not null || HasAdjustments || FindBeforeImage() is not null;
 
     private void NotifyCompare()
     {
@@ -160,6 +161,16 @@ public partial class MainViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(CompareBitmap))]
     public partial Bitmap? OverrideBitmap { get; set; }
+
+    /// <summary>
+    /// Vorher-Seite zu <see cref="OverrideBitmap"/>, z. B. das Bild vor einem noch nicht übernommenen
+    /// KI-Ergebnis — so lässt sich auch ein offenes Ergebnis mit „Vorher / Nachher“ vergleichen.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CompareBitmap))]
+    public partial Bitmap? OverrideBeforeBitmap { get; set; }
+
+    partial void OnOverrideBeforeBitmapChanged(Bitmap? value) => NotifyCompare();
 
     /// <summary>Hinweis über dem Bild bei langen Arbeiten (z. B. „KI · 42 % · noch 20 s“); null = keiner.</summary>
     [ObservableProperty] public partial string? ActivityText { get; set; }

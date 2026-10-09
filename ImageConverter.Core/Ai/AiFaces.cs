@@ -166,11 +166,21 @@ public static class AiFaces
 
     // ------------------------------------------------------------ Verbessern
 
+    /// <summary>Gesichter verbessern und mit <paramref name="strength"/> ins Bild mischen (ohne Hautstruktur).</summary>
     /// <param name="strength">0…1: Mischung mit dem Original.</param>
     /// <param name="progress">Anteil 0…1.</param>
     /// <param name="preview">Zwischenstand nach jedem Gesicht.</param>
     public static MagickImage Restore(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model,
         double strength, IProgress<double>? progress, CancellationToken ct,
+        Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048) =>
+        Run(source, faces, model, progress, ct, preview, previewMaxEdge).Compose(strength, 0);
+
+    /// <summary>
+    /// Gesichter mit voller Wirkung verbessern, aber noch nicht ins Bild mischen: Das Ergebnis
+    /// (<see cref="FaceRun"/>) mischt danach Stärke und Hautstruktur beliebig oft neu, ohne das Modell.
+    /// </summary>
+    public static FaceRun Run(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model,
+        IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048)
     {
         int w = (int)source.Width, h = (int)source.Height;
@@ -190,37 +200,66 @@ public static class AiFaces
         var sink = new AiPreviewSink(preview, previewMaxEdge);
         var size = model.Size;
         var target = Template.Select(p => (p.X * size, p.Y * size)).ToArray();
+        var done = new List<FaceRun.Face>();
+        float[]? shown = null;   // Zwischenstand während der Rechnung
+        var pasted = 0;
         for (var f = 0; f < faces.Count; f++)
         {
             ct.ThrowIfCancellationRequested();
             var toCrop = Similarity.Estimate(faces[f].Landmarks, target);
             var crop = WarpToCrop(image, w, h, toCrop, size);
-            var enhanced = model.Run(ToModelRange(crop), ct);
-            PasteBack(image, w, h, crop, FromModelRange(enhanced), toCrop, size, (float)Math.Clamp(strength, 0, 1));
+            var enhanced = FromModelRange(model.Run(ToModelRange(crop), ct));
+            var face = new FaceRun.Face(crop, enhanced, Smoothed(enhanced, size, toCrop), toCrop, size);
+            done.Add(face);
             progress?.Report((f + 1) / (double)faces.Count);
 
             if (sink.IsDue && f < faces.Count - 1)
+            {
+                shown ??= (float[])image.Clone();
+                for (; pasted < done.Count; pasted++) PasteBack(shown, w, h, done[pasted], null, done[pasted].ToCrop, 1, 0);
                 sink.Emit(w, h, (x, y, rgba) =>
                 {
                     var i = ((long)y * w + x) * 3;
-                    rgba[0] = image[i];
-                    rgba[1] = image[i + 1];
-                    rgba[2] = image[i + 2];
+                    rgba[0] = shown[i];
+                    rgba[1] = shown[i + 1];
+                    rgba[2] = shown[i + 2];
                     rgba[3] = hasAlpha ? pixels[((long)y * w + x) * channels + 3] / 65535f : 1f;
                 });
+            }
         }
 
-        for (long i = 0, j = 0; i < image.Length; i += 3, j += channels)
+        return new FaceRun(source, image, pixels, w, h, mapping, channels, done);
+    }
+
+    /// <summary>
+    /// Grobe Fassung des verbesserten Gesichts: Unterschied dazu = seine feine Struktur. Geglättet über etwa
+    /// ein Pixel des Bildes (im Ausschnitt so viele Pixel, wie ein Bildpixel dort groß ist).
+    /// </summary>
+    private static float[] Smoothed(float[] enhanced, int size, Similarity toCrop)
+    {
+        var sigma = Math.Clamp(toCrop.ScaleFactor * FineDetailPixels, 0.6, 6);
+        var low = (float[])enhanced.Clone();
+        var plane = size * size;
+        var one = new float[plane];
+        for (var c = 0; c < 3; c++)
         {
-            pixels[j] = (ushort)(Math.Clamp(image[i], 0f, 1f) * 65535f + 0.5f);
-            pixels[j + 1] = (ushort)(Math.Clamp(image[i + 1], 0f, 1f) * 65535f + 0.5f);
-            pixels[j + 2] = (ushort)(Math.Clamp(image[i + 2], 0f, 1f) * 65535f + 0.5f);
+            Array.Copy(low, c * plane, one, 0, plane);
+            Blur.Gauss(one, size, size, sigma);
+            Array.Copy(one, 0, low, c * plane, plane);
         }
+        return low;
+    }
 
-        var result = AiEnhancer.WritePixels(pixels, w, h, mapping);
-        lock (source) result.Density = source.Density;
-        ImageExporter.CopyProfiles(source, result);
-        return result;
+    /// <summary>Was als „feine Struktur“ gilt: Unterschiede über so viele Bildpixel (Gauß-Sigma).</summary>
+    internal const double FineDetailPixels = 1.0;
+
+    /// <summary>Feine Struktur des Bildes: Bild minus über <see cref="FineDetailPixels"/> geglättet (RGB verschachtelt).</summary>
+    internal static float[] HighPass(float[] image, int w, int h)
+    {
+        var blurred = (float[])image.Clone();
+        Blur.Gauss(blurred, w, h, FineDetailPixels, channels: 3);
+        for (long i = 0; i < blurred.Length; i++) blurred[i] = image[i] - blurred[i];
+        return blurred;
     }
 
     /// <summary>
@@ -264,24 +303,34 @@ public static class AiFaces
     /// Bei Gesichtern, die größer als der Ausschnitt sind, bleiben die feinen Details des
     /// Originals erhalten, die im Ausschnitt gar nicht vorkommen können.
     /// </summary>
-    private static void PasteBack(float[] image, int w, int h, float[] crop, float[] enhanced, Similarity toCrop, int size, float strength)
+    /// <param name="highPass">Feine Struktur des Bildes davor (<see cref="HighPass"/>, gleiche Größe wie
+    /// <paramref name="image"/>); nur für <paramref name="texture"/> &gt; 0 nötig.</param>
+    /// <param name="toCrop">Bild → Ausschnitt; für die Vorschau auf deren Maßstab umgerechnet.</param>
+    /// <param name="texture">0 … 1: feine Struktur aus dem Bild davor statt der des Modells — gegen das
+    /// „Wachsgesicht“: Form, Augen und grobe Schärfe vom Modell, Poren, Härchen und Korn vom Original.</param>
+    internal static void PasteBack(float[] image, int w, int h, FaceRun.Face face, float[]? highPass,
+        Similarity toCrop, float strength, float texture)
     {
+        var size = face.Size;
         var back = toCrop.Inverse();
         var corners = new[] { back.Apply(0, 0), back.Apply(size - 1, 0), back.Apply(0, size - 1), back.Apply(size - 1, size - 1) };
         var x0 = Math.Max(0, (int)Math.Floor(corners.Min(c => c.X)));
         var x1 = Math.Min(w - 1, (int)Math.Ceiling(corners.Max(c => c.X)));
         var y0 = Math.Max(0, (int)Math.Floor(corners.Min(c => c.Y)));
         var y1 = Math.Min(h - 1, (int)Math.Ceiling(corners.Max(c => c.Y)));
-        if (x1 < x0 || y1 < y0) return;
+        if (x1 < x0 || y1 < y0 || strength <= 0) return;
 
         // Anteil der Originaldetails jenseits der Ausschnitt-Auflösung (0 bei kleinen Gesichtern)
         var keepDetail = (float)Math.Clamp(back.ScaleFactor - 1, 0, 1);
+        // Hautstruktur: dort, wo das Original schon über keepDetail zurückkommt, nicht doppelt
+        var tex = highPass is null ? 0 : Math.Clamp(texture, 0, 1) * (1 - keepDetail);
         var edge = size / 512.0;   // Maße unten für 512er-Ausschnitt
 
         Parallel.For(y0, y1 + 1, y =>
         {
             Span<float> enh = stackalloc float[3];
             Span<float> low = stackalloc float[3];
+            Span<float> coarse = stackalloc float[3];
             for (var x = x0; x <= x1; x++)
             {
                 var (u, v) = toCrop.Apply(x, y);
@@ -293,14 +342,17 @@ public static class AiFaces
                 var mask = (float)(t * t * (3 - 2 * t)) * strength;
                 if (mask <= 0) continue;
 
-                SamplePlanar(enhanced, size, u, v, enh);
-                if (keepDetail > 0) SamplePlanar(crop, size, u, v, low);
+                SamplePlanar(face.Enhanced, size, u, v, enh);
+                if (keepDetail > 0) SamplePlanar(face.Crop, size, u, v, low);
+                if (tex > 0) SamplePlanar(face.Low, size, u, v, coarse);
 
                 var i = ((long)y * w + x) * 3;
                 for (var c = 0; c < 3; c++)
                 {
                     var original = image[i + c];
                     var value = enh[c] + (keepDetail > 0 ? (original - low[c]) * keepDetail : 0);
+                    // feine Struktur des Modells (enh − grob) gegen die des Originals tauschen
+                    if (tex > 0) value += tex * (highPass![i + c] - (enh[c] - coarse[c]));
                     image[i + c] = original + (value - original) * mask;
                 }
             }
