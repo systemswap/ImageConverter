@@ -16,8 +16,8 @@ public sealed class EnhanceRun : IAiRun
     private readonly string _mapping;
     private readonly MagickImage _meta;    // Profile und Auflösung (1 × 1 Pixel)
 
-    // Vorschau: beide Fassungen verkleinert (RGB 0…1), je Kantenlänge einmal gerechnet
-    private (int MaxEdge, int W, int H, float[] Result, float[] Baseline)? _small;
+    // Vorschau: beide Fassungen verkleinert (RGB 0…1), je Vorschaugröße einmal gerechnet
+    private (AiPreviewSize Size, float[] Result, float[] Baseline)? _small;
 
     internal EnhanceRun(MagickImage source, ushort[] result, ushort[] baseline, int w, int h, string mapping, int channels)
     {
@@ -30,27 +30,31 @@ public sealed class EnhanceRun : IAiRun
         }
     }
 
+    public int Width => _w;
+    public int Height => _h;
+
     public bool SupportsTexture => false;
 
-    public AiPreviewFrame Preview(double strength, double texture, int maxEdge = 2048)
+    public AiPixels Preview(double strength, double texture, AiPreviewSize size)
     {
-        var small = Small(maxEdge);
+        var small = Small(size);
+        int sw = size.Width, sh = size.Height;
         var s = (float)Math.Clamp(strength, 0, 1);
-        var bgra = new byte[small.W * small.H * 4];
-        Parallel.For(0, small.H, y =>
+        var bgra = new float[sw * sh * 4];
+        Parallel.For(0, sh, y =>
         {
-            for (var x = 0; x < small.W; x++)
+            for (var x = 0; x < sw; x++)
             {
-                var p = y * small.W + x;
+                var p = y * sw + x;
                 for (var c = 0; c < 3; c++)
                 {
                     var v = small.Baseline[p * 3 + c] + (small.Result[p * 3 + c] - small.Baseline[p * 3 + c]) * s;
-                    bgra[p * 4 + 2 - c] = (byte)(Math.Clamp(v, 0f, 1f) * 255f + 0.5f);
+                    bgra[p * 4 + 2 - c] = Math.Clamp(v, 0f, 1f);
                 }
-                bgra[p * 4 + 3] = 255;
+                bgra[p * 4 + 3] = 1f;
             }
         });
-        return new AiPreviewFrame(bgra, small.W, small.H);
+        return new AiPixels(bgra, sw, sh);
     }
 
     public MagickImage Compose(double strength, double texture)
@@ -74,40 +78,12 @@ public sealed class EnhanceRun : IAiRun
         return image;
     }
 
-    private (int MaxEdge, int W, int H, float[] Result, float[] Baseline) Small(int maxEdge)
+    /// <summary>Beide Fassungen auf Vorschaugröße, verkleinert wie die normale Vorschau.</summary>
+    private (AiPreviewSize Size, float[] Result, float[] Baseline) Small(AiPreviewSize size)
     {
-        if (_small is { } s && s.MaxEdge == maxEdge) return s;
-        var k = Math.Min(1.0, maxEdge / (double)Math.Max(_w, _h));
-        int sw = Math.Max(1, (int)Math.Round(_w * k)), sh = Math.Max(1, (int)Math.Round(_h * k));
-        var result = (maxEdge, sw, sh, Shrink(_result, sw, sh, k), Shrink(_baseline, sw, sh, k));
+        if (_small is { } s && s.Size == size) return s;
+        var result = (size, AiEnhancer.Shrink(_result, _w, _h, _mapping, size), AiEnhancer.Shrink(_baseline, _w, _h, _mapping, size));
         _small = result;
         return result;
-    }
-
-    /// <summary>Flächenmittel auf die Vorschaugröße, RGB 0…1.</summary>
-    private float[] Shrink(ushort[] data, int sw, int sh, double k)
-    {
-        var small = new float[sw * sh * 3];
-        Parallel.For(0, sh, y =>
-        {
-            int ys = (int)(y / k), ye = Math.Min(_h, Math.Max(ys + 1, (int)((y + 1) / k)));
-            for (var x = 0; x < sw; x++)
-            {
-                int xs = (int)(x / k), xe = Math.Min(_w, Math.Max(xs + 1, (int)((x + 1) / k)));
-                float r = 0, g = 0, b = 0;
-                var n = 0;
-                for (var yy = ys; yy < ye; yy++)
-                for (var xx = xs; xx < xe; xx++)
-                {
-                    var i = ((long)yy * _w + xx) * _channels;
-                    r += data[i]; g += data[i + 1]; b += data[i + 2];
-                    n++;
-                }
-                var o = (y * sw + x) * 3;
-                var f = 1f / (n * 65535f);
-                (small[o], small[o + 1], small[o + 2]) = (r * f, g * f, b * f);
-            }
-        });
-        return small;
     }
 }

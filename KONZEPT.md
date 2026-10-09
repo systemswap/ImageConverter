@@ -320,6 +320,13 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
   Ergebnis des letzten KI-Schritts, rechnet der nächste Lauf auf dem Bild davor und ersetzt es
   (KI auf KI machte Gesichter immer glatter). Ablauf: „KI berechnen“ → Stärke/Hautstruktur live
   (ohne neues Rechnen), Natürlichkeit (CodeFormer) rechnet neu → „Übernehmen“ oder „Verwerfen“.
+- **Reihenfolge KI ↔ Einstellungen** (seit 0.5.10, Einstellungen = Entrauschen, Tools/Dunst, Schärfe;
+  nie doppelt): „Erst KI, dann Einstellungen“ — KI auf dem Bild ohne Look, die Regler wirken danach
+  auch auf die Gesichter und bleiben verstellbar (Vorschau zeigt sie schon über dem offenen Ergebnis).
+  „Erst Einstellungen, dann KI“ — der Look wird in voller Größe ins Bild gerechnet, das Modell bekommt
+  das fertige Bild (Gesichter zuletzt), beim Übernehmen gehen die Regler im selben Schritt auf null
+  (Feineinstellungen bleiben); Strg+Z bringt Bild und Regler zusammen zurück. Nur mit Einstellungen
+  je Bild, nicht bei „Gleiche Einstellungen für alle Bilder“ mit mehreren Bildern.
 - **Rückgängig/Wiederholen** wie beim Zuschneiden: Ergebnis wird als eigener Schritt im
   Verlauf zwischengespeichert (Snapshot), Strg+Z/Strg+Y funktionieren.
 - Fortschritt + Abbrechen während der Berechnung (Tiles mit Overlap).

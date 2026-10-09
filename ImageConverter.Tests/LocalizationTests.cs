@@ -67,6 +67,7 @@ public sealed partial class LocalizationTests : IDisposable
         texts.UnionWith(vm.SizeUnits);
         texts.UnionWith(vm.Tints);
         texts.UnionWith(vm.Ai.SizeOptions);
+        texts.UnionWith(vm.Ai.OrderOptions);
         texts.UnionWith(PrintDialogViewModel.OrientationLabels);
         texts.UnionWith(PrintDialogViewModel.ModeLabels);
         texts.UnionWith(PrintDialogViewModel.ColorModeLabels);

@@ -783,3 +783,28 @@ Test oder Nachweis.
   `AiTests.EnhanceRun_StrengthLive_MatchesEnhance`; UI-Test an Familienfoto (lokal):
   Stärke 0 = Original (Abweichung 0), Übernommen = Vorschau, zweiter Lauf + Übernehmen
   = erster (nichts häuft sich), Vorher/Nachher bei offenem und übernommenem Ergebnis.
+
+## 21. KI und Einstellungen: Reihenfolge wählbar, Vorschau sprang beim Übernehmen
+
+- **Entdeckt:** 0.5.9 beta (09.10.2026). Wunsch des Benutzers: der KI wahlweise das fertig
+  eingestellte Bild geben (Gesichter zuletzt) oder erst die KI und danach die Einstellungen —
+  „doppelt soll nichts angewendet werden“. **Behoben:** 0.5.10 beta.
+- **Was:** (1) Ein offenes KI-Ergebnis wurde ohne Einstellungen gezeigt — Dunst, Helligkeit usw.
+  fehlten, bis man übernahm. (2) Beim Übernehmen sprang die Vorschau sichtbar (Laub, ~10 Stufen
+  im Mittel): das offene Ergebnis war mit Flächenmittel auf höchstens 2048 px verkleinert, die normale
+  Vorschau mit dem gewählten Filter (Lanczos) auf die Zielgröße — bzw. ohne Look das Bild selbst.
+- **Wie:** Reihenfolge im KI-Bereich. „Erst KI“: Vorschau = Ergebnis + aktueller Look
+  (`MainViewModel.RenderLookPreview`), Regler bleiben. „Erst Einstellungen“: Look in voller Größe
+  (`ImageExporter.RenderLook`, dieselbe Kette wie im Export, ohne Skalieren/Profil/Metadaten) ins
+  Eingangsbild, beim Übernehmen `ApplyImageEditAsync(…, lookAfter: Neutral)` — Regler im *selben*
+  Rückgängig-Schritt auf null (Snapshot hat den Look davor). Für einen neuen Lauf merkt sich
+  `_lastAi`, welcher Look eingerechnet ist: Lauf vom Bild davor mit diesem Look; bei „erst KI“ danach
+  kommt er beim Übernehmen in die Regler zurück. Vorschaugröße und Filter wie die normale Vorschau
+  (`AiPreviewSize`, `MainViewModel.PreviewSize`; ohne Look und bei Zielgröße = Bildgröße volle Größe).
+- **Nicht tun:** Den Look ins Bild rechnen und die Regler stehen lassen (doppelt); bei „für alle
+  Bilder“ einzeln zurücksetzen (träfe alle Bilder — deshalb gesperrt); die KI-Vorschau anders
+  verkleinern als die normale Vorschau.
+- **Nachweis:** `LookTests` (RenderLook = Export-Kette pixelgleich; Neutral ohne Wirkung, Feinwerte
+  bleiben; Schärferadius skaliert mit der Breite). UI-Test (Foto 2012, Dunst +184, Helligkeit +54,
+  CodeFormer): Hintergrund vorher/offen 0,01, offen/übernommen 0,15 („erst KI“) bzw. 0,14
+  („erst Einstellungen“), Regler danach 0 / nach Strg+Z wieder +54 / +184.

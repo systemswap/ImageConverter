@@ -177,6 +177,17 @@ public static class AiEnhancer
         }
     }
 
+    /// <summary>Auf Vorschaugröße verkleinern, genau wie die normale Vorschau (RGB verschachtelt, 0…1).</summary>
+    internal static float[] Shrink(ushort[] data, int width, int height, string mapping, AiPreviewSize size)
+    {
+        using var full = WritePixels(data, width, height, mapping);
+        using var small = ImageOps.Resize(full, size.Width, size.Height, size.Filter, size.GammaCorrect);
+        var px = ReadPixels(small, "RGB");
+        var result = new float[px.Length];
+        for (var i = 0; i < px.Length; i++) result[i] = px[i] / 65535f;
+        return result;
+    }
+
     internal static MagickImage WritePixels(ushort[] data, int width, int height, string mapping)
     {
         var bytes = new byte[data.Length * 2];

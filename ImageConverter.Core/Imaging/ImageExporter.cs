@@ -85,18 +85,35 @@ public static class ImageExporter
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
         plan?.Next();
-        var result = ImageOps.Resize(source, o.Width, o.Height, o.Filter, o.GammaCorrect);
+        var resized = ImageOps.Resize(source, o.Width, o.Height, o.Filter, o.GammaCorrect);
+        var result = RenderLook(resized, o.Denoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan);
+        if (!ReferenceEquals(result, resized)) resized.Dispose();
 
-        if (o.Denoise > 0.01)
+        plan?.Next();
+        ApplyColor(result, o.Color);
+        ApplyMetadata(result, o.Metadata);
+        result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
+        result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return result;
+    }
+
+    /// <summary>
+    /// Der Bildlook der Kette — Entrauschen → Tools (Licht, Farbe, Dunst) → Schärfen — ohne Skalieren,
+    /// Farbprofil und Metadaten. Liefert <paramref name="image"/> selbst, wenn nichts zu tun ist,
+    /// sonst ein neues 16-Bit-Bild mit denselben Profilen; <paramref name="image"/> bleibt unverändert.
+    /// </summary>
+    public static MagickImage RenderLook(MagickImage image, double denoise, Adjustments? adjustments,
+        double sharpenAmount, double sharpenSigma, WorkPlan? plan = null)
+    {
+        var result = image;
+        if (denoise > 0.01)
         {
             plan?.Next();
-            var denoised = ImageOps.Denoise(result, o.Denoise);
-            result.Dispose();
-            result = denoised;
+            result = ImageOps.Denoise(image, denoise);
         }
 
-        var adjust = o.Adjustments is { IsNone: false } a ? a : null;
-        if (adjust is not null || o.SharpenAmount > 0.01)
+        var adjust = adjustments is { IsNone: false } a ? a : null;
+        if (adjust is not null || sharpenAmount > 0.01)
         {
             // Tools und Schärfen rechnen im 32-Bit-Puffer wie die Vorschau, gelesen mit voller Tiefe (Q16)
             // und als 16-Bit-Bild zurück — gerundet wird erst beim Kodieren. Profile werden übernommen.
@@ -104,23 +121,20 @@ public static class ImageExporter
             var h = (int)result.Height;
             var pixels = Pixels.FromMagick(result);
             if (adjust is not null) pixels = Swap(pixels, Adjust.Apply(pixels, w, h, adjust, plan));
-            if (o.SharpenAmount > 0.01)
+            if (sharpenAmount > 0.01)
             {
                 plan?.Next();
-                pixels = Swap(pixels, Sharpen.UnsharpMask(pixels, w, h, o.SharpenAmount, o.SharpenSigma));
+                pixels = Swap(pixels, Sharpen.UnsharpMask(pixels, w, h, sharpenAmount, sharpenSigma));
             }
-            var processed = Pixels.ToMagick16(pixels, w, h, result.HasAlpha);
+            MagickImage processed;
+            lock (result) processed = Pixels.ToMagick16(pixels, w, h, result.HasAlpha);
             PixelPool.Return(pixels);
             CopyProfiles(result, processed);
-            result.Dispose();
+            lock (result) processed.Density = result.Density;
+            if (!ReferenceEquals(result, image)) result.Dispose();
             result = processed;
         }
 
-        plan?.Next();
-        ApplyColor(result, o.Color);
-        ApplyMetadata(result, o.Metadata);
-        result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
-        result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
         return result;
     }
 

@@ -131,7 +131,7 @@ public partial class MainViewModel
     /// Das Ergebnis wird das neue Bild; Bild und Einstellungen davor kommen
     /// als ein Schritt auf den Rückgängig-Stapel.
     /// </summary>
-    private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation)
+    private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation, Look? lookAfter = null)
     {
         if (_history is not { } h || IsEditing || _fileIndex < 0) return false;
 
@@ -149,6 +149,7 @@ public partial class MainViewModel
             _undo.Push(new Snapshot(path, source, before));
             ClearRedo();
             h.Current = result;
+            if (lookAfter is not null) SetLook(path, lookAfter);   // gehört zu diesem Schritt (Snapshot hat den Look davor)
             if (h == _history) await ShowCurrentAsync();
             return true;
         }
@@ -174,7 +175,10 @@ public partial class MainViewModel
     /// mit Rückgängig/Wiederholen wie Zuschneiden und Drehen. Abbruch über
     /// <see cref="OperationCanceledException"/> lässt das Bild unverändert. Liefert true bei Erfolg.
     /// </summary>
-    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, MagickImage> operation) => ApplyEditAsync(operation);
+    /// <param name="lookAfter">Look, der danach gilt (z. B. neutral, wenn er ins Bild gerechnet wurde) — im selben
+    /// Schritt, Rückgängig bringt Bild und Regler zusammen zurück. null: Regler bleiben.</param>
+    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, MagickImage> operation, Look? lookAfter = null) =>
+        ApplyEditAsync(operation, lookAfter);
 
     /// <summary>Das aktuelle Bild in voller Auflösung (mit allen Bearbeitungen) — nur lesen.</summary>
     internal MagickImage? CurrentImage => _history?.Current;

@@ -221,7 +221,7 @@ public class AiTests
         Assert.True(dTextured < dSmooth * 0.6, $"glatt {dSmooth:0.000}, mit Struktur {dTextured:0.000}");
 
         // Vorschau: verkleinert, aber dieselbe Richtung
-        var preview = run.Preview(1, 1, maxEdge: 150);
+        var preview = run.Preview(1, 1, AiPreviewSize.Fit(300, 300, 150));
         Assert.Equal(150, preview.Width);
         Assert.Equal(150 * 150 * 4, preview.Bgra.Length);
     }
@@ -237,8 +237,8 @@ public class AiTests
         Assert.Equal(AiEnhancer.ReadPixels(expected, "RGB"), AiEnhancer.ReadPixels(half, "RGB"));
 
         // Stärke 0 in der Vorschau = Original, Stärke 1 = schwarz
-        Assert.Contains(run.Preview(0, 0).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
-        Assert.DoesNotContain(run.Preview(1, 0).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
+        Assert.Contains(run.Preview(0, 0, new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
+        Assert.DoesNotContain(run.Preview(1, 0, new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
     }
 
     [Fact]

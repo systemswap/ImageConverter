@@ -96,7 +96,7 @@ public partial class AiViewModel : ViewModelBase
     // ------------------------------------------------------------ Lauf
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(CommitCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(CommitCommand), nameof(DiscardCommand))]
     public partial bool IsRunning { get; set; }
 
     /// <summary>Fortschritt 0…100.</summary>
@@ -104,19 +104,52 @@ public partial class AiViewModel : ViewModelBase
     [ObservableProperty] public partial string? Status { get; set; }
 
     /// <summary>
+    /// Reihenfolge von KI und Einstellungen (Dunst, Licht, Farbe, Entrauschen, Schärfe). Nie doppelt:
+    /// Entweder die KI rechnet auf dem Bild ohne sie und die Einstellungen wirken danach wie gewohnt auch auf
+    /// die Gesichter — oder sie werden vorher ins Bild gerechnet und stehen danach auf null.
+    /// </summary>
+    public IReadOnlyList<string> OrderOptions { get; } = ["Erst KI, dann Einstellungen", "Erst Einstellungen, dann KI"];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OrderHint))]
+    public partial string SelectedOrder { get; set; } = "Erst KI, dann Einstellungen";
+
+    private bool LookFirst => SelectedOrder == OrderOptions[1];
+
+    public string OrderHint => LookFirst
+        ? Tr.T("Die KI bekommt das fertig eingestellte Bild, Gesichter kommen zuletzt. Danach stehen die Regler auf null.")
+        : Tr.T("Die Einstellungen wirken danach auch auf die Gesichter und bleiben verstellbar.");
+
+    partial void OnSelectedOrderChanged(string value)
+    {
+        // das offene Ergebnis gehört zur Reihenfolge, mit der es gerechnet wurde
+        if (HasPending) Discard();
+    }
+
+    /// <summary>Wie ein Lauf aufgesetzt ist: woher er kommt, was das Modell bekommt und welcher Look danach gilt.</summary>
+    /// <param name="Base">Bildstand, den das Ergebnis ersetzt (beim Übernehmen muss er noch gelten).</param>
+    /// <param name="Input">Was das Modell bekommt: <paramref name="Base"/> oder Base mit eingerechnetem Look.</param>
+    /// <param name="Baked">Look, der in <paramref name="Input"/> steckt; null = keiner.</param>
+    /// <param name="LookAfter">Reglerstand nach dem Übernehmen; null = Regler bleiben.</param>
+    /// <param name="LookOnTop">Die Einstellungen wirken danach auf das Ergebnis — die Vorschau zeigt sie mit.</param>
+    private sealed record RunSetup(MagickImage Base, MagickImage Input, MainViewModel.Look? Baked,
+        MainViewModel.Look? LookAfter, bool LookOnTop);
+
+    /// <summary>
     /// Ergebnis des Modells, noch nicht übernommen: Stärke und Hautstruktur mischen es live neu
     /// (<see cref="IAiRun"/>), erst „Übernehmen“ macht daraus einen Bearbeitungsschritt.
     /// </summary>
     private IAiRun? _run;
-
-    /// <summary>Bildstand, auf dem <see cref="_run"/> gerechnet wurde.</summary>
-    private MagickImage? _runBase;
+    private RunSetup? _setup;
 
     /// <summary>Gefundene Gesichter des offenen Ergebnisses — für ein neues Rechnen mit anderer Natürlichkeit.</summary>
     private IReadOnlyList<DetectedFace>? _runFaces;
 
-    /// <summary>Letzter übernommener KI-Schritt: Ergebnis und Bild davor — ein neuer Lauf beginnt wieder vor der KI.</summary>
-    private (MagickImage Result, MagickImage Base)? _lastAi;
+    /// <summary>
+    /// Letzter übernommener KI-Schritt: Ergebnis, Bild davor und der dabei eingerechnete Look — ein neuer Lauf
+    /// beginnt wieder vor der KI, statt auf ihrem Ergebnis aufzubauen.
+    /// </summary>
+    private (MagickImage Result, MagickImage Base, MainViewModel.Look? Baked)? _lastAi;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CommitCommand), nameof(DiscardCommand))]
@@ -175,6 +208,24 @@ public partial class AiViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanApply))]
     private Task Apply() => ComputeAsync(rerun: false);
 
+    /// <summary>
+    /// Ausgangsbild und Look für einen neuen Lauf. Immer vom Stand vor der KI: Ist das Bild das Ergebnis des
+    /// letzten KI-Schritts, rechnet der Lauf auf dem Bild davor — KI auf KI würde Gesichter immer glatter machen.
+    /// Der Look kommt nie doppelt ins Bild.
+    /// </summary>
+    private (MagickImage Base, MainViewModel.Look Apply, MainViewModel.Look? Restore) ChooseStart(MagickImage current)
+    {
+        var look = _main.CurrentLook();
+        if (_lastAi is { } last && ReferenceEquals(current, last.Result))
+        {
+            // letzter Schritt ohne eingerechneten Look: Regler gelten wie eingestellt
+            if (last.Baked is null) return (last.Base, look, null);
+            // mit eingerechnetem Look und Reglern noch auf null: derselbe Look, vom Bild davor aus
+            if (look.IsNone) return (last.Base, last.Baked, last.Baked);
+        }
+        return (current, look, null);   // neu, oder Regler seither verstellt: vom aktuellen Bild aus
+    }
+
     private async Task ComputeAsync(bool rerun)
     {
         if (SelectedModel is not { } model || _main.CurrentImage is not { } current) return;
@@ -184,10 +235,16 @@ public partial class AiViewModel : ViewModelBase
             return;
         }
 
-        // Immer vom Stand vor der KI: Ist das Bild das Ergebnis des letzten KI-Schritts, rechnet der Lauf
-        // auf dem Bild davor — KI auf KI würde Gesichter immer glatter machen.
-        var image = rerun && _runBase is not null ? _runBase
-            : _lastAi is { } last && ReferenceEquals(current, last.Result) ? last.Base : current;
+        var lookFirst = LookFirst;
+        if (!rerun && lookFirst && _main.SettingsShared)
+        {
+            Status = Tr.T("„Erst Einstellungen“ geht nur bei Einstellungen je Bild — dazu „Gleiche Einstellungen für alle Bilder“ ausschalten.");
+            return;
+        }
+
+        RunSetup? setup = rerun ? _setup : null;
+        var start = setup is null ? ChooseStart(current) : default;
+        var image = setup?.Input ?? start.Base;
 
         var factor = SelectedSize == SizeOptions[2] ? 4 : SelectedSize == SizeOptions[1] ? 2 : 1;
         if (model.Kind == AiModelKind.Enhance
@@ -203,7 +260,6 @@ public partial class AiViewModel : ViewModelBase
         _runCts = cts;
         IsRunning = true;
         Progress = 0;
-        Status = Tr.T("Modell wird geladen …");
         var clock = Stopwatch.StartNew();
 
         var progress = new Progress<double>(f =>
@@ -220,8 +276,29 @@ public partial class AiViewModel : ViewModelBase
                 _main.OverrideBitmap = BitmapOps.FromBgra(frame.Bgra, frame.Width, frame.Height);
         });
 
+        MagickImage? rendered = null;   // eigens gerechnetes Eingangsbild — gehört uns, bis es ein Lauf übernimmt
         try
         {
+            if (setup is null)
+            {
+                if (lookFirst && !start.Apply.IsNone)
+                {
+                    // Erst die Einstellungen in voller Größe ins Bild, dann bekommt es das Modell
+                    Status = Tr.T("Einstellungen werden ins Bild gerechnet …");
+                    _main.ActivityText = Tr.T("KI · {0}", Status);
+                    var (from, apply) = (start.Base, start.Apply);
+                    rendered = await Task.Run(() => MainViewModel.RenderLook(from, apply), cts.Token);
+                    setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false);
+                }
+                else
+                {
+                    // KI zuerst; ein eingerechneter Look des letzten Schritts kommt beim Übernehmen in die Regler zurück
+                    setup = new RunSetup(start.Base, start.Base, null, start.Restore, LookOnTop: !lookFirst);
+                }
+                image = setup.Input;
+            }
+
+            Status = Tr.T("Modell wird geladen …");
             IAiRun run;
             IReadOnlyList<DetectedFace>? faces = null;
             if (model.Kind == AiModelKind.Face)
@@ -236,8 +313,9 @@ public partial class AiViewModel : ViewModelBase
                 if (faces is null)
                 {
                     _main.ActivityText = Tr.T("KI · Gesichter werden gesucht …");
+                    var input = image;
                     faces = await Task.Run(() =>
-                        AiFaces.Detect(image, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
+                        AiFaces.Detect(input, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
                 }
 
                 if (faces.Count == 0)
@@ -247,26 +325,28 @@ public partial class AiViewModel : ViewModelBase
                 }
 
                 Status = faces.Count == 1 ? Tr.T("1 Gesicht gefunden …") : Tr.T("{0} Gesichter gefunden …", faces.Count);
-                var found = faces;
-                var fidelity = Fidelity / 100;
+                var (found, input2, fidelity) = (faces, image, Fidelity / 100);
                 run = await Task.Run(() =>
                 {
                     var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model) { Fidelity = fidelity };
-                    return (IAiRun)AiFaces.Run(image, found, face, progress, cts.Token, Preview);
+                    return (IAiRun)AiFaces.Run(input2, found, face, progress, cts.Token, Preview);
                 }, cts.Token);
             }
             else
             {
+                var input = image;
                 run = await Task.Run(() =>
                 {
                     var tiles = new OnnxTileModel(_sessions.Get(model, modelPath), model);
-                    return (IAiRun)AiEnhancer.Run(image, tiles, factor, progress, cts.Token, Preview);
+                    return (IAiRun)AiEnhancer.Run(input, tiles, factor, progress, cts.Token, Preview);
                 }, cts.Token);
             }
 
             if (_main.CurrentImagePath != path) return;   // inzwischen ein anderes Bild gewählt
 
-            (_run, _runBase, _runFaces) = (run, image, faces);
+            if (!ReferenceEquals(setup, _setup)) DisposeInput(_setup);
+            (_run, _setup, _runFaces) = (run, setup, faces);
+            rendered = null;   // gehört jetzt zu _setup
             HasPending = true;
             Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
                 FormatDuration(clock.Elapsed));
@@ -281,6 +361,7 @@ public partial class AiViewModel : ViewModelBase
         }
         finally
         {
+            rendered?.Dispose();
             _runCts = null;
             IsRunning = false;
             _main.ActivityText = null;
@@ -289,9 +370,15 @@ public partial class AiViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Das eigens gerechnete Eingangsbild eines Laufs freigeben (nie das Bild aus dem Verlauf).</summary>
+    private static void DisposeInput(RunSetup? setup)
+    {
+        if (setup is not null && !ReferenceEquals(setup.Input, setup.Base)) setup.Input.Dispose();
+    }
+
     // Vorschau beim Ziehen: die letzte Anforderung gewinnt, gerechnet wird nie zweimal gleichzeitig
     private bool _previewRunning, _previewDirty;
-    private IAiRun? _beforeOf;
+    private (IAiRun Run, MainViewModel.Look? Look, AiPreviewSize Size)? _beforeOf;
 
     private void RequestPreview()
     {
@@ -305,6 +392,10 @@ public partial class AiViewModel : ViewModelBase
         _ = ShowPreviewAsync();
     }
 
+    /// <summary>Welcher Look über dem Ergebnis liegt: bei „erst KI“ die Regler (bzw. der Look, der zurückkommt).</summary>
+    private MainViewModel.Look? PreviewLook(RunSetup setup) =>
+        setup.LookOnTop ? setup.LookAfter ?? _main.CurrentLook() : null;
+
     private async Task ShowPreviewAsync()
     {
         _previewRunning = true;
@@ -313,19 +404,23 @@ public partial class AiViewModel : ViewModelBase
             do
             {
                 _previewDirty = false;
-                if (_run is not { } run) return;
-                var (strength, texture) = (Strength / 100, Texture / 100);
-                var frame = await Task.Run(() => run.Preview(strength, texture));
+                if (_run is not { } run || _setup is not { } setup) return;
+                var (strength, texture, look) = (Strength / 100, Texture / 100, PreviewLook(setup));
+                // wie die normale Vorschau: ohne Look und Größenänderung das Bild selbst, sonst verkleinert
+                var size = look is not { IsNone: false } && _main.TargetIsImageSize
+                    ? new AiPreviewSize(run.Width, run.Height)
+                    : _main.PreviewSize();
+                var shown = await Task.Run(() => Render(run.Preview(strength, texture, size), look));
                 if (ReferenceEquals(run, _run) && !IsRunning)
-                    _main.OverrideBitmap = BitmapOps.FromBgra(frame.Bgra, frame.Width, frame.Height);
+                    _main.OverrideBitmap = BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
 
-                // Vorher-Seite für „Vorher / Nachher“: dasselbe Ergebnis mit Stärke 0 = Bild vor der KI
-                if (!ReferenceEquals(_beforeOf, run))
+                // Vorher-Seite für „Vorher / Nachher“: dasselbe Ergebnis mit Stärke 0 = Bild vor der KI (mit demselben Look)
+                if (_beforeOf is not { } b || !ReferenceEquals(b.Run, run) || b.Look != look || b.Size != size)
                 {
-                    var before = await Task.Run(() => run.Preview(0, 0));
+                    var before = await Task.Run(() => Render(run.Preview(0, 0, size), look));
                     if (ReferenceEquals(run, _run))
                     {
-                        _beforeOf = run;
+                        _beforeOf = (run, look, size);
                         _main.OverrideBeforeBitmap = BitmapOps.FromBgra(before.Bgra, before.Width, before.Height);
                     }
                 }
@@ -342,20 +437,23 @@ public partial class AiViewModel : ViewModelBase
         }
     }
 
+    private static AiPreviewFrame Render(AiPixels frame, MainViewModel.Look? look) =>
+        new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look), frame.Width, frame.Height);
+
     private bool CanCommit => HasPending && !IsRunning && !_main.IsEditing;
 
     /// <summary>Ergebnis mit den aktuellen Reglern in voller Größe ins Bild — ein Schritt, rückgängig mit Strg+Z.</summary>
     [RelayCommand(CanExecute = nameof(CanCommit))]
     private async Task Commit()
     {
-        if (_run is not { } run || _runBase is not { } runBase) return;
+        if (_run is not { } run || _setup is not { } setup) return;
         var (strength, texture) = (Strength / 100, Texture / 100);
         _fidelityCts?.Cancel();
 
         // Inzwischen anders bearbeitet (Zuschnitt, Rückgängig …)? Dann passt das Ergebnis nicht mehr.
         var current = _main.CurrentImage;
-        if (!ReferenceEquals(current, runBase)
-            && !(_lastAi is { } last && ReferenceEquals(current, last.Result) && ReferenceEquals(last.Base, runBase)))
+        if (!ReferenceEquals(current, setup.Base)
+            && !(_lastAi is { } last && ReferenceEquals(current, last.Result) && ReferenceEquals(last.Base, setup.Base)))
         {
             ClearRun();
             Status = Tr.T("Das Bild wurde inzwischen geändert — bitte neu berechnen.");
@@ -364,15 +462,18 @@ public partial class AiViewModel : ViewModelBase
 
         Status = Tr.T("Wird übernommen …");
 
-        // Gerechnet wurde auf dem Stand vor der KI — das Ergebnis ersetzt das aktuelle Bild, statt darauf aufzubauen
-        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(strength, texture));
-        if (ok && _main.CurrentImage is { } result) _lastAi = (result, runBase);
+        // Gerechnet wurde auf dem Stand vor der KI — das Ergebnis ersetzt das aktuelle Bild, statt darauf aufzubauen.
+        // Steckt der Look im Ergebnis, gehen die Regler im selben Schritt auf null (nichts doppelt).
+        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(strength, texture), setup.LookAfter);
+        if (ok && _main.CurrentImage is { } result) _lastAi = (result, setup.Base, setup.Baked);
         ClearRun();
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
     }
 
+    private bool CanDiscard => HasPending && !IsRunning;
+
     /// <summary>Ergebnis verwerfen: das Bild bleibt, wie es war.</summary>
-    [RelayCommand(CanExecute = nameof(HasPending))]
+    [RelayCommand(CanExecute = nameof(CanDiscard))]
     private void Discard()
     {
         ClearRun();
@@ -382,7 +483,9 @@ public partial class AiViewModel : ViewModelBase
     private void ClearRun()
     {
         _fidelityCts?.Cancel();
-        (_run, _runBase, _runFaces, _beforeOf) = (null, null, null, null);
+        if (IsRunning) _runCts?.Cancel();   // ein Neurechnen benutzt das Eingangsbild noch — dann gibt es der GC frei
+        else DisposeInput(_setup);
+        (_run, _setup, _runFaces, _beforeOf) = (null, null, null, null);
         HasPending = false;
         _main.OverrideBitmap = null;
         _main.OverrideBeforeBitmap = null;
@@ -412,6 +515,10 @@ public partial class AiViewModel : ViewModelBase
             ApplyCommand.NotifyCanExecuteChanged();
             CommitCommand.NotifyCanExecuteChanged();
         }
+
+        // Regler oder Zielgröße verstellt, während ein Ergebnis offen ist: Vorschau mitziehen (bei „erst KI“ liegt der Look darüber)
+        if (e.PropertyName is nameof(MainViewModel.AdjustedBitmap) or nameof(MainViewModel.FullBitmap) && _setup is not null)
+            RequestPreview();
 
         // anderes Bild gewählt: Zwischenstand und offenes Ergebnis gehören nicht dazu
         if (e.PropertyName == nameof(MainViewModel.CurrentFileName))

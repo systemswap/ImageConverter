@@ -69,6 +69,15 @@
                               ToolTip.Tip="{l:T '„Größe behalten“: das Modell rechnet in vierfacher Größe und mittelt zurück — sauberer als das Original, gleich viele Pixel. Vergrößern ergänzt Details, die vorher nicht da waren.'}" />
                 </Grid>
 
+                <Grid Classes="row" ColumnDefinitions="76,*">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Reihenfolge'}" />
+                    <ComboBox Classes="tr" Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding OrderOptions}" SelectedItem="{Binding SelectedOrder}"
+                              IsEnabled="{Binding !IsRunning}"
+                              ToolTip.Tip="{l:T 'Einstellungen = Dunst, Licht, Farbe, Entrauschen und Schärfe. Sie wirken nie doppelt: entweder danach auf das KI-Ergebnis oder vorher ins Bild gerechnet.'}" />
+                </Grid>
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,2" Text="{Binding OrderHint}" />
+
                 <!-- Starten oder Fortschritt -->
                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         Margin="0,4,0,0" Content="{l:T 'KI berechnen'}"

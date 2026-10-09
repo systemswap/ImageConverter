@@ -21,8 +21,8 @@ public sealed class FaceRun : IAiRun
     private readonly MagickImage _meta;   // Profile und Auflösung des Bildes davor (1 × 1 Pixel)
     private float[]? _highPass;           // feine Struktur in voller Größe — erst beim ersten Bedarf
 
-    // Vorschau: verkleinerte Fassung und ihre feine Struktur, je Kantenlänge einmal gerechnet
-    private (int MaxEdge, int W, int H, float K, float[] Image, float[] HighPass)? _small;
+    // Vorschau: verkleinerte Fassung und ihre feine Struktur, je Vorschaugröße einmal gerechnet
+    private (AiPreviewSize Size, float K, float[] Image, float[] HighPass)? _small;
 
     internal FaceRun(MagickImage source, float[] image, ushort[] pixels, int w, int h, string mapping, int channels, IReadOnlyList<Face> faces)
     {
@@ -35,35 +35,39 @@ public sealed class FaceRun : IAiRun
         }
     }
 
+    public int Width => _w;
+    public int Height => _h;
+
     public bool SupportsTexture => true;
 
     public int FaceCount => _faces.Count;
 
-    public AiPreviewFrame Preview(double strength, double texture, int maxEdge = 2048)
+    public AiPixels Preview(double strength, double texture, AiPreviewSize size)
     {
-        var small = Small(maxEdge);
+        var small = Small(size);
+        int sw = size.Width, sh = size.Height;
         var image = (float[])small.Image.Clone();
         foreach (var face in _faces)
         {
             // Bild → Ausschnitt auf dem Maßstab der Vorschau: erst auf volle Größe zurück (÷ K)
             var t = face.ToCrop;
             var toCrop = new Similarity(t.A / small.K, t.B / small.K, t.Tx, t.Ty);
-            AiFaces.PasteBack(image, small.W, small.H, face, small.HighPass, toCrop, (float)strength, (float)texture);
+            AiFaces.PasteBack(image, sw, sh, face, small.HighPass, toCrop, (float)strength, (float)texture);
         }
 
-        var bgra = new byte[small.W * small.H * 4];
-        Parallel.For(0, small.H, y =>
+        var bgra = new float[sw * sh * 4];
+        Parallel.For(0, sh, y =>
         {
-            for (var x = 0; x < small.W; x++)
+            for (var x = 0; x < sw; x++)
             {
-                var p = y * small.W + x;
-                bgra[p * 4] = ToByte(image[p * 3 + 2]);
-                bgra[p * 4 + 1] = ToByte(image[p * 3 + 1]);
-                bgra[p * 4 + 2] = ToByte(image[p * 3]);
-                bgra[p * 4 + 3] = 255;
+                var p = y * sw + x;
+                bgra[p * 4] = Math.Clamp(image[p * 3 + 2], 0f, 1f);
+                bgra[p * 4 + 1] = Math.Clamp(image[p * 3 + 1], 0f, 1f);
+                bgra[p * 4 + 2] = Math.Clamp(image[p * 3], 0f, 1f);
+                bgra[p * 4 + 3] = 1f;
             }
         });
-        return new AiPreviewFrame(bgra, small.W, small.H);
+        return new AiPixels(bgra, sw, sh);
     }
 
     public MagickImage Compose(double strength, double texture)
@@ -87,36 +91,13 @@ public sealed class FaceRun : IAiRun
         return result;
     }
 
-    /// <summary>Verkleinerte Fassung (Flächenmittel) und ihre feine Struktur für die Vorschau.</summary>
-    private (int MaxEdge, int W, int H, float K, float[] Image, float[] HighPass) Small(int maxEdge)
+    /// <summary>Verkleinerte Fassung (wie die normale Vorschau) und ihre feine Struktur.</summary>
+    private (AiPreviewSize Size, float K, float[] Image, float[] HighPass) Small(AiPreviewSize size)
     {
-        if (_small is { } s && s.MaxEdge == maxEdge) return s;
-        var k = (float)Math.Min(1.0, maxEdge / (double)Math.Max(_w, _h));
-        int sw = Math.Max(1, (int)Math.Round(_w * k)), sh = Math.Max(1, (int)Math.Round(_h * k));
-        var small = new float[sw * sh * 3];
-        Parallel.For(0, sh, y =>
-        {
-            int ys = (int)(y / k), ye = Math.Min(_h, Math.Max(ys + 1, (int)((y + 1) / k)));
-            for (var x = 0; x < sw; x++)
-            {
-                int xs = (int)(x / k), xe = Math.Min(_w, Math.Max(xs + 1, (int)((x + 1) / k)));
-                float r = 0, g = 0, b = 0;
-                var n = 0;
-                for (var yy = ys; yy < ye; yy++)
-                for (var xx = xs; xx < xe; xx++)
-                {
-                    var i = ((long)yy * _w + xx) * 3;
-                    r += _image[i]; g += _image[i + 1]; b += _image[i + 2];
-                    n++;
-                }
-                var o = (y * sw + x) * 3;
-                (small[o], small[o + 1], small[o + 2]) = (r / n, g / n, b / n);
-            }
-        });
-        var result = (maxEdge, sw, sh, k, small, AiFaces.HighPass(small, sw, sh));
+        if (_small is { } s && s.Size == size) return s;
+        var small = AiEnhancer.Shrink(_pixels, _w, _h, _mapping, size);
+        var result = (size, (float)size.Width / _w, small, AiFaces.HighPass(small, size.Width, size.Height));
         _small = result;
         return result;
     }
-
-    private static byte ToByte(float v) => (byte)(Math.Clamp(v, 0f, 1f) * 255f + 0.5f);
 }
