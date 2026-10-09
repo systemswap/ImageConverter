@@ -158,7 +158,8 @@ public partial class MainViewModel
         MetadataByLabel.TryGetValue(SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
         ColorByLabel.TryGetValue(SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
         CurrentAdjustments(),
-        HighBitDepth && HighBitDepthAvailable);
+        HighBitDepth && HighBitDepthAvailable,
+        EffectiveColorNoise);
 
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()

@@ -134,6 +134,7 @@ public partial class MainViewModel
     {
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
         Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Neutralize = Warmth = Vibrance = Saturation = 0;
+        NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
         ResetDehazeDetails();

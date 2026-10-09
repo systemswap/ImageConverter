@@ -18,7 +18,7 @@ public sealed class WorkPlan(IProgress<WorkProgress>? sink, CancellationToken ca
 {
     // Aufwand je Megapixel in Sekunden
     internal const double ResizeCost = 0.05;
-    internal const double DenoiseCost = 0.12;
+    public const double DenoiseCost = 0.7;   // Non-Local Means auf der Helligkeit, gemessen ~0,7 s je MP
     internal const double DehazePassCost = 0.24;
     internal const double ToneMapCost = 0.15;
     internal const double ToolsCost = 0.03;

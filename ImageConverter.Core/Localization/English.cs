@@ -167,10 +167,14 @@ public static class English
         ["Strichzeichnungen und Scans"] = "line drawings and scans",
 
         // ------------------------------------------------------------ Schärfen
-        ["SCHÄRFEN & RAUSCHEN"] = "SHARPENING & NOISE",
         ["Schärfen"] = "Sharpen",
         ["Radius"] = "Radius",
         ["Rauschen"] = "Noise",
+        ["Farbrauschen"] = "Colour noise",
+        ["RAUSCHEN"] = "NOISE",
+        ["SCHÄRFEN"] = "SHARPENING",
+        ["Helligkeitsrauschen (Körnung): glättet nur, was dem gemessenen Rauschen des Fotos entspricht — Kanten, Haare, Augen bleiben. Dunkle, stark rauschende Stellen bekommen mehr, saubere fast nichts. Um 50 % ist für Handyfotos meist gut, 100 % kann Haut glätten."] = "Luminance noise (grain): smooths only what matches the measured noise of the photo — edges, hair, eyes stay. Dark, noisy areas get more, clean ones almost nothing. Around 50 % usually suits phone photos, 100 % can smooth skin.",
+        ["Bunte Punkte und Flecken: glättet nur die Farbe, an den Kanten der Helligkeit entlang — Schärfe und Helligkeit bleiben. Kleine Werte entfernen die Farbpunkte, große auch größere Farbflecken."] = "Colourful dots and blotches: smooths only the colour, along the edges of the brightness — sharpness and brightness stay. Small values remove the colour dots, large ones also bigger colour blotches.",
         ["aus"] = "off",
 
         // ------------------------------------------------------------ Tools

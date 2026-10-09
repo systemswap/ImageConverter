@@ -958,3 +958,24 @@ Test oder Nachweis.
   erscheinen in der Liste mit Kurzinfo; jedes Auge aus ändert das Bild, wieder an → identisch (0).
   Die Liste hat höchstens neun Zeilen (je Funktion eine); bei kleinem Fenster scrollt sie
   (`ScrollViewer`, höchstens 330 px) statt oben abgeschnitten zu werden.
+
+## 28. Rauschen getrennt nach Helligkeit und Farbe (statt ImageMagick-Wavelet)
+
+- **Gebaut:** 0.5.26 beta (09.10.2026), Wunsch des Benutzers: eigene Gruppe Rauschen mit Reglern für
+  normales Rauschen und Farbrauschen, Details möglichst erhalten.
+- **Wie:** `Core/Imaging/Denoiser.cs` im 32-Bit-Puffer, in Y / Cb = B − Y / Cr = R − Y. Farbrauschen:
+  Guided Filter (He u. a. 2010) auf Cb und Cr, Führung = Helligkeit, zwei Stufen (3 und 10 px im
+  Export; feine Stufe mit der Stärke, grobe mit Stärke²), Toleranz aus der gemessenen Farb-Streuung.
+  Helligkeitsrauschen: Non-Local Means (5 × 5-Umgebung, Suchfenster 9 × 9), Filterbreite je Punkt aus
+  dem Kornprofil der KI-Körnung (`FaceDetails.MeasureGrain` auf genau diesem Bild) — dunkle, verrauschte
+  Stellen mehr, saubere fast nichts. Radien mit dem Vorschau-Maßstab wie beim Schärfen. Ersetzt
+  `ImageOps.Denoise` (Wavelet) in Export, Vorschau und KI-Look. Regler 0…100 % in der neuen Gruppe
+  RAUSCHEN oben in den Tools (vorher „Schärfen & Rauschen“ im Format-Bereich, jetzt nur „Schärfen“);
+  Liste „Bearbeitungen“: Rauschen und Farbrauschen getrennt ausschaltbar.
+- **Messung** (Foto 2012, 2592 × 1944, Release): Rauschen ~3,7 s, Farbrauschen ~0,6 s, Vorschau 2048 px
+  beides ~2,4 s. Optisch: Korn auf Haut und Hintergrund weg, Wimpern, Augen, Mützenrand scharf; bei
+  100 % Rauschen wirkt Haut glatter — um 50 % für Handyfotos.
+- **Nachweis:** `DenoiserTests` (eben: Rauschen < halb, feine Streifen näher am Original; Farbe:
+  Farbrauschen < 30 %, Helligkeit unverändert; 0 = unverändert). UI-Test: beide Zeilen in der Liste,
+  Auge aus ändert das Bild, wieder an → identisch.
+- **Offen:** Helligkeits-NLM beschleunigen (gleiche Differenzen für ±Verschiebung teilen).

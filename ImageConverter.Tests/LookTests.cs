@@ -28,7 +28,7 @@ public class LookTests
             Denoise: 0.3, SharpenAmount: 0.8, SharpenSigma: 1.2, Dpi: 72, MetadataMode.KeepAll, ColorMode.KeepProfile, Look);
 
         using var exported = ImageExporter.Render(src, options);
-        using var look = ImageExporter.RenderLook(src, 0.3, Look, 0.8, 1.2);
+        using var look = ImageExporter.RenderLook(src, 0.3, 0, Look, 0.8, 1.2);
 
         Assert.NotSame(src, look);
         Assert.Equal(Pixels.FromMagick(exported), Pixels.FromMagick(look));
@@ -38,7 +38,7 @@ public class LookTests
     public void RenderLook_WithoutEffect_IsTheImageItself()
     {
         using var src = Photo();
-        Assert.Same(src, ImageExporter.RenderLook(src, 0, Adjustments.None, 0, 1));
+        Assert.Same(src, ImageExporter.RenderLook(src, 0, 0, Adjustments.None, 0, 1));
         Assert.Same(src, MainViewModel.RenderLook(src, new MainViewModel.Look(0, Adjustments.None, 0, 1, 320)));
     }
 

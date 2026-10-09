@@ -43,7 +43,8 @@ public partial class MainViewModel
         double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
         double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband, double DehazeCast,
         bool HighBitDepth,
-        EditSteps Hidden = EditSteps.None);   // ausgeblendete Bearbeitungen (Liste „Bearbeitungen“)
+        EditSteps Hidden = EditSteps.None,    // ausgeschaltete Funktionen (Liste „Bearbeitungen“)
+        double ColorNoiseReduction = 0);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -71,6 +72,7 @@ public partial class MainViewModel
         [nameof(SharpenAmount)] = "Schärfen",
         [nameof(SharpenRadius)] = "Radius",
         [nameof(NoiseReduction)] = "Rauschen",
+        [nameof(ColorNoiseReduction)] = "Farbrauschen",
         [nameof(Dehaze)] = "Dunst",
         [nameof(DehazePasses)] = "Durchläufe",
         [nameof(DehazeClarity)] = "Klarheit",
@@ -226,7 +228,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -264,6 +266,7 @@ public partial class MainViewModel
                 SharpenAmount = s.SharpenAmount;
                 SharpenRadius = s.SharpenRadius;
                 NoiseReduction = s.NoiseReduction;
+                ColorNoiseReduction = s.ColorNoiseReduction;
                 Dehaze = s.Dehaze;
                 DehazePasses = s.DehazePasses;
                 DehazeClarity = s.DehazeClarity;

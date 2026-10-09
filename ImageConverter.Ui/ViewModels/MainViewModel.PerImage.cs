@@ -158,7 +158,7 @@ public partial class MainViewModel
             s.Lossless && losslessAvailable,
             w, h,
             s.SelectedFilter.Filter, s.GammaCorrect,
-            (s.Hidden & EditSteps.Denoise) == 0 && s.NoiseReduction > 0.01 ? s.NoiseReduction : 0,
+            (s.Hidden & EditSteps.Denoise) == 0 && s.NoiseReduction > 0.005 ? s.NoiseReduction : 0,
             (s.Hidden & EditSteps.Sharpen) == 0 && s.SharpenAmount > 0.01 ? s.SharpenAmount : 0,
             s.SharpenRadius,
             s.Dpi,
@@ -171,7 +171,8 @@ public partial class MainViewModel
                 (int)Math.Round(s.DehazePasses), Math.Round(s.DehazeClarity), Math.Round(s.DehazeContrast),
                 Math.Round(s.DehazeVibrance), Math.Round(s.DehazeSharpen), Math.Round(s.DehazeEdge),
                 Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband), Math.Round(s.DehazeCast)), s.Hidden),
-            s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format));
+            s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format),
+            (s.Hidden & EditSteps.ColorNoise) == 0 && s.ColorNoiseReduction > 0.005 ? s.ColorNoiseReduction : 0);
     }
 
     // ------------------------------------------------- für das Export-Fenster

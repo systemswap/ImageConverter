@@ -14,21 +14,23 @@ public partial class MainViewModel
     /// Was die Kette außer Größe und Format aufs Bild legt: Entrauschen → Tools (Licht, Farbe, Dunst) → Schärfen.
     /// </summary>
     /// <param name="TargetWidth">Breite des Exports — der Schärferadius gilt relativ dazu.</param>
-    internal sealed record Look(double Noise, Adjustments Adjust, double SharpenAmount, double SharpenRadius, int TargetWidth)
+    internal sealed record Look(double Noise, Adjustments Adjust, double SharpenAmount, double SharpenRadius, int TargetWidth,
+        double ColorNoise = 0)
     {
-        public bool IsNone => Noise <= 0 && SharpenAmount <= 0 && Adjust.IsNone;
+        public bool IsNone => Noise <= 0 && ColorNoise <= 0 && SharpenAmount <= 0 && Adjust.IsNone;
 
         /// <summary>Schärferadius für ein Bild dieser Breite (so, dass er im Export gleich wirkt).</summary>
         public double SharpenSigma(int width) => SharpenRadius * width / Math.Max(1, TargetWidth);
 
-        /// <summary>Derselbe Look ohne Wirkung: Regler, die etwas tun, auf null; Feineinstellungen bleiben.</summary>
         /// <summary>Schritte für die Fortschrittsanzeige (Entrauschen, Dunst je Durchlauf, Licht und Farbe, Schärfen).</summary>
         public WorkPlan Plan(int width, int height, IProgress<WorkProgress>? progress, System.Threading.CancellationToken cancel) =>
-            ImageExporter.PlanLook((double)width * height / 1e6, Noise, Adjust, SharpenAmount, progress, cancel);
+            ImageExporter.PlanLook((double)width * height / 1e6, Noise, ColorNoise, Adjust, SharpenAmount, progress, cancel);
 
+        /// <summary>Derselbe Look ohne Wirkung: Regler, die etwas tun, auf null; Feineinstellungen bleiben.</summary>
         public Look Neutral() => this with
         {
             Noise = 0,
+            ColorNoise = 0,
             SharpenAmount = 0,
             Adjust = Adjust with
             {
@@ -63,7 +65,8 @@ public partial class MainViewModel
         CurrentAdjustments(),
         EffectiveSharpen,
         SharpenRadius,
-        EffectiveTarget().Width);
+        EffectiveTarget().Width,
+        EffectiveColorNoise);
 
     /// <summary>
     /// Teilen sich mehrere Bilder die Einstellungen („für alle“)? Dann lässt sich der Look nicht für
@@ -77,7 +80,7 @@ public partial class MainViewModel
         if (look.IsNone) return image;
         int width;
         lock (image) width = (int)image.Width;
-        return ImageExporter.RenderLook(image, look.Noise, look.Adjust, look.SharpenAmount, look.SharpenSigma(width), plan);
+        return ImageExporter.RenderLook(image, look.Noise, look.ColorNoise, look.Adjust, look.SharpenAmount, look.SharpenSigma(width), plan);
     }
 
     /// <summary>Look auf eine Vorschau (Pixelpuffer der Kette) rechnen und für die Anzeige runden (Hintergrund).</summary>
@@ -86,13 +89,8 @@ public partial class MainViewModel
         if (look is null || look.IsNone) return Pixels.ToBytes(bgra, dither: true);
 
         var pixels = bgra;
-        if (look.Noise > 0)
-        {
-            plan?.Next();
-            using var image = Pixels.ToMagick16(bgra, width, height, alpha: false);
-            using var denoised = ImageOps.Denoise(image, look.Noise);
-            pixels = Pixels.FromMagick(denoised);
-        }
+        if (look.Noise > 0 || look.ColorNoise > 0)
+            pixels = Denoiser.Apply(pixels, width, height, look.Noise, look.ColorNoise, (double)width / Math.Max(1, look.TargetWidth), plan);
         if (!look.Adjust.IsNone) pixels = Adjust.Apply(pixels, width, height, look.Adjust, plan);
         if (look.SharpenAmount > 0)
         {
@@ -112,6 +110,7 @@ public partial class MainViewModel
         return s with
         {
             NoiseReduction = look.Noise,
+            ColorNoiseReduction = look.ColorNoise,
             SharpenAmount = look.SharpenAmount,
             SharpenRadius = look.SharpenRadius,
             Brightness = a.Brightness, Contrast = a.Contrast, Shadows = a.Shadows, Highlights = a.Highlights,

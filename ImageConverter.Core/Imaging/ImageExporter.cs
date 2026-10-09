@@ -42,7 +42,8 @@ public sealed record ExportOptions(
     MetadataMode Metadata,
     ColorMode Color,
     Adjustments? Adjustments = null,   // Kachel „Tools“; null = keine
-    bool HighBitDepth = false);        // PNG/TIFF mit 16 Bit je Kanal (sonst 8 Bit mit Dither)
+    bool HighBitDepth = false,         // PNG/TIFF mit 16 Bit je Kanal (sonst 8 Bit mit Dither)
+    double ColorDenoise = 0);          // Farbrauschen 0…1 (Denoise = Helligkeitsrauschen)
 
 /// <summary>
 /// Die Export-Kette: Skalieren → Entrauschen → Tools (Licht, Farbe) → Schärfen → Farbprofil
@@ -86,7 +87,7 @@ public static class ImageExporter
         lock (source) sourceDepth = source.Depth;
         plan?.Next();
         var resized = ImageOps.Resize(source, o.Width, o.Height, o.Filter, o.GammaCorrect);
-        var result = RenderLook(resized, o.Denoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan);
+        var result = RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan);
         if (!ReferenceEquals(result, resized)) resized.Dispose();
 
         plan?.Next();
@@ -102,40 +103,31 @@ public static class ImageExporter
     /// Farbprofil und Metadaten. Liefert <paramref name="image"/> selbst, wenn nichts zu tun ist,
     /// sonst ein neues 16-Bit-Bild mit denselben Profilen; <paramref name="image"/> bleibt unverändert.
     /// </summary>
-    public static MagickImage RenderLook(MagickImage image, double denoise, Adjustments? adjustments,
+    public static MagickImage RenderLook(MagickImage image, double denoise, double colorDenoise, Adjustments? adjustments,
         double sharpenAmount, double sharpenSigma, WorkPlan? plan = null)
     {
-        var result = image;
-        if (denoise > 0.01)
+        var adjust = adjustments is { IsNone: false } a ? a : null;
+        var noise = denoise > 0.01 || colorDenoise > 0.01;
+        if (!noise && adjust is null && sharpenAmount <= 0.01) return image;
+
+        // Alles im 32-Bit-Puffer wie die Vorschau, gelesen mit voller Tiefe (Q16) und als 16-Bit-Bild zurück —
+        // gerundet wird erst beim Kodieren. Profile werden übernommen.
+        int w, h;
+        lock (image) (w, h) = ((int)image.Width, (int)image.Height);
+        var pixels = Pixels.FromMagick(image);
+        if (noise) pixels = Swap(pixels, Denoiser.Apply(pixels, w, h, denoise, colorDenoise, 1, plan));
+        if (adjust is not null) pixels = Swap(pixels, Adjust.Apply(pixels, w, h, adjust, plan));
+        if (sharpenAmount > 0.01)
         {
             plan?.Next();
-            result = ImageOps.Denoise(image, denoise);
+            pixels = Swap(pixels, Sharpen.UnsharpMask(pixels, w, h, sharpenAmount, sharpenSigma));
         }
-
-        var adjust = adjustments is { IsNone: false } a ? a : null;
-        if (adjust is not null || sharpenAmount > 0.01)
-        {
-            // Tools und Schärfen rechnen im 32-Bit-Puffer wie die Vorschau, gelesen mit voller Tiefe (Q16)
-            // und als 16-Bit-Bild zurück — gerundet wird erst beim Kodieren. Profile werden übernommen.
-            var w = (int)result.Width;
-            var h = (int)result.Height;
-            var pixels = Pixels.FromMagick(result);
-            if (adjust is not null) pixels = Swap(pixels, Adjust.Apply(pixels, w, h, adjust, plan));
-            if (sharpenAmount > 0.01)
-            {
-                plan?.Next();
-                pixels = Swap(pixels, Sharpen.UnsharpMask(pixels, w, h, sharpenAmount, sharpenSigma));
-            }
-            MagickImage processed;
-            lock (result) processed = Pixels.ToMagick16(pixels, w, h, result.HasAlpha);
-            PixelPool.Return(pixels);
-            CopyProfiles(result, processed);
-            lock (result) processed.Density = result.Density;
-            if (!ReferenceEquals(result, image)) result.Dispose();
-            result = processed;
-        }
-
-        return result;
+        MagickImage processed;
+        lock (image) processed = Pixels.ToMagick16(pixels, w, h, image.HasAlpha);
+        PixelPool.Return(pixels);
+        CopyProfiles(image, processed);
+        lock (image) processed.Density = image.Density;
+        return processed;
     }
 
     /// <summary>Den alten Puffer zurück in den Pool, den neuen weiterreichen (die Export-Puffer gehören nur uns).</summary>
@@ -249,11 +241,11 @@ public static class ImageExporter
     /// Fortschrittsanzeige — z. B. wenn die KI den Look vorher ins Bild rechnet oder ihn über ein Ergebnis legt.
     /// </summary>
     /// <param name="megapixels">Größe des Bildes, auf dem gerechnet wird.</param>
-    public static WorkPlan PlanLook(double megapixels, double denoise, Adjustments? adjustments, double sharpenAmount,
+    public static WorkPlan PlanLook(double megapixels, double denoise, double colorDenoise, Adjustments? adjustments, double sharpenAmount,
         IProgress<WorkProgress>? progress, CancellationToken cancel = default)
     {
         var plan = new WorkPlan(progress, cancel);
-        if (denoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * megapixels);
+        if (denoise > 0.01 || colorDenoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * megapixels);
         if (adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, megapixels);
         if (sharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * megapixels);
         return plan;
@@ -264,7 +256,7 @@ public static class ImageExporter
         var plan = new WorkPlan(progress);
         var mp = (double)o.Width * o.Height / 1e6;
         plan.Add(Tr.T("Größe anpassen"), WorkPlan.ResizeCost * Math.Max(mp, (double)source.Width * source.Height / 1e6));
-        if (o.Denoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * mp);
+        if (o.Denoise > 0.01 || o.ColorDenoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * mp);
         if (o.Adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, mp);
         if (o.SharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * mp);
         plan.Add(Tr.T("Farbprofil und Metadaten"), WorkPlan.ColorCost * mp);

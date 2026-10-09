@@ -213,10 +213,15 @@ public partial class MainViewModel
 
     [ObservableProperty] public partial double SharpenAmount { get; set; }
     [ObservableProperty] public partial double SharpenRadius { get; set; } = 1.0;
+    /// <summary>Helligkeitsrauschen 0…1 (Non-Local Means, Stärke relativ zum gemessenen Rauschen).</summary>
     [ObservableProperty] public partial double NoiseReduction { get; set; }
 
+    /// <summary>Farbrauschen 0…1 (helligkeitsgeführter Filter auf den Farbkanälen).</summary>
+    [ObservableProperty] public partial double ColorNoiseReduction { get; set; }
+
     public string SharpenLabel => SharpenAmount <= 0.01 ? Tr.T("aus") : $"{SharpenAmount:F2}";
-    public string NoiseLabel => NoiseReduction <= 0.01 ? Tr.T("aus") : $"{NoiseReduction:F2}";
+    public string NoiseLabel => NoiseReduction <= 0.005 ? Tr.T("aus") : $"{NoiseReduction * 100:0} %";
+    public string ColorNoiseLabel => ColorNoiseReduction <= 0.005 ? Tr.T("aus") : $"{ColorNoiseReduction * 100:0} %";
 
     partial void OnSharpenAmountChanged(double value)
     {
@@ -229,6 +234,12 @@ public partial class MainViewModel
     partial void OnNoiseReductionChanged(double value)
     {
         OnPropertyChanged(nameof(NoiseLabel));
+        RequestPreview();
+    }
+
+    partial void OnColorNoiseReductionChanged(double value)
+    {
+        OnPropertyChanged(nameof(ColorNoiseLabel));
         RequestPreview();
     }
 
@@ -335,7 +346,7 @@ public partial class MainViewModel
     private sealed record PreviewJob(
         MagickImage Doc, int Width, int Height,
         ResampleFilter Filter, bool Gamma,
-        double Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma);
+        (double Luma, double Chroma) Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma, double Scale);
 
     private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
 
@@ -352,10 +363,10 @@ public partial class MainViewModel
     private const int PixelCacheSize = 2;
     private const int PreparedCacheSize = 3;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
-    private readonly List<(ResizeKey Key, double Noise, float[] Pixels)> _denoisedCache = [];
+    private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, float[] Pixels)> _denoisedCache = [];
     // Dunst + Tiefen/Lichter gesondert: der teure Teil, hängt nur von diesen drei Reglern ab
-    private readonly List<(ResizeKey Key, double Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
-    private readonly List<(ResizeKey Key, double Noise, Adjustments Adjust, float[] Pixels)> _adjustedCache = [];
+    private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
+    private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments Adjust, float[] Pixels)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
 
@@ -466,10 +477,10 @@ public partial class MainViewModel
 
         var (tw, th) = EffectiveTarget();
         var resize = tw != (int)doc.Width || th != (int)doc.Height;
-        var noise = EffectiveNoise;
+        var noise = (EffectiveNoise, EffectiveColorNoise);
         var sharpen = EffectiveSharpen;
         var adjust = CurrentAdjustments();
-        if (!resize && noise == 0 && sharpen == 0 && adjust.IsNone) return null;
+        if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone) return null;
 
         // Vorschau höchstens PreviewMaxEdge groß; der Schärferadius wird
         // mitskaliert, damit er relativ zum Ergebnis gleich wirkt.
@@ -478,7 +489,7 @@ public partial class MainViewModel
         var ph = Math.Max(1, (int)Math.Round(th * scale));
 
         return new PreviewJob(doc, pw, ph, SelectedFilter.Filter, GammaCorrect,
-            noise, adjust, sharpen, SharpenRadius * scale);
+            noise, adjust, sharpen, SharpenRadius * scale, scale);
     }
 
     /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>
@@ -497,14 +508,14 @@ public partial class MainViewModel
         var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Pixels;
         if (denoised is null)
         {
-            if (job.Noise > 0)
+            denoised = ImageOps.ToDisplayPixels(resized);
+            if (job.Noise != (0, 0))
             {
-                using var d = ImageOps.Denoise(resized, job.Noise);
-                denoised = ImageOps.ToDisplayPixels(d);
-            }
-            else
-            {
-                denoised = ImageOps.ToDisplayPixels(resized);
+                // Helligkeit und Farbe getrennt; Radien mit dem Vorschau-Maßstab wie beim Export
+                plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * job.Width * job.Height / 1e6);
+                var clean = Denoiser.Apply(denoised, job.Width, job.Height, job.Noise.Luma, job.Noise.Chroma, job.Scale, plan);
+                PixelPool.Return(denoised);
+                denoised = clean;
             }
             AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Pixels: denoised), null, PixelCacheSize);
         }

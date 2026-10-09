@@ -24,6 +24,7 @@ public enum EditSteps
     MatchColor = 64,
     Sharpen = 128,
     SkinDetails = 256,
+    ColorNoise = 512,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
@@ -103,7 +104,8 @@ public partial class MainViewModel
         return a;
     }
 
-    private double EffectiveNoise => Shows(EditSteps.Denoise) && NoiseReduction > 0.01 ? NoiseReduction : 0;
+    private double EffectiveNoise => Shows(EditSteps.Denoise) && NoiseReduction > 0.005 ? NoiseReduction : 0;
+    private double EffectiveColorNoise => Shows(EditSteps.ColorNoise) && ColorNoiseReduction > 0.005 ? ColorNoiseReduction : 0;
     private double EffectiveSharpen => Shows(EditSteps.Sharpen) && SharpenAmount > 0.01 ? SharpenAmount : 0;
 
     // ------------------------------------------------------------ Bildschritte
@@ -296,8 +298,10 @@ public partial class MainViewModel
 
             if (TargetWidth != SourceWidth || TargetHeight != SourceHeight)
                 rows.Add(Row(EditSteps.Resize, Tr.T("Größe"), $"{TargetWidth} × {TargetHeight} px"));
-            if (NoiseReduction > 0.01)
-                rows.Add(Row(EditSteps.Denoise, Tr.T("Rauschen"), $"{NoiseReduction:0.00}"));
+            if (NoiseReduction > 0.005)
+                rows.Add(Row(EditSteps.Denoise, Tr.T("Rauschen"), $"{NoiseReduction * 100:0} %"));
+            if (ColorNoiseReduction > 0.005)
+                rows.Add(Row(EditSteps.ColorNoise, Tr.T("Farbrauschen"), $"{ColorNoiseReduction * 100:0} %"));
             if (Math.Round(Dehaze) != 0)
                 rows.Add(Row(EditSteps.Dehaze, Tr.T("Dunst"), $"{Math.Round(Dehaze):+0;−0} · {Math.Round(DehazePasses)}×"));
             AddIfAny(rows, EditSteps.Light, Tr.T("Licht"),
@@ -377,6 +381,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Resize) != 0) s = s with { TargetWidth = s.SourceWidth, TargetHeight = s.SourceHeight,
             PrintWidthIn = s.SourceWidth / (double)Math.Max(1, s.Dpi), PrintHeightIn = s.SourceHeight / (double)Math.Max(1, s.Dpi) };
         if ((hidden & EditSteps.Denoise) != 0) s = s with { NoiseReduction = 0 };
+        if ((hidden & EditSteps.ColorNoise) != 0) s = s with { ColorNoiseReduction = 0 };
         if ((hidden & EditSteps.Dehaze) != 0) s = s with { Dehaze = 0 };
         if ((hidden & EditSteps.Light) != 0) s = s with { Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0 };
         if ((hidden & EditSteps.Color) != 0) s = s with { Saturation = 0, Vibrance = 0, SelectedTint = TintLabels[0].Label };

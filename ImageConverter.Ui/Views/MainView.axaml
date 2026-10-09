@@ -502,7 +502,7 @@
                     </HeaderedContentControl>
 
                     <!-- ============================== Schärfen (wirkt als letzter Schritt, auch auf das KI-Ergebnis) -->
-                    <HeaderedContentControl Header="{l:T 'SCHÄRFEN &amp; RAUSCHEN'}">
+                    <HeaderedContentControl Header="{l:T 'SCHÄRFEN'}">
                         <StackPanel>
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Schärfen'}" />
@@ -520,13 +520,6 @@
                                            Text="{Binding SharpenRadius, StringFormat='{}{0:F1}'}" />
                             </Grid>
 
-                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Rauschen'}" />
-                                <Slider Grid.Column="1" Minimum="0" Maximum="3"
-                                        Value="{Binding NoiseReduction}" />
-                                <TextBlock Grid.Column="2" Classes="value"
-                                           Text="{Binding NoiseLabel}" />
-                            </Grid>
                         </StackPanel>
                     </HeaderedContentControl>
 
@@ -537,6 +530,24 @@
 
                     <!-- ############################## Rubrik Tools — je Funktion ein Regler -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
+                        <!-- Rauschen zuerst — wie in der Kette, vor Dunst und Licht (die es sonst verstärken) -->
+                        <HeaderedContentControl Header="{l:T 'RAUSCHEN'}">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Rauschen'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding NoiseReduction}"
+                                            ToolTip.Tip="{l:T 'Helligkeitsrauschen (Körnung): glättet nur, was dem gemessenen Rauschen des Fotos entspricht — Kanten, Haare, Augen bleiben. Dunkle, stark rauschende Stellen bekommen mehr, saubere fast nichts. Um 50 % ist für Handyfotos meist gut, 100 % kann Haut glätten.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding NoiseLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbrauschen'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding ColorNoiseReduction}"
+                                            ToolTip.Tip="{l:T 'Bunte Punkte und Flecken: glättet nur die Farbe, an den Kanten der Helligkeit entlang — Schärfe und Helligkeit bleiben. Kleine Werte entfernen die Farbpunkte, große auch größere Farbflecken.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ColorNoiseLabel}" />
+                                </Grid>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
                         <HeaderedContentControl Header="{l:T 'LICHT'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
