@@ -737,3 +737,11 @@ Test oder Nachweis.
   davon auch Wärme weg (92° → 107° bei 100 %, 97° bei 50 %). Ein Test mit überall
   gleich dichtem Dunst zeigte keine Wirkung — ohne dunstfreien Bezug schätzt der Filter
   die Dunstfarbe aus dem Bild selbst; Testbilder brauchen nach oben zunehmenden Dunst.
+- **Farbverlauf im Regler „Dunstfarbe“ (0.5.6 beta):** Ein fester Verlauf (orange → blau)
+  wäre nur bei warmem Dunst richtig — bei bläulichem wirkt der Regler umgekehrt. Darum
+  zeigt der Verlauf links die geschätzte Dunstfarbe des Bildes (Mittel des Luftlichts,
+  `Prepared.Haze`), rechts ihre Gegenfarbe (`Adjust.HazeGradient`, Oklab gleich hell);
+  grau, solange keine Vorschau mit Dunst gerechnet ist. Eigene Spur des Reglers
+  durchsichtig (`Slider.verlauf`). Oberflächentests ohne den Mauszeiger des Benutzers:
+  Klicks als Fensternachrichten (`PostMessage` WM_LBUTTONDOWN/UP, WM_MOUSEWHEEL) an die
+  eigene Instanz, Bild mit `PrintWindow` — funktioniert mit Avalonia.

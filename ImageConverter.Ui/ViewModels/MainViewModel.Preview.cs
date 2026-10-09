@@ -297,7 +297,7 @@ public partial class MainViewModel
         ResampleFilter Filter, bool Gamma,
         double Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma);
 
-    private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
+    private sealed record PreviewResult(byte[] Bgra, int Width, int Height, float[]? Haze = null);
 
     private Task _renderTask = Task.CompletedTask;
     private bool _renderRunning;
@@ -367,6 +367,7 @@ public partial class MainViewModel
                 // rechnet ohnehin neu (RequestPreview hat _renderDirty gesetzt)
                 if (!ReferenceEquals(job.Doc, _history?.Current)) continue;
                 SetAdjusted(BitmapOps.FromBgra(result.Bgra, result.Width, result.Height));
+                if (result.Haze is not null) SetHazeGradient(result.Haze);
             }
             while (_renderDirty);
         }
@@ -466,6 +467,7 @@ public partial class MainViewModel
 
         // 3) Tools (Licht, Farbe) — schnell, nur bei geänderten Reglern neu
         var adjusted = denoised;
+        float[]? haze = null;   // Dunstfarbe für den Verlauf im Regler
         if (!job.Adjust.IsNone)
         {
             adjusted = Cached(_adjustedCache, e => e.Key == key && e.Noise == job.Noise && e.Adjust == job.Adjust)?.Pixels;
@@ -484,6 +486,7 @@ public partial class MainViewModel
                 {
                     plan.Add(Tr.T("Licht und Farbe"), 1);
                 }
+                haze = prepared.Haze;
                 adjusted = Adjust.Apply(prepared, job.Width, job.Height, j, plan);
                 AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Pixels: adjusted), null, PixelCacheSize);
             }
@@ -498,7 +501,7 @@ public partial class MainViewModel
         var bgra = Pixels.ToBytes(final, dither: true);
         // Die Zwischenstände dieser Rechnung (Dunst-Durchläufe …) sollen nicht belegt bleiben
         PixelPool.Trim();
-        return new PreviewResult(bgra, job.Width, job.Height);
+        return new PreviewResult(bgra, job.Width, job.Height, haze);
     }
 
     /// <summary>Treffer nach vorn holen (zuletzt benutzt bleibt am längsten).</summary>

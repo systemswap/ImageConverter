@@ -249,6 +249,16 @@
         <Setter Property="Margin" Value="0,-4" />
     </Style>
 
+    <!-- Regler mit Farbverlauf dahinter (Dunstfarbe): eigene Spur durchsichtig, in jedem Zustand -->
+    <Style Selector="Slider.verlauf /template/ RepeatButton#PART_DecreaseButton,
+                     Slider.verlauf /template/ RepeatButton#PART_IncreaseButton,
+                     Slider.verlauf:pointerover /template/ RepeatButton#PART_DecreaseButton,
+                     Slider.verlauf:pointerover /template/ RepeatButton#PART_IncreaseButton,
+                     Slider.verlauf:pressed /template/ RepeatButton#PART_DecreaseButton,
+                     Slider.verlauf:pressed /template/ RepeatButton#PART_IncreaseButton">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
     <!-- Kettensymbol: an = Akzentfarbe -->
     <Style Selector="ToggleButton.chain">
         <Setter Property="Background" Value="Transparent" />
