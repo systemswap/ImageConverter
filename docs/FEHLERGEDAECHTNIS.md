@@ -1000,3 +1000,8 @@ Test oder Nachweis.
   (Wärme + Kontrast) ΔE 0,04–0,05, sonst ≈. Die ✗ bei RauschenSchaerfen (Stufen) kommen vom neuen
   Entrauscher aus 0.5.26 (glättet flache Stellen stärker), die bei KombiPanorama (Ferne) aus den
   Dunst-Änderungen seit 0.5.0 — beide Fälle nutzen weder Gleiche Farbe noch Vergrößern.
+- **Meilenstein 0.5.28 (09.10.2026):** Stand 0.5.27 beta — Rauschen und Farbrauschen (Non-Local Means,
+  helligkeitsgeführter Farbfilter) und die neue Reihenfolge der Kette vom Benutzer als gut befunden.
+  Hinweis aus der Prüfung: Die Vorschau rechnet höchstens 2048 px; beim Hineinzoomen (120 %) wirkt schon
+  ein kleiner Reglerwert wie Weichzeichnen, weil die Anzeige vom Original auf die Vorschau wechselt —
+  nicht der Filter. Angeboten: sichtbaren Ausschnitt beim Zoomen in voller Auflösung rechnen.
