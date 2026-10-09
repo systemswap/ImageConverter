@@ -954,6 +954,9 @@
                                 <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'BEARBEITUNGEN'}" />
                                 <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasEditRows}"
                                            Text="{l:T 'Noch keine Bearbeitungen an diesem Bild.'}" />
+                                <!-- höchstens neun Zeilen (je Funktion eine); bei kleinem Fenster scrollen statt abschneiden -->
+                                <ScrollViewer MaxHeight="330"
+                                              HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                 <ItemsControl ItemsSource="{Binding EditRows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:EditRow">
@@ -978,6 +981,7 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                </ScrollViewer>
                                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         IsVisible="{Binding HasEditRows}"
                                         Content="{l:T 'Neu anwenden'}" Command="{Binding ApplySelectionCommand}"

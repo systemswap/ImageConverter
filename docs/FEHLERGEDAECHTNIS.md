@@ -953,3 +953,8 @@ Test oder Nachweis.
   gespiegelt → Liste KI / Haut & Details / Dunst; KI an: Gesicht 3,9 Stufen, Haut & Details an:
   1,9 Stufen, Hintergrund 0,01; zentrale Anzeige mit „KI · 50 % · noch ca. 15 s“ und Abbrechen, danach
   „Dunst entfernen – Durchlauf 5 von 6“.
+- **Nachtrag 0.5.25 beta:** UI-Test aller Funktionsgruppen am Familienfoto (Größe 800 × 600,
+  Rauschen 0,69, Helligkeit +42, Sättigung +66, Gleiche Farbe „Farbe“ +42, Schärfen 1,05): alle sechs
+  erscheinen in der Liste mit Kurzinfo; jedes Auge aus ändert das Bild, wieder an → identisch (0).
+  Die Liste hat höchstens neun Zeilen (je Funktion eine); bei kleinem Fenster scrollt sie
+  (`ScrollViewer`, höchstens 330 px) statt oben abgeschnitten zu werden.
