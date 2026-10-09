@@ -713,3 +713,9 @@ Test oder Nachweis.
   Farben — der Himmel sah nach starken Treppen aus, in beiden Fassungen, obwohl
   die Einzelbilder glatt waren. Stapel als JPEG schreiben; bei Treppen im Vergleich
   immer zuerst das Einzelbild ansehen.
+- **Meilenstein 0.5.0 (09.10.2026):** Neubau der Bildkette Phasen 0–4 (32 Bit,
+  Pufferpool, Szenenkarte, Dunst in Physik und Look getrennt), vom Benutzer als
+  Meilenstein bestimmt. Im Bild bei den Vorgaben bewusst wie 0.4.45. Neue Referenz:
+  Exe unter `%LOCALAPPDATA%\imageconverter-build\publish-050\`, Abnahme-Referenz
+  `abnahme/0.5.0`. Linux-Bau noch offen. Hinweis zum Hook: Er zählt bei „-beta“ nur
+  die Zahl hoch und verliert den Zusatz — Version immer von Hand setzen.

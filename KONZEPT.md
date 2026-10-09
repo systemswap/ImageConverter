@@ -437,9 +437,12 @@ aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-
   nicht erreicht. Offen: Local Laplacian (Speicherzugriff), Farbumrechnung je Pixel im Dunst,
   Entstufen (Speicherlatenz). Vorschau bricht zwischen Schritten ab und zeigt den Schritt.
 - Phase 3 ✓ — `SceneMap`, Bild byte-gleich.
-- Phase 4 ✓ (Abnahme durch den Benutzer offen) — `DehazeLook`; Vorgaben auf 0.4.45 abgestimmt
+- Phase 4 ✓ — `DehazeLook`; Vorgaben auf 0.4.45 abgestimmt
   (ΔE 0,3–0,7 bei Dunst 100), Luftlicht aus überlappenden Fenstern; das Luftlicht war schon
   dreistufig (Bild → 8 Streifen → 6 × 4 Kacheln, jede Stufe nur begrenzte Korrektur).
+- Phase 5 — **Meilenstein 0.5.0** (vom Benutzer am 09.10.2026 als Meilenstein bestimmt): Doku und
+  Zip-Sicherung erledigt; der Linux-Bau (`./publish.sh linux` auf dem Debian-Rechner) steht noch aus.
+  0.5.0 ist die neue Referenz für Abnahme und Vergleich.
 
 **Abnahme-Werkzeug** (`tools/Abnahme`, nicht in der Solution): Arbeitsordner
 `<LocalAppData>/imageconverter-build/abnahme` (oder `IC_ABNAHME`) mit `abnahme.json`
