@@ -745,3 +745,8 @@ Test oder Nachweis.
   verständlich. Dichten Dunst/Smog nicht weiter verfolgen (Benutzer: dort ist keine
   Information mehr herzustellen). Abnahme: neuer Fall „NutzerPanorama“ (Dunst 54 × 7,
   Schärfe fein 29 %, Kanten 13 %, Dunstfarbe 48 % — vom Benutzer als sehr gut befunden).
+- **Meilenstein 0.5.8 (09.10.2026):** Stand 0.5.7 beta als Meilenstein — Dunst mit
+  Physik/Look getrennt, Regler Dunstfarbe (Vorgabe 50 %, fester Verlauf warm → kühl),
+  Auswahlwerkzeug-Knopf, Verschieben mit Strg + Ziehen. Danach: KI live mischen
+  (Stärke/Hautstruktur ohne neues Rechnen), Natürlichkeit für CodeFormer, weitere
+  Gesichtsmodelle; DiffBIR/SUPIR als Versuch für später mit Grafikkarte.
