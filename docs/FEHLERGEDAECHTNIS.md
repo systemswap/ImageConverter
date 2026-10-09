@@ -855,3 +855,5 @@ Test oder Nachweis.
   (Stärke, Hautstruktur, Natürlichkeit), Übernehmen/Verwerfen, kein Aufhäufen, Reihenfolge KI ↔
   Einstellungen, GFPGAN 1.3 und RestoreFormer++, neue Bilder beginnen wie nach dem Start und je Bild,
   DPI aus der Datei auch für nie angezeigte Bilder. Dunst-Filter unverändert seit 0.5.8.
+- **Meilenstein 0.5.18 (09.10.2026):** Stand 0.5.17 beta (Stärke-Tooltip als Deckkraft) als Meilenstein
+  vor den Detailreglern „Falten \& Züge“ und „Körnung angleichen“.
