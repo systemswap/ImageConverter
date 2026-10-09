@@ -888,3 +888,7 @@ Test oder Nachweis.
 - **Nachweis:** `FaceDetailsTests` (Falten auf Haut ≥ 30 % näher am Original, am Auge unverändert;
   Kornmessung weiß und grob; Körnung füllt bis zum Foto auf; nichts, wenn das Gesicht schon körnig
   ist). Vergleichsbögen an Familienfotos (lokal, nicht im Repo).
+- **Meilenstein 0.5.20 (09.10.2026):** Stand 0.5.19 beta — KI-Detailregler (Falten, Körnung, Korngröße,
+  Karte) vom Benutzer am Foto 172251 als gut befunden: GFPGAN Stärke 80, Hautstruktur 69, Falten 48,
+  Körnung 31, Korngröße ×0,46, erst KI; Dunst 47 × 6, Klarheit 29, Kontrast 12, Dynamik 20, Schärfe fein 18,
+  Kanten aus, Helligkeit 72, Entstufen 50, Dunstfarbe 50.
