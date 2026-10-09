@@ -208,6 +208,40 @@
         <Setter Property="Stroke" Value="White" />
     </Style>
 
+    <!-- Auge in der Liste „Bearbeitungen“: offen = Bearbeitung wirkt, durchgestrichen = ausgeblendet -->
+    <Style Selector="ToggleButton.eye">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.eye:checked /template/ ContentPresenter,
+                     ToggleButton.eye:checked:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.eye:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.eye Path">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{DynamicResource TextMutedBrush}" />
+        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+    </Style>
+    <Style Selector="ToggleButton.eye:checked Path">
+        <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.eye:disabled">
+        <Setter Property="Opacity" Value="0.35" />
+    </Style>
+
     <!-- Flache Textbuttons in der Werkzeugleiste (Rückgängig/Wiederholen) -->
     <Style Selector="Button.tool">
         <Setter Property="Background" Value="Transparent" />

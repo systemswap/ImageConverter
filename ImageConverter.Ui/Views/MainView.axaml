@@ -936,9 +936,60 @@
                                      VerticalAlignment="Top" Height="3" MinHeight="3"
                                      CornerRadius="0" />
 
+                        <!-- Liste „Bearbeitungen“: je Bearbeitung eine Zeile in Rechen-Reihenfolge, das Auge blendet sie
+                             aus „Nachher“ und dem Export aus. Symbol nach Lucide layers (ISC-Lizenz). -->
+                        <ToggleButton Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12"
+                                      IsVisible="{Binding HasImage}"
+                                      IsChecked="{Binding ShowEditList}"
+                                      ToolTip.Tip="{l:T 'Bearbeitungen: Liste aller Bearbeitungen dieses Bildes. Mit dem Auge eine Bearbeitung aus „Nachher“ und dem Export ausblenden.'}">
+                            <Path Data="M 12,2 L 2,7 L 12,12 L 22,7 Z M 2,12 L 12,17 L 22,12 M 2,17 L 12,22 L 22,17" />
+                        </ToggleButton>
+
+                        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                Margin="12,12,12,62" Padding="12,10" Width="330" CornerRadius="10"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                IsVisible="{Binding ShowEditList}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'BEARBEITUNGEN'}" />
+                                <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasEditRows}"
+                                           Text="{l:T 'Noch keine Bearbeitungen an diesem Bild.'}" />
+                                <ItemsControl ItemsSource="{Binding EditRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:EditRow">
+                                            <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                                                <!-- Auge: offen = fließt in Nachher und Export ein. Lucide eye / eye-off (ISC). -->
+                                                <ToggleButton Grid.Column="0" Classes="eye" VerticalAlignment="Center"
+                                                              IsChecked="{Binding Shown}" IsEnabled="{Binding CanHide}"
+                                                              ToolTip.ShowOnDisabled="True" ToolTip.Tip="{Binding Note}">
+                                                    <Panel>
+                                                        <Path IsVisible="{Binding Shown}"
+                                                              Data="M 2,12 C 4.5,6.5 19.5,6.5 22,12 C 19.5,17.5 4.5,17.5 2,12 Z M 12,9 A 3,3 0 1 0 12,15 A 3,3 0 1 0 12,9 Z" />
+                                                        <Path IsVisible="{Binding !Shown}"
+                                                              Data="M 2,12 C 4.5,6.5 19.5,6.5 22,12 C 19.5,17.5 4.5,17.5 2,12 Z M 3,3 L 21,21" />
+                                                    </Panel>
+                                                </ToggleButton>
+                                                <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="hint" FontSize="11" Text="{Binding Detail}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        IsVisible="{Binding HasEditRows}"
+                                        Content="{l:T 'Neu anwenden'}" Command="{Binding ApplySelectionCommand}"
+                                        ToolTip.Tip="{l:T 'Nur die angehakten Bearbeitungen festschreiben: ausgeblendete Regler gehen auf null, eine ausgeblendete KI kommt aus dem Bild. Rückgängig mit Strg+Z.'}" />
+                                <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding HasEditRows}"
+                                           Text="{l:T 'Ausgeblendetes fehlt in „Nachher“ und im Export. Zuschnitt und Drehen lassen sich nur mit Rückgängig zurücknehmen.'}" />
+                            </StackPanel>
+                        </Border>
+
                         <!-- Erscheint nur, wenn eine Vorschau-Berechnung spürbar dauert -->
                         <Border VerticalAlignment="Bottom" HorizontalAlignment="Right"
-                                Margin="12" Padding="10,4" CornerRadius="999"
+                                Margin="12,12,64,12" Padding="10,4" CornerRadius="999"
                                 Background="{DynamicResource SurfaceBrush}"
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                 IsVisible="{Binding ShowRendering}" IsHitTestVisible="False">

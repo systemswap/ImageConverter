@@ -42,7 +42,8 @@ public partial class MainViewModel
         int SourceWidth, int SourceHeight,   // Bildgröße, für die dieser Stand gilt
         double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
         double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband, double DehazeCast,
-        bool HighBitDepth);
+        bool HighBitDepth,
+        EditSteps Hidden = EditSteps.None);   // ausgeblendete Bearbeitungen (Liste „Bearbeitungen“)
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -95,6 +96,7 @@ public partial class MainViewModel
         [nameof(SelectedColorMode)] = null,
         [nameof(OutputFolder)] = "Ordner",
         [nameof(NamePattern)] = "Dateiname",
+        [nameof(HiddenSteps)] = null,
     };
 
     /// <summary>
@@ -119,7 +121,10 @@ public partial class MainViewModel
     {
         base.OnPropertyChanged(e);
         if (e.PropertyName is { } name && TrackedSettings.ContainsKey(name))
+        {
             OnSettingChanged(name);
+            RequestEditRows();   // Liste „Bearbeitungen“ folgt den Reglern
+        }
     }
 
     private void OnSettingChanged(string name)
@@ -221,7 +226,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth);
+        HighBitDepth, HiddenSteps);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -284,6 +289,7 @@ public partial class MainViewModel
                 SelectedColorMode = s.SelectedColorMode;
                 OutputFolder = s.OutputFolder;
                 NamePattern = s.NamePattern;
+                HiddenSteps = s.Hidden;
             }
             finally
             {

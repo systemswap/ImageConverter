@@ -908,3 +908,24 @@ Test oder Nachweis.
   geht (Modell, Natürlichkeit, Größe, Reihenfolge), dann KI berechnen und Fortschritt, ein dezenter
   Strich, darunter, was danach live wirkt (Stärke, Hautstruktur, Falten, Körnung, Korngröße,
   Karte); alle immer sichtbar, nicht passende ausgegraut (Tooltip „Nur …“ auch ausgegraut).
+
+## 26. Liste „Bearbeitungen“: je Bearbeitung eine Zeile, Auge blendet aus Nachher und Export aus
+
+- **Gebaut:** 0.5.23 beta (09.10.2026), Wunsch des Benutzers: Liste mit Augensymbol, was in „Nachher“
+  einfließt; nicht jede Reglerbewegung, sondern je Bearbeitung in Rechen-Reihenfolge; beim Export nur
+  das Angehakte; „Neu anwenden“ schreibt die Auswahl fest. Knopf unten rechts in der Vorschau.
+- **Wie:** `MainViewModel.Edits.cs`. Einstellungen: `HiddenSteps` (Flags, Teil von `SettingsState`,
+  also je Bild, mit Rückgängig, beim Export über `OptionsFor`/`EffectiveTarget(s)` beachtet) — die
+  Regler behalten ihre Werte, `Mask` nimmt sie nur aus der Kette (Größe, Rauschen, Dunst, Licht, Farbe,
+  Gleiche Farbe, Schärfe; Gruppen wie die Überschriften im Tools-Bereich). Bildschritte: jeder
+  `Snapshot` kennt jetzt seinen Schritt (`ImageStep`: Art, Name, Kurzinfo, Wiederholen); Zuschnitt,
+  Drehen, Spiegeln sind wiederholbar, die KI nicht. KI ausblenden = Bild vor dem ersten KI-Schritt plus
+  die späteren Schritte noch einmal (`DocumentFor`, je Datei zwischengespeichert) — nur wenn die KI die
+  Größe behielt und danach nur Wiederholbares kam. Zuschnitt/Drehen selbst nicht ausblendbar (die KI
+  wurde darauf gerechnet). „Neu anwenden“: ausgeblendete Regler auf null, ausgeblendete KI aus dem
+  Bild — ein Schritt; danach zählt die KI vor „Auswahl angewendet“ nicht mehr (`FirstLiveAi`).
+- **Grenze:** YuNet findet keine seitlich liegenden Gesichter — erst KI, dann drehen.
+- **Nachweis:** `EditListTests` (Export ohne Ausgeblendetes, Regler behalten Wert; Farbgruppen getrennt;
+  Neu anwenden setzt genau das Ausgeblendete zurück; Auge ist ein Rückgängig-Schritt). UI-Test:
+  KI aus → Gesicht ändert sich (3,7 Stufen), Hintergrund gleich (0); drehen danach → KI bleibt
+  ausblendbar; Neu anwenden → „Auswahl angewendet – ohne KI“; Rückgängig → wieder ausgeblendet.

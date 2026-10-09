@@ -226,6 +226,12 @@ public partial class MainViewModel
     /// </summary>
     private (int Width, int Height) EffectiveTarget()
     {
+        if (!Shows(EditSteps.Resize)) return (Math.Max(1, SourceWidth), Math.Max(1, SourceHeight));   // Größe ausgeblendet
+        return EffectiveResize();
+    }
+
+    private (int Width, int Height) EffectiveResize()
+    {
         var w = Math.Max(1, TargetWidth);
         var h = Math.Max(1, TargetHeight);
         if (!DoNotEnlarge || (w <= SourceWidth && h <= SourceHeight)) return (w, h);

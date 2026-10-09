@@ -19,7 +19,7 @@ public partial class MainViewModel
     /// </summary>
     private sealed record Snapshot(string? FilePath, MagickImage? Image, SettingsState Settings,
         bool? ApplyToAll = null, IReadOnlyDictionary<string, SettingsState>? FileSettings = null,
-        SettingsState? Template = null);
+        SettingsState? Template = null, MainViewModel.ImageStep? Step = null);
 
     /// <summary>Das Bild einer Datei: Original und aktueller Stand.</summary>
     private sealed class EditHistory(MagickImage original)
@@ -56,6 +56,7 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
+        RequestEditRows();
         RedoCommand.NotifyCanExecuteChanged();
         NotifyCompare();
     }
@@ -112,26 +113,39 @@ public partial class MainViewModel
     {
         if (CropSelection is not { } sel) return Task.CompletedTask;
         var radius = CornerRadius;
-        return ApplyEditAsync(img => ImageOps.Crop(img,
-            (int)Math.Round(sel.X), (int)Math.Round(sel.Y),
-            (int)Math.Round(sel.Width), (int)Math.Round(sel.Height), radius));
+        var (x, y, w, h) = ((int)Math.Round(sel.X), (int)Math.Round(sel.Y), (int)Math.Round(sel.Width), (int)Math.Round(sel.Height));
+        MagickImage Crop(MagickImage img) => ImageOps.Crop(img, x, y, w, h, radius);
+        return ApplyEditAsync(Crop, null, new ImageStep(ImageStepKind.Crop, Tr.T("Zuschnitt"), $"{w} × {h} px", Crop));
     }
 
     [RelayCommand(CanExecute = nameof(HasImage))]
-    private Task RotateLeft() => ApplyEditAsync(img => ImageOps.Rotate90(img, clockwise: false));
+    private Task RotateLeft()
+    {
+        static MagickImage Rotate(MagickImage img) => ImageOps.Rotate90(img, clockwise: false);
+        return ApplyEditAsync(Rotate, null, new ImageStep(ImageStepKind.Rotate, Tr.T("Links gedreht"), "90°", Rotate));
+    }
 
     [RelayCommand(CanExecute = nameof(HasImage))]
-    private Task RotateRight() => ApplyEditAsync(img => ImageOps.Rotate90(img, clockwise: true));
+    private Task RotateRight()
+    {
+        static MagickImage Rotate(MagickImage img) => ImageOps.Rotate90(img, clockwise: true);
+        return ApplyEditAsync(Rotate, null, new ImageStep(ImageStepKind.Rotate, Tr.T("Rechts gedreht"), "90°", Rotate));
+    }
 
     [RelayCommand(CanExecute = nameof(HasImage))]
-    private Task FlipHorizontal() => ApplyEditAsync(ImageOps.FlipHorizontal);
+    private Task FlipHorizontal() =>
+        ApplyEditAsync(ImageOps.FlipHorizontal, null,
+            new ImageStep(ImageStepKind.Flip, Tr.T("Gespiegelt"), Tr.T("links ↔ rechts"), ImageOps.FlipHorizontal));
 
     /// <summary>
     /// Ein Bearbeitungsschritt auf dem echten Bild (ImageMagick, im Hintergrund).
     /// Das Ergebnis wird das neue Bild; Bild und Einstellungen davor kommen
     /// als ein Schritt auf den Rückgängig-Stapel.
     /// </summary>
-    private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation, Look? lookAfter = null)
+    /// <param name="settingsAfter">Einstellungen danach (z. B. Look auf null) — im selben Schritt; null: bleiben.</param>
+    /// <param name="step">Was der Schritt war — für die Liste „Bearbeitungen“ (und zum Wiederholen auf anderem Bild).</param>
+    private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation,
+        Func<SettingsState, SettingsState>? settingsAfter, ImageStep step)
     {
         if (_history is not { } h || IsEditing || _fileIndex < 0) return false;
 
@@ -146,10 +160,10 @@ public partial class MainViewModel
             var result = await Task.Run(() => operation(source));
 
             await StopPreviewAsync();   // Wiederholen-Bilder könnten gerade gelesen werden
-            _undo.Push(new Snapshot(path, source, before));
+            _undo.Push(new Snapshot(path, source, before, Step: step));
             ClearRedo();
             h.Current = result;
-            if (lookAfter is not null) SetLook(path, lookAfter);   // gehört zu diesem Schritt (Snapshot hat den Look davor)
+            if (settingsAfter is not null) ChangeSettings(path, settingsAfter);   // gehört zu diesem Schritt (Snapshot hat den Stand davor)
             if (h == _history) await ShowCurrentAsync();
             return true;
         }
@@ -171,14 +185,34 @@ public partial class MainViewModel
     }
 
     /// <summary>
+    /// Einstellungen einer Datei ändern, ohne eigenen Rückgängig-Schritt — gehört zum Bildschritt davor.
+    /// </summary>
+    private void ChangeSettings(string path, Func<SettingsState, SettingsState> change)
+    {
+        if (path == CurrentPath)
+        {
+            ApplySettings(change(CaptureSettings()));
+            if (!ApplyToAll) _fileSettings[path] = CaptureSettings();
+        }
+        else if (!ApplyToAll && _fileSettings.TryGetValue(path, out var saved))
+        {
+            _fileSettings[path] = change(saved);
+        }
+    }
+
+    /// <summary>
     /// Für Erweiterungen (z. B. KI): ein Bearbeitungsschritt auf dem aktuellen Bild,
     /// mit Rückgängig/Wiederholen wie Zuschneiden und Drehen. Abbruch über
     /// <see cref="OperationCanceledException"/> lässt das Bild unverändert. Liefert true bei Erfolg.
     /// </summary>
+    /// <param name="label">Name in der Liste „Bearbeitungen“ (z. B. „KI – CodeFormer“).</param>
+    /// <param name="detail">Kurzinfo dazu (z. B. Stärke, Falten).</param>
     /// <param name="lookAfter">Look, der danach gilt (z. B. neutral, wenn er ins Bild gerechnet wurde) — im selben
     /// Schritt, Rückgängig bringt Bild und Regler zusammen zurück. null: Regler bleiben.</param>
-    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, MagickImage> operation, Look? lookAfter = null) =>
-        ApplyEditAsync(operation, lookAfter);
+    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, MagickImage> operation, string label, string? detail,
+        Look? lookAfter = null) =>
+        ApplyEditAsync(operation, lookAfter is null ? null : s => WithLook(s, lookAfter),
+            new ImageStep(ImageStepKind.Ai, label, detail, null));
 
     /// <summary>Das aktuelle Bild in voller Auflösung (mit allen Bearbeitungen) — nur lesen.</summary>
     internal MagickImage? CurrentImage => _history?.Current;
@@ -248,7 +282,7 @@ public partial class MainViewModel
         if (!ApplyToAll && CurrentPath is { } current)
             _fileSettings[current] = CaptureSettings();
 
-        return new Snapshot(step.FilePath, imageNow, settingsNow, modeNow, fileSettingsNow, templateNow);
+        return new Snapshot(step.FilePath, imageNow, settingsNow, modeNow, fileSettingsNow, templateNow, step.Step);
     }
 
     /// <summary>Zeigt das aktuelle Bild der Datei; Pixelmaße beginnen wieder beim Bild.</summary>
@@ -258,7 +292,7 @@ public partial class MainViewModel
         CommitPendingSettings();   // z. B. Regler bewegt, während die KI rechnete
 
         var doc = h.Current;
-        await SetDocumentAsync(doc);
+        await SetDocumentAsync(ShownDocument ?? doc);   // bei ausgeblendeter KI das Bild ohne sie
 
         var w = (int)doc.Width;
         var hgt = (int)doc.Height;
@@ -285,6 +319,7 @@ public partial class MainViewModel
     /// <summary>Alles freigeben — jedes Bild genau einmal, auch wenn es mehrfach referenziert ist.</summary>
     private void DisposeAllHistories()
     {
+        ClearWithoutAi();   // Bilder ohne KI — vor dem Verlauf, der sie noch kennt
         var images = new HashSet<MagickImage>(ReferenceEqualityComparer.Instance);
         foreach (var h in _histories.Values) { images.Add(h.Original); images.Add(h.Current); }
         foreach (var s in _undo) if (s.Image is not null) images.Add(s.Image);

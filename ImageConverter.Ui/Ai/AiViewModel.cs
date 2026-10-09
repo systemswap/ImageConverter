@@ -144,6 +144,7 @@ public partial class AiViewModel : ViewModelBase
     /// </summary>
     private IAiRun? _run;
     private RunSetup? _setup;
+    private AiModel? _runModel;   // womit gerechnet wurde — Name in der Liste „Bearbeitungen“
 
     /// <summary>Gefundene Gesichter des offenen Ergebnisses — für ein neues Rechnen mit anderer Natürlichkeit.</summary>
     private IReadOnlyList<DetectedFace>? _runFaces;
@@ -403,7 +404,7 @@ public partial class AiViewModel : ViewModelBase
             if (_main.CurrentImagePath != path) return;   // inzwischen ein anderes Bild gewählt
 
             if (!ReferenceEquals(setup, _setup)) DisposeInput(_setup);
-            (_run, _setup, _runFaces) = (run, setup, faces);
+            (_run, _setup, _runFaces, _runModel) = (run, setup, faces, model);
             rendered = null;   // gehört jetzt zu _setup
             HasPending = true;
             Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
@@ -578,7 +579,7 @@ public partial class AiViewModel : ViewModelBase
 
         // Gerechnet wurde auf dem Stand vor der KI — das Ergebnis ersetzt das aktuelle Bild, statt darauf aufzubauen.
         // Steckt der Look im Ergebnis, gehen die Regler im selben Schritt auf null (nichts doppelt).
-        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(blend), setup.LookAfter);
+        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(blend), StepLabel(), StepDetail(blend, run), setup.LookAfter);
         if (ok && _main.CurrentImage is { } result) _lastAi = (result, setup.Base, setup.Baked);
         ClearRun();
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
@@ -603,6 +604,22 @@ public partial class AiViewModel : ViewModelBase
         Fidelity = 60;
     }
 
+
+    /// <summary>Name des KI-Schritts in der Liste „Bearbeitungen“.</summary>
+    private string StepLabel() => Tr.T("KI: {0}", _runModel is { } m ? Tr.T(m.Name) : "");
+
+    /// <summary>Kurzinfo zum KI-Schritt: Stärke und, bei Gesichtern, die Haut-Regler.</summary>
+    private static string StepDetail(AiBlend blend, IAiRun run)
+    {
+        var parts = new List<string> { Tr.T("Stärke {0:0} %", blend.Strength * 100) };
+        if (run.SupportsDetails)
+        {
+            if (blend.Texture > 0) parts.Add(Tr.T("Haut {0:0} %", blend.Texture * 100));
+            if (blend.Folds > 0) parts.Add(Tr.T("Falten {0:0} %", blend.Folds * 100));
+            if (blend.Grain > 0) parts.Add(Tr.T("Korn {0:0} %", blend.Grain * 100));
+        }
+        return string.Join(" · ", parts);
+    }
     private bool CanDiscard => HasPending && !IsRunning;
 
     /// <summary>Ergebnis verwerfen: das Bild bleibt, wie es war.</summary>
@@ -619,7 +636,7 @@ public partial class AiViewModel : ViewModelBase
         if (IsRunning) _runCts?.Cancel();   // ein Neurechnen benutzt das Eingangsbild noch — dann gibt es der GC frei
         else DisposeInput(_setup);
         _previewCts?.Cancel();
-        (_run, _setup, _runFaces, _beforeOf) = (null, null, null, null);
+        (_run, _setup, _runFaces, _beforeOf, _runModel) = (null, null, null, null, null);
         HasPending = false;
         ShowMap = false;
         _main.OverrideBitmap = null;

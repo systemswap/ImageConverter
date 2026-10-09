@@ -151,8 +151,8 @@ public partial class MainViewModel
         Lossless && LosslessAvailable,
         width, height,
         SelectedFilter.Filter, GammaCorrect,
-        NoiseReduction > 0.01 ? NoiseReduction : 0,
-        SharpenAmount > 0.01 ? SharpenAmount : 0,
+        EffectiveNoise,
+        EffectiveSharpen,
         SharpenRadius * sharpenScale,
         Dpi,
         MetadataByLabel.TryGetValue(SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
@@ -163,7 +163,7 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()
     {
-        if (_history?.Current is not { } doc || _fileIndex < 0) return;
+        if (ShownDocument is not { } doc || _fileIndex < 0) return;   // ohne Ausgeblendetes (KI …)
 
         CommitPendingSettings();
 
@@ -253,7 +253,7 @@ public partial class MainViewModel
             // Nacheinander, nie gleichzeitig: alle teilen sich die verkleinerte Fassung
             try { await previous; } catch { /* vorige Schätzung abgebrochen */ }
             await Task.Delay(350, ct);
-            if (_history is not { Current: { } doc } h) return;
+            if (_history is not { } h || ShownDocument is not { } doc) return;
 
             var (tw, th) = EffectiveTarget();
             var options = BuildExportOptions(tw, th);

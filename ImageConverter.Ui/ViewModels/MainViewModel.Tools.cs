@@ -155,13 +155,14 @@ public partial class MainViewModel
         DehazeCast = Adjustments.None.DehazeCast;
     }
 
-    /// <summary>Die Reglerstände als Auftrag für Vorschau und Export.</summary>
-    private Adjustments CurrentAdjustments() => new(
+    /// <summary>Die Reglerstände als Auftrag für Vorschau und Export (ohne Ausgeblendetes).</summary>
+    private Adjustments CurrentAdjustments() => Mask(new(
         Round(Brightness), Round(Contrast), Round(Shadows), Round(Highlights), Round(Saturation),
         TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze), Round(MatchLuminance),
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
-        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast));
+        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast)),
+        HiddenSteps);   // ausgeblendete Bearbeitungen wirken nicht
 
     internal static Tint TintOf(string? label) =>
         TintLabels.FirstOrDefault(t => t.Label == label).Tint;

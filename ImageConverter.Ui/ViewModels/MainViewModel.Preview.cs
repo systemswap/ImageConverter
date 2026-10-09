@@ -376,7 +376,7 @@ public partial class MainViewModel
                 }
                 // Inzwischen ein anderes Bild gewählt: Ergebnis verwerfen, die Schleife
                 // rechnet ohnehin neu (RequestPreview hat _renderDirty gesetzt)
-                if (!ReferenceEquals(job.Doc, _history?.Current)) continue;
+                if (!ReferenceEquals(job.Doc, ShownDocument)) continue;
                 SetAdjusted(BitmapOps.FromBgra(result.Bgra, result.Width, result.Height));
             }
             while (_renderDirty);
@@ -428,12 +428,12 @@ public partial class MainViewModel
     /// <summary>Momentaufnahme der Einstellungen (UI-Thread). null = Original zeigen.</summary>
     private PreviewJob? CreateJob()
     {
-        if (_history?.Current is not { } doc) return null;
+        if (ShownDocument is not { } doc) return null;
 
         var (tw, th) = EffectiveTarget();
         var resize = tw != (int)doc.Width || th != (int)doc.Height;
-        var noise = NoiseReduction > 0.01 ? NoiseReduction : 0;
-        var sharpen = SharpenAmount > 0.01 ? SharpenAmount : 0;
+        var noise = EffectiveNoise;
+        var sharpen = EffectiveSharpen;
         var adjust = CurrentAdjustments();
         if (!resize && noise == 0 && sharpen == 0 && adjust.IsNone) return null;
 

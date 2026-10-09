@@ -59,9 +59,9 @@ public partial class MainViewModel
     }
 
     internal Look CurrentLook() => new(
-        NoiseReduction > 0.01 ? NoiseReduction : 0,
+        EffectiveNoise,
         CurrentAdjustments(),
-        SharpenAmount > 0.01 ? SharpenAmount : 0,
+        EffectiveSharpen,
         SharpenRadius,
         EffectiveTarget().Width);
 
@@ -124,21 +124,4 @@ public partial class MainViewModel
         };
     }
 
-    /// <summary>
-    /// Look einer Datei setzen, ohne eigenen Rückgängig-Schritt — gehört zum Bildschritt davor
-    /// (dessen Snapshot hat die Einstellungen von vorher).
-    /// </summary>
-    private void SetLook(string path, Look look)
-    {
-        if (path == CurrentPath)
-        {
-            using (SuppressHistory())
-                ApplySettings(WithLook(CaptureSettings(), look));
-            if (!ApplyToAll) _fileSettings[path] = CaptureSettings();
-        }
-        else if (!ApplyToAll && _fileSettings.TryGetValue(path, out var saved))
-        {
-            _fileSettings[path] = WithLook(saved, look);
-        }
-    }
 }

@@ -132,6 +132,12 @@ public partial class MainViewModel
     /// <summary>Zielmaße nach „Nicht vergrößern" — wie EffectiveTarget, aber für einen beliebigen Stand.</summary>
     internal static (int Width, int Height) EffectiveTarget(SettingsState s)
     {
+        if ((s.Hidden & EditSteps.Resize) != 0) return (Math.Max(1, s.SourceWidth), Math.Max(1, s.SourceHeight));   // Größe ausgeblendet
+        return EffectiveResize(s);
+    }
+
+    private static (int Width, int Height) EffectiveResize(SettingsState s)
+    {
         var w = Math.Max(1, s.TargetWidth);
         var h = Math.Max(1, s.TargetHeight);
         if (!s.DoNotEnlarge || (w <= s.SourceWidth && h <= s.SourceHeight)) return (w, h);
@@ -152,19 +158,19 @@ public partial class MainViewModel
             s.Lossless && losslessAvailable,
             w, h,
             s.SelectedFilter.Filter, s.GammaCorrect,
-            s.NoiseReduction > 0.01 ? s.NoiseReduction : 0,
-            s.SharpenAmount > 0.01 ? s.SharpenAmount : 0,
+            (s.Hidden & EditSteps.Denoise) == 0 && s.NoiseReduction > 0.01 ? s.NoiseReduction : 0,
+            (s.Hidden & EditSteps.Sharpen) == 0 && s.SharpenAmount > 0.01 ? s.SharpenAmount : 0,
             s.SharpenRadius,
             s.Dpi,
             MetadataByLabel.TryGetValue(s.SelectedMetadataMode ?? "", out var m) ? m : MetadataMode.KeepAll,
             ColorByLabel.TryGetValue(s.SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
-            new Adjustments(Math.Round(s.Brightness), Math.Round(s.Contrast), Math.Round(s.Shadows),
+            Mask(new Adjustments(Math.Round(s.Brightness), Math.Round(s.Contrast), Math.Round(s.Shadows),
                 Math.Round(s.Highlights), Math.Round(s.Saturation), TintOf(s.SelectedTint),
                 Math.Round(s.Vibrance), Math.Round(s.TintHue), Math.Round(s.Dehaze),
                 Math.Round(s.MatchLuminance), Math.Round(s.Neutralize), Math.Round(s.Warmth),
                 (int)Math.Round(s.DehazePasses), Math.Round(s.DehazeClarity), Math.Round(s.DehazeContrast),
                 Math.Round(s.DehazeVibrance), Math.Round(s.DehazeSharpen), Math.Round(s.DehazeEdge),
-                Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband), Math.Round(s.DehazeCast)),
+                Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband), Math.Round(s.DehazeCast)), s.Hidden),
             s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format));
     }
 
@@ -179,7 +185,7 @@ public partial class MainViewModel
     internal async Task<(MagickImage Image, bool Owned, long FileBytes, double Dpi)> GetImageAsync(string path)
     {
         if (_histories.TryGetValue(path, out var h))
-            return (h.Current, false, h.FileBytes, h.Dpi);
+            return (DocumentFor(path, h, HiddenFor(path)), false, h.FileBytes, h.Dpi);   // ohne Ausgeblendetes (KI …)
 
         var loaded = await ImageLoader.LoadAsync(path);
         return (loaded.Image, true, loaded.FileBytes, loaded.Dpi);
