@@ -156,6 +156,7 @@ public partial class MainViewModel : ViewModelBase
         await StopPreviewAsync();
         ClearDisplay();
         DisposeAllHistories();
+        ResetImageSliders();   // neue Bilder beginnen ohne Licht, Dunst, Farbe, Schärfe der vorigen
         _fileIndex = -1;
 
         _files.Clear();

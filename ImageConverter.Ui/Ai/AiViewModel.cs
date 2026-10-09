@@ -45,6 +45,7 @@ public partial class AiViewModel : ViewModelBase
         Rescan();
         WatchFolders();
         _main.PropertyChanged += OnMainPropertyChanged;
+        _main.FilesReplaced += (_, _) => ResetSliders();
     }
 
     internal AiModelStore Store { get; }
@@ -470,6 +471,16 @@ public partial class AiViewModel : ViewModelBase
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
     }
 
+
+    /// <summary>Neue Bilder: Stärke, Hautstruktur, Natürlichkeit auf die Vorgaben; Modell und Reihenfolge bleiben.</summary>
+    private void ResetSliders()
+    {
+        if (HasPending) Discard();
+        _lastAi = null;
+        Strength = 100;
+        Texture = 30;
+        Fidelity = 60;
+    }
     private bool CanDiscard => HasPending && !IsRunning;
 
     /// <summary>Ergebnis verwerfen: das Bild bleibt, wie es war.</summary>

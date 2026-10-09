@@ -808,3 +808,16 @@ Test oder Nachweis.
   bleiben; Schärferadius skaliert mit der Breite). UI-Test (Foto 2012, Dunst +184, Helligkeit +54,
   CodeFormer): Hintergrund vorher/offen 0,01, offen/übernommen 0,15 („erst KI“) bzw. 0,14
   („erst Einstellungen“), Regler danach 0 / nach Strg+Z wieder +54 / +184.
+
+## 22. Neue Bilder übernahmen die Regler des vorigen Bildes
+
+- **Entdeckt:** 0.5.11 beta (09.10.2026), vom Benutzer: nach dem Hineinziehen eines neuen Bildes
+  standen Dunst, Helligkeit usw. noch vom vorigen Bild. **Behoben:** 0.5.12 beta.
+- **Was/Warum:** `OpenAsync` ersetzt Dateien und Verlauf, ließ aber die Reglerwerte stehen — das
+  erste neue Bild bekam sie wie ein „für alle“-Stand.
+- **Wie:** `MainViewModel.ResetImageSliders()` in `OpenAsync`: Licht, Dunst samt Feineinstellung,
+  Farbe, Schärfe (Radius 1,0), Entrauschen, Ecken auf die Vorgaben, ohne Rückgängig-Schritt; Ereignis
+  `FilesReplaced` → KI: Stärke 100 %, Hautstruktur 30 %, Natürlichkeit 60 %, offenes Ergebnis weg.
+  Bleiben: Format, Qualität, Größe, DPI, Metadaten, Farbraum, Ordner, Name, KI-Modell, Reihenfolge
+  (Vorlieben, keine Bearbeitung). Blättern zwischen den geöffneten Bildern ändert nichts.
+- **Nachweis:** `NewImagesTests`.
