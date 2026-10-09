@@ -97,7 +97,7 @@ public static class AiModelCatalog
 
     public static AiModel Gfpgan { get; } = new(
         "gfpgan",
-        "Gesichter – GFPGAN",
+        "Gesichter – GFPGAN 1.4",
         "Augen, Mund, Haut bei unscharfen Gesichtern",
         "GFPGAN 1.4: stellt unscharfe oder kleine Gesichter natürlich wieder her. " +
         "Nur die Gesichter werden verändert, der Rest des Bildes bleibt, wie er ist.",
@@ -110,6 +110,40 @@ public static class AiModelCatalog
         License: "Apache-2.0",
         NonCommercial: false,
         Origin: "TencentARC (GFPGAN), ONNX von FaceFusion",
+        Requires: ["yunet"]);
+
+    public static AiModel Gfpgan13 { get; } = new(
+        "gfpgan13",
+        "Gesichter – GFPGAN 1.3",
+        "Natürlicher, etwas weicher als 1.4",
+        "GFPGAN 1.3: ältere Fassung von GFPGAN, laut den Entwicklern natürlicher und mit weniger künstlichen " +
+        "Details als 1.4. Nur die Gesichter werden verändert, der Rest des Bildes bleibt, wie er ist.",
+        AiModelKind.Face,
+        FaceFusion + "models-3.0.0/gfpgan_1.3.onnx",
+        340_299_087,
+        "d0dbdefc8974a4dd01161d99bd311967c18e63d6628fe40dba2bc60874271e47",
+        IsZip: false,
+        MainFile: "gfpgan_1.3.onnx",
+        License: "Apache-2.0",
+        NonCommercial: false,
+        Origin: "TencentARC (GFPGAN), ONNX von FaceFusion",
+        Requires: ["yunet"]);
+
+    public static AiModel RestoreFormer { get; } = new(
+        "restoreformer",
+        "Gesichter – RestoreFormer++",
+        "Echte, unscharfe Fotos, hält die Person gut",
+        "RestoreFormer++: neueres Modell für echte, unscharfe oder verrauschte Fotos. Bleibt meist nah an der " +
+        "Person und erfindet weniger Details. Nur die Gesichter werden verändert.",
+        AiModelKind.Face,
+        FaceFusion + "models-3.0.0/restoreformer_plus_plus.onnx",
+        294_264_232,
+        "164818b70d1745da4108a45c9263b05452236d14ac0ffab2202af0ac4a438195",
+        IsZip: false,
+        MainFile: "restoreformer_plus_plus.onnx",
+        License: "Apache-2.0",
+        NonCommercial: false,
+        Origin: "Zhouxia Wang u. a. (RestoreFormer++), ONNX von FaceFusion",
         Requires: ["yunet"]);
 
     public static AiModel CodeFormer { get; } = new(
@@ -129,7 +163,7 @@ public static class AiModelCatalog
         Origin: "Shangchen Zhou (CodeFormer), ONNX von FaceFusion",
         Requires: ["yunet"]);
 
-    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, CodeFormer, FaceDetector];
+    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, FaceDetector];
 
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

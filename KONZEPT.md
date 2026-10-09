@@ -315,6 +315,11 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
 - Keine Checkbox, sondern ein **Button „KI anwenden“** — läuft nur auf Abruf, nie in der Live-Vorschau.
 - **ComboBox zur Modellwahl** daneben: Allround (Rauschen/Artefakte/Upscale), große Variante,
   Gesichtsmodelle (GFPGAN/CodeFormer) — angeboten werden nur heruntergeladene Modelle.
+  Seit 0.5.11 auch GFPGAN 1.3 und RestoreFormer++ (beide Apache-2.0). Vergleich an drei
+  Familienfotos (Gesichter 137–443 px, Handy 2012/2016): GFPGAN 1.4 und 1.3 fast gleich — glatt,
+  „Weichzeichner“-Haut, 1.3 einen Hauch weicher; RestoreFormer++ die meisten Details (Poren, Haare),
+  aber härter, macht Kinder älter (Falten an Wangen); CodeFormer bleibt am nächsten an der Person,
+  60 % guter Mittelweg, 90 % fast Original. Zeit je Bild: GFPGAN ~5 s, RestoreFormer++/CodeFormer ~9 s.
 - ~~**Verkettung:** Jeder Lauf wirkt auf das *aktuelle* Bild, also auf das Ergebnis des vorigen
   KI-Laufs, nicht wieder auf das Original.~~ Seit 0.5.9: **keine Verkettung** — ist das Bild das
   Ergebnis des letzten KI-Schritts, rechnet der nächste Lauf auf dem Bild davor und ersetzt es

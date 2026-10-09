@@ -105,7 +105,7 @@ public sealed class OnnxTileModel(InferenceSession session, AiModel model) : ITi
     }
 }
 
-/// <summary>Gesichtsmodell über ONNX (GFPGAN, CodeFormer): 512 × 512, RGB, −1…1.</summary>
+/// <summary>Gesichtsmodell über ONNX (GFPGAN, CodeFormer, RestoreFormer++): 512 × 512, RGB, −1…1.</summary>
 public sealed class OnnxFaceModel(InferenceSession session, AiModel model) : IFaceModel
 {
     /// <summary>CodeFormer: 0 = stärkste Verbesserung, 1 = möglichst nah am Original.</summary>
@@ -116,7 +116,9 @@ public sealed class OnnxFaceModel(InferenceSession session, AiModel model) : IFa
     public float[] Run(float[] input, CancellationToken ct)
     {
         using var image = OrtValue.CreateTensorValueFromMemory(input, [1, 3, Size, Size]);
-        var inputs = new Dictionary<string, OrtValue> { ["input"] = image };
+        // Bildeingang: „input“ bei GFPGAN/CodeFormer — bei anderen Modellen der erste, der nicht „weight“ heißt
+        var name = session.InputNames.First(n => n != "weight");
+        var inputs = new Dictionary<string, OrtValue> { [name] = image };
 
         OrtValue? weight = null;
         try
