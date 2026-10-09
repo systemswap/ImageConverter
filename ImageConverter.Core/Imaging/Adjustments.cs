@@ -248,7 +248,10 @@ public static class Adjust
         var warmth = (float)Math.Clamp(a.Warmth / 100, -1, 1);
         var shiftA = -castA * neutralize + warmth * WarmthA;
         var shiftB = -castB * neutralize + warmth * WarmthB;
-        var oklab = vibrance != 0 || saturation != 0 || luminance != 1 || shiftA != 0 || shiftB != 0;
+        // Reihenfolge wie in Referenzwerkzeug: erst Weißabgleich und Belichtung (Gleiche Farbe), dann Kontrastkurve, dann
+        // Dynamik/Sättigung — ein Farbstich soll weg sein, bevor Kontrast und Buntheit ihn verstärken (0.5.27)
+        var balance = luminance != 1 || shiftA != 0 || shiftB != 0;
+        var chroma = vibrance != 0 || saturation != 0;
 
         Parallel.For(0, height, y =>
         {
@@ -273,16 +276,13 @@ public static class Adjust
                     }
                 }
 
-                r = Lookup(curve, r); g = Lookup(curve, g); b = Lookup(curve, b);
-
-                if (oklab)
+                if (balance)
                 {
-                    // In Oklab: Buntheit ändern lässt Farbton und Helligkeit stehen
+                    // Gleiche Farbe in Oklab (vor der Kontrastkurve, wie der Weißabgleich in Referenzwerkzeug)
                     var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
                     if (shiftA != 0 || shiftB != 0)
                     {
-                        // Gleiche Farbe: Ausgleichen + Farbe. Ganz Dunkles bleibt neutral,
-                        // sonst würde Schwarz farbig.
+                        // Ausgleichen + Farbe. Ganz Dunkles bleibt neutral, sonst würde Schwarz farbig.
                         var w = Math.Min(1, L / 0.3f);
                         oa += shiftA * w;
                         ob += shiftB * w;
@@ -290,13 +290,22 @@ public static class Adjust
                     var factor = 1f;
                     if (luminance != 1 && L > 1e-4f)
                     {
-                        // Gleiche Farbe, Luminanz: wie mehr Licht — Helligkeit und Buntheit im
-                        // selben Verhältnis (in Oklab exakt eine stärkere Beleuchtung). Nur die
-                        // Helligkeit zu heben ließ die Farben blass wirken.
+                        // Luminanz: wie mehr Licht — Helligkeit und Buntheit im selben Verhältnis (in Oklab
+                        // exakt eine stärkere Beleuchtung). Nur die Helligkeit zu heben ließ die Farben blass wirken.
                         var lifted = Shoulder(L * luminance);
                         factor = lifted / L;
                         L = lifted;
                     }
+                    (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);
+                }
+
+                r = Lookup(curve, r); g = Lookup(curve, g); b = Lookup(curve, b);
+
+                if (chroma)
+                {
+                    // In Oklab: Buntheit ändern lässt Farbton und Helligkeit stehen
+                    var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
+                    var factor = 1f;
                     if (vibrance != 0) factor *= VibranceFactor(L, oa, ob, vibrance);
                     if (saturation != 0) factor *= 1 + saturation;
                     (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);

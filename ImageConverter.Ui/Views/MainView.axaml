@@ -530,7 +530,7 @@
 
                     <!-- ############################## Rubrik Tools — je Funktion ein Regler -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
-                        <!-- Rauschen zuerst — wie in der Kette, vor Dunst und Licht (die es sonst verstärken) -->
+                        <!-- Gruppen in der Reihenfolge der Kette: Rauschen → Dunst → Gleiche Farbe (Weißabgleich) → Licht → Farbe -->
                         <HeaderedContentControl Header="{l:T 'RAUSCHEN'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="88,*,Auto">
@@ -544,35 +544,6 @@
                                     <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding ColorNoiseReduction}"
                                             ToolTip.Tip="{l:T 'Bunte Punkte und Flecken: glättet nur die Farbe, an den Kanten der Helligkeit entlang — Schärfe und Helligkeit bleiben. Kleine Werte entfernen die Farbpunkte, große auch größere Farbflecken.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding ColorNoiseLabel}" />
-                                </Grid>
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Header="{l:T 'LICHT'}">
-                            <StackPanel>
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Helligkeit'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Brightness}"
-                                            ToolTip.Tip="{l:T 'Hellt die Mitten auf oder dunkelt sie ab. Schwarz und Weiß bleiben, nichts frisst aus.'}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrightnessLabel}" />
-                                </Grid>
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Kontrast'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Contrast}"
-                                            ToolTip.Tip="{l:T 'Rechts: Helles heller, Dunkles dunkler — knackiger. Links: weicher, flacher.'}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ContrastLabel}" />
-                                </Grid>
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Tiefen'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Shadows}"
-                                            ToolTip.Tip="{l:T 'Rechts: dunkle Bereiche aufhellen, z. B. Gesichter im Gegenlicht. Wirkt nur dort, wo die Umgebung dunkel ist — helle Bereiche bleiben.'}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ShadowsLabel}" />
-                                </Grid>
-                                <Grid ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Lichter'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Highlights}"
-                                            ToolTip.Tip="{l:T 'Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist.'}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding HighlightsLabel}" />
                                 </Grid>
                             </StackPanel>
                         </HeaderedContentControl>
@@ -673,6 +644,80 @@
                             </StackPanel>
                         </HeaderedContentControl>
 
+                        <!-- Nachbau von Referenzwerkzeug CS5 „Bild > Korrekturen > Gleiche Farbe“ ohne Quellbild -->
+                        <HeaderedContentControl Header="{l:T 'GLEICHE FARBE'}">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Luminanz'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding MatchLuminance}"
+                                            ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ausgleichen'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Neutralize}"
+                                            ToolTip.Tip="{l:T 'Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Der Regler bestimmt, wie viel davon. Kräftige Farben zählen bei der Erkennung nicht mit.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding NeutralizeLabel}" />
+                                </Grid>
+                                <!-- Farbe: Verlauf kühl → neutral → warm hinter durchsichtiger Spur -->
+                                <Grid ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbe'}" />
+                                    <Panel Grid.Column="1">
+                                        <Border Height="6" CornerRadius="3" VerticalAlignment="Center" Margin="10,0">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                    <GradientStop Offset="0" Color="#4C7FD0" />
+                                                    <GradientStop Offset="0.5" Color="#C8C8C8" />
+                                                    <GradientStop Offset="1" Color="#E0B040" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <Slider Minimum="-100" Maximum="100" Value="{Binding Warmth}"
+                                                ToolTip.Tip="{l:T 'Links kühler (bläulich), rechts wärmer (gelblich), Mitte neutral — z. B. wenn Ausgleichen ein Kunstlicht-Foto zu kühl gemacht hat.'}">
+                                            <Slider.Resources>
+                                                <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFill" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="Transparent" />
+                                                <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="Transparent" />
+                                            </Slider.Resources>
+                                        </Slider>
+                                    </Panel>
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding WarmthLabel}" />
+                                </Grid>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Header="{l:T 'LICHT'}">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Helligkeit'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Brightness}"
+                                            ToolTip.Tip="{l:T 'Hellt die Mitten auf oder dunkelt sie ab. Schwarz und Weiß bleiben, nichts frisst aus.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrightnessLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Kontrast'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Contrast}"
+                                            ToolTip.Tip="{l:T 'Rechts: Helles heller, Dunkles dunkler — knackiger. Links: weicher, flacher.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ContrastLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Tiefen'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Shadows}"
+                                            ToolTip.Tip="{l:T 'Rechts: dunkle Bereiche aufhellen, z. B. Gesichter im Gegenlicht. Wirkt nur dort, wo die Umgebung dunkel ist — helle Bereiche bleiben.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding ShadowsLabel}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Lichter'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding Highlights}"
+                                            ToolTip.Tip="{l:T 'Links: helle Bereiche abdunkeln und Zeichnung zurückholen, z. B. im Himmel. Wirkt nur dort, wo die Umgebung hell ist.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding HighlightsLabel}" />
+                                </Grid>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
                         <HeaderedContentControl Header="{l:T 'FARBE'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
@@ -726,51 +771,6 @@
                                         </Slider>
                                     </Panel>
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding TintHueLabel}" />
-                                </Grid>
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <!-- Nachbau von Referenzwerkzeug CS5 „Bild > Korrekturen > Gleiche Farbe“ ohne Quellbild -->
-                        <HeaderedContentControl Header="{l:T 'GLEICHE FARBE'}">
-                            <StackPanel>
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Luminanz'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding MatchLuminance}"
-                                            ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus.'}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
-                                </Grid>
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ausgleichen'}" />
-                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Neutralize}"
-                                            ToolTip.Tip="{l:T 'Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Der Regler bestimmt, wie viel davon. Kräftige Farben zählen bei der Erkennung nicht mit.'}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding NeutralizeLabel}" />
-                                </Grid>
-                                <!-- Farbe: Verlauf kühl → neutral → warm hinter durchsichtiger Spur -->
-                                <Grid ColumnDefinitions="76,*,Auto">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbe'}" />
-                                    <Panel Grid.Column="1">
-                                        <Border Height="6" CornerRadius="3" VerticalAlignment="Center" Margin="10,0">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                                                    <GradientStop Offset="0" Color="#4C7FD0" />
-                                                    <GradientStop Offset="0.5" Color="#C8C8C8" />
-                                                    <GradientStop Offset="1" Color="#E0B040" />
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                        </Border>
-                                        <Slider Minimum="-100" Maximum="100" Value="{Binding Warmth}"
-                                                ToolTip.Tip="{l:T 'Links kühler (bläulich), rechts wärmer (gelblich), Mitte neutral — z. B. wenn Ausgleichen ein Kunstlicht-Foto zu kühl gemacht hat.'}">
-                                            <Slider.Resources>
-                                                <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
-                                                <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
-                                                <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
-                                                <SolidColorBrush x:Key="SliderTrackValueFill" Color="Transparent" />
-                                                <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="Transparent" />
-                                                <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="Transparent" />
-                                            </Slider.Resources>
-                                        </Slider>
-                                    </Panel>
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding WarmthLabel}" />
                                 </Grid>
                             </StackPanel>
                         </HeaderedContentControl>

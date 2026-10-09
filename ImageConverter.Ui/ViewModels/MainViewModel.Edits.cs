@@ -304,6 +304,9 @@ public partial class MainViewModel
                 rows.Add(Row(EditSteps.ColorNoise, Tr.T("Farbrauschen"), $"{ColorNoiseReduction * 100:0} %"));
             if (Math.Round(Dehaze) != 0)
                 rows.Add(Row(EditSteps.Dehaze, Tr.T("Dunst"), $"{Math.Round(Dehaze):+0;−0} · {Math.Round(DehazePasses)}×"));
+            // Reihenfolge der Kette: Gleiche Farbe (Weißabgleich) vor Licht und Farbe
+            AddIfAny(rows, EditSteps.MatchColor, Tr.T("Gleiche Farbe"),
+                (Tr.T("Luminanz"), MatchLuminance), (Tr.T("Ausgleichen"), Neutralize), (Tr.T("Farbe"), Warmth));
             AddIfAny(rows, EditSteps.Light, Tr.T("Licht"),
                 (Tr.T("Helligkeit"), Brightness), (Tr.T("Kontrast"), Contrast), (Tr.T("Tiefen"), Shadows), (Tr.T("Lichter"), Highlights));
             var tint = TintOf(SelectedTint) switch
@@ -313,8 +316,6 @@ public partial class MainViewModel
                 _ => null,
             };
             AddIfAny(rows, EditSteps.Color, Tr.T("Farbe"), tint, (Tr.T("Dynamik"), Vibrance), (Tr.T("Sättigung"), Saturation));
-            AddIfAny(rows, EditSteps.MatchColor, Tr.T("Gleiche Farbe"),
-                (Tr.T("Luminanz"), MatchLuminance), (Tr.T("Ausgleichen"), Neutralize), (Tr.T("Farbe"), Warmth));
             if (SharpenAmount > 0.01)
                 rows.Add(Row(EditSteps.Sharpen, Tr.T("Schärfe"), Tr.T("{0:0.00} · Radius {1:0.0}", SharpenAmount, SharpenRadius)));
         }

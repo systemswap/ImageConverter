@@ -85,9 +85,17 @@ public static class ImageExporter
     {
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
+
+        // Beim Vergrößern erst entrauschen, dann vergrößern — sonst bläst das Vergrößern das Korn zu Flecken auf,
+        // bevor der Entrauscher es sieht. Beim Verkleinern wie bisher danach: schneller, das Verkleinern mittelt ohnehin.
+        var noiseFirst = NoiseFirst(source, o);
+        var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : source;
         plan?.Next();
-        var resized = ImageOps.Resize(source, o.Width, o.Height, o.Filter, o.GammaCorrect);
-        var result = RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan);
+        var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
+        if (!ReferenceEquals(start, source)) start.Dispose();
+        var result = noiseFirst
+            ? RenderLook(resized, 0, 0, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan)
+            : RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan);
         if (!ReferenceEquals(result, resized)) resized.Dispose();
 
         plan?.Next();
@@ -96,6 +104,13 @@ public static class ImageExporter
         result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
         result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
         return result;
+    }
+
+    /// <summary>Wird vergrößert und entrauscht? Dann kommt das Entrauschen vor das Skalieren.</summary>
+    public static bool NoiseFirst(MagickImage source, ExportOptions o)
+    {
+        if (o.Denoise <= 0.01 && o.ColorDenoise <= 0.01) return false;
+        lock (source) return (long)o.Width * o.Height > (long)source.Width * source.Height;
     }
 
     /// <summary>
@@ -255,8 +270,11 @@ public static class ImageExporter
     {
         var plan = new WorkPlan(progress);
         var mp = (double)o.Width * o.Height / 1e6;
+        var noise = o.Denoise > 0.01 || o.ColorDenoise > 0.01;
+        var noiseFirst = NoiseFirst(source, o);
+        if (noiseFirst) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * source.Width * source.Height / 1e6);
         plan.Add(Tr.T("Größe anpassen"), WorkPlan.ResizeCost * Math.Max(mp, (double)source.Width * source.Height / 1e6));
-        if (o.Denoise > 0.01 || o.ColorDenoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * mp);
+        if (noise && !noiseFirst) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * mp);
         if (o.Adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, mp);
         if (o.SharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * mp);
         plan.Add(Tr.T("Farbprofil und Metadaten"), WorkPlan.ColorCost * mp);

@@ -508,8 +508,25 @@ public partial class MainViewModel
         var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Pixels;
         if (denoised is null)
         {
-            denoised = ImageOps.ToDisplayPixels(resized);
-            if (job.Noise != (0, 0))
+            int docW, docH;
+            lock (job.Doc) (docW, docH) = ((int)job.Doc.Width, (int)job.Doc.Height);
+            if (job.Noise != (0, 0) && (long)job.Width * job.Height > (long)docW * docH)
+            {
+                // Vergrößern: erst entrauschen, dann vergrößern — wie im Export (ImageExporter.NoiseFirst)
+                plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * docW * docH / 1e6);
+                var source = ImageOps.ToDisplayPixels(job.Doc);
+                var clean = Denoiser.Apply(source, docW, docH, job.Noise.Luma, job.Noise.Chroma, 1, plan);
+                PixelPool.Return(source);
+                using var cleanImage = Pixels.ToMagick16(clean, docW, docH, alpha: false);
+                PixelPool.Return(clean);
+                using var enlarged = ImageOps.Resize(cleanImage, job.Width, job.Height, job.Filter, job.Gamma);
+                denoised = ImageOps.ToDisplayPixels(enlarged);
+            }
+            else
+            {
+                denoised = ImageOps.ToDisplayPixels(resized);
+            }
+            if (job.Noise != (0, 0) && (long)job.Width * job.Height <= (long)docW * docH)
             {
                 // Helligkeit und Farbe getrennt; Radien mit dem Vorschau-Maßstab wie beim Export
                 plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * job.Width * job.Height / 1e6);

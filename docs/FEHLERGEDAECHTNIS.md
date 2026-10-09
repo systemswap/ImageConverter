@@ -979,3 +979,24 @@ Test oder Nachweis.
   Farbrauschen < 30 %, Helligkeit unverändert; 0 = unverändert). UI-Test: beide Zeilen in der Liste,
   Auge aus ändert das Bild, wieder an → identisch.
 - **Offen:** Helligkeits-NLM beschleunigen (gleiche Differenzen für ±Verschiebung teilen).
+
+## 29. Reihenfolge der Kette: Gleiche Farbe vor der Kurve, Entrauschen vor dem Vergrößern
+
+- **Gebaut:** 0.5.27 beta (09.10.2026), Frage des Benutzers, ob alle Filter in der bestmöglichen
+  Reihenfolge laufen (Beispiel: erst schärfen, dann entrauschen wäre falsch — das war schon richtig).
+- **Was falsch war:**
+  1. Gleiche Farbe (Ausgleichen, Farbe, Luminanz) lief in `Adjustments.Apply` nach der
+     Helligkeit/Kontrast-Kurve. Ein Farbstich wird von der S-Kurve je Kanal verbogen; danach lässt er
+     sich nicht mehr sauber neutralisieren. Jetzt: Tiefen/Lichter → Gleiche Farbe → Kurve →
+     Dynamik/Sättigung → Färben (wie Weißabgleich vor der Tonkurve in RAW-Programmen).
+  2. Beim Vergrößern wurde erst vergrößert, dann entrauscht — das Korn war dann breiter als die
+     NLM-Umgebung. Jetzt `ImageExporter.NoiseFirst`: bei Rauschen > 0 und Zielgröße > Original zuerst
+     entrauschen (Maßstab 1), dann vergrößern, danach der übrige Look. Beim Verkleinern bleibt es wie
+     bisher (kleiner = schneller). Vorschau Stufe 2 und `Plan()` folgen derselben Regel.
+  3. Tools-Tab und Liste „Bearbeitungen“ in der Reihenfolge der Kette: Rauschen → Dunst →
+     Gleiche Farbe → Licht → Farbe (Schärfen bleibt im Format-Bereich, läuft zuletzt).
+- **Nachweis:** `ChainOrderTests` (grauer Farbstich mit Kontrast 60 + Ausgleichen 100 bleibt neutral;
+  Vergrößern = erst `RenderLook`, dann `Resize`). Abnahme 0.5.27-beta gegen 0.5.0: ToolsOhneDunst
+  (Wärme + Kontrast) ΔE 0,04–0,05, sonst ≈. Die ✗ bei RauschenSchaerfen (Stufen) kommen vom neuen
+  Entrauscher aus 0.5.26 (glättet flache Stellen stärker), die bei KombiPanorama (Ferne) aus den
+  Dunst-Änderungen seit 0.5.0 — beide Fälle nutzen weder Gleiche Farbe noch Vergrößern.
