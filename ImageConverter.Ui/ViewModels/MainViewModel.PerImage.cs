@@ -152,7 +152,7 @@ public partial class MainViewModel
                 Math.Round(s.MatchLuminance), Math.Round(s.Neutralize), Math.Round(s.Warmth),
                 (int)Math.Round(s.DehazePasses), Math.Round(s.DehazeClarity), Math.Round(s.DehazeContrast),
                 Math.Round(s.DehazeVibrance), Math.Round(s.DehazeSharpen), Math.Round(s.DehazeEdge),
-                Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband)),
+                Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband), Math.Round(s.DehazeCast)),
             s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format));
     }
 

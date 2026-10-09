@@ -23,6 +23,7 @@ public partial class MainViewModel
     [ObservableProperty] public partial double DehazeEdge { get; set; }
     [ObservableProperty] public partial double DehazeBrightness { get; set; } = Adjustments.None.DehazeBrightness;
     [ObservableProperty] public partial double DehazeDeband { get; set; } = Adjustments.None.DehazeDeband;
+    [ObservableProperty] public partial double DehazeCast { get; set; } = Adjustments.None.DehazeCast;
 
     /// <summary>Die Feineinstellung erscheint nur, wenn Dunst entfernt wird.</summary>
     public bool HasDehaze => Math.Round(Dehaze) > 0;
@@ -68,6 +69,7 @@ public partial class MainViewModel
     public string DehazeEdgeLabel => Percent(DehazeEdge);
     public string DehazeBrightnessLabel => Percent(DehazeBrightness);
     public string DehazeDebandLabel => Percent(DehazeDeband);
+    public string DehazeCastLabel => Percent(DehazeCast);
     public string BrightnessLabel => Signed(Brightness);
 
     private static string Percent(double v) => v < 0.5 ? Tr.T("aus") : $"{Math.Round(v):0} %";
@@ -102,6 +104,7 @@ public partial class MainViewModel
     partial void OnDehazeEdgeChanged(double value) => ToolChanged(nameof(DehazeEdgeLabel));
     partial void OnDehazeBrightnessChanged(double value) => ToolChanged(nameof(DehazeBrightnessLabel));
     partial void OnDehazeDebandChanged(double value) => ToolChanged(nameof(DehazeDebandLabel));
+    partial void OnDehazeCastChanged(double value) => ToolChanged(nameof(DehazeCastLabel));
     partial void OnBrightnessChanged(double value) => ToolChanged(nameof(BrightnessLabel));
     partial void OnContrastChanged(double value) => ToolChanged(nameof(ContrastLabel));
     partial void OnShadowsChanged(double value) => ToolChanged(nameof(ShadowsLabel));
@@ -149,6 +152,7 @@ public partial class MainViewModel
         DehazeEdge = 0;
         DehazeBrightness = Adjustments.None.DehazeBrightness;
         DehazeDeband = Adjustments.None.DehazeDeband;
+        DehazeCast = Adjustments.None.DehazeCast;
     }
 
     /// <summary>Die Reglerstände als Auftrag für Vorschau und Export.</summary>
@@ -157,7 +161,7 @@ public partial class MainViewModel
         TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze), Round(MatchLuminance),
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
-        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband));
+        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast));
 
     internal static Tint TintOf(string? label) =>
         TintLabels.FirstOrDefault(t => t.Label == label).Tint;

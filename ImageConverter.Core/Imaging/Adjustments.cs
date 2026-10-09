@@ -37,7 +37,8 @@ public sealed record Adjustments(
     double DehazeSharpen = Imaging.Dehaze.DefaultSharpen,
     double DehazeEdge = 0,
     double DehazeBrightness = Imaging.Dehaze.DefaultBrightness,
-    double DehazeDeband = Imaging.Dehaze.DefaultDeband)
+    double DehazeDeband = Imaging.Dehaze.DefaultDeband,
+    double DehazeCast = Imaging.Dehaze.DefaultCast)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -54,7 +55,7 @@ public sealed record Adjustments(
         {
             var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
             return Dehaze == 0 ? n with { DehazePasses = None.DehazePasses, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
-                DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness, DehazeDeband = None.DehazeDeband } : n;
+                DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness, DehazeDeband = None.DehazeDeband, DehazeCast = None.DehazeCast } : n;
         }
     }
 
@@ -64,7 +65,7 @@ public sealed record Adjustments(
         Shadows = Shadows, Highlights = Highlights, Dehaze = Normalized.Dehaze,
         DehazePasses = Normalized.DehazePasses, DehazeClarity = Normalized.DehazeClarity, DehazeContrast = Normalized.DehazeContrast,
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
-        DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband,
+        DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband, DehazeCast = Normalized.DehazeCast,
     };
 }
 
@@ -158,7 +159,7 @@ public static class Adjust
             // Schärfe. Schärfe zuletzt: Vor dem Entstufen hätte sie die Stufenkanten betont.
             var settings = new Dehaze.Settings(
                 (float)(a.DehazeClarity / 100), (float)(a.DehazeSharpen / 100), (float)(a.DehazeContrast / 100),
-                (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100));
+                (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100), (float)Math.Clamp(a.DehazeCast / 100, 0, 1));
             var pass = new Dehaze.Pass();
             var deband = (float)Math.Clamp(a.DehazeDeband / 100, 0, 1);
             // Zwischenstände kommen aus dem Pool und gehen dorthin zurück, sobald der nächste da ist —

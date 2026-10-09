@@ -41,7 +41,7 @@ public partial class MainViewModel
         string OutputFolder, string NamePattern,
         int SourceWidth, int SourceHeight,   // Bildgröße, für die dieser Stand gilt
         double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
-        double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband,
+        double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband, double DehazeCast,
         bool HighBitDepth);
 
     /// <summary>
@@ -79,6 +79,7 @@ public partial class MainViewModel
         [nameof(DehazeEdge)] = "Kanten",
         [nameof(DehazeBrightness)] = "Helligkeit halten",
         [nameof(DehazeDeband)] = "Entstufen",
+        [nameof(DehazeCast)] = "Dunstfarbe",
         [nameof(Brightness)] = "Helligkeit",
         [nameof(Contrast)] = "Kontrast",
         [nameof(Shadows)] = "Tiefen",
@@ -219,7 +220,7 @@ public partial class MainViewModel
         SelectedMetadataMode, SelectedColorMode,
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
-        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband,
+        DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
         HighBitDepth);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
@@ -267,6 +268,7 @@ public partial class MainViewModel
                 DehazeEdge = s.DehazeEdge;
                 DehazeBrightness = s.DehazeBrightness;
                 DehazeDeband = s.DehazeDeband;
+                DehazeCast = s.DehazeCast;
                 Brightness = s.Brightness;
                 Contrast = s.Contrast;
                 Shadows = s.Shadows;

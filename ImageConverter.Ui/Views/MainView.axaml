@@ -626,6 +626,12 @@
                                                 ToolTip.Tip="{l:T 'Glättet Treppen in weichen Verläufen wie dem Himmel (Debanding): am Original, bevor der Kontrast die 8-Bit-Stufen spreizt, und nach jedem Durchlauf. Kanten und Struktur bleiben. Gerechnet wird ohnehin in 32 Bit, auf 8 Bit gerundet erst am Schluss, mit feinem Korn.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeDebandLabel}" />
                                     </Grid>
+                                    <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                        <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dunstfarbe'}" />
+                                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding DehazeCast}"
+                                                ToolTip.Tip="{l:T 'Wie viel der Farbe des Dunstes aus der Landschaft genommen wird: Smog verliert seinen Gelbstich, ferne Wiesen ihr Blau. Bei 0 bleibt der Farbton wie im Original. Im Abendlicht nimmt viel davon auch Wärme weg.'}" />
+                                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeCastLabel}" />
+                                    </Grid>
                                     <Button Classes="tool" HorizontalAlignment="Right" Content="{l:T 'Vorgaben'}"
                                             Command="{Binding ResetDehazeDetailsCommand}"
                                             ToolTip.Tip="{l:T 'Feineinstellung zurück auf die Vorgaben (3 Durchläufe). Der Dunst-Regler bleibt.'}" />

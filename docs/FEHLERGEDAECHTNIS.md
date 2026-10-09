@@ -728,3 +728,12 @@ Test oder Nachweis.
 - **Meilenstein 0.5.4 (09.10.2026):** Verschieben im Zoom nur noch mit Strg + Ziehen
   (oder Ziehen bei ausgeschaltetem Auswahlrahmen) — mittlere Maustaste und Mausrad
   entfernt (vom Benutzer gewünscht). Strg + Mausrad zoomt weiter. Bildkette unverändert.
+- **Dunstfarbe (0.5.5 beta):** Bis 0.5.4 blieb der Farbton des Originals stehen — samt
+  Farbstich des Dunstes (künstlicher Dunst: Wiesen 16° zu blau). Der volle Farbton des
+  Modells machte Felder braun (dunkelster Kanal gegen null); jetzt wird nur der Anteil
+  der Luftlicht-Farbe abgezogen: (1 − t) · Y(Luft) / Y(Pixel), höchstens 0,8, je
+  Durchlauf mit der Dunstmenge, nur in der Landschaft. Neuer Feinregler „Dunstfarbe“,
+  Vorgabe 50 %: Smog verliert seinen Gelbstich, im Abendlicht (Panorama) nimmt viel
+  davon auch Wärme weg (92° → 107° bei 100 %, 97° bei 50 %). Ein Test mit überall
+  gleich dichtem Dunst zeigte keine Wirkung — ohne dunstfreien Bezug schätzt der Filter
+  die Dunstfarbe aus dem Bild selbst; Testbilder brauchen nach oben zunehmenden Dunst.

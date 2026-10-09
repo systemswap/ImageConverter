@@ -172,6 +172,49 @@ public class DehazeTests
     }
 
     /// <summary>
+    /// Dunstfarbe (0.5.5): Bläulicher Dunst über einer grünen Wiese verschiebt ihren Farbton zum Blau. Mit
+    /// „Dunstfarbe“ 100 % liegt das Ergebnis näher am wahren Farbton als mit 0 % (Farbton wie im Original).
+    /// </summary>
+    [Fact]
+    public void HazeColour_MovesTheHueBackTowardsTheScene()
+    {
+        var scene = new float[W * H * 3];
+        for (var y = 0; y < H; y++)
+        for (var x = 0; x < W; x++)
+        {
+            var i = (y * W + x) * 3;
+            var shade = 0.4f + 0.6f * (((x * 7 + y * 3) % 20) / 19f);
+            (scene[i], scene[i + 1], scene[i + 2]) = (0.10f * shade, 0.30f * shade, 0.06f * shade);   // R, G, B: Wiese
+        }
+        float[] air = [0.62f, 0.72f, 0.92f];   // R, G, B: bläulicher Dunst
+        var hazy = new byte[W * H * 4];
+        for (var p = 0; p < W * H; p++)
+        {
+            for (var c = 0; c < 3; c++)
+            {
+                var t = 0.25f + 0.7f * (p / W) / (H - 1f);   // oben dichter Dunst, unten fast klar — wie eine Landschaft in die Ferne
+                hazy[p * 4 + (2 - c)] = Srgb.ToByte(scene[p * 3 + c] * t + air[c] * (1 - t));
+            }
+            hazy[p * 4 + 3] = 255;
+        }
+
+        static double MeanHue(Func<int, (float L, float A, float B)> lab)
+        {
+            double a = 0, b = 0;
+            for (var p = 0; p < W * H; p++) { var c = lab(p); a += c.A; b += c.B; }
+            return Oklab.Hue((float)a, (float)b);
+        }
+        var truth = MeanHue(p => Oklab.FromLinear(scene[p * 3], scene[p * 3 + 1], scene[p * 3 + 2]));
+        double HueOf(byte[] px) => MeanHue(p => Oklab.FromSrgb(px[p * 4 + 2] / 255f, px[p * 4 + 1] / 255f, px[p * 4] / 255f));
+        static double Off(double h, double t) => Math.Abs(((h - t) % 360 + 540) % 360 - 180);
+
+        var keep = HueOf(Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100, DehazeCast: 0)));
+        var remove = HueOf(Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100, DehazeCast: 100)));
+        Assert.True(Off(remove, truth) < Off(keep, truth) - 2,
+            $"Wahrheit {truth:F0}°, Dunstfarbe 0 %: {keep:F0}°, 100 %: {remove:F0}°");
+    }
+
+    /// <summary>
     /// Durchläufe: Jeder Durchlauf schätzt am Zwischenstand neu — mehr Durchläufe, mehr
     /// Kontrast, ohne dass das Bild kippt; die Feineinstellung zählt nur mit Dunst.
     /// </summary>

@@ -72,6 +72,10 @@ internal static partial class Dehaze
 
     /// <summary>Vorgabe Entstufen (Debanding) in Prozent.</summary>
     internal const double DefaultDeband = 50;
+
+    /// <summary>Vorgabe „Dunstfarbe“ in Prozent: wie viel der Luftlicht-Farbe abgezogen wird (0 = Farbton wie im
+    /// Original, so bis 0.5.4). Halb: Smog verliert seinen Gelbstich, Abendlicht behält einen Teil seiner Wärme.</summary>
+    internal const double DefaultCast = 50;
     /// <summary>Anteil des Entstufens an der Quelle (vor dem ersten Durchlauf): Ihre Stufen sind nur eine
     /// 8-Bit-Stufe hoch, eine kleinere Schwelle genügt und schont feine Struktur.</summary>
     internal const float SourceDebandShare = 0.6f;
@@ -84,7 +88,7 @@ internal static partial class Dehaze
     internal const double EdgeSigma = 2.0;
 
     /// <summary>Wahrnehmungsanteile als Faktoren (Prozent / 100); siehe die Default-Konstanten.</summary>
-    internal sealed record Settings(float Clarity, float Sharpen, float Curve, float Vibrance, float BrightnessMatch)
+    internal sealed record Settings(float Clarity, float Sharpen, float Curve, float Vibrance, float BrightnessMatch, float CastRemoval = (float)(DefaultCast / 100))
     {
         public static readonly Settings Default = new(
             (float)(DefaultClarity / 100), (float)(DefaultSharpen / 100), (float)(DefaultCurve / 100),
@@ -101,6 +105,12 @@ internal static partial class Dehaze
     /// und braun.
     /// </summary>
     private const float ChromaPerUnit = 0.15f;
+
+    /// <summary>Anteil des Farbstichs je Einheit Dunstmenge bei Regler „Dunstfarbe“ 100 %.</summary>
+    private const float HueRecovery = 1.0f;
+
+    /// <summary>Höchstens so viel der Luftlicht-Farbe gilt als beigemischt (darüber ist das Pixel fast nur Dunst).</summary>
+    private const float MaxCastShare = 0.8f;
 
     /// <summary>Radius der Klarheit (Gauß-Sigma des Guided Filters), relativ zur längsten Kante.</summary>
     private const double ClarityPerEdge = 0.02;
@@ -161,6 +171,13 @@ internal static partial class Dehaze
             for (var p = 0; p < t.Length; p++) t[p] += (1 - t[p]) * Math.Min(1, sky[p]);   // Himmel: nur im ersten Durchlauf
         var boosted = ProtectSky(sky, t, boost);
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
+        // Farbe des Luftlichts je Feld (Helligkeit linear, Oklab a/b) — für das Abziehen des Farbstichs
+        var airLab = new float[sw * sh * 3];
+        for (var p = 0; p < sw * sh; p++)
+        {
+            var (_, la, lb) = Oklab.FromLinear(air[p * 3 + 2], air[p * 3 + 1], air[p * 3]);
+            (airLab[p * 3], airLab[p * 3 + 1], airLab[p * 3 + 2]) = (Luma(air[p * 3], air[p * 3 + 1], air[p * 3 + 2]), la, lb);
+        }
         var guide = Encode(small);
         var refine = Math.Max(1.0, RefinePerEdge * Math.Max(sw, sh));
         var plain = GuidedColor.Coefficients(guide, t, sw, sh, refine, eps: 1e-3f);
@@ -273,7 +290,16 @@ internal static partial class Dehaze
                     // bei Grün das Blau, Felder wurden ocker und braun.
                     var was = Oklab.FromLinear(lin[2], lin[1], lin[0]);
                     var now = Oklab.FromLinear(Math.Max(0, oR), Math.Max(0, oG), Math.Max(0, oB));
-                    var c0 = MathF.Sqrt(was.A * was.A + was.B * was.B);
+                    // Farbstich des Dunstes abziehen: Der Dunst mischt die Farbe des Luftlichts bei, mit dem Anteil
+                    // (1 − t) · Helligkeit(Luftlicht) / Helligkeit(Pixel). Diesen Anteil ihrer Farbe (Oklab a/b)
+                    // ziehen wir ab, sachte (je Durchlauf mit der Dunstmenge) und nur in der Landschaft. Der volle
+                    // Farbton des Modells machte Felder braun (es rechnet den dunkelsten Kanal gegen null) — das hier
+                    // nimmt nur die Dunstfarbe weg: grauer Dunst ändert nichts, bläulicher verliert sein Blau.
+                    var castShare = Math.Clamp((1 - tt) * cell.Of(airLab, 0) / Math.Max(Luma(lin[0], lin[1], lin[2]), 1e-4f), 0, MaxCastShare);
+                    var cast = s.CastRemoval * HueRecovery * mix * land * castShare;
+                    var baseA = was.A - cast * cell.Of(airLab, 1);
+                    var baseB = was.B - cast * cell.Of(airLab, 2);
+                    var c0 = MathF.Sqrt(baseA * baseA + baseB * baseB);
                     var c1 = MathF.Sqrt(now.A * now.A + now.B * now.B);
                     // Im Himmel keine zusätzliche Buntheit: Die Rückrechnung machte den Himmel blauer,
                     // der Lichthof der Sonne (dunstfarben, bleibt stehen) wirkte dann als pinker Ring.
@@ -290,7 +316,7 @@ internal static partial class Dehaze
                     var chroma = c0 * ratio;
                     ratio *= 1 + vibrance * land * (1 - Math.Min(1, chroma / VibranceFull));   // nicht im Himmel, auch nicht im Lichthof
 
-                    var (sR, sG, sB) = Oklab.ToSrgb(L, was.A * ratio, was.B * ratio);
+                    var (sR, sG, sB) = Oklab.ToSrgb(L, baseA * ratio, baseB * ratio);
                     result[i] = sB;
                     result[i + 1] = sG;
                     result[i + 2] = sR;

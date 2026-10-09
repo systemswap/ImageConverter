@@ -197,6 +197,8 @@ public static class English
         ["Kantenschärfe mit größerem Radius (2 Pixel), je Durchlauf. Vorgabe aus — erst, wenn die feine Schärfe nicht reicht."] = "Edge sharpening with a larger radius (2 pixels), in each pass. Off by default — only when fine sharpening is not enough.",
         ["Wie weit die Helligkeit großräumig wieder ans Original angeglichen wird. 100: so hell wie vorher; 0: so dunkel, wie die Szene ohne Dunst wäre."] = "How far the large-scale brightness is matched back to the original. 100: as bright as before; 0: as dark as the scene would be without haze.",
         ["Entstufen"] = "Deband",
+        ["Dunstfarbe"] = "Haze colour",
+        ["Wie viel der Farbe des Dunstes aus der Landschaft genommen wird: Smog verliert seinen Gelbstich, ferne Wiesen ihr Blau. Bei 0 bleibt der Farbton wie im Original. Im Abendlicht nimmt viel davon auch Wärme weg."] = "How much of the haze's colour is taken out of the landscape: smog loses its yellow cast, distant meadows their blue. At 0 the hue stays as in the original. In evening light, a lot of it also takes away warmth.",
         ["Glättet Treppen in weichen Verläufen wie dem Himmel (Debanding): am Original, bevor der Kontrast die 8-Bit-Stufen spreizt, und nach jedem Durchlauf. Kanten und Struktur bleiben. Gerechnet wird ohnehin in 32 Bit, auf 8 Bit gerundet erst am Schluss, mit feinem Korn."] = "Smooths steps in soft gradients such as the sky (debanding): on the original, before contrast spreads the 8-bit levels apart, and after every pass. Edges and texture stay. Processing is in 32 bit anyway, rounded to 8 bit only at the end, with fine grain.",
         ["Vorgaben"] = "Defaults",
         ["16 Bit je Kanal"] = "16 bits per channel",
