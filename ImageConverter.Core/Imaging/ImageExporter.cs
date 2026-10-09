@@ -244,6 +244,21 @@ public static class ImageExporter
     }
 
     /// <summary>Die Schritte von <see cref="Render"/> und dem Speichern, in ihrer Reihenfolge.</summary>
+    /// <summary>
+    /// Die Schritte von <see cref="RenderLook"/> (Entrauschen, Dunst je Durchlauf, Licht und Farbe, Schärfen) für die
+    /// Fortschrittsanzeige — z. B. wenn die KI den Look vorher ins Bild rechnet oder ihn über ein Ergebnis legt.
+    /// </summary>
+    /// <param name="megapixels">Größe des Bildes, auf dem gerechnet wird.</param>
+    public static WorkPlan PlanLook(double megapixels, double denoise, Adjustments? adjustments, double sharpenAmount,
+        IProgress<WorkProgress>? progress, CancellationToken cancel = default)
+    {
+        var plan = new WorkPlan(progress, cancel);
+        if (denoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * megapixels);
+        if (adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, megapixels);
+        if (sharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * megapixels);
+        return plan;
+    }
+
     private static WorkPlan Plan(MagickImage source, ExportOptions o, IProgress<WorkProgress> progress)
     {
         var plan = new WorkPlan(progress);

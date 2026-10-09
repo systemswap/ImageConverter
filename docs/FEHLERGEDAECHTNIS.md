@@ -892,3 +892,19 @@ Test oder Nachweis.
   Karte) vom Benutzer am Foto 172251 als gut befunden: GFPGAN Stärke 80, Hautstruktur 69, Falten 48,
   Körnung 31, Korngröße ×0,46, erst KI; Dunst 47 × 6, Klarheit 29, Kontrast 12, Dynamik 20, Schärfe fein 18,
   Kanten aus, Helligkeit 72, Entstufen 50, Dunstfarbe 50.
+
+## 25. KI: Dunst nach der KI ohne Fortschritt, Vorher zeigte gefiltertes Bild, Regler versteckt
+
+- **Entdeckt:** 0.5.20 (09.10.2026), vom Benutzer. **Behoben:** 0.5.21 beta.
+- **Was:** (1) Bei „Erst KI, dann Einstellungen“ lief nach der KI der Dunst (mehrere Durchläufe) über
+  das Ergebnis, ohne dass etwas angezeigt wurde — im Debug-Build ~2,5 s je Durchlauf auf 2048 px.
+  (2) „Vorher / Nachher“ zeigte bei offenem Ergebnis links das Bild *mit* Einstellungen. (3) Regler
+  erschienen je nach Modell oder verschwanden; Modell- und Nachher-Regler standen gemischt.
+- **Wie:** `ImageExporter.PlanLook` / `Look.Plan` liefern die Schritte des Looks; die KI-Vorschau
+  zeigt sie in Fortschrittsbalken und Label („Dunst entfernen – Durchlauf 2 von 6“), danach wieder
+  die Fertig-Meldung. Eine neue Reglerbewegung bricht die veraltete Rechnung zwischen zwei Schritten
+  ab. Bei „Erst Einstellungen“ zeigt das Ins-Bild-Rechnen dieselben Schritte. Vorher = Bild vor der
+  KI ohne Einstellungen (`setup.Base`, verkleinert wie die Vorschau). Panel: oben, was ins Modell
+  geht (Modell, Natürlichkeit, Größe, Reihenfolge), dann KI berechnen und Fortschritt, ein dezenter
+  Strich, darunter, was danach live wirkt (Stärke, Hautstruktur, Falten, Körnung, Korngröße,
+  Karte); alle immer sichtbar, nicht passende ausgegraut (Tooltip „Nur …“ auch ausgegraut).

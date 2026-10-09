@@ -18,6 +18,7 @@
             </StackPanel>
 
             <StackPanel IsVisible="{Binding HasModels}">
+                <!-- Was ins Modell geht: Modell, Natürlichkeit, Größe, Reihenfolge — danach „KI berechnen“ -->
                 <Grid Classes="row" ColumnDefinitions="76,*">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Modell'}" />
                     <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
@@ -41,57 +42,19 @@
                 </Grid>
 
                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
-                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Strength}"
-                            ToolTip.Tip="{l:T 'Deckkraft der KI-Bearbeitung über dem Original: 100 % = nur KI, 30 % = 70 % Original und 30 % KI. Wirkt sofort, ohne neu zu rechnen.'}" />
-                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding StrengthLabel}" />
-                </Grid>
-
-                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding HasFidelity}">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Natürlichkeit'}" />
                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Fidelity}"
-                            ToolTip.Tip="{l:T 'Wie nah CodeFormer am Original bleibt: niedrig = stärkere Verbesserung, die Person kann sich aber verändern; hoch = näher am Original. Geht ins Modell — nach dem Loslassen wird neu gerechnet.'}" />
+                            IsEnabled="{Binding HasFidelity}" ToolTip.ShowOnDisabled="True"
+                            ToolTip.Tip="{l:T 'Nur CodeFormer: wie nah das Modell am Original bleibt — niedrig = stärkere Verbesserung, die Person kann sich aber verändern; hoch = näher am Original. Geht ins Modell — nach dem Loslassen wird neu gerechnet.'}" />
                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding FidelityLabel}" />
                 </Grid>
 
-                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
-                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Hautstruktur'}" />
-                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Texture}"
-                            ToolTip.Tip="{l:T 'Holt Poren und feine Hautstruktur aus dem Original zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live.'}" />
-                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding TextureLabel}" />
-                </Grid>
-
-                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
-                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Falten'}" />
-                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Folds}"
-                            ToolTip.Tip="{l:T 'Falten und Züge: holt Lachfalten, Stirn- und Mundlinien zurück, die das Modell geglättet hat — nur auf der Haut, Augen, Lippen und Zähne bleiben vom Modell. Wirkt live.'}" />
-                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding FoldsLabel}" />
-                </Grid>
-
-                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
-                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Körnung'}" />
-                    <Slider Grid.Column="1" Minimum="0" Maximum="200" Value="{Binding Grain}"
-                            ToolTip.Tip="{l:T 'Korn im Gesicht, damit es nicht sauberer wirkt als der Rest des Fotos: 100 % = so viel wie im übrigen Bild gemessen, je Helligkeit. Wirkt live.'}" />
-                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainLabel}" />
-                </Grid>
-
-                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
-                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Korngröße'}" />
-                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainSize}"
-                            ToolTip.Tip="{l:T 'Größe des Korns: ×1 = wie im Foto gemessen, nach links feiner, nach rechts gröber. Wirkt live.'}" />
-                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainSizeLabel}" />
-                </Grid>
-
-                <CheckBox Margin="76,0,0,4" IsVisible="{Binding IsFaceModel}" IsEnabled="{Binding HasPending}"
-                          IsChecked="{Binding ShowMap}" Content="{l:T 'Karte zeigen'}"
-                          ToolTip.Tip="{l:T 'Zeigt, was wohin kommt: rot, wo Falten aus dem Original zurückkommen (je kräftiger, desto mehr), blau, was vom Modell bleibt (Augen, Brauen, Lippen, Zähne).'}" />
-
-                <Grid Classes="row" ColumnDefinitions="76,*" IsVisible="{Binding IsEnhanceModel}">
+                <Grid Classes="row" ColumnDefinitions="76,*">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Größe'}" />
                     <ComboBox Classes="tr" Grid.Column="1" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding SizeOptions}" SelectedItem="{Binding SelectedSize}"
-                              IsEnabled="{Binding !IsRunning}"
-                              ToolTip.Tip="{l:T '„Größe behalten“: das Modell rechnet in vierfacher Größe und mittelt zurück — sauberer als das Original, gleich viele Pixel. Vergrößern ergänzt Details, die vorher nicht da waren.'}" />
+                              IsEnabled="{Binding CanChooseSize}" ToolTip.ShowOnDisabled="True"
+                              ToolTip.Tip="{l:T 'Nur Allround: „Größe behalten“ — das Modell rechnet in vierfacher Größe und mittelt zurück, sauberer als das Original, gleich viele Pixel. Vergrößern ergänzt Details, die vorher nicht da waren.'}" />
                 </Grid>
 
                 <Grid Classes="row" ColumnDefinitions="76,*">
@@ -103,20 +66,71 @@
                 </Grid>
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,2" Text="{Binding OrderHint}" />
 
-                <!-- Starten oder Fortschritt -->
+                <!-- Starten; Fortschritt der KI und der Einstellungen danach (Dunst je Durchlauf) -->
                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         Margin="0,4,0,0" Content="{l:T 'KI berechnen'}"
-                        IsVisible="{Binding !IsRunning}" Command="{Binding ApplyCommand}"
+                        IsVisible="{Binding !ShowProgress}" Command="{Binding ApplyCommand}"
                         ToolTip.Tip="{l:T 'Rechnet das Modell und zeigt das Ergebnis. Danach wirken die Regler live; ins Bild kommt es erst mit „Übernehmen“. Gerechnet wird immer auf dem Stand vor der letzten KI — nichts häuft sich an.'}" />
 
-                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0" IsVisible="{Binding IsRunning}">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0" IsVisible="{Binding ShowProgress}">
                     <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding Progress}"
-                                 VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <Button Grid.Column="1" Classes="subtle" Content="{l:T 'Abbrechen'}" Command="{Binding CancelCommand}" />
+                                 VerticalAlignment="Center" Margin="0,4,8,4" />
+                    <Button Grid.Column="1" Classes="subtle" Content="{l:T 'Abbrechen'}" Command="{Binding CancelCommand}"
+                            IsVisible="{Binding IsRunning}" />
                 </Grid>
 
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding Status}" />
+
+                <!-- Was danach gilt: wirkt live auf das Ergebnis, ohne das Modell neu zu rechnen -->
+                <Border Height="1" Margin="0,10,0,6" Background="{DynamicResource BorderBrush2}" />
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Strength}"
+                            ToolTip.Tip="{l:T 'Deckkraft der KI-Bearbeitung über dem Original: 100 % = nur KI, 30 % = 70 % Original und 30 % KI. Wirkt sofort, ohne neu zu rechnen.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding StrengthLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Hautstruktur'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Texture}"
+                            IsEnabled="{Binding IsFaceModel}" ToolTip.ShowOnDisabled="True"
+                            ToolTip.Tip="{l:T 'Nur Gesichtsmodelle: holt Poren und feine Hautstruktur aus dem Original zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding TextureLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Falten'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Folds}"
+                            IsEnabled="{Binding IsFaceModel}" ToolTip.ShowOnDisabled="True"
+                            ToolTip.Tip="{l:T 'Nur Gesichtsmodelle: holt Lachfalten, Stirn- und Mundlinien zurück, die das Modell geglättet hat — nur auf der Haut, Augen, Lippen und Zähne bleiben vom Modell. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding FoldsLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Körnung'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="200" Value="{Binding Grain}"
+                            IsEnabled="{Binding IsFaceModel}" ToolTip.ShowOnDisabled="True"
+                            ToolTip.Tip="{l:T 'Nur Gesichtsmodelle: Korn im Gesicht, damit es nicht sauberer wirkt als der Rest des Fotos — 100 % = aufgefüllt bis zum Korn des übrigen Bildes, je Helligkeit. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Korngröße'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainSize}"
+                            IsEnabled="{Binding IsFaceModel}" ToolTip.ShowOnDisabled="True"
+                            ToolTip.Tip="{l:T 'Nur Gesichtsmodelle: Größe des Korns — ×1 = wie im Foto gemessen, nach links feiner, nach rechts gröber. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainSizeLabel}" />
+                </Grid>
+
+                <CheckBox Margin="76,0,0,4" IsEnabled="{Binding CanShowMap}" ToolTip.ShowOnDisabled="True"
+                          IsChecked="{Binding ShowMap}" Content="{l:T 'Karte zeigen'}"
+                          ToolTip.Tip="{l:T 'Nur Gesichtsmodelle, sobald ein Ergebnis da ist: zeigt, was wohin kommt — rot, wo Falten aus dem Original zurückkommen (je kräftiger, desto mehr), blau, was vom Modell bleibt (Augen, Brauen, Lippen, Zähne).'}" />
+
                 <!-- Offenes Ergebnis: übernehmen oder verwerfen -->
-                <Grid ColumnDefinitions="*,6,*" Margin="0,4,0,0" IsVisible="{Binding HasPending}">
+                <Grid ColumnDefinitions="*,6,*" Margin="0,6,0,0" IsVisible="{Binding HasPending}">
                     <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Content="{l:T 'Übernehmen'}" Command="{Binding CommitCommand}"
                             ToolTip.Tip="{l:T 'Schreibt das Ergebnis mit den aktuellen Reglern ins Bild. Rückgängig mit Strg+Z.'}" />
@@ -125,10 +139,7 @@
                             ToolTip.Tip="{l:T 'Ergebnis verwerfen — das Bild bleibt, wie es war.'}" />
                 </Grid>
 
-                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
-                           IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           Text="{Binding Status}" />
-                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,6,0,0"
                            Text="{l:T 'Läuft lokal auf deinem Rechner. Kann je nach Bild einige Minuten dauern.'}" />
             </StackPanel>
         </StackPanel>

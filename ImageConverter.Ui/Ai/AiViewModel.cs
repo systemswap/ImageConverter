@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Imaging;
 using ImageConverter.Imaging;
 using ImageConverter.ViewModels;
 using ImageMagick;
@@ -74,7 +75,7 @@ public partial class AiViewModel : ViewModelBase
     // ------------------------------------------------------------ Auswahl
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint), nameof(IsFaceModel), nameof(HasFidelity))]
+    [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint), nameof(IsFaceModel), nameof(HasFidelity), nameof(CanChooseSize), nameof(CanShowMap))]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     public partial AiModel? SelectedModel { get; set; }
 
@@ -98,6 +99,7 @@ public partial class AiViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(CommitCommand), nameof(DiscardCommand))]
+    [NotifyPropertyChangedFor(nameof(ShowProgress), nameof(CanChooseSize))]
     public partial bool IsRunning { get; set; }
 
     /// <summary>Fortschritt 0…100.</summary>
@@ -154,7 +156,17 @@ public partial class AiViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CommitCommand), nameof(DiscardCommand))]
+    [NotifyPropertyChangedFor(nameof(CanShowMap))]
     public partial bool HasPending { get; set; }
+
+    /// <summary>Die Einstellungen (Dunst …) werden gerade über das Ergebnis gelegt — Fortschritt wie beim Rechnen zeigen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowProgress))]
+    public partial bool IsRenderingLook { get; set; }
+
+    public bool ShowProgress => IsRunning || IsRenderingLook;
+    public bool CanChooseSize => IsEnhanceModel && !IsRunning;
+    public bool CanShowMap => IsFaceModel && HasPending;
 
     /// <summary>Hautstruktur 0…100 %: feine Struktur aus dem Bild davor statt der glatten Modellhaut (nur Gesichter).</summary>
     [ObservableProperty]
@@ -321,7 +333,13 @@ public partial class AiViewModel : ViewModelBase
                     Status = Tr.T("Einstellungen werden ins Bild gerechnet …");
                     _main.ActivityText = Tr.T("KI · {0}", Status);
                     var (from, apply) = (start.Base, start.Apply);
-                    rendered = await Task.Run(() => MainViewModel.RenderLook(from, apply), cts.Token);
+                    var plan = apply.Plan((int)from.Width, (int)from.Height, new Progress<WorkProgress>(p =>
+                    {
+                        Progress = p.Fraction * 100;
+                        Status = p.Step;
+                        _main.ActivityText = Tr.T("KI · {0}", p.Step);
+                    }), cts.Token);
+                    rendered = await Task.Run(() => MainViewModel.RenderLook(from, apply, plan), cts.Token);
                     setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false);
                 }
                 else
@@ -388,6 +406,7 @@ public partial class AiViewModel : ViewModelBase
                 FormatDuration(clock.Elapsed));
             if (model.Kind == AiModelKind.Face && !Store.IsInstalled(AiModelCatalog.FaceParser))
                 Status += " " + Tr.T("Tipp: „Gesichtsbereiche“ in den Einstellungen laden — dann wirken Falten genauer.");
+            _resultStatus = Status;
         }
         catch (OperationCanceledException)
         {
@@ -416,7 +435,11 @@ public partial class AiViewModel : ViewModelBase
 
     // Vorschau beim Ziehen: die letzte Anforderung gewinnt, gerechnet wird nie zweimal gleichzeitig
     private bool _previewRunning, _previewDirty;
-    private (IAiRun Run, MainViewModel.Look? Look, AiPreviewSize Size)? _beforeOf;
+    private CancellationTokenSource? _previewCts;
+    private (IAiRun Run, AiPreviewSize Size)? _beforeOf;
+
+    /// <summary>Meldung nach dem Rechnen — steht wieder da, sobald die Einstellungen über dem Ergebnis fertig sind.</summary>
+    private string? _resultStatus;
 
     private void RequestPreview()
     {
@@ -424,6 +447,7 @@ public partial class AiViewModel : ViewModelBase
         if (_previewRunning)
         {
             _previewDirty = true;
+            _previewCts?.Cancel();   // veraltete Rechnung (Dunst …) zwischen zwei Schritten abbrechen
             return;
         }
 
@@ -448,17 +472,55 @@ public partial class AiViewModel : ViewModelBase
                 var size = look is not { IsNone: false } && _main.TargetIsImageSize
                     ? new AiPreviewSize(run.Width, run.Height)
                     : _main.PreviewSize();
-                var shown = await Task.Run(() => map is not null ? Render(map.Map(blend, size), null) : Render(run.Preview(blend, size), look));
-                if (ReferenceEquals(run, _run) && !IsRunning)
-                    _main.OverrideBitmap = BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
 
-                // Vorher-Seite für „Vorher / Nachher“: dasselbe Ergebnis mit Stärke 0 = Bild vor der KI (mit demselben Look)
-                if (_beforeOf is not { } b || !ReferenceEquals(b.Run, run) || b.Look != look || b.Size != size)
+                // Einstellungen über dem Ergebnis (Dunst in mehreren Durchläufen …): Schritt im Label zeigen
+                using var cts = _previewCts = new CancellationTokenSource();
+                var plan = map is null && look is { IsNone: false }
+                    ? look.Plan(size.Width, size.Height, new Progress<WorkProgress>(p =>
+                    {
+                        if (cts.IsCancellationRequested) return;
+                        Status = p.Step;
+                        Progress = p.Fraction * 100;
+                    }), cts.Token)
+                    : null;
+
+                AiPreviewFrame shown;
+                try
                 {
-                    var before = await Task.Run(() => Render(run.Preview(new AiBlend(0), size), look));
+                    if (plan is not null)
+                    {
+                        Progress = 0;
+                        IsRenderingLook = true;
+                    }
+                    shown = await Task.Run(() => map is not null
+                        ? Render(map.Map(blend, size), null, null)
+                        : Render(run.Preview(blend, size), look, plan), cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    continue;   // neuere Reglerstellung wartet schon
+                }
+                finally
+                {
+                    _previewCts = null;
+                    IsRenderingLook = false;
+                }
+
+                if (ReferenceEquals(run, _run) && !IsRunning)
+                {
+                    _main.OverrideBitmap = BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
+                    if (plan is not null) Status = _resultStatus;
+                }
+
+                // Vorher-Seite für „Vorher / Nachher“: das Bild vor der KI, ohne Einstellungen — so zeigt der Vergleich
+                // links das Original und rechts KI samt allen Einstellungen
+                if (_beforeOf is not { } b || !ReferenceEquals(b.Run, run) || b.Size != size)
+                {
+                    var origin = setup.Base;
+                    var before = await Task.Run(() => Original(origin, size));
                     if (ReferenceEquals(run, _run))
                     {
-                        _beforeOf = (run, look, size);
+                        _beforeOf = (run, size);
                         _main.OverrideBeforeBitmap = BitmapOps.FromBgra(before.Bgra, before.Width, before.Height);
                     }
                 }
@@ -475,8 +537,18 @@ public partial class AiViewModel : ViewModelBase
         }
     }
 
-    private static AiPreviewFrame Render(AiPixels frame, MainViewModel.Look? look) =>
-        new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look), frame.Width, frame.Height);
+    private static AiPreviewFrame Render(AiPixels frame, MainViewModel.Look? look, WorkPlan? plan) =>
+        new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look, plan), frame.Width, frame.Height);
+
+    /// <summary>Das Bild vor der KI in Vorschaugröße, ohne Einstellungen (für die Vorher-Seite).</summary>
+    private static AiPreviewFrame Original(MagickImage image, AiPreviewSize size)
+    {
+        using var small = ImageOps.Resize(image, size.Width, size.Height, size.Filter, size.GammaCorrect);
+        var pixels = ImageOps.ToDisplayPixels(small);
+        var bgra = Pixels.ToBytes(pixels, dither: true);
+        PixelPool.Return(pixels);
+        return new AiPreviewFrame(bgra, size.Width, size.Height);
+    }
 
     private bool CanCommit => HasPending && !IsRunning && !_main.IsEditing;
 
@@ -542,6 +614,7 @@ public partial class AiViewModel : ViewModelBase
         _fidelityCts?.Cancel();
         if (IsRunning) _runCts?.Cancel();   // ein Neurechnen benutzt das Eingangsbild noch — dann gibt es der GC frei
         else DisposeInput(_setup);
+        _previewCts?.Cancel();
         (_run, _setup, _runFaces, _beforeOf) = (null, null, null, null);
         HasPending = false;
         ShowMap = false;

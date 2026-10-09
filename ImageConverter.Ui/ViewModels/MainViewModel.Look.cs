@@ -22,6 +22,10 @@ public partial class MainViewModel
         public double SharpenSigma(int width) => SharpenRadius * width / Math.Max(1, TargetWidth);
 
         /// <summary>Derselbe Look ohne Wirkung: Regler, die etwas tun, auf null; Feineinstellungen bleiben.</summary>
+        /// <summary>Schritte für die Fortschrittsanzeige (Entrauschen, Dunst je Durchlauf, Licht und Farbe, Schärfen).</summary>
+        public WorkPlan Plan(int width, int height, IProgress<WorkProgress>? progress, System.Threading.CancellationToken cancel) =>
+            ImageExporter.PlanLook((double)width * height / 1e6, Noise, Adjust, SharpenAmount, progress, cancel);
+
         public Look Neutral() => this with
         {
             Noise = 0,
@@ -77,20 +81,24 @@ public partial class MainViewModel
     }
 
     /// <summary>Look auf eine Vorschau (Pixelpuffer der Kette) rechnen und für die Anzeige runden (Hintergrund).</summary>
-    internal static byte[] RenderLookPreview(float[] bgra, int width, int height, Look? look)
+    internal static byte[] RenderLookPreview(float[] bgra, int width, int height, Look? look, WorkPlan? plan = null)
     {
         if (look is null || look.IsNone) return Pixels.ToBytes(bgra, dither: true);
 
         var pixels = bgra;
         if (look.Noise > 0)
         {
+            plan?.Next();
             using var image = Pixels.ToMagick16(bgra, width, height, alpha: false);
             using var denoised = ImageOps.Denoise(image, look.Noise);
             pixels = Pixels.FromMagick(denoised);
         }
-        if (!look.Adjust.IsNone) pixels = Adjust.Apply(pixels, width, height, look.Adjust);
+        if (!look.Adjust.IsNone) pixels = Adjust.Apply(pixels, width, height, look.Adjust, plan);
         if (look.SharpenAmount > 0)
+        {
+            plan?.Next();
             pixels = Sharpen.UnsharpMask(pixels, width, height, look.SharpenAmount, look.SharpenSigma(width));
+        }
 
         var result = Pixels.ToBytes(pixels, dither: true);
         PixelPool.Trim();
