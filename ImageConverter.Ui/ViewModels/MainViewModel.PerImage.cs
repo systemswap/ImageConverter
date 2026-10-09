@@ -108,14 +108,26 @@ public partial class MainViewModel
     }
 
     /// <summary>Stand, der für eine Datei gilt — aktuelles Bild, eigener Stand oder umgerechnete Kopie.</summary>
-    internal SettingsState SettingsFor(string path, int width, int height)
+    /// <param name="fileDpi">DPI aus der Datei — für Bilder, die noch nie angezeigt wurden (wie beim ersten Anzeigen).</param>
+    internal SettingsState SettingsFor(string path, int width, int height, double fileDpi)
     {
         if (path == CurrentPath)
             return CaptureSettings();
         if (!ApplyToAll && _fileSettings.TryGetValue(path, out var own))
             return own.SourceWidth == width && own.SourceHeight == height ? own : AdaptToImage(own, width, height);
-        return AdaptToImage(!ApplyToAll && _individualTemplate is { } t ? t : CaptureSettings(), width, height);
+        var template = !ApplyToAll && _individualTemplate is { } t ? t : CaptureSettings();
+        return AdaptToImage(WithFileDpi(template, fileDpi, _history?.Dpi), width, height);
     }
+
+    /// <summary>
+    /// DPI für ein Bild, das zum ersten Mal einen Stand bekommt: aus der Datei, wenn die Vorlage der Startstand ist
+    /// oder ihre DPI noch die der Datei des Bildes davor (also nicht selbst eingestellt) — sonst die eigene Einstellung.
+    /// </summary>
+    private SettingsState WithFileDpi(SettingsState template, double fileDpi, double? previousFileDpi) =>
+        ReferenceEquals(template, _startSettings)
+        || (previousFileDpi is { } d && template.Dpi == (int)Math.Round(d))
+            ? template with { Dpi = (int)Math.Round(fileDpi) }
+            : template;
 
     /// <summary>Zielmaße nach „Nicht vergrößern" — wie EffectiveTarget, aber für einen beliebigen Stand.</summary>
     internal static (int Width, int Height) EffectiveTarget(SettingsState s)
@@ -164,13 +176,13 @@ public partial class MainViewModel
     /// Das Bild einer Datei in ihrem aktuellen Stand: bearbeitet aus dem Verlauf,
     /// sonst frisch geladen. <c>Owned</c> = der Aufrufer muss es freigeben.
     /// </summary>
-    internal async Task<(MagickImage Image, bool Owned, long FileBytes)> GetImageAsync(string path)
+    internal async Task<(MagickImage Image, bool Owned, long FileBytes, double Dpi)> GetImageAsync(string path)
     {
         if (_histories.TryGetValue(path, out var h))
-            return (h.Current, false, h.FileBytes);
+            return (h.Current, false, h.FileBytes, h.Dpi);
 
         var loaded = await ImageLoader.LoadAsync(path);
-        return (loaded.Image, true, loaded.FileBytes);
+        return (loaded.Image, true, loaded.FileBytes, loaded.Dpi);
     }
 
     /// <summary>Zielordner und Dateiname (noch ohne Kollisionsprüfung).</summary>
@@ -182,10 +194,10 @@ public partial class MainViewModel
     /// <summary>Exportiert eine Datei mit ihrem Stand. Gibt Zielpfad und Größe zurück.</summary>
     internal async Task<(string Path, long Bytes)> ExportFileAsync(string path, IProgress<WorkProgress>? progress = null)
     {
-        var (image, owned, _) = await GetImageAsync(path);
+        var (image, owned, _, dpi) = await GetImageAsync(path);
         try
         {
-            var state = SettingsFor(path, (int)image.Width, (int)image.Height);
+            var state = SettingsFor(path, (int)image.Width, (int)image.Height, dpi);
             var options = OptionsFor(state);
             var (folder, fileName) = PlanOutput(path, state, options);
 

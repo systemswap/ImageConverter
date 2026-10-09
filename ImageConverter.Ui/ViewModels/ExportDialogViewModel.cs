@@ -93,12 +93,12 @@ public partial class ExportDialogViewModel : ViewModelBase
             if (_closing.IsCancellationRequested) return;
             try
             {
-                var (image, owned, _) = await _main.GetImageAsync(item.Path);
+                var (image, owned, _, dpi) = await _main.GetImageAsync(item.Path);
                 try
                 {
                     var w = (int)image.Width;
                     var h = (int)image.Height;
-                    var state = _main.SettingsFor(item.Path, w, h);
+                    var state = _main.SettingsFor(item.Path, w, h, dpi);
                     var options = MainViewModel.OptionsFor(state);
                     var (_, fileName) = _main.PlanOutput(item.Path, state, options);
 

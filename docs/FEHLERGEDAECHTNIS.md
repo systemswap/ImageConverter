@@ -835,3 +835,19 @@ Test oder Nachweis.
   der Datei) — vorher hätte es im Einzelmodus den Stand des zuletzt gezeigten Bildes übernommen.
   UI-Test mit zwei Bildern: Bild 1 Qualität 36 → Bild 2 zeigt 82, 2592 × 1944, 72 dpi → zurück
   bei Bild 1 wieder 36.
+
+## 23. Nie angezeigte Bilder: DPI der Datei ging beim Export und Druck verloren
+
+- **Entdeckt:** 0.5.14 beta (09.10.2026), bei der Durchsicht nach dem Umstellen auf „je Bild“.
+  **Behoben:** 0.5.15 beta.
+- **Was:** Mehrere Bilder exportieren oder drucken, ohne jedes einmal anzuzeigen: diese Bilder bekamen
+  die DPI der Vorlage (72 bzw. die des gezeigten Bildes) statt der aus ihrer Datei — falsche DPI im
+  Ergebnis und falsche Druckgröße.
+- **Warum:** Die DPI liest `ImageLoader` aus der Datei, aber nur `ShowFileAsync` übernahm sie (über
+  `EditHistory.Dpi`); `GetImageAsync` gab sie nicht weiter, `SettingsFor` kannte sie nicht.
+- **Wie:** `GetImageAsync` liefert die DPI mit, `SettingsFor(path, w, h, fileDpi)`; dieselbe Regel wie
+  beim Blättern in `WithFileDpi`: aus der Datei, wenn die Vorlage der Startstand ist oder ihre DPI noch
+  die der Datei des Bildes davor — selbst eingestellte DPI bleiben.
+- **Durchgesehen, ohne Befund:** Drehung (EXIF) und Farbprofil macht der Loader für beide Wege gleich;
+  Größe wird übergeben; Dateigröße und Formatname dienen nur der Anzeige.
+- **Nachweis:** `NewImagesTests.UnseenImage_GetsTheDpiOfItsFile`.

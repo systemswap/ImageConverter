@@ -52,4 +52,25 @@ public class NewImagesTests
         Assert.Equal(60, vm.Ai.Fidelity);
         Assert.Equal(vm.Ai.OrderOptions[0], vm.Ai.SelectedOrder);
     }
+
+    /// <summary>
+    /// Ein Bild, das nie angezeigt wurde (Export aller Bilder, Druck), bekommt die DPI aus seiner Datei —
+    /// wie beim ersten Anzeigen. Selbst eingestellte DPI bleiben.
+    /// </summary>
+    [Fact]
+    public void UnseenImage_GetsTheDpiOfItsFile()
+    {
+        var vm = new MainViewModel { DeferHistoryTurns = false };
+        vm.ResetToStart();   // wie nach dem Laden: je Bild, Vorlage = Startstand
+
+        var unseen = vm.SettingsFor("nie-angezeigt.jpg", 2592, 1944, fileDpi: 300);
+
+        Assert.Equal(300, unseen.Dpi);
+        Assert.Equal(2592, unseen.TargetWidth);   // Originalgröße
+        Assert.Equal(2592 / 300.0, unseen.PrintWidthIn, 6);
+
+        vm.ApplyToAll = true;
+        vm.Dpi = 150;   // selbst eingestellt, gilt für alle
+        Assert.Equal(150, vm.SettingsFor("nie-angezeigt.jpg", 2592, 1944, fileDpi: 300).Dpi);
+    }
 }

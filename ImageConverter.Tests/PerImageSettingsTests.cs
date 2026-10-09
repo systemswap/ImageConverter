@@ -15,7 +15,7 @@ public class PerImageSettingsTests
     {
         var vm = new MainViewModel { DeferHistoryTurns = false };
         vm.Dpi = 300;
-        var s = vm.SettingsFor("—", 4000, 3000);   // Vorlage mit allen Standardwerten
+        var s = vm.SettingsFor("—", 4000, 3000, ImageLoader.DefaultDpi);   // Vorlage mit allen Standardwerten
         return s with
         {
             SourceWidth = 4000, SourceHeight = 3000,

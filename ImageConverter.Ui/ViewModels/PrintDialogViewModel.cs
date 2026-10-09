@@ -242,10 +242,10 @@ public partial class PrintDialogViewModel : ViewModelBase
         {
             try
             {
-                var (image, owned, _) = await _main.GetImageAsync(path);
+                var (image, owned, _, dpi) = await _main.GetImageAsync(path);
                 try
                 {
-                    var state = _main.SettingsFor(path, (int)image.Width, (int)image.Height);
+                    var state = _main.SettingsFor(path, (int)image.Width, (int)image.Height, dpi);
                     var options = MainViewModel.OptionsFor(state);
                     var (thumb, tw, th) = await Task.Run(() =>
                     {
@@ -353,7 +353,7 @@ public partial class PrintDialogViewModel : ViewModelBase
             byte[] ImageFor(Placement p)
             {
                 var source = sources[p.ItemId];
-                var (image, owned, _) = _main.GetImageAsync(source.Path).GetAwaiter().GetResult();
+                var (image, owned, _, _) = _main.GetImageAsync(source.Path).GetAwaiter().GetResult();
                 try { return PrintDocument.RenderForPrint(image, source.Options, p, settings.Grayscale); }
                 finally { if (owned) image.Dispose(); }
             }

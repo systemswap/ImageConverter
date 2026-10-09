@@ -262,10 +262,7 @@ public partial class MainViewModel : ViewModelBase
                 // geändert hatte — sonst gilt die eigene Einstellung für alle.
                 // Einzelmodus ohne eigenen Stand: Vorlage vom Umschalten, nicht das vorige Bild
                 var template = !ApplyToAll && _individualTemplate is { } t ? t : outgoing;
-                if (isNew && ReferenceEquals(template, _startSettings))
-                    template = template with { Dpi = (int)Math.Round(history.Dpi) };   // frisch geladen: wie nach dem Start
-                else if (isNew && outgoingFileDpi is { } prevDpi && template.Dpi == (int)Math.Round(prevDpi))
-                    template = template with { Dpi = (int)Math.Round(history.Dpi) };
+                if (isNew) template = WithFileDpi(template, history.Dpi, outgoingFileDpi);   // wie bei SettingsFor
                 ApplySettings(AdaptToImage(template, SourceWidth, SourceHeight));
             }
             else if (isNew)
