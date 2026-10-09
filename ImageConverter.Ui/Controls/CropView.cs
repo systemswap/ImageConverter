@@ -347,7 +347,6 @@ public sealed class CropView : Control
 
     private const double MaxScale = 32;       // 3200 % — einzelne Pixel prüfen
     private const double WheelZoomStep = 1.2; // pro Rastung
-    private const double WheelPanStep = 60;   // px pro Rastung beim Scrollen
 
     /// <summary>true = Bild wird ins Fenster eingepasst; false = freier Zoom.</summary>
     private bool _fitMode = true;
@@ -434,13 +433,6 @@ public sealed class CropView : Control
         return new Rect(x, y, r.Width, r.Height);
     }
 
-    private void PanBy(Vector delta)
-    {
-        if (_fitMode) return;
-        _imageRect = ClampPan(_imageRect.Translate(delta));
-        InvalidateVisual();
-    }
-
     /// <summary>Bild wieder ganz ins Fenster einpassen.</summary>
     public void FitToView()
     {
@@ -461,13 +453,6 @@ public sealed class CropView : Control
         {
             // Strg + Mausrad: zoomen um den Mauszeiger
             ZoomAt(e.GetPosition(this), _scale * Math.Pow(WheelZoomStep, e.Delta.Y));
-            e.Handled = true;
-        }
-        else if (!_fitMode)
-        {
-            // Ohne Strg im Zoom: scrollen, mit Shift waagerecht
-            var d = e.Delta * WheelPanStep;
-            PanBy(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? new Vector(d.Y, d.X) : d);
             e.Handled = true;
         }
     }
@@ -525,9 +510,9 @@ public sealed class CropView : Control
         var props = e.GetCurrentPoint(this).Properties;
         var p = e.GetPosition(this);
 
-        // Verschieben im Zoom: mittlere Maustaste oder Strg + links, ohne Auswahlwerkzeug links allein
+        // Verschieben im Zoom: Strg + links, ohne Auswahlwerkzeug links allein
         var panKey = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        if (!_fitMode && (props.IsMiddleButtonPressed || (props.IsLeftButtonPressed && panKey)))
+        if (!_fitMode && props.IsLeftButtonPressed && panKey)
         {
             Focus();
             _mode = DragMode.Pan;

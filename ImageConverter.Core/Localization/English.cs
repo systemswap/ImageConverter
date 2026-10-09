@@ -32,7 +32,7 @@ public static class English
         ["Mit allen Einstellungen in voller Auflösung speichern. Vorhandene Dateien werden nie überschrieben."] = "Save at full resolution with all settings. Existing files are never overwritten.",
         ["Zoom"] = "Zoom",
         ["Strg + Mausrad über dem Bild zoomt um den Mauszeiger."] = "Ctrl + mouse wheel over the image zooms around the pointer.",
-        ["Im Zoom verschieben: Strg + Ziehen, mittlere Maustaste oder Mausrad (mit Umschalt waagerecht); bei ausgeschaltetem Auswahlrahmen auch einfach Ziehen."] = "Pan while zoomed: Ctrl + drag, the middle mouse button, or the mouse wheel (with Shift for horizontal); with the selection frame off, just drag.",
+        ["Im Zoom verschieben: Strg + Ziehen; bei ausgeschaltetem Auswahlrahmen auch einfach Ziehen."] = "Pan while zoomed: Ctrl + drag; with the selection frame off, just drag.",
         ["Klick hier oder Strg+0: einpassen · Strg+1: 100 %"] = "Click here or Ctrl+0: fit · Ctrl+1: 100 %",
         ["Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe."] = "The percentage refers to the result at the chosen size.",
         ["↶  Rückgängig"] = "↶  Undo",

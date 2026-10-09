@@ -73,7 +73,7 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
 - Numerische Felder für X/Y/B/H, Einrasten an Bildkanten, Pfeiltasten = 1 px,
   Shift+Pfeil = 10 px.
 - Buttons: **Auf Auswahl zuschneiden**, Auswahl zurücksetzen.
-- Zoom (Strg+Mausrad), Pan (Strg + Ziehen, Mittel-Taste; Auswahlrahmen-Knopf aus = Ziehen verschiebt), „Einpassen", 100 %.
+- Zoom (Strg+Mausrad), Pan (Strg + Ziehen; Auswahlrahmen-Knopf aus = Ziehen verschiebt), „Einpassen", 100 %.
 - Auswahl wird in **Bildkoordinaten** gehalten, nicht in Bildschirmpixeln — sonst
   verschiebt sich der Zuschnitt beim Zoomen.
 

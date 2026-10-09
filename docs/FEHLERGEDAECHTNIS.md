@@ -725,3 +725,6 @@ Test oder Nachweis.
   reicht). Bildkette unverändert gegenüber 0.5.0. Hinweis: `dotnet test` baut die
   Desktop-Exe nicht neu — für Bildschirmfotos erst die ganze Lösung bauen (sonst
   zeigte der Testlauf noch 0.4.51).
+- **Meilenstein 0.5.4 (09.10.2026):** Verschieben im Zoom nur noch mit Strg + Ziehen
+  (oder Ziehen bei ausgeschaltetem Auswahlrahmen) — mittlere Maustaste und Mausrad
+  entfernt (vom Benutzer gewünscht). Strg + Mausrad zoomt weiter. Bildkette unverändert.
