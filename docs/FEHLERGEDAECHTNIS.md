@@ -708,3 +708,8 @@ Test oder Nachweis.
   0,12. Verbleibende Ausnahme der Abnahme: Berglandschaft mit der Panorama-Kombi
   (Dunst 211, Schärfen 1,4) 139° statt 115° — beide Fassungen dort gleich
   überzeichnet, gemessen an wenigen grünen Pixeln; im Bild kein sichtbarer Unterschied.
+- **Vergleichsbilder nie als gestapeltes PNG aus dem Stapel-Hilfswerkzeug**
+  (`bench-stapel`, außerhalb des Repos): Beim Schreiben als PNG reduzierte es die
+  Farben — der Himmel sah nach starken Treppen aus, in beiden Fassungen, obwohl
+  die Einzelbilder glatt waren. Stapel als JPEG schreiben; bei Treppen im Vergleich
+  immer zuerst das Einzelbild ansehen.
