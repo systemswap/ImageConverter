@@ -33,13 +33,13 @@ public sealed class EnhanceRun : IAiRun
     public int Width => _w;
     public int Height => _h;
 
-    public bool SupportsTexture => false;
+    public bool SupportsDetails => false;
 
-    public AiPixels Preview(double strength, double texture, AiPreviewSize size)
+    public AiPixels Preview(AiBlend blend, AiPreviewSize size)
     {
         var small = Small(size);
         int sw = size.Width, sh = size.Height;
-        var s = (float)Math.Clamp(strength, 0, 1);
+        var s = (float)Math.Clamp(blend.Strength, 0, 1);
         var bgra = new float[sw * sh * 4];
         Parallel.For(0, sh, y =>
         {
@@ -57,9 +57,9 @@ public sealed class EnhanceRun : IAiRun
         return new AiPixels(bgra, sw, sh);
     }
 
-    public MagickImage Compose(double strength, double texture)
+    public MagickImage Compose(AiBlend blend)
     {
-        var s = (float)Math.Clamp(strength, 0, 1);
+        var s = (float)Math.Clamp(blend.Strength, 0, 1);
         ushort[] pixels;
         if (s >= 1) pixels = (ushort[])_result.Clone();
         else

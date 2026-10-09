@@ -95,6 +95,24 @@ public static class AiModelCatalog
         Origin: "Shiqi Yu u. a. (OpenCV Zoo), ONNX von FaceFusion",
         TileSize: 640);
 
+    public static AiModel FaceParser { get; } = new(
+        "faceparser",
+        "Gesichtsbereiche",
+        "Erkennt Haut, Augen, Mund … für die Detailregler",
+        "BiSeNet (Face Parsing): teilt jedes Gesicht in Bereiche — Haut, Nase, Augen, Brauen, Lippen, Zähne, Haare. " +
+        "Damit kommen Falten und Korn nur auf die Haut, Augen und Zähne bleiben vom Modell. " +
+        "Wird mit jedem Gesichtsmodell automatisch geladen.",
+        AiModelKind.Helper,
+        FaceFusion + "models-3.1.0/bisenet_resnet_18.onnx",
+        53_205_356,
+        "2218b6183c26ca5c83303232d682a536c670c13ea9695f716c777d1f244eefe9",
+        IsZip: false,
+        MainFile: "bisenet_resnet_18.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "zllrunning (face-parsing.PyTorch, BiSeNet), ONNX von FaceFusion",
+        TileSize: 512);
+
     public static AiModel Gfpgan { get; } = new(
         "gfpgan",
         "Gesichter – GFPGAN 1.4",
@@ -110,7 +128,7 @@ public static class AiModelCatalog
         License: "Apache-2.0",
         NonCommercial: false,
         Origin: "TencentARC (GFPGAN), ONNX von FaceFusion",
-        Requires: ["yunet"]);
+        Requires: ["yunet", "faceparser"]);
 
     public static AiModel Gfpgan13 { get; } = new(
         "gfpgan13",
@@ -127,7 +145,7 @@ public static class AiModelCatalog
         License: "Apache-2.0",
         NonCommercial: false,
         Origin: "TencentARC (GFPGAN), ONNX von FaceFusion",
-        Requires: ["yunet"]);
+        Requires: ["yunet", "faceparser"]);
 
     public static AiModel RestoreFormer { get; } = new(
         "restoreformer",
@@ -144,7 +162,7 @@ public static class AiModelCatalog
         License: "Apache-2.0",
         NonCommercial: false,
         Origin: "Zhouxia Wang u. a. (RestoreFormer++), ONNX von FaceFusion",
-        Requires: ["yunet"]);
+        Requires: ["yunet", "faceparser"]);
 
     public static AiModel CodeFormer { get; } = new(
         "codeformer",
@@ -161,9 +179,9 @@ public static class AiModelCatalog
         License: "S-Lab-1.0",
         NonCommercial: true,
         Origin: "Shangchen Zhou (CodeFormer), ONNX von FaceFusion",
-        Requires: ["yunet"]);
+        Requires: ["yunet", "faceparser"]);
 
-    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, FaceDetector];
+    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, FaceDetector, FaceParser];
 
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

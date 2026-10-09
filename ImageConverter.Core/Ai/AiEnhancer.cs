@@ -40,7 +40,7 @@ public static class AiEnhancer
     public static MagickImage Enhance(MagickImage source, ITileModel model, int factor, double strength,
         IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048) =>
-        Run(source, model, factor, progress, ct, preview, previewMaxEdge).Compose(strength, 0);
+        Run(source, model, factor, progress, ct, preview, previewMaxEdge).Compose(new AiBlend(strength));
 
     /// <summary>
     /// Das Modell mit voller Wirkung über das ganze Bild, noch nicht mit dem Original gemischt

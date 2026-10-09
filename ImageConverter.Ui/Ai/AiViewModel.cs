@@ -163,6 +163,39 @@ public partial class AiViewModel : ViewModelBase
 
     public string TextureLabel => $"{Texture:0} %";
 
+    /// <summary>Falten &amp; Züge 0…100 %: was das Modell an Falten geglättet hat, aus dem Original zurück (nur Haut).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FoldsLabel))]
+    public partial double Folds { get; set; }
+
+    public string FoldsLabel => $"{Folds:0} %";
+
+    /// <summary>Körnung 0…200 %: 100 % = so viel Korn wie im übrigen Foto gemessen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GrainLabel))]
+    public partial double Grain { get; set; }
+
+    public string GrainLabel => $"{Grain:0} %";
+
+    /// <summary>Korngröße als Regler 0…100: Mitte = wie im Foto gemessen, je Viertel doppelt so grob bzw. fein.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GrainSizeLabel))]
+    public partial double GrainSize { get; set; } = 50;
+
+    private double GrainFactor => Math.Pow(2, (GrainSize - 50) / 25);
+
+    public string GrainSizeLabel => $"×{GrainFactor:0.0#}";
+
+    /// <summary>Karte statt Bild: rot, wo Falten zurückkommen; blau, was vom Modell bleibt.</summary>
+    [ObservableProperty] public partial bool ShowMap { get; set; }
+
+    private AiBlend CurrentBlend => new(Strength / 100, Texture / 100, Folds / 100, Grain / 100, GrainFactor);
+
+    partial void OnFoldsChanged(double value) => RequestPreview();
+    partial void OnGrainChanged(double value) => RequestPreview();
+    partial void OnGrainSizeChanged(double value) => RequestPreview();
+    partial void OnShowMapChanged(bool value) => RequestPreview();
+
     /// <summary>CodeFormer: 0 = stärkste Verbesserung, 100 = möglichst nah am Original. Geht ins Modell — rechnet neu.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FidelityLabel))]
@@ -327,10 +360,12 @@ public partial class AiViewModel : ViewModelBase
 
                 Status = faces.Count == 1 ? Tr.T("1 Gesicht gefunden …") : Tr.T("{0} Gesichter gefunden …", faces.Count);
                 var (found, input2, fidelity) = (faces, image, Fidelity / 100);
+                var parserPath = Store.PathOf(AiModelCatalog.FaceParser);   // ohne: Falten ersatzweise ohne Augen und Mund
                 run = await Task.Run(() =>
                 {
                     var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model) { Fidelity = fidelity };
-                    return (IAiRun)AiFaces.Run(input2, found, face, progress, cts.Token, Preview);
+                    var parser = parserPath is null ? null : new OnnxFaceParser(_sessions.Get(AiModelCatalog.FaceParser, parserPath));
+                    return (IAiRun)AiFaces.Run(input2, found, face, parser, progress, cts.Token, Preview);
                 }, cts.Token);
             }
             else
@@ -351,6 +386,8 @@ public partial class AiViewModel : ViewModelBase
             HasPending = true;
             Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
                 FormatDuration(clock.Elapsed));
+            if (model.Kind == AiModelKind.Face && !Store.IsInstalled(AiModelCatalog.FaceParser))
+                Status += " " + Tr.T("Tipp: „Gesichtsbereiche“ in den Einstellungen laden — dann wirken Falten genauer.");
         }
         catch (OperationCanceledException)
         {
@@ -406,19 +443,19 @@ public partial class AiViewModel : ViewModelBase
             {
                 _previewDirty = false;
                 if (_run is not { } run || _setup is not { } setup) return;
-                var (strength, texture, look) = (Strength / 100, Texture / 100, PreviewLook(setup));
+                var (blend, look, map) = (CurrentBlend, PreviewLook(setup), ShowMap ? run as FaceRun : null);
                 // wie die normale Vorschau: ohne Look und Größenänderung das Bild selbst, sonst verkleinert
                 var size = look is not { IsNone: false } && _main.TargetIsImageSize
                     ? new AiPreviewSize(run.Width, run.Height)
                     : _main.PreviewSize();
-                var shown = await Task.Run(() => Render(run.Preview(strength, texture, size), look));
+                var shown = await Task.Run(() => map is not null ? Render(map.Map(blend, size), null) : Render(run.Preview(blend, size), look));
                 if (ReferenceEquals(run, _run) && !IsRunning)
                     _main.OverrideBitmap = BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
 
                 // Vorher-Seite für „Vorher / Nachher“: dasselbe Ergebnis mit Stärke 0 = Bild vor der KI (mit demselben Look)
                 if (_beforeOf is not { } b || !ReferenceEquals(b.Run, run) || b.Look != look || b.Size != size)
                 {
-                    var before = await Task.Run(() => Render(run.Preview(0, 0, size), look));
+                    var before = await Task.Run(() => Render(run.Preview(new AiBlend(0), size), look));
                     if (ReferenceEquals(run, _run))
                     {
                         _beforeOf = (run, look, size);
@@ -448,7 +485,7 @@ public partial class AiViewModel : ViewModelBase
     private async Task Commit()
     {
         if (_run is not { } run || _setup is not { } setup) return;
-        var (strength, texture) = (Strength / 100, Texture / 100);
+        var blend = CurrentBlend;
         _fidelityCts?.Cancel();
 
         // Inzwischen anders bearbeitet (Zuschnitt, Rückgängig …)? Dann passt das Ergebnis nicht mehr.
@@ -465,7 +502,7 @@ public partial class AiViewModel : ViewModelBase
 
         // Gerechnet wurde auf dem Stand vor der KI — das Ergebnis ersetzt das aktuelle Bild, statt darauf aufzubauen.
         // Steckt der Look im Ergebnis, gehen die Regler im selben Schritt auf null (nichts doppelt).
-        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(strength, texture), setup.LookAfter);
+        var ok = await _main.ApplyImageEditAsync(_ => run.Compose(blend), setup.LookAfter);
         if (ok && _main.CurrentImage is { } result) _lastAi = (result, setup.Base, setup.Baked);
         ClearRun();
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
@@ -483,6 +520,10 @@ public partial class AiViewModel : ViewModelBase
         SelectedOrder = OrderOptions[0];
         Strength = 100;
         Texture = 30;
+        Folds = 0;
+        Grain = 0;
+        GrainSize = 50;
+        ShowMap = false;
         Fidelity = 60;
     }
 
@@ -503,6 +544,7 @@ public partial class AiViewModel : ViewModelBase
         else DisposeInput(_setup);
         (_run, _setup, _runFaces, _beforeOf) = (null, null, null, null);
         HasPending = false;
+        ShowMap = false;
         _main.OverrideBitmap = null;
         _main.OverrideBeforeBitmap = null;
     }

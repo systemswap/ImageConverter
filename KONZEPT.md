@@ -325,6 +325,11 @@ Für v1 reicht klassische Entrauschung — KI ist v2.
   Ergebnis des letzten KI-Schritts, rechnet der nächste Lauf auf dem Bild davor und ersetzt es
   (KI auf KI machte Gesichter immer glatter). Ablauf: „KI berechnen“ → Stärke/Hautstruktur live
   (ohne neues Rechnen), Natürlichkeit (CodeFormer) rechnet neu → „Übernehmen“ oder „Verwerfen“.
+- **Detailregler nach der KI** (seit 0.5.19, nur Gesichtsmodelle, alle live): Hautstruktur (feinste
+  Stufe aus dem Original), Falten (mittlere Stufe, nur Haut, nur wo Original und KI übereinanderpassen),
+  Körnung (Menge, 100 % = bis zum Korn des Fotos aufgefüllt) und Korngröße (×1 = gemessen), „Karte
+  zeigen“ (rot: Falten kommen zurück, blau: bleibt vom Modell). Analyse vor der KI: Gesichtsbereiche
+  (BiSeNet) und Kornprofil des Fotos; nach der KI: Vergleich mit dem Ergebnis.
 - **Reihenfolge KI ↔ Einstellungen** (seit 0.5.10, Einstellungen = Entrauschen, Tools/Dunst, Schärfe;
   nie doppelt): „Erst KI, dann Einstellungen“ — KI auf dem Bild ohne Look, die Regler wirken danach
   auch auf die Gesichter und bleiben verstellbar (Vorschau zeigt sie schon über dem offenen Ergebnis).

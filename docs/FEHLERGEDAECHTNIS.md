@@ -856,4 +856,35 @@ Test oder Nachweis.
   Einstellungen, GFPGAN 1.3 und RestoreFormer++, neue Bilder beginnen wie nach dem Start und je Bild,
   DPI aus der Datei auch für nie angezeigte Bilder. Dunst-Filter unverändert seit 0.5.8.
 - **Meilenstein 0.5.18 (09.10.2026):** Stand 0.5.17 beta (Stärke-Tooltip als Deckkraft) als Meilenstein
-  vor den Detailreglern „Falten \& Züge“ und „Körnung angleichen“.
+  vor den Detailreglern „Falten & Züge“ und „Körnung angleichen“.
+
+## 24. KI-Detailregler: Falten & Züge, Körnung, Karte — drei Fallen beim Bau
+
+- **Gebaut:** 0.5.19 beta (09.10.2026), Wunsch des Benutzers: Gesichter kommen zu glatt; Regler für
+  Falten und für Menge und Größe des Korns, vorher aus dem Ausgangsbild einlesen, nachher vergleichen,
+  übereinanderlegen zum Anschauen. Alles wirkt live (das Modell rechnet einmal).
+- **Wie:** `FaceDetails` + `AiFaces.Run`/`PasteBack`. *Vor der KI:* Gesichtsbereiche mit BiSeNet
+  (Hilfsmodell „Gesichtsbereiche“, 53 MB, MIT; ohne ersatzweise Kreise um Augen und Mund) und das
+  Kornprofil des Fotos (wie AV1 Film Grain: Streuung je Helligkeit in den ruhigsten 16er-Blöcken,
+  Korngröße über das Verhältnis zweier Hochpässe, abgeglichen an künstlichem Korn). *Nach der KI:*
+  Falten = mittlere Detailstufe (1–4 Bildpixel) Original minus Modell, nur auf Haut/Nase/Ohren/Hals,
+  mit Abstand zu Augen, Lippen und Gesichtsrand, und nur wo beide übereinanderpassen (örtliche
+  Korrelation) — sonst doppelte Konturen. Korn: festes Muster je Bildpixel, Gauß in Korngröße,
+  in der Vorschau aus der vollen Größe verkleinert. Karte: rot = Falten kommen zurück, blau = bleibt
+  vom Modell (Augen, Brauen, Lippen, Zähne).
+- **Falle 1 – `new AiBlend()` war Stärke 0:** Als `record struct` ruft `new AiBlend()` den leeren
+  Konstruktor auf, die Vorgaben (Stärke 1) gelten nicht — der Zwischenstand während der Rechnung und
+  ein Test zeigten das Original. Jetzt `sealed record` (Klasse).
+- **Falle 2 – Korn auf erfundene Struktur:** „100 % = wie im Foto“ legte das volle Korn des Fotos
+  auch auf Gesichter, in die CodeFormer schon selbst feine Struktur erfunden hatte (2012er Foto:
+  Original 3,0 → KI 4,4 → mit Korn 4,7 Stufen, zu körnig). Jetzt misst `GrainGain` nach der KI das
+  Korn des eingesetzten Gesichts (ruhigste 8er-Blöcke auf der Haut, wie beim Foto) und füllt nur auf,
+  was fehlt (Streuungen quadratisch). 2016er Foto: KI 1,9 → mit Korn 3,7 (Foto 3,3, Original 3,5).
+  Erst die Gesamtstreuung der Haut zu nehmen ging schief: Konturen von Nase und Wangen zählten mit,
+  es kam gar kein Korn dazu.
+- **Falle 3 – Kanten an den Bereichsgrenzen:** Die Detailstufe reicht über die Grenze der Haut
+  hinaus; ohne Abstand kamen Lid-, Lippen- und Gesichtsrand-Kanten aus dem unscharfen Original mit.
+  Abstand drei Viertel der Stufenbreite (`FoldsKeepAway`).
+- **Nachweis:** `FaceDetailsTests` (Falten auf Haut ≥ 30 % näher am Original, am Auge unverändert;
+  Kornmessung weiß und grob; Körnung füllt bis zum Foto auf; nichts, wenn das Gesicht schon körnig
+  ist). Vergleichsbögen an Familienfotos (lokal, nicht im Repo).

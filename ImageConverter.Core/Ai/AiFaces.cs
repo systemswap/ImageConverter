@@ -64,7 +64,7 @@ public readonly record struct Similarity(double A, double B, double Tx, double T
 public static class AiFaces
 {
     /// <summary>Normlage der fünf Punkte im 512er-Ausschnitt (FFHQ, wie beim Training).</summary>
-    private static readonly (double X, double Y)[] Template =
+    internal static readonly (double X, double Y)[] Template =
     [
         (0.37691676, 0.46864664), (0.62285697, 0.46912813), (0.50123859, 0.61331904),
         (0.39308822, 0.72541100), (0.61150205, 0.72490465),
@@ -166,20 +166,23 @@ public static class AiFaces
 
     // ------------------------------------------------------------ Verbessern
 
-    /// <summary>Gesichter verbessern und mit <paramref name="strength"/> ins Bild mischen (ohne Hautstruktur).</summary>
-    /// <param name="strength">0…1: Mischung mit dem Original.</param>
+    /// <summary>Gesichter verbessern und mit <paramref name="strength"/> ins Bild mischen (ohne Detailregler).</summary>
+    /// <param name="strength">0…1: Deckkraft über dem Original.</param>
     /// <param name="progress">Anteil 0…1.</param>
     /// <param name="preview">Zwischenstand nach jedem Gesicht.</param>
     public static MagickImage Restore(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model,
         double strength, IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048) =>
-        Run(source, faces, model, progress, ct, preview, previewMaxEdge).Compose(strength, 0);
+        Run(source, faces, model, null, progress, ct, preview, previewMaxEdge).Compose(new AiBlend(strength));
 
     /// <summary>
     /// Gesichter mit voller Wirkung verbessern, aber noch nicht ins Bild mischen: Das Ergebnis
-    /// (<see cref="FaceRun"/>) mischt danach Stärke und Hautstruktur beliebig oft neu, ohne das Modell.
+    /// (<see cref="FaceRun"/>) mischt danach Stärke, Hautstruktur, Falten und Korn beliebig oft neu, ohne das Modell.
+    /// Vor dem Modell wird das Ausgangsbild eingelesen (Gesichtsbereiche, Kornprofil), danach mit dem
+    /// Ergebnis verglichen (was an Falten und Zügen verloren ging).
     /// </summary>
-    public static FaceRun Run(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model,
+    /// <param name="parser">Gesichtsbereiche; ohne ersatzweise Kreise um Augen und Mund.</param>
+    public static FaceRun Run(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model, IFaceParser? parser,
         IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048)
     {
@@ -197,6 +200,9 @@ public static class AiFaces
             image[i + 2] = pixels[j + 2] / 65535f;
         }
 
+        // Vor der KI: wie sieht das Korn des Fotos aus?
+        var grain = FaceDetails.MeasureGrain(image, w, h);
+
         var sink = new AiPreviewSink(preview, previewMaxEdge);
         var size = model.Size;
         var target = Template.Select(p => (p.X * size, p.Y * size)).ToArray();
@@ -208,15 +214,25 @@ public static class AiFaces
             ct.ThrowIfCancellationRequested();
             var toCrop = Similarity.Estimate(faces[f].Landmarks, target);
             var crop = WarpToCrop(image, w, h, toCrop, size);
+
+            // vor der KI: Bereiche des Gesichts (Haut, Augen, Mund …) im Original
+            var labels = parser?.Parse(crop, size, ct);
+            var foldMask = FaceDetails.FoldMask(labels, size, Template, FaceDetails.FoldsKeepAway(toCrop.ScaleFactor));
+
             var enhanced = FromModelRange(model.Run(ToModelRange(crop), ct));
-            var face = new FaceRun.Face(crop, enhanced, Smoothed(enhanced, size, toCrop), toCrop, size);
+
+            // nach der KI: was hat das Modell an Falten und Zügen weggeglättet?
+            var folds = FaceDetails.Folds(crop, enhanced, size, toCrop.ScaleFactor, foldMask);
+            var face = new FaceRun.Face(crop, enhanced, Smoothed(enhanced, size, toCrop), toCrop, size, folds, foldMask,
+                FaceDetails.KeptMask(labels, size, Template));
+            face = face with { GrainGain = MeasureGrainGain(image, w, h, face, grain) };   // Korn, das schon da ist
             done.Add(face);
             progress?.Report((f + 1) / (double)faces.Count);
 
             if (sink.IsDue && f < faces.Count - 1)
             {
                 shown ??= (float[])image.Clone();
-                for (; pasted < done.Count; pasted++) PasteBack(shown, w, h, done[pasted], null, done[pasted].ToCrop, 1, 0);
+                for (; pasted < done.Count; pasted++) PasteBack(shown, w, h, done[pasted], null, done[pasted].ToCrop, new AiBlend(), null);
                 sink.Emit(w, h, (x, y, rgba) =>
                 {
                     var i = ((long)y * w + x) * 3;
@@ -228,7 +244,7 @@ public static class AiFaces
             }
         }
 
-        return new FaceRun(source, image, pixels, w, h, mapping, channels, done);
+        return new FaceRun(source, image, pixels, w, h, mapping, channels, done, grain);
     }
 
     /// <summary>
@@ -298,65 +314,145 @@ public static class AiFaces
         return crop;
     }
 
+    /// <summary>Bildbereich, den ein Gesicht beim Zurücksetzen berührt (Bildkoordinaten, einschließlich).</summary>
+    internal static (int X0, int Y0, int X1, int Y1) Bounds(Similarity toCrop, int size, int w, int h)
+    {
+        var back = toCrop.Inverse();
+        var corners = new[] { back.Apply(0, 0), back.Apply(size - 1, 0), back.Apply(0, size - 1), back.Apply(size - 1, size - 1) };
+        return (Math.Max(0, (int)Math.Floor(corners.Min(c => c.X))), Math.Max(0, (int)Math.Floor(corners.Min(c => c.Y))),
+            Math.Min(w - 1, (int)Math.Ceiling(corners.Max(c => c.X))), Math.Min(h - 1, (int)Math.Ceiling(corners.Max(c => c.Y))));
+    }
+
+    /// <summary>Weicher Rand beim Zurücksetzen: 0 bis 10 px vom Rand des Ausschnitts, voll ab 66 px (bei 512).</summary>
+    internal static float EdgeWeight(double u, double v, int size)
+    {
+        var d = Math.Min(Math.Min(u, v), Math.Min(size - 1 - u, size - 1 - v)) / (size / 512.0);
+        var t = Math.Clamp((d - 10) / 56, 0, 1);
+        return (float)(t * t * (3 - 2 * t));
+    }
+
+    /// <summary>Korn für ein Gesicht in den Koordinaten des Bildes, auf das zurückgesetzt wird.</summary>
+    /// <param name="Field">Korn mit Streuung 1 (bzw. verkleinert in der Vorschau), Zeile für Zeile ab <paramref name="X0"/>, <paramref name="Y0"/>.</param>
+    internal sealed record GrainPatch(float[] Field, int X0, int Y0, int Width, int Height, GrainProfile Profile);
+
     /// <summary>
-    /// Verbessertes Gesicht zurück ins Bild, mit weichem Übergang zum Rand des Ausschnitts.
+    /// Verbessertes Gesicht zurück ins Bild, mit weichem Rand zum Rand des Ausschnitts.
     /// Bei Gesichtern, die größer als der Ausschnitt sind, bleiben die feinen Details des
     /// Originals erhalten, die im Ausschnitt gar nicht vorkommen können.
     /// </summary>
     /// <param name="highPass">Feine Struktur des Bildes davor (<see cref="HighPass"/>, gleiche Größe wie
-    /// <paramref name="image"/>); nur für <paramref name="texture"/> &gt; 0 nötig.</param>
+    /// <paramref name="image"/>); nur für Hautstruktur &gt; 0 nötig.</param>
     /// <param name="toCrop">Bild → Ausschnitt; für die Vorschau auf deren Maßstab umgerechnet.</param>
-    /// <param name="texture">0 … 1: feine Struktur aus dem Bild davor statt der des Modells — gegen das
-    /// „Wachsgesicht“: Form, Augen und grobe Schärfe vom Modell, Poren, Härchen und Korn vom Original.</param>
+    /// <param name="blend">Stärke (Deckkraft); Hautstruktur: feine Struktur aus dem Bild davor statt der des Modells —
+    /// gegen das „Wachsgesicht“; Falten: was das Modell an Zügen weggeglättet hat, auf der Haut zurück; Korn.</param>
+    /// <param name="grain">Korn in diesen Koordinaten; nur für Korn &gt; 0 nötig.</param>
     internal static void PasteBack(float[] image, int w, int h, FaceRun.Face face, float[]? highPass,
-        Similarity toCrop, float strength, float texture)
+        Similarity toCrop, AiBlend blend, GrainPatch? grain)
     {
         var size = face.Size;
-        var back = toCrop.Inverse();
-        var corners = new[] { back.Apply(0, 0), back.Apply(size - 1, 0), back.Apply(0, size - 1), back.Apply(size - 1, size - 1) };
-        var x0 = Math.Max(0, (int)Math.Floor(corners.Min(c => c.X)));
-        var x1 = Math.Min(w - 1, (int)Math.Ceiling(corners.Max(c => c.X)));
-        var y0 = Math.Max(0, (int)Math.Floor(corners.Min(c => c.Y)));
-        var y1 = Math.Min(h - 1, (int)Math.Ceiling(corners.Max(c => c.Y)));
+        var (x0, y0, x1, y1) = Bounds(toCrop, size, w, h);
+        var strength = (float)Math.Clamp(blend.Strength, 0, 1);
         if (x1 < x0 || y1 < y0 || strength <= 0) return;
 
+        var back = toCrop.Inverse();
         // Anteil der Originaldetails jenseits der Ausschnitt-Auflösung (0 bei kleinen Gesichtern)
         var keepDetail = (float)Math.Clamp(back.ScaleFactor - 1, 0, 1);
         // Hautstruktur: dort, wo das Original schon über keepDetail zurückkommt, nicht doppelt
-        var tex = highPass is null ? 0 : Math.Clamp(texture, 0, 1) * (1 - keepDetail);
-        var edge = size / 512.0;   // Maße unten für 512er-Ausschnitt
+        var tex = highPass is null ? 0 : (float)Math.Clamp(blend.Texture, 0, 1) * (1 - keepDetail);
+        var folds = (float)Math.Clamp(blend.Folds, 0, 1);
+        var grainAmount = grain is null ? 0 : (float)Math.Max(0, blend.Grain);
+        var plane = size * size;
 
         Parallel.For(y0, y1 + 1, y =>
         {
             Span<float> enh = stackalloc float[3];
             Span<float> low = stackalloc float[3];
             Span<float> coarse = stackalloc float[3];
+            Span<float> value = stackalloc float[3];
             for (var x = x0; x <= x1; x++)
             {
                 var (u, v) = toCrop.Apply(x, y);
                 if (u < 0 || v < 0 || u > size - 1 || v > size - 1) continue;
 
-                // weicher Rand: 0 bis 10 px vom Rand, voll ab 66 px (bei 512)
-                var d = Math.Min(Math.Min(u, v), Math.Min(size - 1 - u, size - 1 - v)) / edge;
-                var t = Math.Clamp((d - 10) / 56, 0, 1);
-                var mask = (float)(t * t * (3 - 2 * t)) * strength;
+                var mask = EdgeWeight(u, v, size) * strength;
                 if (mask <= 0) continue;
 
                 SamplePlanar(face.Enhanced, size, u, v, enh);
                 if (keepDetail > 0) SamplePlanar(face.Crop, size, u, v, low);
                 if (tex > 0) SamplePlanar(face.Low, size, u, v, coarse);
+                var fold = folds > 0 ? folds * SampleOne(face.Folds, size, u, v) : 0;
 
                 var i = ((long)y * w + x) * 3;
                 for (var c = 0; c < 3; c++)
                 {
                     var original = image[i + c];
-                    var value = enh[c] + (keepDetail > 0 ? (original - low[c]) * keepDetail : 0);
+                    var val = enh[c] + (keepDetail > 0 ? (original - low[c]) * keepDetail : 0);
                     // feine Struktur des Modells (enh − grob) gegen die des Originals tauschen
-                    if (tex > 0) value += tex * (highPass![i + c] - (enh[c] - coarse[c]));
-                    image[i + c] = original + (value - original) * mask;
+                    if (tex > 0) val += tex * (highPass![i + c] - (enh[c] - coarse[c]));
+                    value[c] = val + fold;   // Falten: Helligkeit, auf alle Kanäle gleich
                 }
+
+                if (grainAmount > 0)
+                {
+                    // Korn in der Helligkeit, so stark wie im Foto bei dieser Helligkeit
+                    var g = grain!;
+                    int gx = x - g.X0, gy = y - g.Y0;
+                    if (gx >= 0 && gy >= 0 && gx < g.Width && gy < g.Height)
+                    {
+                        var luma = 0.2126f * value[0] + 0.7152f * value[1] + 0.0722f * value[2];
+                        var n = grainAmount * face.GrainGain * g.Profile.SigmaAt(luma) * g.Field[gy * g.Width + gx];
+                        for (var c = 0; c < 3; c++) value[c] += n;
+                    }
+                }
+
+                for (var c = 0; c < 3; c++)
+                    image[i + c] = image[i + c] + (value[c] - image[i + c]) * mask;
             }
         });
+    }
+
+
+    /// <summary>
+    /// Wie viel Korn dem eingesetzten Gesicht bis zum Foto noch fehlt: das Gesicht einmal mit voller Stärke in
+    /// seinen Bildausschnitt setzen und auf der Haut messen (<see cref="FaceDetails.GrainGain"/>).
+    /// </summary>
+    private static float MeasureGrainGain(float[] image, int w, int h, FaceRun.Face face, GrainProfile profile)
+    {
+        if (profile.Average <= 0) return 0;
+        var (x0, y0, x1, y1) = Bounds(face.ToCrop, face.Size, w, h);
+        int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+        if (bw < 8 || bh < 8) return 1;
+
+        var sub = new float[bw * bh * 3];
+        for (var y = 0; y < bh; y++)
+            Array.Copy(image, ((long)(y + y0) * w + x0) * 3, sub, (long)y * bw * 3, bw * 3);
+        var t = face.ToCrop;
+        var shifted = new Similarity(t.A, t.B, t.Tx + t.A * x0 - t.B * y0, t.Ty + t.B * x0 + t.A * y0);
+        PasteBack(sub, bw, bh, face, null, shifted, new AiBlend(), null);
+
+        var luma = new float[bw * bh];
+        var weight = new float[bw * bh];
+        for (var y = 0; y < bh; y++)
+        for (var x = 0; x < bw; x++)
+        {
+            var i = y * bw + x;
+            luma[i] = 0.2126f * sub[i * 3] + 0.7152f * sub[i * 3 + 1] + 0.0722f * sub[i * 3 + 2];
+            var (u, v) = shifted.Apply(x, y);
+            if (u >= 0 && v >= 0 && u <= face.Size - 1 && v <= face.Size - 1)
+                weight[i] = EdgeWeight(u, v, face.Size) * SampleOne(face.FoldMask, face.Size, u, v);
+        }
+        return FaceDetails.GrainGain(luma, weight, bw, bh, profile);
+    }
+    /// <summary>Bilinear aus einer einzelnen Ebene (size × size).</summary>
+    internal static float SampleOne(float[] data, int size, double u, double v)
+    {
+        int iu = Math.Min((int)u, size - 2), iv = Math.Min((int)v, size - 2);
+        float fu = (float)(u - iu), fv = (float)(v - iv);
+        var p00 = data[iv * size + iu];
+        var p10 = data[iv * size + iu + 1];
+        var p01 = data[(iv + 1) * size + iu];
+        var p11 = data[(iv + 1) * size + iu + 1];
+        return (p00 * (1 - fu) + p10 * fu) * (1 - fv) + (p01 * (1 - fu) + p11 * fu) * fv;
     }
 
     private static float[] ToModelRange(float[] crop)

@@ -210,10 +210,10 @@ public class AiTests
     {
         using var src = Noise(300, 300);
         var face = new DetectedFace(100, 100, 100, 100, 0.9, [(130, 130), (170, 130), (150, 150), (135, 172), (165, 172)]);
-        var run = AiFaces.Run(src, [face], new SmoothFace(), null, default);
+        var run = AiFaces.Run(src, [face], new SmoothFace(), null, null, default);
 
-        using var smooth = run.Compose(1, 0);
-        using var textured = run.Compose(1, 1);
+        using var smooth = run.Compose(new AiBlend(1, 0));
+        using var textured = run.Compose(new AiBlend(1, 1));
         using var restored = AiFaces.Restore(src, [face], new SmoothFace(), 1, null, default);
 
         Assert.Equal(AiEnhancer.ReadPixels(restored, "RGB"), AiEnhancer.ReadPixels(smooth, "RGB"));
@@ -221,7 +221,7 @@ public class AiTests
         Assert.True(dTextured < dSmooth * 0.6, $"glatt {dSmooth:0.000}, mit Struktur {dTextured:0.000}");
 
         // Vorschau: verkleinert, aber dieselbe Richtung
-        var preview = run.Preview(1, 1, AiPreviewSize.Fit(300, 300, 150));
+        var preview = run.Preview(new AiBlend(1, 1), AiPreviewSize.Fit(300, 300, 150));
         Assert.Equal(150, preview.Width);
         Assert.Equal(150 * 150 * 4, preview.Bgra.Length);
     }
@@ -232,13 +232,13 @@ public class AiTests
         using var src = Noise(90, 70);
         var run = AiEnhancer.Run(src, new BlackModel(4, 32), 1, null, default);
 
-        using var half = run.Compose(0.5, 0);
+        using var half = run.Compose(new AiBlend(0.5));
         using var expected = AiEnhancer.Enhance(src, new BlackModel(4, 32), 1, 0.5, null, default);
         Assert.Equal(AiEnhancer.ReadPixels(expected, "RGB"), AiEnhancer.ReadPixels(half, "RGB"));
 
         // Stärke 0 in der Vorschau = Original, Stärke 1 = schwarz
-        Assert.Contains(run.Preview(0, 0, new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
-        Assert.DoesNotContain(run.Preview(1, 0, new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
+        Assert.Contains(run.Preview(new AiBlend(0), new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
+        Assert.DoesNotContain(run.Preview(new AiBlend(1), new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
     }
 
     [Fact]

@@ -77,7 +77,9 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 |---|---|---|
 | Allround (Real-ESRGAN, klein) | BSD-3-Clause | Xintao Wang (Real-ESRGAN), ONNX von Qualcomm AI Hub |
 | Gesichtserkennung (YuNet) | MIT | Shiqi Yu u. a. (OpenCV Zoo), ONNX von FaceFusion |
-| Gesichter – GFPGAN | Apache-2.0 | TencentARC (GFPGAN), ONNX von FaceFusion |
+| Gesichtsbereiche (BiSeNet Face Parsing) | MIT | zllrunning (face-parsing.PyTorch), ONNX von FaceFusion |
+| Gesichter – GFPGAN 1.4 und 1.3 | Apache-2.0 | TencentARC (GFPGAN), ONNX von FaceFusion |
+| Gesichter – RestoreFormer++ | Apache-2.0 | Zhouxia Wang u. a. (RestoreFormer++), ONNX von FaceFusion |
 | Gesichter – CodeFormer | **S-Lab License 1.0 – nur nicht-kommerzielle Nutzung** | Shangchen Zhou (CodeFormer), ONNX von FaceFusion |
 
 ## Netzzugriffe

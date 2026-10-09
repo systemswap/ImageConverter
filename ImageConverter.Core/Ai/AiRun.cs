@@ -4,8 +4,8 @@ namespace ImageConverter.Core.Ai;
 
 /// <summary>
 /// Ergebnis eines KI-Laufs, noch nicht ins Bild gemischt. Das Modell rechnet einmal mit voller Wirkung;
-/// Stärke (Mischung mit dem Bild davor) und Hautstruktur werden danach beliebig oft neu gemischt —
-/// schnell für die Vorschau (live beim Ziehen am Regler), in voller Größe beim Übernehmen.
+/// alles in <see cref="AiBlend"/> wird danach beliebig oft neu gemischt — schnell für die Vorschau (live beim
+/// Ziehen am Regler), in voller Größe beim Übernehmen.
 /// </summary>
 public interface IAiRun
 {
@@ -13,17 +13,23 @@ public interface IAiRun
     int Width { get; }
     int Height { get; }
 
-    /// <summary>Gesichtsmodelle: Hautstruktur aus dem Bild davor zurückholen; beim ganzen Bild nicht.</summary>
-    bool SupportsTexture { get; }
+    /// <summary>Gesichtsmodelle: Hautstruktur, Falten und Korn; beim ganzen Bild nur die Stärke.</summary>
+    bool SupportsDetails { get; }
 
     /// <summary>Vorschau in <paramref name="size"/> (gleiches Seitenverhältnis wie das Ergebnis).</summary>
-    /// <param name="strength">0 … 1: Mischung mit dem Bild davor (1 = nur das Modell).</param>
-    /// <param name="texture">0 … 1: feine Struktur (Poren, Härchen, Korn) aus dem Bild davor statt aus dem Modell.</param>
-    AiPixels Preview(double strength, double texture, AiPreviewSize size);
+    AiPixels Preview(AiBlend blend, AiPreviewSize size);
 
     /// <summary>Endergebnis in voller Größe, mit Profilen und Auflösung des Bildes davor.</summary>
-    MagickImage Compose(double strength, double texture);
+    MagickImage Compose(AiBlend blend);
 }
+
+/// <summary>Wie das Ergebnis eines KI-Laufs ins Bild kommt — alles ohne neues Rechnen des Modells.</summary>
+/// <param name="Strength">0 … 1: Deckkraft der KI über dem Original (1 = nur KI).</param>
+/// <param name="Texture">0 … 1: feinste Struktur (Poren, Härchen) aus dem Original statt aus dem Modell.</param>
+/// <param name="Folds">0 … 1: was das Modell an Falten und Zügen weggeglättet hat, aus dem Original zurück (nur Haut).</param>
+/// <param name="Grain">0 … 2: Korn im Gesicht, 1 = so stark wie im übrigen Foto gemessen.</param>
+/// <param name="GrainSize">Faktor auf die gemessene Korngröße (1 = wie im Foto).</param>
+public sealed record AiBlend(double Strength = 1, double Texture = 0, double Folds = 0, double Grain = 0, double GrainSize = 1);
 
 /// <summary>
 /// Vorschau als Pixelpuffer der Bildkette (<see cref="Imaging.Pixels"/>: B, G, R, A je 0 … 1, sRGB) —

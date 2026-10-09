@@ -47,19 +47,44 @@
                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding StrengthLabel}" />
                 </Grid>
 
-                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
-                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Hautstruktur'}" />
-                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Texture}"
-                            ToolTip.Tip="{l:T 'Holt Poren und feine Hautstruktur aus dem Bild davor zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live.'}" />
-                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding TextureLabel}" />
-                </Grid>
-
                 <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding HasFidelity}">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Natürlichkeit'}" />
                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Fidelity}"
                             ToolTip.Tip="{l:T 'Wie nah CodeFormer am Original bleibt: niedrig = stärkere Verbesserung, die Person kann sich aber verändern; hoch = näher am Original. Geht ins Modell — nach dem Loslassen wird neu gerechnet.'}" />
                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding FidelityLabel}" />
                 </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Hautstruktur'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Texture}"
+                            ToolTip.Tip="{l:T 'Holt Poren und feine Hautstruktur aus dem Original zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding TextureLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Falten'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Folds}"
+                            ToolTip.Tip="{l:T 'Falten und Züge: holt Lachfalten, Stirn- und Mundlinien zurück, die das Modell geglättet hat — nur auf der Haut, Augen, Lippen und Zähne bleiben vom Modell. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding FoldsLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Körnung'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="200" Value="{Binding Grain}"
+                            ToolTip.Tip="{l:T 'Korn im Gesicht, damit es nicht sauberer wirkt als der Rest des Fotos: 100 % = so viel wie im übrigen Bild gemessen, je Helligkeit. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainLabel}" />
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsFaceModel}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Korngröße'}" />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainSize}"
+                            ToolTip.Tip="{l:T 'Größe des Korns: ×1 = wie im Foto gemessen, nach links feiner, nach rechts gröber. Wirkt live.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainSizeLabel}" />
+                </Grid>
+
+                <CheckBox Margin="76,0,0,4" IsVisible="{Binding IsFaceModel}" IsEnabled="{Binding HasPending}"
+                          IsChecked="{Binding ShowMap}" Content="{l:T 'Karte zeigen'}"
+                          ToolTip.Tip="{l:T 'Zeigt, was wohin kommt: rot, wo Falten aus dem Original zurückkommen (je kräftiger, desto mehr), blau, was vom Modell bleibt (Augen, Brauen, Lippen, Zähne).'}" />
 
                 <Grid Classes="row" ColumnDefinitions="76,*" IsVisible="{Binding IsEnhanceModel}">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Größe'}" />
