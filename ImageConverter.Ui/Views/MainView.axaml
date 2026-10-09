@@ -900,7 +900,7 @@
                                 BorderThickness="1" CornerRadius="999" Opacity="0.92"
                                 IsHitTestVisible="False">
                             <TextBlock Classes="hint"
-                                       Text="{l:T 'Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt'}" />
+                                       Text="{l:T 'Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt  ·  Leertaste + Ziehen oder Mausrad verschiebt'}" />
                         </Border>
 
                         <!-- Ladeanzeige -->
