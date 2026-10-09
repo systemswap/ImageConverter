@@ -113,7 +113,7 @@ public partial class MainViewModel
     private readonly HashSet<string> _turnProperties = [];
     private int _suppressHistory;                // > 0: Änderungen kommen vom Programm, nicht vom Nutzer
 
-    private bool HasPendingSettings => _pendingBaseline is not null || _turnBaseline is not null;
+    internal bool HasPendingSettings => _pendingBaseline is not null || _turnBaseline is not null;
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {

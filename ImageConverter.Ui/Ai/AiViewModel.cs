@@ -45,7 +45,7 @@ public partial class AiViewModel : ViewModelBase
         Rescan();
         WatchFolders();
         _main.PropertyChanged += OnMainPropertyChanged;
-        _main.FilesReplaced += (_, _) => ResetSliders();
+        _main.FilesReplaced += (_, _) => ResetToStart();
     }
 
     internal AiModelStore Store { get; }
@@ -472,15 +472,20 @@ public partial class AiViewModel : ViewModelBase
     }
 
 
-    /// <summary>Neue Bilder: Stärke, Hautstruktur, Natürlichkeit auf die Vorgaben; Modell und Reihenfolge bleiben.</summary>
-    private void ResetSliders()
+    /// <summary>Neue Bilder: alles wie nach dem Programmstart (erstes vorhandenes Modell, Vorgaben der Regler).</summary>
+    private void ResetToStart()
     {
         if (HasPending) Discard();
         _lastAi = null;
+        Status = null;
+        SelectedModel = Available.FirstOrDefault();
+        SelectedSize = SizeOptions[0];
+        SelectedOrder = OrderOptions[0];
         Strength = 100;
         Texture = 30;
         Fidelity = 60;
     }
+
     private bool CanDiscard => HasPending && !IsRunning;
 
     /// <summary>Ergebnis verwerfen: das Bild bleibt, wie es war.</summary>

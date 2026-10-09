@@ -45,6 +45,9 @@ public partial class MainViewModel : ViewModelBase
         // Maße des Platzhalterbilds, solange nichts geladen ist
         ApplySourceSize(4000, 3000);
 
+        // Ausgangszustand für neue Bilder (siehe ResetToStart)
+        _startSettings = CaptureSettings();
+
         // Ab hier zählen Änderungen als Rückgängig-Schritte
         ResetHistoryBaseline();
 
@@ -119,6 +122,30 @@ public partial class MainViewModel : ViewModelBase
     public bool HasMultipleFiles => _files.Count > 1;
     public string FilePosition => _files.Count > 1 ? $"{_fileIndex + 1} / {_files.Count}" : "";
 
+    /// <summary>Alle Einstellungen, wie sie beim Programmstart sind (gespeichert wird nur die Sprache).</summary>
+    private readonly SettingsState _startSettings;
+
+    /// <summary>Wird ausgelöst, wenn neue Bilder die bisherigen ersetzen — Erweiterungen (KI) beginnen dann auch neu.</summary>
+    internal event EventHandler? FilesReplaced;
+
+    /// <summary>
+    /// Neu geladene Bilder beginnen wie nach dem Programmstart: alle Einstellungen (Format, Qualität, Größe =
+    /// Originalauflösung, DPI aus der Datei, Licht, Dunst, Farbe, Schärfe …) auf den Vorgaben, gleiche
+    /// Einstellungen für alle. Kein Rückgängig-Schritt — der Verlauf beginnt mit den neuen Bildern neu.
+    /// Blättern zwischen schon geöffneten Bildern ändert nichts.
+    /// </summary>
+    internal void ResetToStart()
+    {
+        using (SuppressHistory())
+        {
+            ApplyToAll = true;
+            ApplySettings(_startSettings);
+        }
+        SelectionTool = true;
+        ResetHistoryBaseline();
+        FilesReplaced?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// Übernimmt Dateien und Ordner (aus Drag &amp; Drop, Dateidialog oder
     /// Kommandozeile) und zeigt das erste Bild. Ordner werden flach durchsucht.
@@ -156,7 +183,7 @@ public partial class MainViewModel : ViewModelBase
         await StopPreviewAsync();
         ClearDisplay();
         DisposeAllHistories();
-        ResetImageSliders();   // neue Bilder beginnen ohne Licht, Dunst, Farbe, Schärfe der vorigen
+        ResetToStart();   // neue Bilder beginnen wie nach dem Programmstart
         _fileIndex = -1;
 
         _files.Clear();

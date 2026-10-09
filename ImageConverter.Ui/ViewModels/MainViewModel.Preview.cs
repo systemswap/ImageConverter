@@ -183,7 +183,7 @@ public partial class MainViewModel
     // ------------------------------------------------------------ Regler
 
     [ObservableProperty] public partial double SharpenAmount { get; set; }
-    [ObservableProperty] public partial double SharpenRadius { get; set; } = DefaultSharpenRadius;
+    [ObservableProperty] public partial double SharpenRadius { get; set; } = 1.0;
     [ObservableProperty] public partial double NoiseReduction { get; set; }
 
     public string SharpenLabel => SharpenAmount <= 0.01 ? Tr.T("aus") : $"{SharpenAmount:F2}";

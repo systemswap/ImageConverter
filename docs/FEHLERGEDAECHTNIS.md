@@ -821,3 +821,10 @@ Test oder Nachweis.
   Bleiben: Format, Qualität, Größe, DPI, Metadaten, Farbraum, Ordner, Name, KI-Modell, Reihenfolge
   (Vorlieben, keine Bearbeitung). Blättern zwischen den geöffneten Bildern ändert nichts.
 - **Nachweis:** `NewImagesTests`.
+- **Nachtrag 0.5.13 beta:** Auf Wunsch des Benutzers beginnen neu geladene Bilder jetzt *ganz* wie
+  nach dem Programmstart — auch Format, Qualität, Größe (Originalauflösung), DPI aus der Datei,
+  Metadaten, Farbraum, Ordner, Name, „für alle“, Auswahlwerkzeug, KI-Modell und Reihenfolge.
+  `MainViewModel.ResetToStart()` stellt den beim Start gemerkten Stand (`_startSettings`) wieder her;
+  gespeichert wird zwischen Programmstarts ohnehin nur die Sprache. Blättern zwischen schon
+  geöffneten Bildern ändert weiterhin nichts. UI-Test über den Dateidialog: Qualität 36 → 82,
+  Dunst +184 → 0, Größe 1200 × 900 (Original).

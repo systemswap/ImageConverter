@@ -3,20 +3,19 @@ using ImageConverter.ViewModels;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Neue Bilder beginnen ohne die Bildregler der vorigen; Ausgabe-Einstellungen bleiben.</summary>
+/// <summary>Neu geladene Bilder beginnen wie nach dem Programmstart — alle Einstellungen auf den Vorgaben.</summary>
 public class NewImagesTests
 {
     [Fact]
-    public void NewImages_ResetImageAndAiSliders_ButKeepOutputSettings()
+    public void NewImages_StartLikeAFreshProgram()
     {
+        var fresh = new MainViewModel { DeferHistoryTurns = false };
         var vm = new MainViewModel { DeferHistoryTurns = false };
         vm.Dehaze = 54;
         vm.DehazePasses = 7;
         vm.DehazeCast = 48;
         vm.Brightness = 20;
-        vm.Warmth = -15;
         vm.SelectedTint = "Farbe";
-        vm.TintHue = 200;
         vm.SharpenAmount = 1.2;
         vm.SharpenRadius = 2.5;
         vm.NoiseReduction = 0.5;
@@ -24,31 +23,33 @@ public class NewImagesTests
         vm.SelectedFormat = "PNG";
         vm.Quality = 50;
         vm.Dpi = 300;
+        vm.TargetWidth = 1200;
+        vm.OutputFolder = "irgendwo";
+        vm.ApplyToAll = false;
+        vm.SelectionTool = false;
         vm.Ai.Strength = 40;
         vm.Ai.Texture = 80;
         vm.Ai.Fidelity = 90;
+        vm.Ai.SelectedOrder = vm.Ai.OrderOptions[1];
         vm.CommitPendingSettings();
 
-        vm.ResetImageSliders();
+        vm.ResetToStart();
 
+        // Calc ist ein unveränderliches Objekt — nach Werten vergleichen
+        var (expected, actual) = (fresh.CaptureSettings(), vm.CaptureSettings());
+        Assert.Equal((expected.Calc.SourceWidth, expected.Calc.SourceHeight), (actual.Calc.SourceWidth, actual.Calc.SourceHeight));
+        Assert.Equal(expected with { Calc = null! }, actual with { Calc = null! });
         Assert.Equal(0, vm.Dehaze);
         Assert.Equal(Adjustments.None.DehazePasses, vm.DehazePasses);
-        Assert.Equal(Adjustments.None.DehazeCast, vm.DehazeCast);
-        Assert.Equal(0, vm.Brightness);
-        Assert.Equal(0, vm.Warmth);
-        Assert.Equal("Aus", vm.SelectedTint);
-        Assert.Equal(Adjustments.SepiaHue, vm.TintHue);
-        Assert.Equal(0, vm.SharpenAmount);
-        Assert.Equal(1.0, vm.SharpenRadius);
-        Assert.Equal(0, vm.NoiseReduction);
-        Assert.Equal(0, vm.CornerRadius);
-
-        Assert.Equal("PNG", vm.SelectedFormat);
-        Assert.Equal(50, vm.Quality);
-        Assert.Equal(300, vm.Dpi);
+        Assert.Equal("WebP", vm.SelectedFormat);
+        Assert.Equal(82, vm.Quality);
+        Assert.True(vm.ApplyToAll);
+        Assert.True(vm.SelectionTool);
+        Assert.False(vm.HasPendingSettings);   // kein eigener Rückgängig-Schritt (den Verlauf leert das Öffnen)
 
         Assert.Equal(100, vm.Ai.Strength);
         Assert.Equal(30, vm.Ai.Texture);
         Assert.Equal(60, vm.Ai.Fidelity);
+        Assert.Equal(vm.Ai.OrderOptions[0], vm.Ai.SelectedOrder);
     }
 }

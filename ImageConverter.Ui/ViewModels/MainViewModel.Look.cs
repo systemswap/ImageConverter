@@ -97,27 +97,6 @@ public partial class MainViewModel
         return result;
     }
 
-    /// <summary>Look im Ausgangszustand: Regler auf null, Feineinstellungen und Schärferadius auf ihren Vorgaben.</summary>
-    private static readonly Look DefaultLook = new(0, Adjustments.None, 0, DefaultSharpenRadius, 1);
-
-    private const double DefaultSharpenRadius = 1.0;
-
-    /// <summary>Wird ausgelöst, wenn neue Bilder die bisherigen ersetzen — Erweiterungen (KI) setzen ihre Regler zurück.</summary>
-    internal event EventHandler? FilesReplaced;
-
-    /// <summary>
-    /// Neue Bilder beginnen ohne die Bildregler der vorigen: Licht, Dunst (samt Feineinstellung), Farbe,
-    /// Schärfe, Entrauschen, Ecken. Ausgabe (Format, Qualität, Größe, DPI, Ordner, Name) bleibt — das sind
-    /// Vorlieben, keine Bearbeitung. Kein Rückgängig-Schritt: der Verlauf beginnt mit den neuen Bildern neu.
-    /// </summary>
-    internal void ResetImageSliders()
-    {
-        using (SuppressHistory())
-            ApplySettings(WithLook(CaptureSettings(), DefaultLook) with { CornerRadius = 0 });
-        ResetHistoryBaseline();
-        FilesReplaced?.Invoke(this, EventArgs.Empty);
-    }
-
     /// <summary>Die Einstellungen mit einem anderen Look (alles Übrige bleibt).</summary>
     private static SettingsState WithLook(SettingsState s, Look look)
     {
