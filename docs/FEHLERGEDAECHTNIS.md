@@ -851,3 +851,7 @@ Test oder Nachweis.
 - **Durchgesehen, ohne Befund:** Drehung (EXIF) und Farbprofil macht der Loader für beide Wege gleich;
   Größe wird übergeben; Dateigröße und Formatname dienen nur der Anzeige.
 - **Nachweis:** `NewImagesTests.UnseenImage_GetsTheDpiOfItsFile`.
+- **Meilenstein 0.5.16 (09.10.2026):** Stand 0.5.15 beta als Meilenstein — KI live mischen
+  (Stärke, Hautstruktur, Natürlichkeit), Übernehmen/Verwerfen, kein Aufhäufen, Reihenfolge KI ↔
+  Einstellungen, GFPGAN 1.3 und RestoreFormer++, neue Bilder beginnen wie nach dem Start und je Bild,
+  DPI aus der Datei auch für nie angezeigte Bilder. Dunst-Filter unverändert seit 0.5.8.
