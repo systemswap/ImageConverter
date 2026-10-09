@@ -10,7 +10,7 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-/// <summary>Bearbeitungen, die sich ausblenden lassen (Auge in der Liste „Bearbeitungen“).</summary>
+/// <summary>Funktionen, die sich ausschalten lassen (Auge in der Liste „Bearbeitungen“, wie in Referenzwerkzeug).</summary>
 [Flags]
 public enum EditSteps
 {
@@ -23,44 +23,52 @@ public enum EditSteps
     Color = 32,
     MatchColor = 64,
     Sharpen = 128,
+    SkinDetails = 256,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
 public enum ImageStepKind { Crop, Rotate, Flip, Ai, Applied }
 
-/// <summary>Eine Zeile der Liste „Bearbeitungen“.</summary>
+/// <summary>Eine Zeile der Liste „Bearbeitungen“: eine Funktion, die am Bild wirkt.</summary>
 public partial class EditRow(MainViewModel owner, EditSteps step, string name, string detail, bool canHide, string? note)
     : ObservableObject
 {
     public string Name { get; } = name;
     public string Detail { get; } = detail;
 
-    /// <summary>Lässt sich ausblenden (Zuschnitt und Drehen nicht — die KI wurde darauf gerechnet).</summary>
+    /// <summary>Lässt sich ausschalten (z. B. nicht, wenn die KI vergrößert hat).</summary>
     public bool CanHide { get; } = canHide;
 
     public string? Note { get; } = note;
 
-    /// <summary>Auge offen: fließt in „Nachher“ und in den Export ein.</summary>
+    /// <summary>Auge offen: wirkt in „Nachher“ und im Export.</summary>
     public bool Shown
     {
-        get => step == EditSteps.None || (owner.HiddenSteps & step) == 0;
+        get => (owner.HiddenSteps & step) == 0;
         set
         {
-            if (step == EditSteps.None || value == Shown) return;
+            if (value == Shown) return;
             owner.HiddenSteps = value ? owner.HiddenSteps & ~step : owner.HiddenSteps | step;
         }
     }
 }
 
-// Liste „Bearbeitungen“: je Bearbeitung eine Zeile in der Reihenfolge, in der gerechnet wird; das Auge blendet sie
-// aus „Nachher“ und aus dem Export aus, „Neu anwenden“ schreibt die Auswahl fest.
+// Liste „Bearbeitungen“: je Funktion eine Zeile (KI, Haut & Details, Größe, Rauschen, Dunst, Licht, Farbe,
+// Gleiche Farbe, Schärfe) — nicht jede Reglerbewegung, nicht Drehen und Zuschnitt. Das Auge schaltet eine Funktion
+// aus „Nachher“ und dem Export aus, „Neu anwenden“ schreibt die Auswahl fest.
 public partial class MainViewModel
 {
     /// <summary>Ein Bildschritt im Verlauf: was er war und wie er sich auf ein anderes Bild wiederholen lässt.</summary>
     /// <param name="Replay">Derselbe Schritt auf einem anderen Bild (Zuschnitt, Drehen); null = nicht wiederholbar (KI).</param>
-    internal sealed record ImageStep(ImageStepKind Kind, string Label, string? Detail, Func<MagickImage, MagickImage>? Replay);
+    /// <param name="SkinDetail">KI mit Haut &amp; Details: Kurzinfo dazu; null = keine.</param>
+    internal sealed record ImageStep(ImageStepKind Kind, string Label, string? Detail,
+        Func<MagickImage, MagickImage>? Replay, string? SkinDetail = null)
+    {
+        /// <summary>Dieselbe KI ohne Haut &amp; Details (nur wenn es welche gab) — zum Ausschalten.</summary>
+        public MagickImage? Plain { get; set; }
+    }
 
-    /// <summary>Ausgeblendete Bearbeitungen — gehören zum Einstellungsstand (je Bild, Rückgängig, Export).</summary>
+    /// <summary>Ausgeschaltete Funktionen — gehören zum Einstellungsstand (je Bild, Rückgängig, Export).</summary>
     [ObservableProperty] public partial EditSteps HiddenSteps { get; set; }
 
     /// <summary>Liste „Bearbeitungen“ über der Vorschau zeigen.</summary>
@@ -72,18 +80,20 @@ public partial class MainViewModel
 
     private bool Shows(EditSteps step) => (HiddenSteps & step) == 0;
 
+    private const EditSteps ImageVariants = EditSteps.Ai | EditSteps.SkinDetails;
+
     partial void OnHiddenStepsChanged(EditSteps oldValue, EditSteps newValue)
     {
         ApplySelectionCommand.NotifyCanExecuteChanged();
         RefreshEditRows();
-        if (((oldValue ^ newValue) & EditSteps.Ai) != 0)
-            _ = ShowDocumentAsync();   // KI ein/aus: anderes Bild zeigen
+        if (((oldValue ^ newValue) & ImageVariants) != 0)
+            _ = ShowDocumentAsync();   // KI bzw. Haut & Details ein/aus: anderes Bild zeigen
         else
             RequestPreview();
         NotifySizeDerived();
     }
 
-    /// <summary>Einstellungen ohne die ausgeblendeten Bearbeitungen.</summary>
+    /// <summary>Einstellungen ohne die ausgeschalteten Funktionen.</summary>
     internal static Adjustments Mask(Adjustments a, EditSteps hidden)
     {
         if ((hidden & EditSteps.Dehaze) != 0) a = a with { Dehaze = 0 };
@@ -102,7 +112,6 @@ public partial class MainViewModel
     private List<Snapshot> ImageStepsOf(string path) =>
         _undo.Where(s => s.FilePath == path && s.Image is not null && s.Step is not null).Reverse().ToList();
 
-
     /// <summary>
     /// Index des ersten KI-Schritts, der noch zählt: nach dem letzten „Auswahl angewendet“ (das eine KI schon aus dem
     /// Bild genommen hat); −1 = keiner.
@@ -112,8 +121,17 @@ public partial class MainViewModel
         var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
         return steps.FindIndex(applied + 1, s => s.Step!.Kind == ImageStepKind.Ai);
     }
+
+    /// <summary>Das Bild nach Schritt <paramref name="i"/> (vor dem nächsten bzw. das aktuelle).</summary>
+    private static MagickImage After(List<Snapshot> steps, int i, EditHistory h) =>
+        i + 1 < steps.Count ? steps[i + 1].Image! : h.Current;
+
+    /// <summary>Alles ab Schritt <paramref name="from"/> wiederholbar (Zuschnitt, Drehen) — KI-Schritte ausgenommen?</summary>
+    private static bool Replayable(List<Snapshot> steps, int from) =>
+        steps.Skip(from).All(s => s.Step!.Kind == ImageStepKind.Ai || s.Step.Replay is not null);
+
     /// <summary>
-    /// Lässt sich die KI ausblenden? Nur wenn sie die Bildgröße behalten hat und alles danach wiederholbar ist
+    /// Lässt sich die KI ausschalten? Nur wenn sie die Bildgröße behalten hat und alles danach wiederholbar ist
     /// (Zuschnitt, Drehen) — dann entsteht das Bild ohne KI aus dem Stand davor plus den späteren Schritten.
     /// </summary>
     private bool CanHideAi(string path, EditHistory h, out string? reason)
@@ -125,20 +143,27 @@ public partial class MainViewModel
 
         for (var i = first; i < steps.Count; i++)
         {
-            var kind = steps[i].Step!.Kind;
-            var after = i + 1 < steps.Count ? steps[i + 1].Image! : h.Current;
-            if (kind == ImageStepKind.Ai && !SameSize(steps[i].Image!, after))
+            if (steps[i].Step!.Kind == ImageStepKind.Ai && !SameSize(steps[i].Image!, After(steps, i, h)))
             {
-                reason = Tr.T("Vergrößert — lässt sich nicht ausblenden, nur mit Rückgängig zurücknehmen.");
-                return false;
-            }
-            if (kind != ImageStepKind.Ai && steps[i].Step!.Replay is null)
-            {
-                reason = Tr.T("Danach wurde das Bild festgeschrieben — nur mit Rückgängig zurückzunehmen.");
+                reason = Tr.T("Vergrößert — lässt sich nicht ausschalten, nur mit Rückgängig zurücknehmen.");
                 return false;
             }
         }
+        if (!Replayable(steps, first))
+        {
+            reason = Tr.T("Danach wurde das Bild festgeschrieben — nur mit Rückgängig zurückzunehmen.");
+            return false;
+        }
         return true;
+    }
+
+    /// <summary>Der letzte KI-Schritt hat Haut &amp; Details, die sich ausschalten lassen?</summary>
+    private bool CanHideSkin(string path, EditHistory h)
+    {
+        var steps = ImageStepsOf(path);
+        if (FirstLiveAi(steps) < 0) return false;
+        var last = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Ai);
+        return steps[last].Step!.Plain is { } plain && SameSize(plain, After(steps, last, h)) && Replayable(steps, last + 1);
     }
 
     private static bool SameSize(MagickImage a, MagickImage b)
@@ -146,42 +171,64 @@ public partial class MainViewModel
         lock (a) lock (b) return a.Width == b.Width && a.Height == b.Height;
     }
 
-    // Bild ohne KI, je Datei und deren aktuellem Bild einmal gerechnet
-    private readonly Dictionary<string, (MagickImage Current, MagickImage WithoutAi)> _withoutAi = new(StringComparer.Ordinal);
+    // Bild ohne KI bzw. ohne Haut & Details, je Datei, Fassung und aktuellem Bild einmal gerechnet
+    private readonly Dictionary<(string Path, EditSteps Variant), (MagickImage Current, MagickImage Image)> _variants = [];
 
     /// <summary>
-    /// Das Bild, das angezeigt und exportiert wird: das aktuelle — oder bei ausgeblendeter KI das Bild vor dem
-    /// ersten KI-Schritt mit den späteren Schritten (Zuschnitt, Drehen) noch einmal angewendet.
+    /// Das Bild, das angezeigt und exportiert wird: das aktuelle — oder bei ausgeschalteter KI das Bild vor dem ersten
+    /// KI-Schritt, bei ausgeschalteten Haut &amp; Details die letzte KI ohne sie; die späteren Schritte (Zuschnitt,
+    /// Drehen) jeweils noch einmal angewendet.
     /// </summary>
     private MagickImage DocumentFor(string path, EditHistory h, EditSteps hidden)
     {
-        if ((hidden & EditSteps.Ai) == 0 || !CanHideAi(path, h, out _)) return h.Current;
-        if (_withoutAi.TryGetValue(path, out var cached) && ReferenceEquals(cached.Current, h.Current)) return cached.WithoutAi;
+        var variant = (hidden & EditSteps.Ai) != 0 && CanHideAi(path, h, out _) ? EditSteps.Ai
+            : (hidden & EditSteps.SkinDetails) != 0 && CanHideSkin(path, h) ? EditSteps.SkinDetails
+            : EditSteps.None;
+        if (variant == EditSteps.None) return h.Current;
+        if (_variants.TryGetValue((path, variant), out var cached) && ReferenceEquals(cached.Current, h.Current))
+            return cached.Image;
 
         var steps = ImageStepsOf(path);
-        var first = FirstLiveAi(steps);
-        var doc = steps[first].Image!;
+        int from;
+        MagickImage doc;
+        if (variant == EditSteps.Ai)
+        {
+            var first = FirstLiveAi(steps);
+            (doc, from) = (steps[first].Image!, first + 1);
+        }
+        else
+        {
+            var last = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Ai);
+            (doc, from) = (steps[last].Step!.Plain!, last + 1);
+        }
+
         var owned = false;
-        foreach (var step in steps.Skip(first + 1).Select(s => s.Step!).Where(s => s.Kind != ImageStepKind.Ai))
+        foreach (var step in steps.Skip(from).Select(s => s.Step!).Where(s => s.Kind != ImageStepKind.Ai))
         {
             var next = step.Replay!(doc);
             if (owned) doc.Dispose();
             (doc, owned) = (next, true);
         }
 
-        // Der vorige Stand dieser Datei wird nicht mehr gebraucht (Bild hat sich geändert — die Vorschau ist gestoppt)
-        if (_withoutAi.TryGetValue(path, out var old) && !ReferenceEquals(old.WithoutAi, doc) && !IsHeldByHistory(old.WithoutAi))
-            old.WithoutAi.Dispose();
-        _withoutAi[path] = (h.Current, doc);
+        // Der vorige Stand wird nicht mehr gebraucht (Bild hat sich geändert — die Vorschau ist gestoppt)
+        if (_variants.TryGetValue((path, variant), out var old) && !ReferenceEquals(old.Image, doc) && !IsHeldByHistory(old.Image))
+            old.Image.Dispose();
+        _variants[(path, variant)] = (h.Current, doc);
         return doc;
     }
 
-    /// <summary>Das gerade angezeigte Bild (mit oder ohne KI, je nach Liste „Bearbeitungen“).</summary>
+    /// <summary>Das gerade angezeigte Bild (mit oder ohne KI bzw. Haut &amp; Details, je nach Liste).</summary>
     private MagickImage? ShownDocument =>
         _history is { } h && CurrentPath is { } path ? DocumentFor(path, h, HiddenSteps) : null;
 
+    /// <summary>
+    /// Das aktuelle Bild ohne KI (Zuschnitt, Drehen danach noch einmal angewendet) — Ausgangsbild für einen neuen
+    /// KI-Lauf, damit sich KI nicht auf KI häuft. null: keine KI im Bild oder nicht abtrennbar.
+    /// </summary>
+    internal MagickImage? CurrentWithoutAi =>
+        _history is { } h && CurrentPath is { } path && CanHideAi(path, h, out _) ? DocumentFor(path, h, EditSteps.Ai) : null;
 
-    /// <summary>Was bei einer Datei ausgeblendet ist — ihr eigener Stand, sonst der gemeinsame bzw. die Vorlage.</summary>
+    /// <summary>Was bei einer Datei ausgeschaltet ist — ihr eigener Stand, sonst der gemeinsame bzw. die Vorlage.</summary>
     internal EditSteps HiddenFor(string path)
     {
         if (path == CurrentPath || ApplyToAll) return HiddenSteps;
@@ -189,18 +236,19 @@ public partial class MainViewModel
         return _individualTemplate?.Hidden ?? EditSteps.None;
     }
 
-    /// <summary>Alle Bilder ohne KI freigeben (Bilder geschlossen).</summary>
+    /// <summary>Alle Fassungen freigeben (Bilder geschlossen).</summary>
     private void ClearWithoutAi()
     {
-        foreach (var (_, entry) in _withoutAi)
-            if (!IsHeldByHistory(entry.WithoutAi)) entry.WithoutAi.Dispose();
-        _withoutAi.Clear();
+        foreach (var (_, entry) in _variants)
+            if (!IsHeldByHistory(entry.Image)) entry.Image.Dispose();
+        _variants.Clear();
     }
+
     private bool IsHeldByHistory(MagickImage image) =>
         _histories.Values.Any(h => ReferenceEquals(h.Current, image) || ReferenceEquals(h.Original, image))
-        || _undo.Any(s => ReferenceEquals(s.Image, image)) || _redo.Any(s => ReferenceEquals(s.Image, image));
+        || _undo.Concat(_redo).Any(s => ReferenceEquals(s.Image, image) || ReferenceEquals(s.Step?.Plain, image));
 
-    /// <summary>Angezeigtes Bild neu setzen (KI ein- oder ausgeblendet).</summary>
+    /// <summary>Angezeigtes Bild neu setzen (KI bzw. Haut &amp; Details ein- oder ausgeschaltet).</summary>
     private async Task ShowDocumentAsync()
     {
         if (ShownDocument is not { } doc) return;
@@ -210,7 +258,6 @@ public partial class MainViewModel
     }
 
     // ------------------------------------------------------------ Liste
-
 
     private bool _editRowsRequested;
 
@@ -225,38 +272,28 @@ public partial class MainViewModel
             RefreshEditRows();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
+
     /// <summary>Zeilen neu aufbauen — nach jeder Einstellung, jedem Bildschritt, jedem Bildwechsel.</summary>
     private void RefreshEditRows()
     {
         var rows = new List<EditRow>();
         if (_history is { } h && CurrentPath is { } path)
         {
-            // Bildschritte in ihrer Reihenfolge; die KI als eine Zeile (spätere KI-Läufe ersetzen frühere)
-            // — KI-Schritte vor einem „Auswahl angewendet“ sind schon aus dem Bild genommen
-            var aiDone = false;
-            var canHideAi = CanHideAi(path, h, out var aiReason);
+            // KI als eine Zeile (spätere Läufe ersetzen frühere), Haut & Details der letzten KI als eigene
             var steps = ImageStepsOf(path);
-            var firstLive = FirstLiveAi(steps);
-            for (var i = 0; i < steps.Count; i++)
+            if (FirstLiveAi(steps) >= 0)
             {
-                var step = steps[i].Step!;
-                if (step.Kind == ImageStepKind.Ai)
+                var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
+                var canHideAi = CanHideAi(path, h, out var aiReason);
+                rows.Add(new EditRow(this, EditSteps.Ai, last.Label, last.Detail ?? "", canHideAi, aiReason));
+                if (last.SkinDetail is { } skin)
                 {
-                    if (aiDone || i < firstLive || firstLive < 0) continue;
-                    aiDone = true;
-                    var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
-                    rows.Add(new EditRow(this, EditSteps.Ai, last.Label, last.Detail ?? "", canHideAi, aiReason));
-                }
-                else
-                {
-                    rows.Add(new EditRow(this, EditSteps.None, step.Label, step.Detail ?? "", false,
-                        Tr.T("Lässt sich nicht ausblenden — nur mit Rückgängig zurücknehmen.")));
+                    var canHideSkin = CanHideSkin(path, h);
+                    rows.Add(new EditRow(this, EditSteps.SkinDetails, Tr.T("Haut & Details"), skin, canHideSkin,
+                        canHideSkin ? null : Tr.T("Lässt sich nicht ausschalten — nur mit Rückgängig zurücknehmen.")));
                 }
             }
-        }
 
-        if (_history is not null)
-        {
             if (TargetWidth != SourceWidth || TargetHeight != SourceHeight)
                 rows.Add(Row(EditSteps.Resize, Tr.T("Größe"), $"{TargetWidth} × {TargetHeight} px"));
             if (NoiseReduction > 0.01)
@@ -302,8 +339,8 @@ public partial class MainViewModel
     private bool CanApplySelection => HiddenSteps != EditSteps.None && EditRows.Any(r => !r.Shown) && !IsEditing;
 
     /// <summary>
-    /// Nur die angehakten Bearbeitungen festschreiben: ausgeblendete Einstellungen auf null, ausgeblendete KI aus dem
-    /// Bild — ein Schritt, rückgängig mit Strg+Z.
+    /// Nur die eingeschalteten Funktionen festschreiben: ausgeschaltete Regler auf null, eine ausgeschaltete KI bzw.
+    /// Haut &amp; Details aus dem Bild — ein Schritt, rückgängig mit Strg+Z.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanApplySelection))]
     private async Task ApplySelection()
@@ -312,11 +349,17 @@ public partial class MainViewModel
         var hidden = HiddenSteps;
         SettingsState Cleared(SettingsState s) => WithoutHidden(s, hidden);
 
-        if ((hidden & EditSteps.Ai) != 0 && ShownDocument is { } withoutAi && _history is { } h && !ReferenceEquals(withoutAi, h.Current))
+        if (_history is { } h && CurrentPath is { } path && ShownDocument is { } shown && !ReferenceEquals(shown, h.Current))
         {
-            var copy = ImageOps.CloneOf(withoutAi);
-            await ApplyEditAsync(_ => copy, Cleared,
-                new ImageStep(ImageStepKind.Applied, Tr.T("Auswahl angewendet"), Tr.T("ohne KI"), null));
+            var copy = ImageOps.CloneOf(shown);
+            var aiOut = (hidden & EditSteps.Ai) != 0;
+            var steps = ImageStepsOf(path);
+            var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
+            // KI ganz raus: ab hier zählt keine KI mehr. Nur Haut & Details raus: die KI bleibt, nur ohne sie.
+            var step = aiOut
+                ? new ImageStep(ImageStepKind.Applied, Tr.T("Auswahl angewendet"), Tr.T("ohne KI"), null)
+                : new ImageStep(ImageStepKind.Ai, last.Label, last.Detail, null);
+            await ApplyEditAsync(_ => copy, Cleared, step);
             return;
         }
 
@@ -324,11 +367,11 @@ public partial class MainViewModel
         ApplySettings(Cleared(before));
         _undo.Push(new Snapshot(ApplyToAll ? null : CurrentPath, null, before));
         ClearRedo();
-        if (!ApplyToAll && CurrentPath is { } path) _fileSettings[path] = CaptureSettings();
+        if (!ApplyToAll && CurrentPath is { } current) _fileSettings[current] = CaptureSettings();
         NotifyUndoRedo();
     }
 
-    /// <summary>Stand ohne die ausgeblendeten Bearbeitungen — deren Regler auf null, nichts mehr ausgeblendet.</summary>
+    /// <summary>Stand ohne die ausgeschalteten Funktionen — deren Regler auf null, nichts mehr ausgeschaltet.</summary>
     internal static SettingsState WithoutHidden(SettingsState s, EditSteps hidden)
     {
         if ((hidden & EditSteps.Resize) != 0) s = s with { TargetWidth = s.SourceWidth, TargetHeight = s.SourceHeight,

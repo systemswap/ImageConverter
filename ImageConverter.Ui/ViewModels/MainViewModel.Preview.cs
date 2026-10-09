@@ -145,14 +145,23 @@ public partial class MainViewModel
     [ObservableProperty] public partial object? ViewResetToken { get; set; }
 
     /// <summary>Nur sichtbar, wenn eine Berechnung länger dauert — kein Flackern bei schnellen.</summary>
-    [ObservableProperty] public partial bool ShowRendering { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
+    public partial bool ShowRendering { get; set; }
 
     /// <summary>Auswahlwerkzeug in der Vorschau: an = Ziehen zieht einen Ausschnitt auf, aus = Ziehen verschiebt
     /// das Bild. Eine Ansichtseinstellung, kein Bearbeitungsschritt (nicht im Rückgängig).</summary>
     [ObservableProperty] public partial bool SelectionTool { get; set; } = true;
 
     /// <summary>Was die Vorschau gerade rechnet (z. B. „Dunst entfernen – Durchlauf 2 von 3“).</summary>
-    [ObservableProperty] public partial string PreviewStep { get; set; } = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
+    public partial string PreviewStep { get; set; } = "";
+
+    /// <summary>Wie weit die Vorschau ist (0…1).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
+    public partial double PreviewFraction { get; set; }
 
     /// <summary>
     /// Vorübergehende Anzeige statt der Vorschau, z. B. der Zwischenstand einer langen
@@ -173,7 +182,27 @@ public partial class MainViewModel
     partial void OnOverrideBeforeBitmapChanged(Bitmap? value) => NotifyCompare();
 
     /// <summary>Hinweis über dem Bild bei langen Arbeiten (z. B. „KI · 42 % · noch 20 s“); null = keiner.</summary>
-    [ObservableProperty] public partial string? ActivityText { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
+    public partial string? ActivityText { get; set; }
+
+    /// <summary>Fortschritt der langen Arbeit 0…100; −1 = ohne Balken.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
+    public partial double ActivityProgress { get; set; } = -1;
+
+    /// <summary>Abbrechen der langen Arbeit (z. B. KI); null = nicht abbrechbar.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
+    public partial System.Windows.Input.ICommand? ActivityCancel { get; set; }
+
+    // Eine Anzeige für alles, was rechnet — unten mitte in der Vorschau: lange Arbeiten (KI, Einstellungen ins Bild)
+    // haben Vorrang, sonst die Vorschau-Berechnung, sobald sie spürbar dauert.
+    public bool ShowOverlay => ActivityText is not null || ShowRendering;
+    public string? OverlayText => ActivityText ?? PreviewStep;
+    public bool OverlayHasProgress => ActivityText is not null ? ActivityProgress >= 0 : ShowRendering;
+    public double OverlayProgress => ActivityText is not null ? ActivityProgress : PreviewFraction * 100;
+    public bool OverlayCanCancel => ActivityText is not null && ActivityCancel is not null;
 
     /// <summary>Angezeigtes Ergebnis (beim Vergleich die Nachher-Seite).</summary>
     public Bitmap? DisplayBitmap => OverrideBitmap ?? AdjustedBitmap ?? FullBitmap;
@@ -364,7 +393,12 @@ public partial class MainViewModel
 
                 var cts = _renderCts = new CancellationTokenSource();   // ohne Zeitgeber, Dispose nicht nötig
                 PreviewStep = Tr.T("Vorschau wird berechnet …");
-                var plan = new WorkPlan(new Progress<WorkProgress>(p => PreviewStep = p.Step), cts.Token);
+                PreviewFraction = 0;
+                var plan = new WorkPlan(new Progress<WorkProgress>(p =>
+                {
+                    PreviewStep = p.Step;
+                    PreviewFraction = p.Fraction;
+                }), cts.Token);
                 PreviewResult result;
                 try
                 {

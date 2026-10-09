@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -87,7 +88,12 @@ public partial class MainViewModel
 
     private void ClearRedo()
     {
-        foreach (var s in _redo) s.Image?.Dispose();
+        foreach (var s in _redo)
+        {
+            s.Image?.Dispose();
+            // KI ohne Haut & Details: gehört nur zu diesem Schritt, der jetzt wegfällt
+            if (s.Step?.Plain is { } plain && !_undo.Any(u => ReferenceEquals(u.Step, s.Step))) plain.Dispose();
+        }
         _redo.Clear();
     }
 
@@ -205,14 +211,24 @@ public partial class MainViewModel
     /// mit Rückgängig/Wiederholen wie Zuschneiden und Drehen. Abbruch über
     /// <see cref="OperationCanceledException"/> lässt das Bild unverändert. Liefert true bei Erfolg.
     /// </summary>
-    /// <param name="label">Name in der Liste „Bearbeitungen“ (z. B. „KI – CodeFormer“).</param>
-    /// <param name="detail">Kurzinfo dazu (z. B. Stärke, Falten).</param>
+    /// <param name="operation">Liefert das Ergebnis und, falls es Haut &amp; Details gibt, dieselbe KI ohne sie.</param>
+    /// <param name="label">Name in der Liste „Bearbeitungen“ (z. B. „KI: Gesichter – CodeFormer“).</param>
+    /// <param name="detail">Kurzinfo dazu (Stärke).</param>
+    /// <param name="skinDetail">Kurzinfo für die Zeile „Haut &amp; Details“; null = keine.</param>
     /// <param name="lookAfter">Look, der danach gilt (z. B. neutral, wenn er ins Bild gerechnet wurde) — im selben
     /// Schritt, Rückgängig bringt Bild und Regler zusammen zurück. null: Regler bleiben.</param>
-    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, MagickImage> operation, string label, string? detail,
-        Look? lookAfter = null) =>
-        ApplyEditAsync(operation, lookAfter is null ? null : s => WithLook(s, lookAfter),
-            new ImageStep(ImageStepKind.Ai, label, detail, null));
+    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, (MagickImage Result, MagickImage? Plain)> operation,
+        string label, string? detail, string? skinDetail, Look? lookAfter = null)
+    {
+        var step = new ImageStep(ImageStepKind.Ai, label, detail, null, skinDetail);
+        return ApplyEditAsync(img =>
+            {
+                var (result, plain) = operation(img);
+                step.Plain = plain;
+                return result;
+            },
+            lookAfter is null ? null : s => WithLook(s, lookAfter), step);
+    }
 
     /// <summary>Das aktuelle Bild in voller Auflösung (mit allen Bearbeitungen) — nur lesen.</summary>
     internal MagickImage? CurrentImage => _history?.Current;
@@ -324,6 +340,7 @@ public partial class MainViewModel
         foreach (var h in _histories.Values) { images.Add(h.Original); images.Add(h.Current); }
         foreach (var s in _undo) if (s.Image is not null) images.Add(s.Image);
         foreach (var s in _redo) if (s.Image is not null) images.Add(s.Image);
+        foreach (var s in _undo.Concat(_redo)) if (s.Step?.Plain is { } plain) images.Add(plain);
         foreach (var img in images) img.Dispose();
 
         _histories.Clear();

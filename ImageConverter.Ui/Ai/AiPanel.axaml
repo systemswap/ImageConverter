@@ -66,18 +66,11 @@
                 </Grid>
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,2" Text="{Binding OrderHint}" />
 
-                <!-- Starten; Fortschritt der KI und der Einstellungen danach (Dunst je Durchlauf) -->
+                <!-- Starten — der Fortschritt steht in der einen Anzeige unten mitte in der Vorschau -->
                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         Margin="0,4,0,0" Content="{l:T 'KI berechnen'}"
-                        IsVisible="{Binding !ShowProgress}" Command="{Binding ApplyCommand}"
+                        Command="{Binding ApplyCommand}"
                         ToolTip.Tip="{l:T 'Rechnet das Modell und zeigt das Ergebnis. Danach wirken die Regler live; ins Bild kommt es erst mit „Übernehmen“. Gerechnet wird immer auf dem Stand vor der letzten KI — nichts häuft sich an.'}" />
-
-                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0" IsVisible="{Binding ShowProgress}">
-                    <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding Progress}"
-                                 VerticalAlignment="Center" Margin="0,4,8,4" />
-                    <Button Grid.Column="1" Classes="subtle" Content="{l:T 'Abbrechen'}" Command="{Binding CancelCommand}"
-                            IsVisible="{Binding IsRunning}" />
-                </Grid>
 
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
                            IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"

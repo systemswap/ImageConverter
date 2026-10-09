@@ -941,7 +941,7 @@
                         <ToggleButton Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12"
                                       IsVisible="{Binding HasImage}"
                                       IsChecked="{Binding ShowEditList}"
-                                      ToolTip.Tip="{l:T 'Bearbeitungen: Liste aller Bearbeitungen dieses Bildes. Mit dem Auge eine Bearbeitung aus „Nachher“ und dem Export ausblenden.'}">
+                                      ToolTip.Tip="{l:T 'Bearbeitungen: alle Funktionen, die an diesem Bild wirken. Mit dem Auge eine Funktion aus „Nachher“ und dem Export ausschalten — wie in Referenzwerkzeug.'}">
                             <Path Data="M 12,2 L 2,7 L 12,12 L 22,7 Z M 2,12 L 12,17 L 22,12 M 2,17 L 12,22 L 22,17" />
                         </ToggleButton>
 
@@ -981,29 +981,28 @@
                                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         IsVisible="{Binding HasEditRows}"
                                         Content="{l:T 'Neu anwenden'}" Command="{Binding ApplySelectionCommand}"
-                                        ToolTip.Tip="{l:T 'Nur die angehakten Bearbeitungen festschreiben: ausgeblendete Regler gehen auf null, eine ausgeblendete KI kommt aus dem Bild. Rückgängig mit Strg+Z.'}" />
+                                        ToolTip.Tip="{l:T 'Nur die eingeschalteten Funktionen festschreiben: ausgeschaltete Regler gehen auf null, eine ausgeschaltete KI oder Haut &amp; Details kommen aus dem Bild. Rückgängig mit Strg+Z.'}" />
                                 <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding HasEditRows}"
-                                           Text="{l:T 'Ausgeblendetes fehlt in „Nachher“ und im Export. Zuschnitt und Drehen lassen sich nur mit Rückgängig zurücknehmen.'}" />
+                                           Text="{l:T 'Ausgeschaltete Funktionen fehlen in „Nachher“ und im Export. Drehen und Zuschnitt stehen nicht in der Liste — dafür Rückgängig.'}" />
                             </StackPanel>
                         </Border>
 
-                        <!-- Erscheint nur, wenn eine Vorschau-Berechnung spürbar dauert -->
-                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Right"
-                                Margin="12,12,64,12" Padding="10,4" CornerRadius="999"
-                                Background="{DynamicResource SurfaceBrush}"
-                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
-                                IsVisible="{Binding ShowRendering}" IsHitTestVisible="False">
-                            <TextBlock Classes="hint" Text="{Binding PreviewStep}" />
-                        </Border>
-
-                        <!-- Lange Arbeiten (z. B. KI): Fortschritt direkt über dem Bild -->
+                        <!-- Eine Anzeige für alles, was rechnet: KI, Einstellungen ins Bild, Vorschau (sobald sie
+                             spürbar dauert) — Text, Balken, bei der KI auch Abbrechen -->
                         <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                                Margin="12" Padding="12,5" CornerRadius="999"
+                                Margin="12" Padding="14,7,10,7" CornerRadius="12"
                                 Background="{DynamicResource SurfaceBrush}"
                                 BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
-                                IsVisible="{Binding ActivityText, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                IsHitTestVisible="False">
-                            <TextBlock Classes="hint" Text="{Binding ActivityText}" />
+                                IsVisible="{Binding ShowOverlay}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <StackPanel Spacing="5" VerticalAlignment="Center" MinWidth="240">
+                                    <TextBlock Classes="hint" Text="{Binding OverlayText}" />
+                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding OverlayProgress}"
+                                                 Height="4" MinHeight="4" IsVisible="{Binding OverlayHasProgress}" />
+                                </StackPanel>
+                                <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Abbrechen'}"
+                                        Command="{Binding ActivityCancel}" IsVisible="{Binding OverlayCanCancel}" />
+                            </StackPanel>
                         </Border>
 
                         <!-- Wird beim Hineinziehen von Dateien eingeblendet -->

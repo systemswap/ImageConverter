@@ -929,3 +929,27 @@ Test oder Nachweis.
   Neu anwenden setzt genau das Ausgeblendete zurück; Auge ist ein Rückgängig-Schritt). UI-Test:
   KI aus → Gesicht ändert sich (3,7 Stufen), Hintergrund gleich (0); drehen danach → KI bleibt
   ausblendbar; Neu anwenden → „Auswahl angewendet – ohne KI“; Rückgängig → wieder ausgeblendet.
+
+## 27. Drehen bei offenem KI-Ergebnis, Liste nur mit Funktionen, eine Fortschrittsanzeige
+
+- **Entdeckt:** 0.5.23 beta (09.10.2026), vom Benutzer. **Behoben:** 0.5.24 beta.
+- **Was:** (1) Nach der KI gedreht: Bild schmal, Gesichter an falscher Stelle — das *offene* Ergebnis
+  lag als Vorschau-Ebene im alten Querformat über dem gedrehten Bild. (2) Nach Übernehmen und Drehen
+  rechnete ein neuer KI-Lauf auf dem gedrehten KI-Ergebnis (KI auf KI). (3) Die Liste zeigte jede
+  Drehung als Zeile; gewünscht ist je Funktion eine Zeile zum Aus-/Einschalten wie in Referenzwerkzeug,
+  dazu Haut & Details getrennt von der KI. (4) Drei Fortschrittsanzeigen (Vorschau unten rechts, KI
+  unten mitte, Balken im KI-Bereich).
+- **Wie:** (1) `RunSetup.Current` = Bild beim Rechnen; ändert es sich (FullBitmap), wird das offene
+  Ergebnis verworfen, „Übernehmen“ prüft genau dieses Bild. (2) `MainViewModel.CurrentWithoutAi`
+  (Bild vor der KI, spätere Zuschnitte/Drehungen noch einmal) ist Ausgangsbild eines neuen Laufs.
+  (3) Liste: KI, Haut & Details, Größe, Rauschen, Dunst, Licht, Farbe, Gleiche Farbe, Schärfe — kein
+  Drehen/Zuschnitt. Beim Übernehmen wird die KI zusätzlich ohne Haut & Details gemischt und im
+  Schritt behalten (`ImageStep.Plain`, freigegeben mit dem Schritt); Ausschalten nimmt diese Fassung
+  plus spätere Schritte. „Neu anwenden“ nur ohne Haut & Details = neuer KI-Schritt ohne sie.
+  (4) Eine Anzeige unten mitte (`ActivityText/-Progress/-Cancel`, sonst Vorschau-Schritt mit Anteil),
+  mit Balken und — bei der KI — Abbrechen; im KI-Bereich nur noch Ergebnis-Meldungen. Export behält
+  seinen eigenen Fortschritt.
+- **Nachweis:** UI-Test: Spiegeln bei offenem Ergebnis → verworfen mit Hinweis; KI übernommen,
+  gespiegelt → Liste KI / Haut & Details / Dunst; KI an: Gesicht 3,9 Stufen, Haut & Details an:
+  1,9 Stufen, Hintergrund 0,01; zentrale Anzeige mit „KI · 50 % · noch ca. 15 s“ und Abbrechen, danach
+  „Dunst entfernen – Durchlauf 5 von 6“.
