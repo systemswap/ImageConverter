@@ -85,6 +85,9 @@
 
                 <!-- Was danach gilt: wirkt live auf das Ergebnis, ohne das Modell neu zu rechnen -->
                 <Border Height="1" Margin="0,10,0,6" Background="{DynamicResource BorderBrush2}" />
+                <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'Haut &amp; Details'}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,1,0,2"
+                           Text="{l:T 'Wirkt live auf das KI-Ergebnis, ohne neu zu rechnen.'}" />
 
                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />

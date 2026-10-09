@@ -48,7 +48,10 @@ public class NewImagesTests
         Assert.False(vm.HasPendingSettings);   // kein eigener Rückgängig-Schritt (den Verlauf leert das Öffnen)
 
         Assert.Equal(100, vm.Ai.Strength);
-        Assert.Equal(30, vm.Ai.Texture);
+        Assert.Equal(69, vm.Ai.Texture);
+        Assert.Equal(48, vm.Ai.Folds);
+        Assert.Equal(31, vm.Ai.Grain);
+        Assert.Equal(22, vm.Ai.GrainSize);
         Assert.Equal(60, vm.Ai.Fidelity);
         Assert.Equal(vm.Ai.OrderOptions[0], vm.Ai.SelectedOrder);
     }

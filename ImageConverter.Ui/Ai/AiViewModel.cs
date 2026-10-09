@@ -168,31 +168,35 @@ public partial class AiViewModel : ViewModelBase
     public bool CanChooseSize => IsEnhanceModel && !IsRunning;
     public bool CanShowMap => IsFaceModel && HasPending;
 
+    // Vorgaben der Haut-Regler: vom Benutzer am Foto 172251 (2012) als passend befunden (0.5.20)
+    private const double DefaultTexture = 69, DefaultFolds = 48, DefaultGrain = 31;
+    private const double DefaultGrainSize = 22;   // ×0,46: 2^((22 − 50) / 25)
+
     /// <summary>Hautstruktur 0…100 %: feine Struktur aus dem Bild davor statt der glatten Modellhaut (nur Gesichter).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TextureLabel))]
-    public partial double Texture { get; set; } = 30;
+    public partial double Texture { get; set; } = DefaultTexture;
 
     public string TextureLabel => $"{Texture:0} %";
 
     /// <summary>Falten &amp; Züge 0…100 %: was das Modell an Falten geglättet hat, aus dem Original zurück (nur Haut).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FoldsLabel))]
-    public partial double Folds { get; set; }
+    public partial double Folds { get; set; } = DefaultFolds;
 
     public string FoldsLabel => $"{Folds:0} %";
 
     /// <summary>Körnung 0…200 %: 100 % = so viel Korn wie im übrigen Foto gemessen.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GrainLabel))]
-    public partial double Grain { get; set; }
+    public partial double Grain { get; set; } = DefaultGrain;
 
     public string GrainLabel => $"{Grain:0} %";
 
     /// <summary>Korngröße als Regler 0…100: Mitte = wie im Foto gemessen, je Viertel doppelt so grob bzw. fein.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GrainSizeLabel))]
-    public partial double GrainSize { get; set; } = 50;
+    public partial double GrainSize { get; set; } = DefaultGrainSize;
 
     private double GrainFactor => Math.Pow(2, (GrainSize - 50) / 25);
 
@@ -591,10 +595,10 @@ public partial class AiViewModel : ViewModelBase
         SelectedSize = SizeOptions[0];
         SelectedOrder = OrderOptions[0];
         Strength = 100;
-        Texture = 30;
-        Folds = 0;
-        Grain = 0;
-        GrainSize = 50;
+        Texture = DefaultTexture;
+        Folds = DefaultFolds;
+        Grain = DefaultGrain;
+        GrainSize = DefaultGrainSize;
         ShowMap = false;
         Fidelity = 60;
     }

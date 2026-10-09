@@ -359,6 +359,8 @@ public static class English
         ["Modell"] = "Model",
         ["Stärke"] = "Strength",
         ["Deckkraft der KI-Bearbeitung über dem Original: 100 % = nur KI, 30 % = 70 % Original und 30 % KI. Wirkt sofort, ohne neu zu rechnen."] = "Opacity of the AI result over the original: 100 % = AI only, 30 % = 70 % original and 30 % AI. Works instantly, without recomputing.",
+        ["Haut & Details"] = "Skin & details",
+        ["Wirkt live auf das KI-Ergebnis, ohne neu zu rechnen."] = "Works live on the AI result, without recomputing.",
         ["Hautstruktur"] = "Skin texture",
         ["Nur Gesichtsmodelle: holt Poren und feine Hautstruktur aus dem Original zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live."] = "Face models only: brings pores and fine skin texture back from the original, so faces don't look ironed flat. Eyes, mouth and shape stay from the model. Works live.",
         ["Nur Gesichtsmodelle: holt Lachfalten, Stirn- und Mundlinien zurück, die das Modell geglättet hat — nur auf der Haut, Augen, Lippen und Zähne bleiben vom Modell. Wirkt live."] = "Face models only: brings back laugh lines, forehead and mouth lines that the model smoothed away — only on the skin; eyes, lips and teeth stay from the model. Works live.",
