@@ -805,7 +805,7 @@
                                 <StackPanel Spacing="4" MaxWidth="280">
                                     <TextBlock FontWeight="SemiBold" Text="{l:T 'Zoom'}" />
                                     <TextBlock TextWrapping="Wrap" Text="{l:T 'Strg + Mausrad über dem Bild zoomt um den Mauszeiger.'}" />
-                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Im Zoom verschieben: mittlere Maustaste ziehen, Leertaste + Ziehen oder Mausrad (mit Umschalt waagerecht).'}" />
+                                    <TextBlock TextWrapping="Wrap" Text="{l:T 'Im Zoom verschieben: Strg + Ziehen, mittlere Maustaste oder Mausrad (mit Umschalt waagerecht); bei ausgeschaltetem Auswahlrahmen auch einfach Ziehen.'}" />
                                     <TextBlock TextWrapping="Wrap" Text="{l:T 'Klick hier oder Strg+0: einpassen · Strg+1: 100 %'}" />
                                     <TextBlock TextWrapping="Wrap" Text="{l:T 'Die Prozente beziehen sich auf das Ergebnis in der eingestellten Größe.'}" />
                                 </StackPanel>

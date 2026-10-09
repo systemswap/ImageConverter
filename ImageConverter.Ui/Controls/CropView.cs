@@ -226,7 +226,6 @@ public sealed class CropView : Control
 
     private Rect _imageRect;   // Bild auf dem Bildschirm
     private Rect _panStartRect;
-    private bool _spaceHeld;   // Leertaste gedrückt = Hand-Werkzeug
     private double _scale = 1; // Bildschirm-px pro Bildpixel
 
     // ------------------------------------------------------------------ Optik
@@ -526,8 +525,8 @@ public sealed class CropView : Control
         var props = e.GetCurrentPoint(this).Properties;
         var p = e.GetPosition(this);
 
-        // Verschieben im Zoom: mittlere Maustaste, Strg oder Leertaste + links, ohne Auswahlwerkzeug links allein
-        var panKey = _spaceHeld || e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        // Verschieben im Zoom: mittlere Maustaste oder Strg + links, ohne Auswahlwerkzeug links allein
+        var panKey = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         if (!_fitMode && (props.IsMiddleButtonPressed || (props.IsLeftButtonPressed && panKey)))
         {
             Focus();
@@ -690,7 +689,7 @@ public sealed class CropView : Control
 
     private void UpdateHoverCursor(Point p, KeyModifiers modifiers)
     {
-        if ((_spaceHeld || modifiers.HasFlag(KeyModifiers.Control)) && !_fitMode)
+        if (modifiers.HasFlag(KeyModifiers.Control) && !_fitMode)
         {
             Cursor = CursorHand;
             return;
@@ -813,14 +812,6 @@ public sealed class CropView : Control
     {
         base.OnKeyDown(e);
 
-        if (e.Key == Key.Space)
-        {
-            _spaceHeld = true;
-            if (!_fitMode) Cursor = CursorHand;
-            e.Handled = true;
-            return;
-        }
-
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             var center = ViewArea.Center;
@@ -862,21 +853,6 @@ public sealed class CropView : Control
             Selection = new Rect(x, y, sel.Width, sel.Height);
             e.Handled = true;
         }
-    }
-
-    protected override void OnKeyUp(KeyEventArgs e)
-    {
-        base.OnKeyUp(e);
-        if (e.Key != Key.Space) return;
-
-        _spaceHeld = false;
-        if (_mode != DragMode.Pan) Cursor = SelectionEnabled ? CursorCross : _fitMode ? Cursor.Default : CursorHand;
-    }
-
-    protected override void OnLostFocus(FocusChangedEventArgs e)
-    {
-        base.OnLostFocus(e);
-        _spaceHeld = false; // sonst "klebt" die Leertaste nach einem Fensterwechsel
     }
 
     // ------------------------------------------------------------ Rechnen

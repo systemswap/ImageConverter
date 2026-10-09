@@ -719,3 +719,9 @@ Test oder Nachweis.
   Exe unter `%LOCALAPPDATA%\imageconverter-build\publish-050\`, Abnahme-Referenz
   `abnahme/0.5.0`. Linux-Bau noch offen. Hinweis zum Hook: Er zählt bei „-beta“ nur
   die Zahl hoch und verliert den Zusatz — Version immer von Hand setzen.
+- **Meilenstein 0.5.2 (09.10.2026):** Vorschau-Bedienung — Knopf für das
+  Auswahlwerkzeug (Vorgabe an, blau; aus = Ziehen verschiebt), Strg + Ziehen
+  verschiebt immer, Leertaste + Ziehen entfernt (vom Benutzer gewünscht, Strg
+  reicht). Bildkette unverändert gegenüber 0.5.0. Hinweis: `dotnet test` baut die
+  Desktop-Exe nicht neu — für Bildschirmfotos erst die ganze Lösung bauen (sonst
+  zeigte der Testlauf noch 0.4.51).
