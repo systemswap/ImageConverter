@@ -3,7 +3,7 @@ using ImageConverter.ViewModels;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Neu geladene Bilder beginnen wie nach dem Programmstart — alle Einstellungen auf den Vorgaben.</summary>
+/// <summary>Neu geladene Bilder beginnen wie nach dem Programmstart — alle Einstellungen auf den Vorgaben, aber je Bild.</summary>
 public class NewImagesTests
 {
     [Fact]
@@ -25,7 +25,7 @@ public class NewImagesTests
         vm.Dpi = 300;
         vm.TargetWidth = 1200;
         vm.OutputFolder = "irgendwo";
-        vm.ApplyToAll = false;
+        vm.ApplyToAll = true;
         vm.SelectionTool = false;
         vm.Ai.Strength = 40;
         vm.Ai.Texture = 80;
@@ -43,7 +43,7 @@ public class NewImagesTests
         Assert.Equal(Adjustments.None.DehazePasses, vm.DehazePasses);
         Assert.Equal("WebP", vm.SelectedFormat);
         Assert.Equal(82, vm.Quality);
-        Assert.True(vm.ApplyToAll);
+        Assert.False(vm.ApplyToAll);   // neue Bilder: Einstellungen je Bild — eine Änderung überschreibt nie unbemerkt die anderen
         Assert.True(vm.SelectionTool);
         Assert.False(vm.HasPendingSettings);   // kein eigener Rückgängig-Schritt (den Verlauf leert das Öffnen)
 

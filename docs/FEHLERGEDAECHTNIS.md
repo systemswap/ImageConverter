@@ -828,3 +828,10 @@ Test oder Nachweis.
   gespeichert wird zwischen Programmstarts ohnehin nur die Sprache. Blättern zwischen schon
   geöffneten Bildern ändert weiterhin nichts. UI-Test über den Dateidialog: Qualität 36 → 82,
   Dunst +184 → 0, Größe 1200 × 900 (Original).
+- **Nachtrag 0.5.14 beta:** „Gleiche Einstellungen für alle Bilder“ wird beim Laden neuer Bilder
+  *ausgeschaltet* (nicht wie beim Start eingeschaltet) — Wunsch des Benutzers: sonst überschreibt
+  eine Änderung an einem Bild, wenn man den Haken übersieht, unbemerkt die anderen. Jedes neue Bild
+  beginnt beim ersten Anzeigen mit dem Startstand (`_individualTemplate = _startSettings`, DPI aus
+  der Datei) — vorher hätte es im Einzelmodus den Stand des zuletzt gezeigten Bildes übernommen.
+  UI-Test mit zwei Bildern: Bild 1 Qualität 36 → Bild 2 zeigt 82, 2592 × 1944, 72 dpi → zurück
+  bei Bild 1 wieder 36.

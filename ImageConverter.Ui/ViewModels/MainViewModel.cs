@@ -130,17 +130,20 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>
     /// Neu geladene Bilder beginnen wie nach dem Programmstart: alle Einstellungen (Format, Qualität, Größe =
-    /// Originalauflösung, DPI aus der Datei, Licht, Dunst, Farbe, Schärfe …) auf den Vorgaben, gleiche
-    /// Einstellungen für alle. Kein Rückgängig-Schritt — der Verlauf beginnt mit den neuen Bildern neu.
+    /// Originalauflösung, DPI aus der Datei, Licht, Dunst, Farbe, Schärfe …) auf den Vorgaben. Dazu Einstellungen
+    /// je Bild („Gleiche Einstellungen für alle Bilder“ aus) — so überschreibt eine Änderung an einem Bild nie
+    /// unbemerkt die anderen; jedes Bild beginnt beim ersten Anzeigen mit dem Startstand.
+    /// Kein Rückgängig-Schritt — der Verlauf beginnt mit den neuen Bildern neu.
     /// Blättern zwischen schon geöffneten Bildern ändert nichts.
     /// </summary>
     internal void ResetToStart()
     {
         using (SuppressHistory())
         {
-            ApplyToAll = true;
+            ApplyToAll = false;
             ApplySettings(_startSettings);
         }
+        _individualTemplate = _startSettings;
         SelectionTool = true;
         ResetHistoryBaseline();
         FilesReplaced?.Invoke(this, EventArgs.Empty);
@@ -259,7 +262,9 @@ public partial class MainViewModel : ViewModelBase
                 // geändert hatte — sonst gilt die eigene Einstellung für alle.
                 // Einzelmodus ohne eigenen Stand: Vorlage vom Umschalten, nicht das vorige Bild
                 var template = !ApplyToAll && _individualTemplate is { } t ? t : outgoing;
-                if (isNew && outgoingFileDpi is { } prevDpi && template.Dpi == (int)Math.Round(prevDpi))
+                if (isNew && ReferenceEquals(template, _startSettings))
+                    template = template with { Dpi = (int)Math.Round(history.Dpi) };   // frisch geladen: wie nach dem Start
+                else if (isNew && outgoingFileDpi is { } prevDpi && template.Dpi == (int)Math.Round(prevDpi))
                     template = template with { Dpi = (int)Math.Round(history.Dpi) };
                 ApplySettings(AdaptToImage(template, SourceWidth, SourceHeight));
             }
