@@ -43,7 +43,7 @@
                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Strength}"
-                            ToolTip.Tip="{l:T 'Mischung mit dem Bild davor: 100 % = nur das Ergebnis des Modells, darunter wirkt es schwächer und natürlicher. Wirkt live, ohne neu zu rechnen.'}" />
+                            ToolTip.Tip="{l:T 'Deckkraft der KI-Bearbeitung über dem Original: 100 % = nur KI, 30 % = 70 % Original und 30 % KI. Wirkt sofort, ohne neu zu rechnen.'}" />
                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding StrengthLabel}" />
                 </Grid>
 

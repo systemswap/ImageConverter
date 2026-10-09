@@ -358,7 +358,7 @@ public static class English
         ["Modelle laden …"] = "Get models …",
         ["Modell"] = "Model",
         ["Stärke"] = "Strength",
-        ["Mischung mit dem Bild davor: 100 % = nur das Ergebnis des Modells, darunter wirkt es schwächer und natürlicher. Wirkt live, ohne neu zu rechnen."] = "Blend with the image before: 100 % = only the model's result, below that the effect is weaker and more natural. Works live, without recomputing.",
+        ["Deckkraft der KI-Bearbeitung über dem Original: 100 % = nur KI, 30 % = 70 % Original und 30 % KI. Wirkt sofort, ohne neu zu rechnen."] = "Opacity of the AI result over the original: 100 % = AI only, 30 % = 70 % original and 30 % AI. Works instantly, without recomputing.",
         ["Hautstruktur"] = "Skin texture",
         ["Holt Poren und feine Hautstruktur aus dem Bild davor zurück, damit Gesichter nicht glattgebügelt wirken. Augen, Mund und Form bleiben vom Modell. Wirkt live."] = "Brings pores and fine skin texture back from the image before, so faces don't look ironed flat. Eyes, mouth and shape stay from the model. Works live.",
         ["Natürlichkeit"] = "Fidelity",
