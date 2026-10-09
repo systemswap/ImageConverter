@@ -599,13 +599,13 @@
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Dynamik'}" />
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding DehazeVibrance}"
-                                                ToolTip.Tip="{l:T 'Blasse Farben (Ferne) bekommen mehr Buntheit, kräftige kaum. Nicht im Himmel.'}" />
+                                                ToolTip.Tip="{l:T 'Blasse Farben (Ferne) bekommen mehr Buntheit, kräftige kaum. Im Himmel nur wenig.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeVibranceLabel}" />
                                     </Grid>
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Schärfe fein'}" />
                                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding DehazeSharpen}"
-                                                ToolTip.Tip="{l:T 'Feine Schärfe (3 × 3 Pixel) auf der Landschaft — Details, die der Dunst verschluckt hat.'}" />
+                                                ToolTip.Tip="{l:T 'Feine Schärfe auf Landschaft und Sonnenstrahlen — Details, die der Dunst verschluckt hat. Im glatten Himmel nur wenig.'}" />
                                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding DehazeSharpenLabel}" />
                                     </Grid>
                                     <Grid Classes="row" ColumnDefinitions="76,*,Auto">

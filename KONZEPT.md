@@ -430,6 +430,17 @@ aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-
 | 4 Dunst neu gegliedert | 0.4.52 beta | Stufe A Physik (Luftlicht hierarchisch), Stufe B Look an einer Stelle | kein Messwert schlechter; Auge des Benutzers |
 | 5 Abschluss | Meilenstein (z. B. 0.5.0) | Linux-Bau, Doku, Zip-Sicherung | Benutzer |
 
+**Stand (09.10.2026):**
+- Phase 0 ✓ — Prüflauf gegen 0.4.45 byte-gleich.
+- Phase 1 ✓ — Puffer sRGB-kodiert statt linear (siehe oben); Abweichung ≤ ΔE 0,38 im Mittel.
+- Phase 2 teilweise — 28,7 MP × 3: 13,9 s / 3,7 GB (vorher 19,5 s / 6,4 GB); Ziel < 10 s / < 3 GB
+  nicht erreicht. Offen: Local Laplacian (Speicherzugriff), Farbumrechnung je Pixel im Dunst,
+  Entstufen (Speicherlatenz). Vorschau bricht zwischen Schritten ab und zeigt den Schritt.
+- Phase 3 ✓ — `SceneMap`, Bild byte-gleich.
+- Phase 4 ✓ (Abnahme durch den Benutzer offen) — `DehazeLook`; Vorgaben auf 0.4.45 abgestimmt
+  (ΔE 0,3–0,7 bei Dunst 100), Luftlicht aus überlappenden Fenstern; das Luftlicht war schon
+  dreistufig (Bild → 8 Streifen → 6 × 4 Kacheln, jede Stufe nur begrenzte Korrektur).
+
 **Abnahme-Werkzeug** (`tools/Abnahme`, nicht in der Solution): Arbeitsordner
 `<LocalAppData>/imageconverter-build/abnahme` (oder `IC_ABNAHME`) mit `abnahme.json`
 (Testbilder, Messbereiche), Testbilder unter `bilder/` — Bilder kommen nie ins Repo.

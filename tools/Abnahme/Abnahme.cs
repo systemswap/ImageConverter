@@ -329,7 +329,7 @@ public static class Report
     public static void SynthLine(string name, Metrics m, Metrics? r) =>
         Console.WriteLine($"{name,-18} {Cell(m.WahrheitAlle, r?.WahrheitAlle, "F2", 9, abs: 0.3, worse: d => d > 0.8)} "
                           + $"{Cell(m.WahrheitOben, r?.WahrheitOben, "F2", 9, abs: 0.3, worse: d => d > 1.0)} "
-                          + $"{Cell(m.WahrheitGruenFarbton, r?.WahrheitGruenFarbton, "F1", 9, abs: 2, worse: d => Math.Abs(d) > 4)}");
+                          + $"{Cell(m.WahrheitGruenFarbton, r?.WahrheitGruenFarbton, "F1", 9, abs: 2, worse: _ => Math.Abs(m.WahrheitGruenFarbton ?? 0) - Math.Abs(r?.WahrheitGruenFarbton ?? 0) > 2)}");
 
     /// <summary>Wert, dahinter ≈ (wie die Referenz), ↑/↓ (geändert) oder ✗ (schlechter).</summary>
     static string Cell(double? v, double? r, string fmt, int width, double rel = 0, double abs = 0, Func<double, bool>? worse = null)

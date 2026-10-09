@@ -51,14 +51,14 @@ void Run(string name, string? compareTo)
     }
 
     var watch = Stopwatch.StartNew();
-    foreach (var image in config.Bilder)
+    foreach (var image in config.Bilder.Where(b => Wanted("IC_BILDER", b.Name)))
     {
         using var source = new MagickImage(Path.Combine(root, image.Datei));
         Console.WriteLine($"\n== {image.Name} ({source.Width} × {source.Height})");
         Report.Header();
         (int X, int Y)? sun = null;
         double? raysOriginal = null;
-        foreach (var c in Cases.All)
+        foreach (var c in Cases.All.Where(c => c.Name == Cases.Original || Wanted("IC_FAELLE", c.Name)))
         {
             var px = Render(source, c, out var w, out var h);
             if (c.Name == Cases.Original)
@@ -85,13 +85,13 @@ void Run(string name, string? compareTo)
         }
     }
 
-    foreach (var synth in config.Synthetisch)
+    foreach (var synth in config.Synthetisch.Where(s => Wanted("IC_BILDER", s.Name)))
     {
         using var clear = new MagickImage(Path.Combine(root, synth.Datei));
         Console.WriteLine($"\n== {synth.Name} (künstlicher Dunst, bekannte Wahrheit)");
         Report.SynthHeader();
         var (truth, hazy, w, h) = Synthetic.Make(clear);
-        foreach (var c in Cases.Synthetic)
+        foreach (var c in Cases.Synthetic.Where(c => c.Name == "Dunstig" || Wanted("IC_FAELLE", c.Name)))
         {
             var result = c.Adjust is null ? hazy : Adjust.Apply(hazy, w, h, c.Adjust);
             var m = Synthetic.Measure(truth, result, w, h);
@@ -204,3 +204,8 @@ void Raster()
         Console.WriteLine(path);
     }
 }
+
+// Auswahl für schnelle Messrunden: IC_BILDER / IC_FAELLE = Namen mit Komma; leer = alle
+static bool Wanted(string variable, string name) =>
+    Environment.GetEnvironmentVariable(variable) is not { Length: > 0 } list
+    || list.Split(',').Any(n => n.Trim().Equals(name, StringComparison.OrdinalIgnoreCase));

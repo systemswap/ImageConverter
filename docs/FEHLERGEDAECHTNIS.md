@@ -685,3 +685,26 @@ Test oder Nachweis.
   weiteren Schritte zugänglich. Reine Umstrukturierung — alle 48 Abnahmebilder
   byte-gleich mit 0.4.50. Was die Karte zusätzlich schonen soll (Kontrast und
   Schärfe je Durchlauf im Himmel), ändert das Bild und gehört zu Phase 4.
+- **Phase 4, Physik und Look getrennt (0.4.52 beta):** Der Dunstfilter rechnet je
+  Durchlauf nur noch das Modell; der Look (`DehazeLook`: Klarheit, S-Kurve,
+  Dynamik vor dem Entstufen, Schärfe/Kanten danach) folgt an einer Stelle, je
+  Feinregler ein Mechanismus. Abgestimmt in fünf Messrunden auf die Referenz
+  0.4.45. Lehren: (1) Schärfe nur in der Landschaft nahm den Sonnenstrahlen die
+  Struktur (Strahlen 1,05 statt 1,18) — die Strahlen reichen in den Himmel; voll im
+  Himmel betonte sie JPEG-Blöcke (Stufen 0,79 statt 0,59) → im Himmel ein Anteil
+  (0,4). (2) Die alte Tools-Kurve drehte je Kanal um sRGB 0,5 (Oklab-L ≈ 0,6), die
+  Sinus-Kurve um L 0,5 — mit nur der zweiten wurden Bilder gut eine Stufe heller;
+  Drehpunkt jetzt 0,56. (3) Im Lichthof halbe Kurve, ganz ohne fehlte den Strahlen
+  der Kontrast. (4) Klarheit auf dem entdunsteten Bild wirkt stärker — 0,2 statt
+  0,3. Luftlicht: Kacheln schätzen jetzt aus überlappenden Fenstern (halbe Kachel
+  in jede Richtung) — künstlicher Dunst oben näher an der Wahrheit (27,7 → 27,4).
+  Die Abnahme wertete eine Farbtonänderung beim künstlichen Dunst als schlechter,
+  auch wenn sie zur Wahrheit hin ging — korrigiert (nur |neu| − |alt| > 2°).
+  Nachtrag: Mehr Dynamik im Himmel (0,35), um im Smog (Photo175) die fehlende Farbe
+  auszugleichen, ließ blasse bläuliche Hügel ins Türkis kippen (Berglandschaft, Kombi
+  Panorama: Farbton 149° statt 115°). Die Ursache der fehlenden Farbe war eine
+  andere: Die alte Tools-Kurve je Kanal hob nebenbei die Buntheit, die Kurve auf der
+  Helligkeit nicht → Kopplung Buntheit an die Kurve (0,3), Dynamik im Himmel wieder
+  0,12. Verbleibende Ausnahme der Abnahme: Berglandschaft mit der Panorama-Kombi
+  (Dunst 211, Schärfen 1,4) 139° statt 115° — beide Fassungen dort gleich
+  überzeichnet, gemessen an wenigen grünen Pixeln; im Bild kein sichtbarer Unterschied.

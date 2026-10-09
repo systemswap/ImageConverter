@@ -182,52 +182,30 @@ public static class Adjust
                 // Schluss, die Dynamik viel zu stark.
                 var passes = Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses);
                 var t = dehaze;   // 0 … 3: Reglerstand / 100
-                var contrast = a.DehazeContrast / 100 * Dehaze.LoopContrast * t;
-                var vibrance = a.DehazeVibrance / 100 * Dehaze.LoopVibrance * t;
-                var fine = a.DehazeSharpen / 100 * Dehaze.LoopSharpen * t;
-                var edge = Math.Clamp(a.DehazeEdge / 100, 0, 1) * Dehaze.LoopEdgeShare * t;
+                // Physik und Look getrennt (Phase 4): Der Dunstfilter rechnet nur das Modell (Luftlicht,
+                // Durchlässigkeit, Rückrechnung, Helligkeitsausgleich, Farbe), der Look folgt an einer
+                // Stelle — je Feinregler ein Mechanismus, Himmel und Lichthof über die Szenenkarte geschont.
+                var physics = settings with { Clarity = 0, Sharpen = 0, Curve = 0, Vibrance = 0 };
+                var look = new Dehaze.LookSettings(
+                    Clarity: (float)(a.DehazeClarity / 100 * Dehaze.LookClarity * t),
+                    Curve: (float)(a.DehazeContrast / 100 * Dehaze.LookCurve * t),
+                    Vibrance: (float)(a.DehazeVibrance / 100 * Dehaze.LookVibrance * t),
+                    VibranceSky: (float)(a.DehazeVibrance / 100 * Dehaze.LookVibranceSky * t),
+                    Sharpen: (float)(a.DehazeSharpen / 100 * Dehaze.LookSharpen * t),
+                    Edge: (float)(Math.Clamp(a.DehazeEdge / 100, 0, 1) * Dehaze.LoopEdgeShare * t));
                 for (var i = 0; i < passes; i++)
                 {
                     if (i > 0) plan?.Next();
-                    work = Replace(work, Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, settings, 1f));
-                    ContrastVibrance(work, width, height, contrast / 100, vibrance / 100);
+                    work = Replace(work, Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, physics, 1f));
+                    Dehaze.LookTone(work, width, height, pass.Scene, look);
                     work = Replace(work, Deband.Apply(work, width, height, deband, seed: (uint)i + 1));
-                    if (fine > 0) work = Replace(work, Sharpen.UnsharpMask(work, width, height, fine, Dehaze.FineSigma));
-                    if (edge > 0) work = Replace(work, Sharpen.UnsharpMask(work, width, height, edge, Dehaze.EdgeSigma));
+                    Dehaze.LookDetail(work, width, height, pass.Scene, look);
                 }
             }
             source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
         }
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
         return new Prepared(source, ToneMap(source, width, height, a));
-    }
-
-    /// <summary>
-    /// Kontrast (S-Kurve je Kanal) und Dynamik wie die Regler dieser Kachel, aber auf Fließkomma-Pixeln
-    /// und an Ort und Stelle — der Schritt der Dunst-Durchläufe.
-    /// </summary>
-    /// <param name="contrast">−1 … 1 wie Regler / 100.</param>
-    /// <param name="vibrance">−1 … 1 wie Regler / 100.</param>
-    private static void ContrastVibrance(float[] px, int width, int height, double contrast, double vibrance)
-    {
-        if (contrast == 0 && vibrance == 0) return;
-        var curve = contrast != 0 ? ToneCurve(0, contrast) : null;
-        var vib = (float)Math.Clamp(vibrance, -1, 1);
-        Parallel.For(0, height, y =>
-        {
-            for (int x = 0, p = y * width; x < width; x++, p++)
-            {
-                var i = p * 4;
-                float b = px[i], g = px[i + 1], r = px[i + 2];
-                if (curve is not null) { r = Lookup(curve, r); g = Lookup(curve, g); b = Lookup(curve, b); }
-                if (vib != 0)
-                {
-                    var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
-                    (r, g, b) = Oklab.ScaleChroma(L, oa, ob, VibranceFactor(L, oa, ob, vib));
-                }
-                px[i] = b; px[i + 1] = g; px[i + 2] = r;
-            }
-        });
     }
 
     /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>

@@ -21,7 +21,7 @@ namespace ImageConverter.Core.Imaging;
 ///   lokale Kontraste und Farben gewinnen — sonst wird das Bild dunkel.</item>
 /// </list>
 /// </summary>
-internal static class Dehaze
+internal static partial class Dehaze
 {
     /// <summary>Längste Kante der Fassung, auf der Luftlicht und Durchlässigkeit geschätzt werden.</summary>
     private const int WorkEdge = 1024;
@@ -54,16 +54,21 @@ internal static class Dehaze
     /// <summary>Vorgabe der Durchläufe: Ein Durchlauf ist bewusst sacht, erst mehrere ergeben die Wirkung.</summary>
     internal const int DefaultPasses = 3;
 
-    // Je Durchlauf, bei Dunst 100 und den Vorgaben der Feinregler: Was über die Tools-Kette dazukommt —
-    // sachte Schritte (0.4.43 war mit Dunst 40 · Kontrast +8 · Dynamik +8 je Runde viel zu kräftig).
+    // Je Durchlauf ein sachter Schritt (0.4.43 war mit Dunst 40 · Kontrast +8 · Dynamik +8 je Runde viel zu
+    // kräftig).
     /// <summary>Dunstmenge je Durchlauf bei Regler 100.</summary>
     internal const double PassAmount = 0.3;
-    /// <summary>Tools-Kontrast je Durchlauf bei 100 % (Vorgabe 12 % → +4).</summary>
-    internal const double LoopContrast = 33;
-    /// <summary>Tools-Dynamik je Durchlauf bei 100 % (Vorgabe 25 % → +2); dazu wirkt die Dynamik im Dunstfilter selbst.</summary>
-    internal const double LoopVibrance = 8;
-    /// <summary>Feine Unscharfmaskierung je Durchlauf bei 100 %.</summary>
-    internal const double LoopSharpen = 0.35;
+
+    // Look je Durchlauf (Phase 4, DehazeLook): Stärke je Einheit des Feinreglers bei Dunst 100. Die Vorgaben
+    // fassen zusammen, was bis 0.4.51 an zwei Stellen wirkte (im Dunstfilter und über die Tools-Kette).
+    /// <summary>Klarheit je Durchlauf (auf dem schon entdunsteten Bild — darum weniger als die 0,3 im Dunstfilter bis 0.4.51).</summary>
+    internal const double LookClarity = 0.2;
+    /// <summary>S-Kurve auf der Helligkeit je Durchlauf (Sinus-Kurve und Tools-Kontrast zusammen).</summary>
+    internal const double LookCurve = 0.6;
+    /// <summary>Dynamik je Durchlauf in der Landschaft und im Himmel (dort bisher nur über die Tools).</summary>
+    internal const double LookVibrance = 0.42, LookVibranceSky = 0.12;
+    /// <summary>Feine Schärfe je Durchlauf (3×3 im Dunstfilter und Unscharfmaskierung zusammen).</summary>
+    internal const double LookSharpen = 0.9;
 
     /// <summary>Vorgabe Entstufen (Debanding) in Prozent.</summary>
     internal const double DefaultDeband = 50;
@@ -213,7 +218,7 @@ internal static class Dehaze
         var curve = perceptual * (s.Curve * mix + s.Curve * 0.5f * over);
         var vibrance = perceptual * (s.Vibrance * mix + s.Vibrance * 0.4f * over);
         (float[] A, float[] B) baseL = default;
-        if (amount > 0)
+        if (amount > 0 && clarity > 0)   // ohne Klarheit (Physik allein, Look danach) entfällt die Grundhelligkeit
         {
             // Grundhelligkeit für die Klarheit: Oklab-L des Originals, kantentreu geglättet —
             // ein einfacher Weichzeichner gäbe Lichthöfe an Horizont und Häuserkanten
@@ -277,7 +282,7 @@ internal static class Dehaze
 
                     // Klarheit, Schärfe, Kurve (auf der Helligkeit), Dynamik (auf der Buntheit)
                     var L = now.L
-                          + clarity * land * (was.L - cell.Sample(baseL, gB, gG, gR))
+                          + (clarity > 0 ? clarity * land * (was.L - cell.Sample(baseL, gB, gG, gR)) : 0)
                           + (luma is null ? 0 : sharpen * land * FineDetail(luma, width, height, x, y));
                     L = Math.Clamp(L, 0, 1);
                     // Kurve nicht im Lichthof: Ihre Schulter staucht die Strahlen (gemessen −11 % Schwankung)
@@ -575,6 +580,10 @@ internal static class Dehaze
         {
             int x0 = tx * w / AirCols, x1 = Math.Max(x0 + 1, (tx + 1) * w / AirCols);
             int y0 = ty * h / AirRows, y1 = Math.Max(y0 + 1, (ty + 1) * h / AirRows);
+            var cx = Math.Clamp((x0 + x1) / 2, 0, w - 1) * 3;   // Mitte der Kachel (vor dem Erweitern)
+            // Überlappende Fenster: eine halbe Kachel in jede Richtung — mehr Kandidaten, ruhigere Schätzung
+            int ex = (x1 - x0) / 2, ey = (y1 - y0) / 2;
+            (x0, x1, y0, y1) = (Math.Max(0, x0 - ex), Math.Min(w, x1 + ex), Math.Max(0, y0 - ey), Math.Min(h, y1 + ey));
             var pixels = new int[(x1 - x0) * (y1 - y0)];
             for (int y = y0, i = 0; y < y1; y++)
                 for (var x = x0; x < x1; x++) pixels[i++] = y * w + x;
@@ -582,7 +591,6 @@ internal static class Dehaze
             var a = AirLightOf(lin, dark, pixels);
             var candidates = pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).Average(p => dark[p]);
             var trust = SmoothStep(0.7f, 0.95f, (float)candidates / Math.Max(1e-3f, columnDark[tx]));
-            var cx = Math.Clamp((x0 + x1) / 2, 0, w - 1) * 3;
             for (var c = 0; c < 3; c++)
             {
                 var col = columns[cx + c];
