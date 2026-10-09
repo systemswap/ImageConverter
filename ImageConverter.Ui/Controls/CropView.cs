@@ -32,6 +32,19 @@ public sealed class CropView : Control
         AvaloniaProperty.Register<CropView, Rect?>(nameof(Selection),
             defaultBindingMode: BindingMode.TwoWay);
 
+    /// <summary>
+    /// Auswahlwerkzeug an (Vorgabe): Ziehen mit links zieht einen Ausschnitt auf. Aus: Ziehen mit links
+    /// verschiebt das Bild (Hand). Strg + Ziehen verschiebt in beiden Fällen.
+    /// </summary>
+    public static readonly StyledProperty<bool> SelectionEnabledProperty =
+        AvaloniaProperty.Register<CropView, bool>(nameof(SelectionEnabled), defaultValue: true);
+
+    public bool SelectionEnabled
+    {
+        get => GetValue(SelectionEnabledProperty);
+        set => SetValue(SelectionEnabledProperty, value);
+    }
+
     /// <summary>Seitenverhältnis Breite/Höhe; 0 = frei.</summary>
     public static readonly StyledProperty<double> AspectRatioProperty =
         AvaloniaProperty.Register<CropView, double>(nameof(AspectRatio));
@@ -513,8 +526,9 @@ public sealed class CropView : Control
         var props = e.GetCurrentPoint(this).Properties;
         var p = e.GetPosition(this);
 
-        // Verschieben im Zoom: mittlere Maustaste oder Leertaste + links
-        if (!_fitMode && (props.IsMiddleButtonPressed || (props.IsLeftButtonPressed && _spaceHeld)))
+        // Verschieben im Zoom: mittlere Maustaste, Strg oder Leertaste + links, ohne Auswahlwerkzeug links allein
+        var panKey = _spaceHeld || e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        if (!_fitMode && (props.IsMiddleButtonPressed || (props.IsLeftButtonPressed && panKey)))
         {
             Focus();
             _mode = DragMode.Pan;
@@ -536,6 +550,18 @@ public sealed class CropView : Control
         {
             _mode = DragMode.Split;
             Cursor = CursorWestEast;
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+
+        // Auswahlwerkzeug aus: Ziehen verschiebt das Bild (nur im Zoom — eingepasst gibt es nichts zu schieben)
+        if (!SelectionEnabled)
+        {
+            if (_fitMode) return;
+            _mode = DragMode.Pan;
+            _panStartRect = _imageRect;
+            Cursor = CursorGrab;
             e.Pointer.Capture(this);
             e.Handled = true;
             return;
@@ -592,7 +618,7 @@ public sealed class CropView : Control
         switch (_mode)
         {
             case DragMode.None:
-                UpdateHoverCursor(p);
+                UpdateHoverCursor(p, e.KeyModifiers);
                 return;
 
             case DragMode.Create:
@@ -650,7 +676,7 @@ public sealed class CropView : Control
         var wasEdit = _mode is not (DragMode.Pan or DragMode.Split);
         _mode = DragMode.None;
         e.Pointer.Capture(null);
-        UpdateHoverCursor(e.GetPosition(this));
+        UpdateHoverCursor(e.GetPosition(this), e.KeyModifiers);
         if (wasEdit && GestureCompletedCommand is { } done && done.CanExecute(null))
             done.Execute(null);
         e.Handled = true;
@@ -662,9 +688,9 @@ public sealed class CropView : Control
         _mode = DragMode.None;
     }
 
-    private void UpdateHoverCursor(Point p)
+    private void UpdateHoverCursor(Point p, KeyModifiers modifiers)
     {
-        if (_spaceHeld && !_fitMode)
+        if ((_spaceHeld || modifiers.HasFlag(KeyModifiers.Control)) && !_fitMode)
         {
             Cursor = CursorHand;
             return;
@@ -673,6 +699,12 @@ public sealed class CropView : Control
         if (OnSplitLine(p))
         {
             Cursor = CursorWestEast;
+            return;
+        }
+
+        if (!SelectionEnabled)
+        {
+            Cursor = _fitMode ? Cursor.Default : CursorHand;
             return;
         }
 
@@ -838,7 +870,7 @@ public sealed class CropView : Control
         if (e.Key != Key.Space) return;
 
         _spaceHeld = false;
-        if (_mode != DragMode.Pan) Cursor = CursorCross;
+        if (_mode != DragMode.Pan) Cursor = SelectionEnabled ? CursorCross : _fitMode ? Cursor.Default : CursorHand;
     }
 
     protected override void OnLostFocus(FocusChangedEventArgs e)

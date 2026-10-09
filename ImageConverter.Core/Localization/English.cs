@@ -49,7 +49,7 @@ public static class English
         ["Bilder auswählen…"] = "Choose images…",
         ["90° nach links drehen (gegen den Uhrzeigersinn). Rückgängig mit Strg+Z."] = "Rotate 90° left (counter-clockwise). Undo with Ctrl+Z.",
         ["90° nach rechts drehen (im Uhrzeigersinn). Rückgängig mit Strg+Z."] = "Rotate 90° right (clockwise). Undo with Ctrl+Z.",
-        ["Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt  ·  Leertaste + Ziehen oder Mausrad verschiebt"] = "Drag a selection  ·  Enter crops  ·  Esc cancels  ·  Ctrl + wheel zooms  ·  Space + drag or wheel pans",
+        ["Auswahlrahmen: an (blau) — mit der Maus einen Ausschnitt aufziehen, Enter schneidet zu, Esc hebt auf. Aus — Ziehen verschiebt das Bild. Strg + Ziehen verschiebt immer, Strg + Mausrad zoomt."] = "Selection frame: on (blue) — drag a selection with the mouse, Enter crops, Esc cancels. Off — dragging pans the image. Ctrl + drag always pans, Ctrl + wheel zooms.",
         ["Vorschau wird berechnet …"] = "Rendering preview …",
         ["Loslassen zum Öffnen"] = "Release to open",
         ["Bilder öffnen"] = "Open images",

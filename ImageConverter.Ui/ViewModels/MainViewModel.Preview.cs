@@ -146,6 +146,10 @@ public partial class MainViewModel
     /// <summary>Nur sichtbar, wenn eine Berechnung länger dauert — kein Flackern bei schnellen.</summary>
     [ObservableProperty] public partial bool ShowRendering { get; set; }
 
+    /// <summary>Auswahlwerkzeug in der Vorschau: an = Ziehen zieht einen Ausschnitt auf, aus = Ziehen verschiebt
+    /// das Bild. Eine Ansichtseinstellung, kein Bearbeitungsschritt (nicht im Rückgängig).</summary>
+    [ObservableProperty] public partial bool SelectionTool { get; set; } = true;
+
     /// <summary>Was die Vorschau gerade rechnet (z. B. „Dunst entfernen – Durchlauf 2 von 3“).</summary>
     [ObservableProperty] public partial string PreviewStep { get; set; } = "";
 

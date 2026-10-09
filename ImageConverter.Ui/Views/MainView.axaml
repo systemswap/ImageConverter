@@ -853,7 +853,8 @@
                                     AspectRatio="{Binding AspectRatio}"
                                     SelectionRadius="{Binding CornerRadius}"
                                     CropCommand="{Binding CropToSelectionCommand}"
-                                    GestureCompletedCommand="{Binding CommitSettingsStepCommand}" />
+                                    GestureCompletedCommand="{Binding CommitSettingsStepCommand}"
+                                    SelectionEnabled="{Binding SelectionTool}" />
 
                         <!-- Leerer Zustand: große Drop-Zone -->
                         <Grid IsVisible="{Binding !HasImage}"
@@ -891,17 +892,15 @@
                             <Path Data="M 21,12 A 9,9 0 1 1 12,3 A 9.75,9.75 0 0 1 18.74,5.74 L 21,8 M 21,3 L 21,8 L 16,8" />
                         </Button>
 
-                        <!-- Hinweis über dem Bild -->
-                        <Border VerticalAlignment="Top" HorizontalAlignment="Center"
-                                Margin="0,10,0,0" Padding="12,5"
-                                IsVisible="{Binding HasImage}"
-                                Background="{DynamicResource SurfaceBrush}"
-                                BorderBrush="{DynamicResource BorderBrush2}"
-                                BorderThickness="1" CornerRadius="999" Opacity="0.92"
-                                IsHitTestVisible="False">
-                            <TextBlock Classes="hint"
-                                       Text="{l:T 'Ausschnitt aufziehen  ·  Enter schneidet zu  ·  Esc hebt auf  ·  Strg + Mausrad zoomt  ·  Leertaste + Ziehen oder Mausrad verschiebt'}" />
-                        </Border>
+                        <!-- Auswahlwerkzeug: an (blau) = Ziehen zieht einen Ausschnitt auf, aus = Ziehen verschiebt
+                             das Bild. Strg + Ziehen verschiebt immer. Symbol nach Lucide square-dashed (ISC-Lizenz). -->
+                        <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Margin="58,12,12,12"
+                                      IsVisible="{Binding HasImage}"
+                                      IsChecked="{Binding SelectionTool}"
+                                      ToolTip.Tip="{l:T 'Auswahlrahmen: an (blau) — mit der Maus einen Ausschnitt aufziehen, Enter schneidet zu, Esc hebt auf. Aus — Ziehen verschiebt das Bild. Strg + Ziehen verschiebt immer, Strg + Mausrad zoomt.'}">
+                            <Path Data="M 5,3 A 2,2 0 0 0 3,5 M 9,3 L 10,3 M 14,3 L 15,3 M 19,3 A 2,2 0 0 1 21,5 M 21,9 L 21,10 M 21,14 L 21,15 M 21,19 A 2,2 0 0 1 19,21 M 14,21 L 15,21 M 9,21 L 10,21 M 5,21 A 2,2 0 0 1 3,19 M 3,14 L 3,15 M 3,9 L 3,10" />
+                        </ToggleButton>
 
                         <!-- Ladeanzeige -->
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
