@@ -7,8 +7,8 @@ namespace ImageConverter.Core.Imaging;
 /// ist als Ganzes dunkel, der Himmel als Ganzes hell, die Kante dazwischen bleibt scharf. Der Schwellwert gilt für
 /// diese Bereiche, nicht je Pixel – so wird ein dunkler Baum ganz aufgehellt, und neben ihm leuchtet kein Hof in
 /// den Himmel.</item>
-/// <item><b>Dunst</b> – der dunkelste Farbkanal in der Umgebung (wie beim Dunst-Regler): Im Vordergrund gibt es
-/// immer wirklich dunkle Farbanteile, in dunstiger Ferne nicht. Damit lässt sich dunkle Ferne (Talgrund, Hang)
+/// <item><b>Dunst</b> – der dunkelste Farbkanal je Pixel, kantentreu geglättet: Im Vordergrund gibt es immer wirklich
+/// dunkle Farbanteile, in dunstiger Ferne nicht. Damit lässt sich dunkle Ferne (Talgrund, Hang)
 /// vom dunklen Vordergrund unterscheiden, was die Helligkeit allein nicht kann.</item>
 /// </list>
 /// </summary>
@@ -16,8 +16,9 @@ namespace ImageConverter.Core.Imaging;
 /// Am Panorama mit dunklem Vordergrund ausgewählt (0.5.38): weichgezeichnete Masken gaben deutliche Höfe am Himmel,
 /// mehrere Durchläufe (Rolling Guidance) machten die Maske klumpig und brachten die Höfe zurück; die eingeebnete
 /// Helligkeit hielt die Pixel neben den Bäumen praktisch unverändert (+0,003 statt +0,31 Oklab-L ohne Grenze).
-/// Grenze von „Ferne schonen“: Wo Ferne und Vordergrund gleich hell aneinanderstoßen, bleibt ein schmaler Saum;
-/// die fertige Karte noch einmal kantentreu nachzuführen machte ihn nur breiter (keine Kante zum Ausrichten).
+/// „Ferne schonen“: Der helle Saum am Übergang Ferne → Vordergrund (0.5.38) kam vom Minimumfilter der Dunstkarte, nicht
+/// vom Mischen; die fertige Karte kantentreu nachzuführen machte ihn breiter (dort gibt es keine Kante zum Ausrichten).
+/// Gemischt wird über eine Laplace-Pyramide (<see cref="PyramidBlend"/>, 0.5.39).
 /// </remarks>
 public sealed class LuminanceRegions
 {
@@ -75,9 +76,10 @@ public sealed class LuminanceRegions
         var edge = Math.Max(w, h);
         var radius = Math.Max(2, edge / 60);
         var baseMap = Guided(l, l, w, h, radius, 0.01f);   // Bereiche: Struktur weg, große Kanten bleiben
-        // Dunst fein (kleine Radien): Am Übergang Ferne → Vordergrund sind beide oft gleich hell, es gibt keine Kante,
-        // an der sich die Karte ausrichten könnte — eine weiche Karte gab dort einen breiten hellen Saum um die Büsche
-        var haze = Guided(MinFilter(minChannel, w, h, Math.Max(1, edge / 300)), l, w, h, Math.Max(2, edge / 200), 1e-3f);
+        // Dunst je Pixel, ohne Minimumfilter: Der „dunkelste Kanal in der Umgebung“ (Dark Channel wie beim Dunst-Regler)
+        // trug die dunklen Werte der Büsche ins Tal — dort galt das Tal als nah und hellte als Saum mit auf (0.5.38).
+        // Kleiner Glättungsradius: Am Übergang sind Ferne und Vordergrund oft gleich hell, es gibt keine Kante zum Ausrichten.
+        var haze = Guided(minChannel, l, w, h, Math.Max(2, edge / 200), 1e-3f);
         return new LuminanceRegions(baseMap, haze, w, h, f);
     }
 
@@ -88,7 +90,9 @@ public sealed class LuminanceRegions
     /// <param name="distance">Ferne schonen 0 … 1: dunstige Bereiche entsprechend weniger.</param>
     /// <param name="l">Helligkeit des Pixels selbst — sehr helle Pixel in dunklen Bereichen (Himmel zwischen
     /// Ästen) bleiben, sonst leuchteten die Lücken auf.</param>
-    public float Weight(int x, int y, float l, float limit, float distance)
+    /// <returns>Gesamt — und der Teil aus Schwellwert und Schutz allein (folgt echten Kanten; als Obergrenze, damit
+    /// der Himmel neben einem Baum auch beim Verschmelzen über die Pyramide unverändert bleibt).</returns>
+    public (float All, float Limit) Weight(int x, int y, float l, float limit, float distance)
     {
         var (b, haze) = Sample(x, y);
         var w = 1f;
@@ -98,8 +102,8 @@ public sealed class LuminanceRegions
             var protect = Math.Max(0.62f, limit + 0.12f);
             w *= 1 - SmoothStep(protect, protect + 0.18f, l);
         }
-        if (distance > 0) w *= 1 - distance * SmoothStep(HazeFrom, HazeFrom + HazeRange, haze);
-        return w;
+        var all = distance > 0 ? w * (1 - distance * SmoothStep(HazeFrom, HazeFrom + HazeRange, haze)) : w;
+        return (all, w);
     }
 
     /// <summary>Beide Karten an einem Bildpixel, bilinear gelesen.</summary>
@@ -170,31 +174,5 @@ public sealed class LuminanceRegions
             if (add < length) { sum += src[start + add * step]; count++; }
             if (remove >= 0) { sum -= src[start + remove * step]; count--; }
         }
-    }
-
-    /// <summary>Kleinster Wert über ±r (Quadrat, getrennt waagerecht und senkrecht).</summary>
-    private static float[] MinFilter(float[] src, int w, int h, int r)
-    {
-        var tmp = new float[src.Length];
-        var dst = new float[src.Length];
-        Parallel.For(0, h, y =>
-        {
-            for (var x = 0; x < w; x++)
-            {
-                var m = 1f;
-                for (var k = Math.Max(0, x - r); k <= Math.Min(w - 1, x + r); k++) m = Math.Min(m, src[y * w + k]);
-                tmp[y * w + x] = m;
-            }
-        });
-        Parallel.For(0, w, x =>
-        {
-            for (var y = 0; y < h; y++)
-            {
-                var m = 1f;
-                for (var k = Math.Max(0, y - r); k <= Math.Min(h - 1, y + r); k++) m = Math.Min(m, tmp[k * w + x]);
-                dst[y * w + x] = m;
-            }
-        });
-        return dst;
     }
 }

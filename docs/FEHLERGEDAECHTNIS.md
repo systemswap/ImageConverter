@@ -1236,3 +1236,29 @@ Test oder Nachweis.
   `MatchLimit_ProtectsBrightGapsInsideDarkRegions`, `MatchDistance_SparesHazyRegions_ButLiftsSaturatedForeground` –
   Gegenprobe: ohne Bereichskarten schlagen alle drei fehl. Unsichtbares Testfenster: Regler, Liste
   („Schwellwert 40 % · Ferne schonen 100 % · Luminanz +80“), Rückgängig.
+
+## 37. Luminanz: heller Saum am Übergang Ferne → Vordergrund (Pyramide, Dunstkarte ohne Minimumfilter)
+
+- **Entdeckt in:** 0.5.38 beta (Commit `4ef443b`, 10.10.2026), beim eigenen Test am Panorama; dem Benutzer bei der
+  Übergabe genannt. **Behoben in:** 0.5.39 beta.
+- **Was:** Mit „Ferne schonen“ hoch lag um Büsche und Baumkanten vor dem dunstigen Tal ein heller Saum.
+- **Recherche (Stand der Technik):** Belichtungsverschmelzung nach Mertens über eine Laplace-Pyramide – so arbeitet die
+  Tonwertverarbeitung in Googles HDR+; für ein einzelnes Bild mit künstlichen Belichtungen (Extended Exposure Fusion,
+  WACV 2020). Entfernung per KI-Tiefenkarte: Adobe Referenzwerkzeug seit April 2026 („Tiefenbereichsmaske“ für jedes Foto).
+- **Ursache (zwei Teile):** (1) Gemischt wurde Pixel für Pixel in einer Größenstufe – ein weicher Maskenrand wird so
+  als Saum sichtbar. (2) Hauptursache: Die Dunstkarte nahm den dunkelsten Kanal *in der Umgebung* (Minimumfilter wie
+  beim Dark Channel). Der trug die dunklen Werte der Büsche ins Tal; dort galt das Tal als nah und wurde aufgehellt.
+- **Behoben:** Original und aufgehellte Fassung werden über eine Laplace-Pyramide gemischt (`PyramidBlend`), gröbste
+  Stufe 1/24 der längsten Kante (relativ → Vorschau und Export gleich). Weil die Pyramide grobe Helligkeit auch über
+  echte Kanten mischt (der Himmel neben dem Baum wurde im Test weiß – bekannter großflächiger Hof der Verschmelzung),
+  sind Schwellwert und Schutz heller Pixel eine **Obergrenze**; frei weich gemischt wird nur „Ferne schonen“. Dunstkarte
+  ohne Minimumfilter (dunkelster Kanal je Pixel, kantentreu geglättet). Der Saum ist danach am Baum und am Hang deutlich
+  schwächer, über den Büschen bleibt ein leichter Schimmer – die eigentliche Lösung ist eine Tiefenkarte (#38).
+- **Nicht tun:** Dunst-/Entfernungskarte mit Minimumfilter für scharfe Übergänge benutzen; Pyramide ohne Obergrenze
+  (Himmel hellt neben dunklen Bereichen auf); Pyramide bis zur kleinsten Stufe (Maske über das halbe Bild gemittelt).
+- **Kosten:** 28 MP: Karten ≈ 80 ms, Anwenden ≈ 0,6 s (vorher 0,2 s).
+- **Wo:** `Core/Imaging/PyramidBlend.cs`, `Core/Imaging/LuminanceRegions.cs` (`Weight` liefert Gesamt und Obergrenze,
+  Dunstkarte), `Core/Imaging/Adjustments.cs` (`LiftByRegions`, `Apply`).
+- **Test/Nachweis:** `AdjustTests.PyramidBlend_GivesSoftTransition_ButKeepsImageEdgesSharp`; die drei Tests aus #36
+  (Himmel bis an die Kante unverändert – schlug mit Pyramide ohne Obergrenze fehl). Sichtvergleich Ausschnitt Tal
+  0.5.38 ↔ 0.5.39.

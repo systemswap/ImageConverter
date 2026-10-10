@@ -282,28 +282,31 @@ public static class Adjust
         var balance = luminance != 1 || shiftA != 0 || shiftB != 0;
         var chroma = vibrance != 0 || saturation != 0;
 
+        // Pixel nach Tiefen/Lichtern (Zielhelligkeit aus Prepare, Farbton bleibt)
+        (float R, float G, float B) Toned(int p)
+        {
+            var i = p * 4;
+            float b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
+            if (toned is null) return (r, g, b);
+            var lum = Kr * r + Kg * g + Kb * b;
+            var target = Math.Clamp(toned[p], 0, 1);
+            if (lum <= 1f / 512) return (target, target, target);   // fast schwarz: kein Farbton zu erhalten
+            var f = Math.Min(target / lum, 8f);                       // Farbton behalten: alle Kanäle im selben Verhältnis
+            return (r * f, g * f, b * f);
+        }
+
+        // Luminanz mit Schwellwert / Ferne schonen: Original und aufgehellte Fassung je Größenstufe gemischt
+        // (Laplace-Pyramide, wie die Belichtungsverschmelzung nach Mertens bzw. in Googles HDR+) — grobe Helligkeit
+        // über große Flächen, Kanten über wenige Pixel. Pixelweise gemischt blieb an weichen Maskenrändern ein
+        // heller Saum (0.5.38).
+        var lifted = regions is not null ? LiftByRegions(Toned, width, height, luminance, regions, limit, distance) : null;
+
         Parallel.For(0, height, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
                 var i = p * 4;
-                float b = bgra[i], g = bgra[i + 1], r = bgra[i + 2];
-
-                if (toned is not null)
-                {
-                    var lum = Kr * r + Kg * g + Kb * b;
-                    var target = Math.Clamp(toned[p], 0, 1);
-                    if (lum > 1f / 512)
-                    {
-                        // Farbton behalten: alle Kanäle im selben Verhältnis
-                        var f = Math.Min(target / lum, 8f);
-                        r *= f; g *= f; b *= f;
-                    }
-                    else
-                    {
-                        r = g = b = target;   // fast schwarz: kein Farbton zu erhalten
-                    }
-                }
+                var (r, g, b) = Toned(p);
 
                 if (balance)
                 {
@@ -321,11 +324,9 @@ public static class Adjust
                     {
                         // Luminanz: wie mehr Licht — Helligkeit und Buntheit im selben Verhältnis (in Oklab
                         // exakt eine stärkere Beleuchtung). Nur die Helligkeit zu heben ließ die Farben blass wirken.
-                        var lifted = Shoulder(L * luminance);
-                        // Schwellwert / Ferne schonen: je Bereich, wie stark aufgehellt wird
-                        if (regions is not null) lifted = L + (lifted - L) * regions.Weight(x, y, L, limit, distance);
-                        factor = lifted / L;
-                        L = lifted;
+                        var target = lifted is not null ? Math.Clamp(lifted[p], 0, 1) : Shoulder(L * luminance);
+                        factor = target / L;
+                        L = target;
                     }
                     (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);
                 }
@@ -350,7 +351,46 @@ public static class Adjust
             }
         });
 
+        if (lifted is not null) PixelPool.Return(lifted);
         return result;
+    }
+
+    /// <summary>
+    /// Zielhelligkeit (Oklab-L) für Luminanz mit Bereichen: Original und voll aufgehellte Fassung, je Größenstufe einer
+    /// Laplace-Pyramide mit der geglätteten Bereichsmaske gemischt (Burt/Adelson, wie bei der Belichtungsverschmelzung).
+    /// </summary>
+    private static float[] LiftByRegions(Func<int, (float R, float G, float B)> pixel, int width, int height,
+        float luminance, LuminanceRegions regions, float limit, float distance)
+    {
+        var n = width * height;
+        var plain = PixelPool.Rent(n);
+        var bright = PixelPool.Rent(n);
+        var weight = PixelPool.Rent(n);
+        var cap = PixelPool.Rent(n);
+        Parallel.For(0, height, y =>
+        {
+            for (int x = 0, p = y * width; x < width; x++, p++)
+            {
+                var (r, g, b) = pixel(p);
+                var l = Oklab.FromSrgb(r, g, b).L;
+                var lift = l > 1e-4f ? Shoulder(l * luminance) : l;
+                var (all, byLimit) = regions.Weight(x, y, l, limit, distance);
+                plain[p] = l;
+                bright[p] = lift;
+                weight[p] = all;
+                cap[p] = l + (lift - l) * byLimit;
+            }
+        });
+        // Die Pyramide mischt grobe Helligkeit großflächig — auch über echte Kanten hinweg (Himmel neben dem Baum würde
+        // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Schwellwert und Schutz folgen den echten
+        // Kanten und sind deshalb die Obergrenze; frei weich gemischt wird nur „Ferne schonen“, wo es keine Kante gibt.
+        var blended = PyramidBlend.Blend(plain, bright, weight, width, height);
+        Parallel.For(0, n, p => blended[p] = Math.Clamp(blended[p], plain[p], Math.Max(plain[p], cap[p])));
+        PixelPool.Return(plain);
+        PixelPool.Return(bright);
+        PixelPool.Return(weight);
+        PixelPool.Return(cap);
+        return blended;
     }
 
     /// <summary>Wirkung bei ±100: zwei Blendenstufen.</summary>

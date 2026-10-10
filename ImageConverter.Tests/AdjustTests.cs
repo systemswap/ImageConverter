@@ -262,6 +262,38 @@ public class AdjustTests
             Assert.InRange(At(limited, w, x, 100), At(src, w, x, 100) - 0.004f, At(src, w, x, 100) + 0.004f);
     }
 
+    /// <summary>
+    /// Mischen über die Laplace-Pyramide: Weit weg vom Maskenrand genau die jeweilige Fassung, am Rand ein weicher,
+    /// breiter Übergang ohne Sprung — und Kanten im Bild bleiben dabei scharf.
+    /// </summary>
+    [Fact]
+    public void PyramidBlend_GivesSoftTransition_ButKeepsImageEdgesSharp()
+    {
+        const int w = 512, h = 64;
+        var a = new float[w * h];
+        var b = new float[w * h];
+        var weight = new float[w * h];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var i = y * w + x;
+            var edge = x % 64 < 32 ? 0f : 0.2f;            // feines Streifenmuster (Kanten) in beiden Fassungen
+            a[i] = 0.3f + edge;
+            b[i] = 0.6f + edge;
+            weight[i] = x < w / 2 ? 0 : 1;                  // harter Maskenrand in der Mitte
+        }
+        var r = PyramidBlend.Blend(a, b, weight, w, h);
+        float At(int x) => r[32 * w + x];
+
+        Assert.Equal(a[32 * w + 10], At(10), 2);           // weit links: Fassung a
+        Assert.Equal(b[32 * w + 500], At(500), 2);         // weit rechts: Fassung b
+        // Streifenkante bei x = 96 (links) bleibt ein Sprung von 0,2 – Kanten werden nicht verwaschen
+        Assert.InRange(At(96) - At(95), 0.15f, 0.25f);
+        // Am Maskenrand kein Sprung um die volle Differenz (0,3): der Übergang verteilt sich
+        var maxStep = Enumerable.Range(200, 112).Where(x => x % 32 != 0).Max(x => Math.Abs(At(x) - At(x - 1)));
+        Assert.True(maxStep < 0.12f, $"Sprung {maxStep:0.000} am Maskenrand");
+    }
+
     /// <summary>Helle Lücken in einem dunklen Bereich (Himmel zwischen Ästen) leuchten nicht auf.</summary>
     [Fact]
     public void MatchLimit_ProtectsBrightGapsInsideDarkRegions()
