@@ -1351,3 +1351,6 @@ Test oder Nachweis.
   die gleicht mit Zielwert und Ferne die Bereiche an, macht das Bild insgesamt aber nicht heller. Kein Einfluss auf
   den teuren Teil (`PrepareKey` unverändert). Test `MatchGlobal_BrightensWholeImage_AfterRegionalLuminance`
   (Gegenprobe: ohne den Regler rot).
+- **Nachtrag 0.5.45:** Luminanz wieder höchstens 300 % (Wunsch des Benutzers) – insgesamt heller macht jetzt „Gesamt“,
+  die Bereichs-Luminanz braucht über 300 % nicht mehr. Test `MatchLuminance_UpTo300_LetsDeepShadowsReachTheTarget`
+  (prüft auch, dass Werte darüber begrenzt werden).

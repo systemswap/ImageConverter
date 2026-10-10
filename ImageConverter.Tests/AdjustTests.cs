@@ -368,21 +368,24 @@ public class AdjustTests
 
 
     /// <summary>
-    /// Luminanz bis 400 %: Mit Zielwert erreicht auch ein tiefer Schatten das Ziel (mit 200 % nicht), Mitteltöne
-    /// darüber bleiben unverändert.
+    /// Luminanz bis 300 %: Mit Zielwert erreicht ein tiefer Schatten das Ziel (mit 200 % nicht), Mitteltöne darüber
+    /// bleiben unverändert; mehr als 300 % gibt es nicht (insgesamt heller macht „Gesamt“).
     /// </summary>
     [Fact]
-    public void MatchLuminance_UpTo400_LetsDeepShadowsReachTheTarget()
+    public void MatchLuminance_UpTo300_LetsDeepShadowsReachTheTarget()
     {
         const int w = 400, h = 200;
-        var src = Halves(w, h, (0.012f, 0.02f, 0.01f), (0.42f, 0.5f, 0.28f));   // sehr dunkler Schatten | Wiese
+        var src = Halves(w, h, (0.03f, 0.05f, 0.025f), (0.42f, 0.5f, 0.28f));   // tiefer Schatten | Wiese
         float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
         var at200 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
-        var at400 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 300, MatchTarget: 40));
+        var at300 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 200, MatchTarget: 40));
+        var above = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 400, MatchTarget: 60));
+        var at300Target60 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 200, MatchTarget: 60));
 
-        Assert.True(L(at200, 60) < 0.3f, $"Mit 200 % schon {L(at200, 60):0.00} — Testschatten nicht dunkel genug");
-        Assert.InRange(L(at400, 60), 0.34f, 0.44f);                              // mit 400 % bis etwa zum Ziel
-        Assert.InRange(L(at400, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // Wiese bleibt
+        Assert.True(L(at200, 60) < 0.34f, $"Mit 200 % schon {L(at200, 60):0.00} — Testschatten nicht dunkel genug");
+        Assert.InRange(L(at300, 60), 0.36f, 0.44f);                              // mit 300 % bis etwa zum Ziel
+        Assert.InRange(L(at300, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // Wiese bleibt
+        Assert.Equal(L(at300Target60, 60), L(above, 60), 3);                      // über 300 % wird begrenzt
     }
 
     /// <summary>

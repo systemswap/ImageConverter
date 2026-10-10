@@ -276,9 +276,9 @@ public static class Adjust
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
-        // Wie Referenzwerkzeug 1–200 %, darüber bis 400 % (Wunsch 0.5.43): sinnvoll mit Zielwert — der Faktor ist dann nur die
-        // Obergrenze, tiefe Schatten (8 %) brauchen ×5, um 40 % zu erreichen
-        var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 3));
+        // Wie Referenzwerkzeug 1–200 %, darüber bis 300 % (0.5.43: 400 %, mit „Gesamt“ in 0.5.45 auf 300 % zurück — insgesamt
+        // heller macht jetzt „Gesamt“): sinnvoll mit Zielwert, der Faktor ist dann nur die Obergrenze für tiefe Schatten
+        var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 2));
         var limit = (float)Math.Clamp(a.MatchLimit / 100, 0.05, 1);
         var distance = (float)Math.Clamp(a.MatchDistance / 100, 0, 1);
         var target = a.MatchTarget > 0 ? (float)Math.Clamp(a.MatchTarget / 100, 0.05, 1) : 0f;

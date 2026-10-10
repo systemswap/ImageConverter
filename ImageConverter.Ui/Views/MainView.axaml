@@ -770,8 +770,8 @@
                                 <Border Height="1" Margin="0,2,0,6" Background="{DynamicResource BorderBrush2}" />
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Luminanz'}" />
-                                    <Slider Grid.Column="1" Minimum="-100" Maximum="300" Value="{Binding MatchLuminance}"
-                                            ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus. Über 200 % (bis 400 %) vor allem zusammen mit dem Zielwert: dann erreichen auch tiefe Schatten das Ziel, Mitteltöne bleiben ruhig.'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="200" Value="{Binding MatchLuminance}"
+                                            ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus. Über 200 % (bis 300 %) vor allem zusammen mit dem Zielwert: dann erreichen auch tiefe Schatten das Ziel, Mitteltöne bleiben ruhig.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsEnabled="{Binding CanLimitLuminance}">
