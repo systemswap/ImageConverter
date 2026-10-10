@@ -1342,3 +1342,7 @@ Test oder Nachweis.
   `Views/MainView.axaml` (unter Luminanz).
 - **Test/Nachweis:** `AdjustTests.MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone` (Gegenprobe: ohne Zielwert
   rot); Panorama mit Tiefenkarte: sonnige Büsche nicht mehr grell, dunkler Vordergrund gleichmäßig angehoben.
+- **Nachtrag 0.5.43:** Luminanz bis 400 % (Wunsch des Benutzers; vorher wie Referenzwerkzeug höchstens 200 %). Sinnvoll vor
+  allem mit Zielwert – der Faktor ist dann nur die Obergrenze, tiefe Schatten (8 %) brauchen ×5 bis 40 %. Ohne Zielwert
+  wird bei 400 % fast alles weiß, und Rauschen in tiefen Schatten wird stark sichtbar (Tooltip sagt es).
+  Test `MatchLuminance_UpTo400_LetsDeepShadowsReachTheTarget` (Gegenprobe: mit Grenze 200 % rot).

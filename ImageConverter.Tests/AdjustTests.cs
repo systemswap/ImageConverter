@@ -367,6 +367,24 @@ public class AdjustTests
     }
 
 
+    /// <summary>
+    /// Luminanz bis 400 %: Mit Zielwert erreicht auch ein tiefer Schatten das Ziel (mit 200 % nicht), Mitteltöne
+    /// darüber bleiben unverändert.
+    /// </summary>
+    [Fact]
+    public void MatchLuminance_UpTo400_LetsDeepShadowsReachTheTarget()
+    {
+        const int w = 400, h = 200;
+        var src = Halves(w, h, (0.012f, 0.02f, 0.01f), (0.42f, 0.5f, 0.28f));   // sehr dunkler Schatten | Wiese
+        float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
+        var at200 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
+        var at400 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 300, MatchTarget: 40));
+
+        Assert.True(L(at200, 60) < 0.3f, $"Mit 200 % schon {L(at200, 60):0.00} — Testschatten nicht dunkel genug");
+        Assert.InRange(L(at400, 60), 0.34f, 0.44f);                              // mit 400 % bis etwa zum Ziel
+        Assert.InRange(L(at400, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // Wiese bleibt
+    }
+
     /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
     [Fact]
     public void Neutralize_RemovesColourCast_ButKeepsStrongColours()
