@@ -39,6 +39,13 @@ public partial class AiViewModel : ViewModelBase
         _main = main;
         Store = AiModelStore.CreateDefault();
         Models = AiModelCatalog.All.Select(m => new AiModelItem(this, m)).ToList();
+        ModelGroups =
+        [
+            Group("BILDER VERBESSERN", "Rauschen, JPEG-Artefakte, Unschärfe, Vergrößern – in der Rubrik „KI“.", AiModelKind.Enhance),
+            Group("GESICHTER", "Unscharfe oder beschädigte Gesichter wiederherstellen – in der Rubrik „KI“.", AiModelKind.Face),
+            Group("GESICHTSERKENNUNG", "Hilfsmodelle für die Gesichtsmodelle: finden Gesichter und ihre Bereiche. Werden mit jedem Gesichtsmodell automatisch geladen.", AiModelKind.Helper),
+            Group("ENTFERNEN", "Wasserzeichen, Schrift oder Störendes übermalen und füllen lassen – in der Rubrik „Entfernen“.", AiModelKind.Inpaint),
+        ];
 
         SizeOptions = ["Größe behalten", "Doppelte Größe (2×)", "Vierfache Größe (4×)"];
         SelectedSize = SizeOptions[0];
@@ -51,8 +58,30 @@ public partial class AiViewModel : ViewModelBase
 
     internal AiModelStore Store { get; }
 
+    /// <summary>Geöffnete Modelle — mit dem Entfernen geteilt, damit nur ein großes Modell im Speicher liegt.</summary>
+    internal OnnxSessions Sessions => _sessions;
+
+    /// <summary>Nach jedem Durchsehen des Modellordners (Download, Löschen, von Hand kopiert).</summary>
+    internal event EventHandler? ModelsChanged;
+
+    /// <summary>Fortschritt in der einen Anzeige unten mitte — auch für das Entfernen.</summary>
+    internal void ShowActivity(string text, double progress, System.Windows.Input.ICommand? cancel)
+    {
+        _main.ActivityText = text;
+        _main.ActivityProgress = progress;
+        _main.ActivityCancel = cancel;
+    }
+
+    internal void HideActivity() => EndActivity();
+
     /// <summary>Alle Modelle für die Verwaltung (Einstellungen).</summary>
     public IReadOnlyList<AiModelItem> Models { get; }
+
+    /// <summary>Die Modelle in Gruppen für die Verwaltung — je Gruppe ein Kasten.</summary>
+    public IReadOnlyList<AiModelGroup> ModelGroups { get; }
+
+    private AiModelGroup Group(string title, string hint, AiModelKind kind) =>
+        new(title, hint, Models.Where(m => m.Model.Kind == kind).ToList());
 
     /// <summary>Vorhandene, wählbare Modelle (ohne Hilfsmodelle).</summary>
     public ObservableCollection<AiModel> Available { get; } = [];
@@ -727,7 +756,7 @@ public partial class AiViewModel : ViewModelBase
 
         var detector = Store.IsInstalled(AiModelCatalog.FaceDetector);
         var usable = AiModelCatalog.All
-            .Where(m => m.Kind != AiModelKind.Helper && Store.IsInstalled(m)
+            .Where(m => m.Kind is AiModelKind.Enhance or AiModelKind.Face && Store.IsInstalled(m)
                         && (m.Kind != AiModelKind.Face || detector))
             .ToList();
 
@@ -737,6 +766,7 @@ public partial class AiViewModel : ViewModelBase
         SelectedModel = usable.Contains(selected!) ? selected : usable.FirstOrDefault();
         OnPropertyChanged(nameof(HasModels));
         OnPropertyChanged(nameof(FolderText));
+        ModelsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal async Task DownloadAsync(AiModelItem item)
@@ -758,7 +788,10 @@ public partial class AiViewModel : ViewModelBase
         Rescan();
     }
 
-    internal bool IsBusy => IsRunning;
+    internal bool IsBusy => IsRunning || BusyElsewhere?.Invoke() == true;
+
+    /// <summary>Rechnet gerade das Entfernen? (Modelle dann nicht löschen.)</summary>
+    internal Func<bool>? BusyElsewhere { get; set; }
 
     private void WatchFolders()
     {
@@ -789,6 +822,9 @@ public partial class AiViewModel : ViewModelBase
         return http;
     }
 }
+
+/// <summary>Eine Gruppe in der Verwaltung (Kasten mit Überschrift und kurzem Hinweis).</summary>
+public sealed record AiModelGroup(string Title, string Hint, IReadOnlyList<AiModelItem> Items);
 
 /// <summary>Ein Modell in der Verwaltung: vorhanden?, Download mit Fortschritt, abbrechen, löschen.</summary>
 public partial class AiModelItem : ObservableObject

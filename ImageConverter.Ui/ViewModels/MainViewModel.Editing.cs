@@ -354,6 +354,15 @@ public partial class MainViewModel
             lookAfter is null ? null : s => WithLook(s, lookAfter), step);
     }
 
+    /// <summary>
+    /// Für das Entfernen (Tab „Entfernen“): ein Bildschritt mit Rückgängig wie Zuschneiden und Drehen. Die Operation
+    /// bekommt das aktuelle Bild, darf aber von einem früheren Stand aus rechnen (neuer Versuch mit anderem Modell) —
+    /// Rückgängig führt dann zum vorigen Ergebnis zurück.
+    /// </summary>
+    /// <param name="replaces">Neuer Versuch vom Bild vor dem letzten Entfernen — ersetzt es in der Liste „Bearbeitungen“.</param>
+    internal Task<bool> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces) =>
+        ApplyEditAsync(operation, null, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces });
+
     /// <summary>Das aktuelle Bild in voller Auflösung (mit allen Bearbeitungen) — nur lesen.</summary>
     internal MagickImage? CurrentImage => _history?.Current;
 

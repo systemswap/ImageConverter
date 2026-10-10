@@ -68,6 +68,7 @@ public sealed partial class LocalizationTests : IDisposable
         texts.UnionWith(vm.Tints);
         texts.UnionWith(vm.Ai.SizeOptions);
         texts.UnionWith(vm.Ai.OrderOptions);
+        foreach (var g in vm.Ai.ModelGroups) { texts.Add(g.Title); texts.Add(g.Hint); }
         texts.UnionWith(PrintDialogViewModel.OrientationLabels);
         texts.UnionWith(PrintDialogViewModel.ModeLabels);
         texts.UnionWith(PrintDialogViewModel.ColorModeLabels);

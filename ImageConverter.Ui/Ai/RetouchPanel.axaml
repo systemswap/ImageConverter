@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:ai="using:ImageConverter.Ai"
+             xmlns:core="using:ImageConverter.Core.Ai"
+             x:Class="ImageConverter.Ai.RetouchPanel"
+             x:DataType="ai:RetouchViewModel">
+
+    <!-- Entfernen: Pinsel über das Störende, dann füllt ein Modell die Stelle -->
+    <HeaderedContentControl Header="{l:T 'ENTFERNEN'}">
+        <StackPanel>
+
+            <!-- Noch kein Füllmodell -->
+            <StackPanel IsVisible="{Binding !HasModels}" Spacing="6">
+                <TextBlock Classes="hint" TextWrapping="Wrap"
+                           Text="{l:T 'Zum Entfernen wird ein Modell gebraucht (LaMa oder MI-GAN). Es läuft komplett auf deinem Rechner und wird einmalig heruntergeladen.'}" />
+                <Button HorizontalAlignment="Left" Content="{l:T 'Modelle laden …'}" Command="{Binding OpenModelsCommand}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding HasModels}">
+                <Grid Classes="row" ColumnDefinitions="76,*">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Modell'}" />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Available}" SelectedItem="{Binding SelectedModel}"
+                              IsEnabled="{Binding !IsRunning}"
+                              ToolTip.Tip="{Binding ModelHint}">
+                        <ComboBox.SelectionBoxItemTemplate>
+                            <DataTemplate x:DataType="core:AiModel">
+                                <TextBlock Text="{l:TItem Path=Name}" />
+                            </DataTemplate>
+                        </ComboBox.SelectionBoxItemTemplate>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:AiModel">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="{l:TItem Path=Name}" />
+                                    <TextBlock Classes="hint" FontSize="11" Text="{l:TItem Path=Purpose}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Pinsel'}" />
+                    <Slider Grid.Column="1" Minimum="6" Maximum="200" Value="{Binding BrushSize}"
+                            ToolTip.Tip="{l:T 'Größe des Pinsels auf dem Bildschirm. Zum genauen Malen mit Strg + Mausrad hineinzoomen — der Pinsel bleibt gleich groß.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrushSizeLabel}" />
+                </Grid>
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,4"
+                           Text="{l:T 'Mit gedrückter Maustaste über alles malen, was verschwinden soll – lieber etwas großzügiger als zu knapp. Mehrere Stellen auf einmal gehen.'}" />
+
+                <Grid ColumnDefinitions="*,6,*">
+                    <Button Grid.Column="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Letzter Strich'}" Command="{Binding UndoStrokeCommand}"
+                            ToolTip.Tip="{l:T 'Den zuletzt gemalten Strich wieder wegnehmen.'}" />
+                    <Button Grid.Column="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Neue Markierung'}" Command="{Binding ClearStrokesCommand}"
+                            ToolTip.Tip="{l:T 'Alle Striche löschen. Das nächste Entfernen baut auf dem aktuellen Bild auf.'}" />
+                </Grid>
+
+                <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Margin="0,8,0,0" Content="{l:T 'Entfernen'}"
+                        Command="{Binding RemoveCommand}"
+                        ToolTip.Tip="{l:T 'Das Modell malt die markierten Stellen passend zur Umgebung neu. Rückgängig mit Strg+Z. Noch einmal „Entfernen“ (anderes Modell, Markierung ergänzt) rechnet wieder vom Bild davor.'}" />
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding Status}" />
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Text="{l:T 'Läuft lokal auf deinem Rechner. Nur bei eigenen Bildern oder mit Erlaubnis: Wasserzeichen aus fremden Bildern zu entfernen kann gegen das Urheberrecht verstoßen.'}" />
+            </StackPanel>
+        </StackPanel>
+    </HeaderedContentControl>
+</UserControl>

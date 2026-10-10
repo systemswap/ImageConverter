@@ -11,6 +11,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
 using Avalonia.Threading;
+using ImageConverter.Core.Ai;
 using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.Controls;
@@ -115,6 +116,59 @@ public sealed class CropView : Control
     }
 
     private Point? _pickHover;   // Bildpunkt unter dem Mauszeiger, solange die Pipette misst
+
+    /// <summary>Pinsel aktiv (Entfernen): Ziehen malt eine Markierung, statt einen Rahmen aufzuziehen.</summary>
+    public static readonly StyledProperty<bool> BrushActiveProperty =
+        AvaloniaProperty.Register<CropView, bool>(nameof(BrushActive));
+
+    public bool BrushActive
+    {
+        get => GetValue(BrushActiveProperty);
+        set => SetValue(BrushActiveProperty, value);
+    }
+
+    /// <summary>Pinseldurchmesser in Bildschirmpixeln.</summary>
+    public static readonly StyledProperty<double> BrushSizeProperty =
+        AvaloniaProperty.Register<CropView, double>(nameof(BrushSize), 40);
+
+    public double BrushSize
+    {
+        get => GetValue(BrushSizeProperty);
+        set => SetValue(BrushSizeProperty, value);
+    }
+
+    /// <summary>Die bisherigen Striche (Bildpixel) — rot über dem Bild.</summary>
+    public static readonly StyledProperty<IReadOnlyList<BrushStroke>?> BrushStrokesProperty =
+        AvaloniaProperty.Register<CropView, IReadOnlyList<BrushStroke>?>(nameof(BrushStrokes));
+
+    public IReadOnlyList<BrushStroke>? BrushStrokes
+    {
+        get => GetValue(BrushStrokesProperty);
+        set => SetValue(BrushStrokesProperty, value);
+    }
+
+    /// <summary>Striche schon entfernt: ausblenden, bis ein neuer Strich dazukommt (dann wieder alle).</summary>
+    public static readonly StyledProperty<bool> BrushDimProperty =
+        AvaloniaProperty.Register<CropView, bool>(nameof(BrushDim));
+
+    public bool BrushDim
+    {
+        get => GetValue(BrushDimProperty);
+        set => SetValue(BrushDimProperty, value);
+    }
+
+    /// <summary>Wird mit dem fertigen Strich (<see cref="BrushStroke"/>) ausgeführt, wenn die Maus losgelassen wird.</summary>
+    public static readonly StyledProperty<ICommand?> BrushCommandProperty =
+        AvaloniaProperty.Register<CropView, ICommand?>(nameof(BrushCommand));
+
+    public ICommand? BrushCommand
+    {
+        get => GetValue(BrushCommandProperty);
+        set => SetValue(BrushCommandProperty, value);
+    }
+
+    private List<Point>? _brushPoints;   // Strich, der gerade gemalt wird (Bildpixel)
+    private Point? _brushHover;          // Mauszeiger auf dem Bildschirm, solange der Pinsel aktiv ist
 
     /// <summary>Seitenverhältnis Breite/Höhe; 0 = frei.</summary>
     public static readonly StyledProperty<double> AspectRatioProperty =
@@ -280,7 +334,7 @@ public sealed class CropView : Control
     [Flags]
     private enum Edge { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 }
 
-    private enum DragMode { None, Create, Move, Resize, Pan, Split, QuadCorner, QuadEdge, QuadMove }
+    private enum DragMode { None, Create, Move, Resize, Pan, Split, QuadCorner, QuadEdge, QuadMove, Brush }
 
     // Oben mehr Luft: dort schwebt der Bedienhinweis über dem Bild.
     private static readonly Thickness ViewPadding = new(28, 50, 28, 28);
@@ -376,7 +430,7 @@ public sealed class CropView : Control
     {
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
             CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty,
-            PickActiveProperty, PickMarkersProperty);
+            PickActiveProperty, PickMarkersProperty, BrushActiveProperty, BrushStrokesProperty, BrushDimProperty, BrushSizeProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -416,6 +470,12 @@ public sealed class CropView : Control
             Selection = IsRotated ? ShrinkIntoRotated(ReshapeAroundCenter(sel, AspectRatio)) : Round(ReshapeAroundCenter(sel, AspectRatio));
 
         if (change.Property == PickActiveProperty && !PickActive) _pickHover = null;
+        if (change.Property == BrushActiveProperty && !BrushActive)
+        {
+            _brushHover = null;
+            _brushPoints = null;
+            if (_mode == DragMode.Brush) _mode = DragMode.None;
+        }
 
         if (change.Property == RotationAngleProperty && ImageSize.Width > 0)
         {
@@ -768,6 +828,20 @@ public sealed class CropView : Control
         Focus();
         _pressScreen = p;
 
+        // Pinsel: malen statt aufziehen
+        if (BrushActive && !IsRotated)
+        {
+            if (OnImage(p))
+            {
+                _mode = DragMode.Brush;
+                _brushPoints = [ClampToImage(ToImage(p))];
+                e.Pointer.Capture(this);
+                InvalidateVisual();
+            }
+            e.Handled = true;
+            return;
+        }
+
         // Pipette: messen statt aufziehen
         if (PickActive)
         {
@@ -889,6 +963,13 @@ public sealed class CropView : Control
         switch (_mode)
         {
             case DragMode.None:
+                if (BrushActive && !IsRotated)
+                {
+                    _brushHover = OnImage(p) ? p : null;
+                    Cursor = _brushHover is null ? Cursor.Default : CursorCross;
+                    InvalidateVisual();
+                    return;
+                }
                 if (PickActive)
                 {
                     _pickHover = OnImage(p) ? ToImage(p) : null;
@@ -955,6 +1036,16 @@ public sealed class CropView : Control
             case DragMode.QuadMove:
                 Quad = ShiftQuad([0, 1, 2, 3], ToImage(p) - _anchorImage);
                 break;
+
+            case DragMode.Brush when _brushPoints is { } points:
+            {
+                // Neuer Punkt erst ab etwa einem Bildschirmpixel Abstand — sonst wächst der Strich ohne Nutzen
+                var ip = ClampToImage(ToImage(p));
+                if (Point.Distance(ip, points[^1]) * _scale >= 1.5) points.Add(ip);
+                _brushHover = p;
+                InvalidateVisual();
+                break;
+            }
         }
 
         e.Handled = true;
@@ -964,6 +1055,22 @@ public sealed class CropView : Control
     {
         base.OnPointerReleased(e);
         if (_mode == DragMode.None) return;
+
+        if (_mode == DragMode.Brush)
+        {
+            var points = _brushPoints;
+            _brushPoints = null;
+            _mode = DragMode.None;
+            e.Pointer.Capture(null);
+            if (points is { Count: > 0 } && BrushCommand is { } paint)
+            {
+                var stroke = new BrushStroke(points.Select(q => (q.X, q.Y)).ToArray(), BrushSize / 2 / _scale);
+                if (paint.CanExecute(stroke)) paint.Execute(stroke);
+            }
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
 
         if (_mode == DragMode.Create)
         {
@@ -985,8 +1092,9 @@ public sealed class CropView : Control
     protected override void OnPointerExited(PointerEventArgs e)
     {
         base.OnPointerExited(e);
-        if (_pickHover is null) return;
+        if (_pickHover is null && _brushHover is null) return;
         _pickHover = null;   // Lupe weg, wenn die Maus die Vorschau verlässt
+        _brushHover = null;
         InvalidateVisual();
     }
 
@@ -1370,6 +1478,47 @@ public sealed class CropView : Control
         }
     }
 
+    private static readonly IBrush BrushFill = new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0x30, 0x30));
+    private static readonly IPen BrushRingPen = new ImmutablePen(Brushes.White, 1.5);
+
+    /// <summary>Markierung zum Entfernen: Striche rot und halb durchsichtig (Überlappungen nicht dunkler), dazu der Pinselkreis.</summary>
+    private void RenderBrush(DrawingContext context)
+    {
+        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius)).ToList() ?? [];
+        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale));
+        if (strokes.Count > 0)
+        {
+            using (context.PushOpacity(0.5))
+            {
+                foreach (var (points, radius) in strokes)
+                {
+                    var r = radius * _scale;
+                    if (points.Count == 1)
+                    {
+                        context.DrawEllipse(BrushFill, null, ToScreenPoint(points[0]), r, r);
+                        continue;
+                    }
+                    var pen = new Pen(BrushFill, 2 * r, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+                    var line = new StreamGeometry();
+                    using (var g = line.Open())
+                    {
+                        g.BeginFigure(ToScreenPoint(points[0]), false);
+                        foreach (var q in points.Skip(1)) g.LineTo(ToScreenPoint(q));
+                        g.EndFigure(false);
+                    }
+                    context.DrawGeometry(null, pen, line);
+                }
+            }
+        }
+
+        if (BrushActive && _brushHover is { } hover)
+        {
+            var r = BrushSize / 2;
+            context.DrawEllipse(null, QuadShadowPen, hover, r, r);
+            context.DrawEllipse(null, BrushRingPen, hover, r, r);
+        }
+    }
+
     // ------------------------------------------------------------ Tastatur
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -1561,6 +1710,7 @@ public sealed class CropView : Control
             RenderGrid(context, imageArea);
 
         if (!rotated) RenderPickMarkers(context);
+        if (!rotated) RenderBrush(context);
         if (PickActive && _pickHover is { } hover && !rotated)
         {
             var r = WhiteBalance.SampleRadius(ImageSize.Width, ImageSize.Height);

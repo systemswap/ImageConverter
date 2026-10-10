@@ -53,6 +53,7 @@ public partial class MainViewModel : ViewModelBase
 
         // KI-Modul (abtrennbar, siehe Ordner Ai/)
         Ai = new AiViewModel(this);
+        Retouch = new RetouchViewModel(this, Ai);
 
         // Sprachwechsel: berechnete Texte (Hinweise, Druckgröße …) neu abfragen lassen
         Tr.Instance.PropertyChanged += (_, _) => RefreshTexts();
@@ -60,6 +61,9 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>KI-Verbesserung — eigenes Modul mit GroupBox und Einstellungs-Tab.</summary>
     public AiViewModel Ai { get; }
+
+    /// <summary>Entfernen (Wasserzeichen, Schrift …) mit Pinsel und Füllmodell — gehört zum KI-Modul.</summary>
+    public RetouchViewModel Retouch { get; }
 
     /// <summary>Tab „Sprache“ in den Einstellungen.</summary>
     public LanguageViewModel Language { get; } = new();

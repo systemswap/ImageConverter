@@ -26,10 +26,11 @@ public enum EditSteps
     SkinDetails = 256,
     ColorNoise = 512,
     WhiteBalance = 1024,
+    Retouch = 2048,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
-public enum ImageStepKind { Crop, Rotate, Flip, Ai, Applied }
+public enum ImageStepKind { Crop, Rotate, Flip, Ai, Applied, Retouch }
 
 /// <summary>Eine Zeile der Liste „Bearbeitungen“: eine Funktion, die am Bild wirkt.</summary>
 public partial class EditRow(MainViewModel owner, EditSteps step, string name, string detail, bool canHide, string? note)
@@ -68,6 +69,9 @@ public partial class MainViewModel
     {
         /// <summary>Dieselbe KI ohne Haut &amp; Details (nur wenn es welche gab) — zum Ausschalten.</summary>
         public MagickImage? Plain { get; set; }
+
+        /// <summary>Entfernen: neuer Versuch vom Bild vor dem letzten Entfernen — ersetzt es in der Liste.</summary>
+        public bool Replaces { get; init; }
     }
 
     /// <summary>Ausgeschaltete Funktionen — gehören zum Einstellungsstand (je Bild, Rückgängig, Export).</summary>
@@ -298,6 +302,18 @@ public partial class MainViewModel
                 }
             }
 
+            // Entfernen: eine Zeile für alle Stellen seit dem letzten Festschreiben
+            var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
+            var retouch = new List<ImageStep>();
+            foreach (var s in steps.Skip(applied + 1).Select(s => s.Step!).Where(s => s.Kind == ImageStepKind.Retouch))
+            {
+                if (s.Replaces && retouch.Count > 0) retouch.RemoveAt(retouch.Count - 1);
+                retouch.Add(s);
+            }
+            if (retouch.Count > 0)
+                rows.Add(new EditRow(this, EditSteps.Retouch, Tr.T("Entfernt"),
+                    retouch.Count == 1 ? retouch[0].Detail ?? "" : Tr.T("{0}× · zuletzt {1}", retouch.Count, retouch[^1].Detail ?? ""),
+                    false, Tr.T("Lässt sich nicht ausschalten — nur mit Rückgängig zurücknehmen.")));
             if (TargetWidth != SourceWidth || TargetHeight != SourceHeight)
                 rows.Add(Row(EditSteps.Resize, Tr.T("Größe"), $"{TargetWidth} × {TargetHeight} px"));
             if (NoiseReduction > 0.005)

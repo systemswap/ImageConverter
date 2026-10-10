@@ -1147,3 +1147,63 @@ Test oder Nachweis.
   Schwarzes, Beige, Holz).
 - **Meilenstein 0.5.35 (10.10.2026):** Stand 0.5.34 beta plus Hinweistext – Weißabgleich mit drei Pipetten vom
   Benutzer als passend befunden. Tag `v0.5.35`, Sicherung `../ImageConverter-0.5.35-Sicherung.zip`.
+
+## 34. Luminanz mit Schwellwert (Gleiche Farbe)
+
+- **Neu in:** 0.5.36 beta (10.10.2026, Commit „Luminanz mit Schwellwert“). Kein gemeldeter Fehler; Bauweise
+  und eine Falle beim Testen.
+- **Wunsch:** Beim Aufhellen mit Luminanz dunkle Bereiche (Vordergrund) heller machen, ohne dass helle Bereiche
+  (Himmel) weiter aufhellen – Regler „Schwellwert“ unter Luminanz.
+- **Rechnen:** `Adjust.Limited`: unterhalb der Grenze dieselbe weiche Schulter wie ohne Grenze, nur auf die Grenze
+  statt auf Weiß gestaucht (`limit · Shoulder(L · k / limit)`), darüber unverändert; das Maximum mit dem
+  Ausgangswert hält die Kurve stetig und steigend (keine Umkehr der Tonwerte). 100 % = keine Grenze = genau die
+  alte Rechnung. Wirkt nur beim Aufhellen (Regler sonst gesperrt, `Normalized` setzt ihn auf 100).
+- **Grenze der Lösung:** Rein je Pixel – Töne knapp unter der Grenze rücken zusammen (wirkt dort flacher), und ein
+  helles Detail im dunklen Vordergrund wird wie der Himmel behandelt. Rückmeldung des Benutzers: Auf die Bäume
+  allein lässt es sich so nicht begrenzen → bereichsbezogene Lösung geplant (nach dem Entfernen, eigene Beta).
+- **Falle beim Testen:** `Adjust.Apply(byte[] …)` rundet mit Dither (±1 Stufe Rauschen) – ein Test auf „steigend“
+  über die 8-Bit-Ausgabe meldete scheinbare Umkehrungen. Monotonie auf den Float-Werten prüfen.
+- **Wo:** `Core/Imaging/Adjustments.cs` (`MatchLimit`, `Limited`, `Normalized`), `Ui/ViewModels/MainViewModel.Tools.cs`,
+  `.History.cs`, `.Edits.cs`, `.Look.cs`, `.PerImage.cs`; `Views/MainView.axaml` (Gleiche Farbe).
+- **Test/Nachweis:** `AdjustTests.MatchLimit_BrightensOnlyBelowThreshold_AndStaysMonotonic`; Probe an einem
+  Panorama mit dunklem Vordergrund (Luminanz 180 %, Grenze 40–50 %: Himmel bleibt, Vordergrund heller).
+
+## 35. Entfernen (Wasserzeichen, Schrift, Störendes) mit LaMa und MI-GAN
+
+- **Neu in:** 0.5.37 beta (10.10.2026). Kein gemeldeter Fehler; Bauweise und vier Fallen beim Bau.
+- **Funktion:** Eigene Rubrik „Entfernen“ unter „KI“. Mit dem Pinsel (Größe in Bildschirmpixeln, bleibt beim Zoomen
+  gleich) über das Störende malen, „Entfernen“ – ein Füllmodell malt die Stellen passend zur Umgebung neu. Jedes
+  Entfernen ist ein Rückgängig-Schritt (`ImageStepKind.Retouch`, Zeile „Entfernt“ in der Liste, nicht
+  ausschaltbar). Die Markierung bleibt danach stehen (ausgeblendet): Ein neuer Versuch mit anderem Modell oder
+  ergänzter Markierung rechnet vom Bild vor dem letzten Entfernen (Wunsch des Benutzers) und ersetzt die Zeile;
+  Strg+Z führt zum vorigen Ergebnis. „Neue Markierung“ beginnt beim aktuellen Bild. Modelle: LaMa (Apache-2.0,
+  208 MB, gründlich) und MI-GAN (MIT, 28 MB, schnell), Download in den Einstellungen, dort jetzt in Gruppen
+  (Bilder verbessern, Gesichter, Gesichtserkennung, Entfernen).
+- **Rechnen (`Inpainter`):** Striche → Maske, um `Grow` (≥ 3 px) vergrößert. Stücke: je Strich ein Rahmen, nahe
+  zusammengefasst, lange schmale geteilt (höchstens doppelt so lang wie breit). Je Stück ein Ausschnitt etwa
+  doppelt so groß, auf 512 × 512 skaliert, gefüllt, zurückskaliert und mit weichem Rand eingesetzt; außerhalb der
+  Markierung bleibt jeder Pixel exakt (volle Tiefe, Alpha, Profile). LaMa braucht die Lücke im Eingang
+  geschwärzt (sonst malt es das Alte durchscheinend nach); MI-GAN-Pipeline: Bytes, Maske 255 = bleibt.
+- **Falle 1 – Kopie wird schwarz:** In eine frische Kopie (`Clone`) geschriebene Pixel (Pixel-API, sicher wie
+  unsafe) machten in Magick.NET 14.17.2 alles außerhalb des geschriebenen Bereichs schwarz – die Kopie teilt ihre
+  Pixel noch mit dem Original. Abhilfe: nach dem Kopieren `Evaluate(Add, 0)` (jeder Pixel einmal durchgerechnet),
+  danach schreiben. **Nicht tun:** direkt in eine frische Kopie Pixel schreiben. Gegenprobe: ohne `Evaluate`
+  schlägt `FillsMarkedArea_AndLeavesEverythingElseUntouched` fehl (Pixel 1,0 → schwarz).
+- **Falle 2 – Composite ändert Unberührtes:** `Composite(…, Copy/SrcAtop)` veränderte auch Pixel mit Deckkraft 0
+  um ±2 Stufen. Deshalb über die Pixel-API mischen.
+- **Falle 3 – Nähte und Reste an Stückgrenzen:** Füllte ein Stück auch die Markierung direkt am Rand seines
+  Ausschnitts, fehlte dort die Umgebung (Naht); schmale ungefüllte Streifen malte MI-GAN ins Innere weiter.
+  Jetzt übernimmt jedes Stück nur den inneren Teil (¼ der kurzen Seite Abstand, außer am Bildrand); den Rand füllt
+  das Nachbarstück.
+- **Falle 4 – heller Saum:** Lanczos verschmiert beim Verkleinern das Zeichen bis zu drei Modellpixel über den
+  Maskenrand; dieser Saum lag ungelöscht neben der Lücke, LaMa setzte ihn als Band fort (Rest eines Balkens im
+  Ergebnis). Abhilfe: Modellmaske um die Filterreichweite vergrößern (`Dilate`, 3 Modellpixel, beim Vergrößern
+  entsprechend mehr). Gefunden über gespeicherte Ein-/Ausgaben je Stück.
+- **Wo:** `Core/Ai/Inpainter.cs`, `Core/Ai/OnnxModels.cs` (`OnnxInpaintModel`, `RunBytes`), `Core/Ai/AiModels.cs`
+  (`Lama`, `Migan`, `AiModelKind.Inpaint`); `Ui/Ai/RetouchViewModel.cs`, `RetouchPanel.axaml`, `AiModelsView.axaml`
+  (Gruppen), `AiViewModel.cs` (`ModelGroups`, geteilte Sitzungen); `Ui/Controls/CropView.cs` (Pinsel);
+  `MainViewModel.Editing.cs` (`ApplyRetouchAsync`), `.Edits.cs` (Zeile „Entfernt“); `Views/MainView.axaml`.
+- **Test/Nachweis:** `InpaintTests` (Unberührtes exakt gleich, 16 Bit; jeder markierte Pixel gefüllt auch über
+  Stückgrenzen; Stücke zusammenfassen/teilen; Ausschnitt im Bild; dünne Linien in der Maske; Alpha bleibt).
+  Unsichtbares Testfenster ohne Netz mit Testmaus: zwei „Wasserzeichen“ übermalt, LaMa (≈ 15 s, 7 Stücke) entfernt
+  beide sauber, MI-GAN (≈ 3 s) vom Bild davor, Liste ersetzt die Zeile, Strg+Z → LaMa-Ergebnis, Strg+Z → Original.

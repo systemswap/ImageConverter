@@ -10,6 +10,9 @@ public enum AiModelKind
 
     /// <summary>Wird von anderen Modellen gebraucht (Gesichtserkennung), nicht selbst wählbar.</summary>
     Helper,
+
+    /// <summary>Markierte Stellen neu malen: Wasserzeichen, Schrift, Störendes entfernen (Tab „Entfernen“).</summary>
+    Inpaint,
 }
 
 /// <summary>
@@ -181,7 +184,45 @@ public static class AiModelCatalog
         Origin: "Shangchen Zhou (CodeFormer), ONNX von FaceFusion",
         Requires: ["yunet", "faceparser"]);
 
-    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, FaceDetector, FaceParser];
+    // Feste Fassung des Hugging-Face-Archivs (Commit), nicht „main“ — sonst könnte sich die Datei ändern
+    private const string LamaRepo = "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/";
+    private const string MiganRepo = "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/";
+
+    public static AiModel Lama { get; } = new(
+        "lama",
+        "LaMa (gründlich)",
+        "Wasserzeichen, Schrift, Personen – beste Füllung",
+        "LaMa (big-lama): malt markierte Stellen passend zur Umgebung neu, auch größere Flächen und Muster wie " +
+        "Mauern, Gras oder Himmel. Etwas langsamer.",
+        AiModelKind.Inpaint,
+        LamaRepo + "lama_fp32.onnx",
+        208_044_816,
+        "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+        IsZip: false,
+        MainFile: "lama_fp32.onnx",
+        License: "Apache-2.0",
+        NonCommercial: false,
+        Origin: "Roman Suvorov u. a. (LaMa, Samsung AI Center), ONNX von Carve",
+        TileSize: 512);
+
+    public static AiModel Migan { get; } = new(
+        "migan",
+        "MI-GAN (schnell)",
+        "Kleine Stellen – schnell und klein",
+        "MI-GAN: kleines, schnelles Modell zum Entfernen. Gut für kleine Stellen wie Schriftzüge oder Flecken; " +
+        "bei großen Flächen ist LaMa meist besser.",
+        AiModelKind.Inpaint,
+        MiganRepo + "migan_pipeline_v2.onnx",
+        28_079_181,
+        "6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b",
+        IsZip: false,
+        MainFile: "migan_pipeline_v2.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "Andranik Sargsyan u. a. (MI-GAN, Picsart AI Research)",
+        TileSize: 512);
+
+    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, FaceDetector, FaceParser];
 
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

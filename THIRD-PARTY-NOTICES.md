@@ -81,6 +81,8 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 | Gesichter – GFPGAN 1.4 und 1.3 | Apache-2.0 | TencentARC (GFPGAN), ONNX von FaceFusion |
 | Gesichter – RestoreFormer++ | Apache-2.0 | Zhouxia Wang u. a. (RestoreFormer++), ONNX von FaceFusion |
 | Gesichter – CodeFormer | **S-Lab License 1.0 – nur nicht-kommerzielle Nutzung** | Shangchen Zhou (CodeFormer), ONNX von FaceFusion |
+| Entfernen – LaMa (big-lama) | Apache-2.0 | Roman Suvorov u. a. (LaMa, Samsung AI Center), ONNX von Carve (Hugging Face `Carve/LaMa-ONNX`, feste Fassung) |
+| Entfernen – MI-GAN | MIT | Andranik Sargsyan u. a. (MI-GAN, Picsart AI Research), Hugging Face `andraniksargsyan/migan`, feste Fassung |
 
 ## Netzzugriffe
 
