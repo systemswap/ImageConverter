@@ -1358,3 +1358,20 @@ Test oder Nachweis.
   Zielwert, Ferne (Tiefenkarte), Durchblicken und „Gesamt“ (#34, #36–#40) vom Benutzer als passend befunden. Tag
   `v0.5.46`, Sicherung `../ImageConverter-0.5.46-Sicherung.zip`; Windows-Stand einmalig in den vom Benutzer genannten
   Ordner übertragen (`KI-Modelle/` dort unverändert).
+
+## 41. Luminanz „Ferne“ (ohne Tiefenmodell) schonte zu wenig, wenn der Dunst-Regler aktiv war
+
+- **Entdeckt in:** 0.5.46 (Commit `566d177`) beim Durchdenken der Reihenfolge (Frage des Benutzers, ob die Masken
+  auf Dunst wirken); kein Bericht. **Behoben in:** 0.5.47 beta.
+- **Was:** Ohne Tiefenmodell erkennt „Ferne“ die Ferne am Dunst (dunkelster Farbkanal). Die Karte wurde aus dem Bild
+  *nach* dem Dunst-Regler berechnet – hatte er den Dunst entfernt, sah die Ferne aus wie Vordergrund und wurde
+  aufgehellt: die beiden Regler arbeiteten gegeneinander.
+- **Wie behoben:** Die Dunstkarte kommt aus dem Bild vor dem Dunst-Regler (nach dem Weißabgleich); alle anderen
+  Karten (Bereiche, „was liegt dahinter“, Tiefenkarte) weiter aus dem Bild nach dem Dunst – aufgehellt wird, was man
+  nach dem Dunst sieht. Mit Tiefenmodell ändert sich nichts.
+- **Reihenfolge der Kette (zur Erinnerung):** Weißabgleich → Dunst → Tiefen/Lichter → Gleiche Farbe (Luminanz mit
+  Bereichen, dann „Gesamt“) → Helligkeit/Kontrast → Dynamik/Sättigung/Färben. Dunst nutzt keine Luminanz-Masken.
+- **Wo:** `Core/Imaging/Adjustments.cs` (`Prepare`: `beforeDehaze`), `Core/Imaging/LuminanceRegions.cs` (`Compute`
+  mit `hazeFrom`, `Shrink`).
+- **Test/Nachweis:** `LuminanceDistanceTests.Distance_UsesHazeFromBeforeDehaze` (enthält die Gegenprobe: ohne
+  Vorher-Bild wird die Ferne aufgehellt).

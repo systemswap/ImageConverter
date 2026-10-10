@@ -59,31 +59,15 @@ public sealed class LuminanceRegions
     public bool UsesDepth => _near is not null;
 
     /// <summary>Die Karten zu einem Pixelpuffer (B, G, R, A; sRGB 0–1).</summary>
-    public static LuminanceRegions Compute(float[] bgra, int width, int height)
+    /// <param name="hazeFrom">Bild für die Dunstkarte von „Ferne“: das Bild vor dem Dunst-Regler. Danach zeigt der Dunst
+    /// nicht mehr, was weit weg ist — „Ferne“ schonte mit dem Dunst-Regler zu wenig (bis 0.5.46). null = <paramref name="bgra"/>.</param>
+    public static LuminanceRegions Compute(float[] bgra, int width, int height, float[]? hazeFrom = null)
     {
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)MapEdge));
         int w = (width + f - 1) / f, h = (height + f - 1) / f, n = w * h;
+        var small = Shrink(bgra, width, height, f, w, h);
 
-        // Verkleinern durch Mitteln je f × f
-        var small = new float[n * 3];
-        Parallel.For(0, h, y =>
-        {
-            for (var x = 0; x < w; x++)
-            {
-                double b = 0, g = 0, r = 0;
-                var count = 0;
-                for (var yy = y * f; yy < Math.Min(height, (y + 1) * f); yy++)
-                for (var xx = x * f; xx < Math.Min(width, (x + 1) * f); xx++)
-                {
-                    var i = (yy * width + xx) * 4;
-                    b += bgra[i]; g += bgra[i + 1]; r += bgra[i + 2];
-                    count++;
-                }
-                var o = (y * w + x) * 3;
-                small[o] = (float)(b / count); small[o + 1] = (float)(g / count); small[o + 2] = (float)(r / count);
-            }
-        });
-
+        var hazeSmall = hazeFrom is null || ReferenceEquals(hazeFrom, bgra) ? small : Shrink(hazeFrom, width, height, f, w, h);
         var l = new float[n];
         var la = new float[n];
         var lb = new float[n];
@@ -92,7 +76,7 @@ public sealed class LuminanceRegions
         {
             float b = small[i * 3], g = small[i * 3 + 1], r = small[i * 3 + 2];
             (l[i], la[i], lb[i]) = Oklab.FromSrgb(r, g, b);
-            minChannel[i] = Math.Min(b, Math.Min(g, r));
+            minChannel[i] = Math.Min(hazeSmall[i * 3], Math.Min(hazeSmall[i * 3 + 1], hazeSmall[i * 3 + 2]));
         }
 
         var edge = Math.Max(w, h);
@@ -117,6 +101,30 @@ public sealed class LuminanceRegions
             }
         }
         return new LuminanceRegions(baseMap, haze, near, l, la, lb, w, h, f);
+    }
+
+    /// <summary>Verkleinern durch Mitteln je f × f; Ergebnis B, G, R je Pixel.</summary>
+    private static float[] Shrink(float[] bgra, int width, int height, int f, int w, int h)
+    {
+        var small = new float[w * h * 3];
+        Parallel.For(0, h, y =>
+        {
+            for (var x = 0; x < w; x++)
+            {
+                double b = 0, g = 0, r = 0;
+                var count = 0;
+                for (var yy = y * f; yy < Math.Min(height, (y + 1) * f); yy++)
+                for (var xx = x * f; xx < Math.Min(width, (x + 1) * f); xx++)
+                {
+                    var i = (yy * width + xx) * 4;
+                    b += bgra[i]; g += bgra[i + 1]; r += bgra[i + 2];
+                    count++;
+                }
+                var o = (y * w + x) * 3;
+                small[o] = (float)(b / count); small[o + 1] = (float)(g / count); small[o + 2] = (float)(r / count);
+            }
+        });
+        return small;
     }
 
     /// <summary>Wie stark ein Bereich aufgehellt wird (0 … 1), ohne Blick auf den einzelnen Pixel.</summary>

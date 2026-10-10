@@ -36,6 +36,29 @@ public sealed class LuminanceDistanceTests : IDisposable
         Assert.True(new Adjustments(MatchDistance: 50).IsNone);
     }
 
+    /// <summary>
+    /// Ferne ohne Tiefenkarte mit Dunst-Regler: Die Dunstkarte kommt aus dem Bild vor dem Dunst-Regler. Danach sieht
+    /// die Ferne aus wie Vordergrund (satte Farben, keine hellen Farbanteile mehr) — sie soll trotzdem geschont werden.
+    /// </summary>
+    [Fact]
+    public void Distance_UsesHazeFromBeforeDehaze()
+    {
+        const int w = 400, h = 200;
+        var hazy = Halves(w, h, (0.02f, 0.25f, 0.02f), (0.2f, 0.21f, 0.23f));      // vorher: rechts dunstig
+        var dehazed = Halves(w, h, (0.02f, 0.25f, 0.02f), (0.03f, 0.2f, 0.05f));   // nachher: rechts satt wie vorn
+        float WeightRight(LuminanceRegions maps)
+        {
+            var i = (100 * w + 300) * 4;
+            var (l, a, b) = Oklab.FromSrgb(dehazed[i + 2], dehazed[i + 1], dehazed[i]);
+            return maps.For(1, 1).Weight(300, 100, l, a, b).All;
+        }
+
+        var right = WeightRight(LuminanceRegions.Compute(dehazed, w, h, hazy));
+        var withoutBefore = WeightRight(LuminanceRegions.Compute(dehazed, w, h));
+        Assert.True(right < 0.1f, $"Ferne aufgehellt (Gewicht {right:0.00}) — Dunst vor dem Dunst-Regler nicht benutzt");
+        Assert.True(withoutBefore > 0.8f, $"Testbild taugt nicht: auch ohne Vorher-Bild geschont ({withoutBefore:0.00})");
+    }
+
     /// <summary>Ersatz-Tiefenkarte: linke Hälfte nah, rechte fern.</summary>
     private sealed class LeftNear : IDepthEstimator
     {

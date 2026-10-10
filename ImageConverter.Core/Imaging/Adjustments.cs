@@ -177,6 +177,7 @@ public static class Adjust
         // Weitere (Dunst, Licht, Farbe) arbeitet schon mit den richtigen Farben
         if (a.HasWhiteBalance)
             source = WhiteBalance.Apply(px, width, height, a.WbNeutral, a.WbBlack, a.WbWhite);
+        var beforeDehaze = source;   // für die Dunstkarte von „Ferne“ — dort zeigt der Dunst noch, was weit weg ist
         if (dehaze != 0)
         {
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
@@ -241,7 +242,7 @@ public static class Adjust
         }
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
         return new Prepared(source, ToneMap(source, width, height, a),
-            a.NeedsRegions ? LuminanceRegions.Compute(source, width, height) : null);
+            a.NeedsRegions ? LuminanceRegions.Compute(source, width, height, beforeDehaze) : null);
     }
 
     /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>
