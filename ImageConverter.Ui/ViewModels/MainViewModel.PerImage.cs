@@ -171,7 +171,8 @@ public partial class MainViewModel
                 Math.Round(s.MatchLuminance), Math.Round(s.Neutralize), Math.Round(s.Warmth),
                 (int)Math.Round(s.DehazePasses), Math.Round(s.DehazeClarity), Math.Round(s.DehazeContrast),
                 Math.Round(s.DehazeVibrance), Math.Round(s.DehazeSharpen), Math.Round(s.DehazeEdge),
-                Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband), Math.Round(s.DehazeCast)), s.Hidden),
+                Math.Round(s.DehazeBrightness), Math.Round(s.DehazeDeband), Math.Round(s.DehazeCast),
+                s.WbNeutral, s.WbBlack, s.WbWhite), s.Hidden),
             s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format),
             (s.Hidden & EditSteps.ColorNoise) == 0 && s.ColorNoiseReduction > 0.005 ? s.ColorNoiseReduction : 0);
     }

@@ -534,6 +534,35 @@ public static class English
         ["DIN-Formate"] = "ISO A sizes",
         ["Fotoabzüge (cm)"] = "Photo prints (cm)",
         ["US-Formate"] = "US sizes",
+
+        // Weißabgleich
+        ["WEISSABGLEICH"] = "WHITE BALANCE",
+        ["Weißabgleich"] = "White balance",
+        ["Neutral"] = "Neutral",
+        ["Schwarz"] = "Black",
+        ["Weiß"] = "White",
+        ["N"] = "N",
+        ["S"] = "B",
+        ["W"] = "W",
+        ["Neutral: eine Stelle anklicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Entfernt den Farbstich, die Helligkeit bleibt."] =
+            "Neutral: click a spot that should be colourless grey – asphalt, concrete, a grey cloud, paper in the shade. Removes the colour cast, the brightness stays.",
+        ["Schwarz: die dunkelste Stelle anklicken, die schwarz sein sollte. Korrigiert die Schatten und macht sie satt schwarz."] =
+            "Black: click the darkest spot that should be black. Corrects the shadows and makes them deep black.",
+        ["Weiß: die hellste Stelle anklicken, die weiß sein sollte, aber noch Zeichnung hat. Korrigiert die Lichter und macht sie rein weiß."] =
+            "White: click the brightest spot that should be white but still has detail. Corrects the highlights and makes them pure white.",
+        ["Messungen dieser Pipette löschen (z. B. nach einem Fehlklick). Strg+Z nimmt nur den letzten Klick zurück."] =
+            "Delete this eyedropper's measurements (e.g. after a wrong click). Ctrl+Z only undoes the last click.",
+        ["Alle drei Pipetten zurücksetzen – der Weißabgleich ist dann aus."] = "Reset all three eyedroppers – white balance is then off.",
+        ["Diese Stelle ist ausgefressen (reines Weiß, keine Farbe mehr) – bitte eine etwas dunklere Stelle wählen."] =
+            "This spot is blown out (pure white, no colour left) – please choose a slightly darker spot.",
+        ["Neutral: auf eine Stelle klicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Nicht reines Weiß. Mehrere Klicks werden gemittelt; Esc beendet."] =
+            "Neutral: click a spot that should be colourless grey – asphalt, concrete, a grey cloud, paper in the shade. Not pure white. Several clicks are averaged; Esc ends.",
+        ["Schwarz: auf die dunkelste Stelle klicken, die schwarz sein sollte. Mehrere Klicks werden gemittelt; Esc beendet."] =
+            "Black: click the darkest spot that should be black. Several clicks are averaged; Esc ends.",
+        ["Weiß: auf die hellste Stelle klicken, die weiß sein sollte, aber noch Zeichnung hat (nicht ausgefressen). Mehrere Klicks werden gemittelt; Esc beendet."] =
+            "White: click the brightest spot that should be white but still has detail (not blown out). Several clicks are averaged; Esc ends.",
+        ["Pipette wählen und ins Bild klicken. Eine Pipette reicht – Neutral (grau) ist meist die beste. Mit Schwarz und Weiß dazu und mit mehreren Klicks wird es genauer."] =
+            "Choose an eyedropper and click into the image. One is enough – Neutral (grey) is usually the best. Adding Black and White and clicking several times makes it more accurate.",
     };
 
     public static IReadOnlyDictionary<string, string> Texts => _texts;

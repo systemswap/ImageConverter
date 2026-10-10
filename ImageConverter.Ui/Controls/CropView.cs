@@ -84,6 +84,38 @@ public sealed class CropView : Control
 
     private bool QuadMode => Quad is { Count: 4 };
 
+    /// <summary>Pipette aktiv (Weißabgleich): Ein Klick ins Bild misst, statt einen Rahmen aufzuziehen; beim Zeigen eine Lupe mit Messfeld. Esc beendet.</summary>
+    public static readonly StyledProperty<bool> PickActiveProperty =
+        AvaloniaProperty.Register<CropView, bool>(nameof(PickActive), defaultBindingMode: BindingMode.TwoWay);
+
+    public bool PickActive
+    {
+        get => GetValue(PickActiveProperty);
+        set => SetValue(PickActiveProperty, value);
+    }
+
+    /// <summary>Wird mit der Stelle in Bildpixeln (<see cref="Point"/>) ausgeführt, wenn mit aktiver Pipette geklickt wird.</summary>
+    public static readonly StyledProperty<ICommand?> PickCommandProperty =
+        AvaloniaProperty.Register<CropView, ICommand?>(nameof(PickCommand));
+
+    public ICommand? PickCommand
+    {
+        get => GetValue(PickCommandProperty);
+        set => SetValue(PickCommandProperty, value);
+    }
+
+    /// <summary>Messstellen, die als kleine Markierung im Bild stehen.</summary>
+    public static readonly StyledProperty<IReadOnlyList<PickMarker>?> PickMarkersProperty =
+        AvaloniaProperty.Register<CropView, IReadOnlyList<PickMarker>?>(nameof(PickMarkers));
+
+    public IReadOnlyList<PickMarker>? PickMarkers
+    {
+        get => GetValue(PickMarkersProperty);
+        set => SetValue(PickMarkersProperty, value);
+    }
+
+    private Point? _pickHover;   // Bildpunkt unter dem Mauszeiger, solange die Pipette misst
+
     /// <summary>Seitenverhältnis Breite/Höhe; 0 = frei.</summary>
     public static readonly StyledProperty<double> AspectRatioProperty =
         AvaloniaProperty.Register<CropView, double>(nameof(AspectRatio));
@@ -343,7 +375,8 @@ public sealed class CropView : Control
     static CropView()
     {
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
-            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty);
+            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty,
+            PickActiveProperty, PickMarkersProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -381,6 +414,8 @@ public sealed class CropView : Control
 
         if (change.Property == AspectRatioProperty && Selection is { } sel && AspectRatio > 0)
             Selection = IsRotated ? ShrinkIntoRotated(ReshapeAroundCenter(sel, AspectRatio)) : Round(ReshapeAroundCenter(sel, AspectRatio));
+
+        if (change.Property == PickActiveProperty && !PickActive) _pickHover = null;
 
         if (change.Property == RotationAngleProperty && ImageSize.Width > 0)
         {
@@ -733,6 +768,18 @@ public sealed class CropView : Control
         Focus();
         _pressScreen = p;
 
+        // Pipette: messen statt aufziehen
+        if (PickActive)
+        {
+            if (OnImage(p) && PickCommand is { } pick)
+            {
+                var at = ToImage(p);
+                if (pick.CanExecute(at)) pick.Execute(at);
+            }
+            e.Handled = true;
+            return;
+        }
+
         // Vergleich: die Trennlinie geht vor — sie liegt mitten im Bild
         if (OnSplitLine(p))
         {
@@ -842,6 +889,13 @@ public sealed class CropView : Control
         switch (_mode)
         {
             case DragMode.None:
+                if (PickActive)
+                {
+                    _pickHover = OnImage(p) ? ToImage(p) : null;
+                    Cursor = _pickHover is null ? Cursor.Default : CursorCross;
+                    InvalidateVisual();
+                    return;
+                }
                 UpdateHoverCursor(p, e.KeyModifiers);
                 return;
 
@@ -926,6 +980,14 @@ public sealed class CropView : Control
         if (wasEdit && GestureCompletedCommand is { } done && done.CanExecute(null))
             done.Execute(null);
         e.Handled = true;
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (_pickHover is null) return;
+        _pickHover = null;   // Lupe weg, wenn die Maus die Vorschau verlässt
+        InvalidateVisual();
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
@@ -1221,7 +1283,14 @@ public sealed class CropView : Control
         }
 
         if (_mode == DragMode.QuadCorner && _quadIndex is >= 0 and < 4)
-            DrawLoupe(context, q, _quadIndex);
+        {
+            var i = _quadIndex;
+            DrawLoupe(context, q[i], toLoupe =>
+            {
+                context.DrawLine(LoupeEdgePen, toLoupe(q[i]), toLoupe(q[(i + 1) % 4]));
+                context.DrawLine(LoupeEdgePen, toLoupe(q[i]), toLoupe(q[(i + 3) % 4]));
+            });
+        }
 
         // Hell mit dunklem Schatten: auf hellem Papier wie auf dunklem Grund zu sehen
         void Line((double X, double Y) a, (double X, double Y) b)
@@ -1232,11 +1301,13 @@ public sealed class CropView : Control
         }
     }
 
-    /// <summary>Lupe neben der gezogenen Ecke: Bild vergrößert, Fadenkreuz, die beiden Kanten an dieser Ecke.</summary>
-    private void DrawLoupe(DrawingContext context, IReadOnlyList<Point> quad, int index)
+    /// <summary>
+    /// Lupe neben einem Bildpunkt: Bild vergrößert, Fadenkreuz; <paramref name="overlay"/> zeichnet darüber (mit der
+    /// Umrechnung Bildpunkt → Lupe), z. B. die Kanten an einer Ecke oder das Messfeld der Pipette.
+    /// </summary>
+    private void DrawLoupe(DrawingContext context, Point corner, Action<Func<Point, Point>>? overlay)
     {
         if (Source is not { } bmp || ImageSize.Width <= 0) return;
-        var corner = quad[index];
         var sp = ToScreenPoint(corner);
         var off = LoupeRadius + 26;
         var cx = sp.X - off - LoupeRadius < 0 ? sp.X + off : sp.X - off;
@@ -1248,7 +1319,7 @@ public sealed class CropView : Control
         var zoom = _scale * LoupeZoom;
         Point ToLoupe(Point image) => new(cx + (image.X - corner.X) * zoom, cy + (image.Y - corner.Y) * zoom);
 
-        // Ausschnitt der Bitmap, auf die Bitmap begrenzt (Ecken am Bildrand)
+        // Ausschnitt der Bitmap, auf die Bitmap begrenzt (Stellen am Bildrand)
         var bmpPerImage = bmp.PixelSize.Width / (double)ImageSize.Width;
         var half = LoupeRadius / zoom;
         var srcImage = new Rect(corner.X - half, corner.Y - half, 2 * half, 2 * half)
@@ -1266,13 +1337,37 @@ public sealed class CropView : Control
                     context.DrawImage(bmp, src, target);
             }
 
-            context.DrawLine(LoupeEdgePen, ToLoupe(corner), ToLoupe(quad[(index + 1) % 4]));
-            context.DrawLine(LoupeEdgePen, ToLoupe(corner), ToLoupe(quad[(index + 3) % 4]));
+            overlay?.Invoke(ToLoupe);
             context.DrawLine(LoupeCrossPen, new Point(cx - 10, cy), new Point(cx + 10, cy));
             context.DrawLine(LoupeCrossPen, new Point(cx, cy - 10), new Point(cx, cy + 10));
         }
         context.DrawEllipse(null, QuadShadowPen, center, LoupeRadius, LoupeRadius);
         context.DrawEllipse(null, LoupeRingPen, center, LoupeRadius, LoupeRadius);
+    }
+
+    private static readonly IBrush MarkerNeutral = new ImmutableSolidColorBrush(Color.FromRgb(0x8C, 0x8C, 0x8C));
+    private static readonly IBrush MarkerBlack = new ImmutableSolidColorBrush(Color.FromRgb(0x14, 0x14, 0x14));
+    private static readonly IBrush MarkerWhite = new ImmutableSolidColorBrush(Colors.White);
+
+    /// <summary>Messstellen der Pipetten: kleiner Kreis mit N, S oder W.</summary>
+    private void RenderPickMarkers(DrawingContext context)
+    {
+        if (PickMarkers is not { Count: > 0 } markers) return;
+        foreach (var m in markers)
+        {
+            var c = ToScreenPoint(m.At);
+            var (fill, ink) = m.Kind switch
+            {
+                WbPoint.Black => (MarkerBlack, Brushes.White),
+                WbPoint.White => (MarkerWhite, Brushes.Black),
+                _ => (MarkerNeutral, Brushes.White),
+            };
+            context.DrawEllipse(null, QuadShadowPen, c, 9, 9);
+            context.DrawEllipse(fill, LoupeRingPen, c, 9, 9);
+            var text = new FormattedText(m.Label, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                new Typeface(Typeface.Default.FontFamily, weight: FontWeight.Bold), 10, ink);
+            context.DrawText(text, new Point(c.X - text.Width / 2, c.Y - text.Height / 2));
+        }
     }
 
     // ------------------------------------------------------------ Tastatur
@@ -1291,6 +1386,14 @@ public sealed class CropView : Control
                 case Key.OemPlus or Key.Add: ZoomAt(center, _scale * WheelZoomStep); e.Handled = true; return;
                 case Key.OemMinus or Key.Subtract: ZoomAt(center, _scale / WheelZoomStep); e.Handled = true; return;
             }
+        }
+
+        if (PickActive && e.Key == Key.Escape)
+        {
+            PickActive = false;
+            _pickHover = null;
+            e.Handled = true;
+            return;
         }
 
         if (QuadMode)
@@ -1456,6 +1559,21 @@ public sealed class CropView : Control
 
         if (rotated && DateTime.UtcNow < _gridUntil)
             RenderGrid(context, imageArea);
+
+        if (!rotated) RenderPickMarkers(context);
+        if (PickActive && _pickHover is { } hover && !rotated)
+        {
+            var r = WhiteBalance.SampleRadius(ImageSize.Width, ImageSize.Height);
+            DrawLoupe(context, hover, toLoupe =>
+            {
+                // Messfeld: so groß wird gemittelt
+                var box = new Rect(toLoupe(new Point(Math.Floor(hover.X) - r, Math.Floor(hover.Y) - r)),
+                    toLoupe(new Point(Math.Floor(hover.X) + r + 1, Math.Floor(hover.Y) + r + 1)));
+                context.DrawRectangle(null, QuadShadowPen, box);
+                context.DrawRectangle(null, LoupeEdgePen, box);
+            });
+            return;
+        }
 
         if (QuadMode)
         {

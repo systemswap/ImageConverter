@@ -1107,3 +1107,37 @@ Test oder Nachweis.
 - **Meilenstein 0.5.33 (10.10.2026):** Stand 0.5.32 beta plus A0–A2 – Frei drehen mit automatischem Rahmen,
   Entzerren mit frei verschiebbaren Ecken und Standardformate vom Benutzer als gut befunden. Tag `v0.5.33`,
   Sicherung `../ImageConverter-0.5.33-Sicherung.zip`.
+
+## 33. Weißabgleich mit drei Pipetten (Neutral, Schwarz, Weiß)
+
+- **Neu in:** 0.5.34 beta (10.10.2026). Kein gemeldeter Fehler; Bauweise und eine Falle beim Testen.
+- **Funktion:** Gruppe „Weißabgleich“ in der Rubrik Standard unter Schärfen. Drei Pipetten, jede allein oder
+  zusammen; jeder weitere Klick mit derselben Pipette wird gemittelt (Mittel in linearem Licht, nach Anzahl
+  gewichtet – `WbSample.Add`), die Pipette bleibt dafür an (Esc beendet). Strg+Z nimmt den letzten Klick zurück,
+  × löscht eine Pipette, „Zurücksetzen“ alle. Messstellen als kleine Markierung (N, S, W), beim Zielen die Lupe
+  vom Entzerren mit eingezeichnetem Messfeld. Hinweistext je Pipette, was man anklicken soll.
+- **Rechnen (`WhiteBalance`):** in linearem Licht, je Kanal. Schwarz/Weiß setzen die Tonwert-Enden (die Stelle wird
+  ganz schwarz bzw. weiß, Stich in Schatten/Lichtern weg). Neutral macht die Stelle farblos bei gleicher
+  Helligkeit (Rec. 709): mit Weißpunkt über den Exponenten je Kanal (Weiß bleibt weiß, wie die Grau-Pipette in
+  „Tonwerte“), ohne Weißpunkt über eine Verstärkung je Kanal (physikalisch: anderes Licht). Gemessen wird ein
+  Feld von ±max(4, kurze Seite/300) Pixeln; ausgefressene Pixel (≥ 0,985) zählen bei Neutral und Weiß nicht –
+  ist alles ausgefressen, Hinweis statt Messung.
+- **Stelle in der Kette:** ganz am Anfang von `Adjust.Prepare` (vor Dunst, Licht, Farbe) – er wirkt auf dasselbe
+  Bild, an dem die Pipetten messen (`CurrentImage`), und alles Weitere arbeitet mit richtigen Farben. Weil die
+  Vorschau `Prepare` zwischenspeichert, stehen die Messungen im `PrepareKey`.
+- **Überall mitgeführt:** `Adjustments` (WbNeutral/WbBlack/WbWhite), `SettingsState` (Rückgängig, für alle/einzeln –
+  die Messwerte gelten auch für andere Bilder, gleiches Licht), Ausblenden (`EditSteps.WhiteBalance`, Zeile
+  „Weißabgleich“ in der Liste vor Dunst), Look (KI rechnet ihn ein → danach neutral). Markierungen gehören zum
+  Bild: neuer Bildstand (`ApplySourceSize`) räumt sie ab, die Messwerte bleiben. Pipette an → Drehen und Entzerren
+  aus (gemessen wird am ungedrehten Bild).
+- **Falle beim Testen:** Ein Testbild mit verschieden starken Stichen auf Grau, Schwarz und Weiß ist kein Foto –
+  dann kann Neutral allein das Weiß nicht neutral machen und der Test „scheitert“ an falschen Daten. Testbilder
+  deshalb als neutrale Flächen unter *einer* Lichtfarbe erzeugen (gleicher Faktor je Kanal in linearem Licht).
+- **Wo:** `Core/Imaging/WhiteBalance.cs`, `Core/Imaging/Adjustments.cs` (Felder, `PrepareKey`, `Prepare`),
+  `Ui/ViewModels/MainViewModel.WhiteBalance.cs`, `MainViewModel.History.cs`, `.Tools.cs`, `.PerImage.cs`, `.Edits.cs`,
+  `.Look.cs`, `.Size.cs`; `Ui/Controls/CropView.cs` (`PickActive`, `PickCommand`, `PickMarkers`, `DrawLoupe`),
+  `Ui/Controls/PickMarker.cs`; `Views/MainView.axaml`.
+- **Test/Nachweis:** `WhiteBalanceTests` (Neutral allein: Grau, Weiß und Schwarz farblos, Helligkeit bleibt;
+  Schwarz+Weiß; alle drei; nur Weiß; Ausgefressenes; Mitteln nach Anzahl; durch die ganze Kette). Unsichtbares
+  Testfenster mit Testmaus: Zimmer unter warmem Licht, Neutral 2×, Schwarz, Weiß → Wand 161/161/160, Weiß 255,
+  Schwarz 0; Liste „Neutral 2× · Schwarz · Weiß“; Strg+Z Klick für Klick samt Markierungen; × schaltet ab.

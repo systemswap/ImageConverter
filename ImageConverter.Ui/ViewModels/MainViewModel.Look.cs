@@ -36,6 +36,7 @@ public partial class MainViewModel
             {
                 Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0, Saturation = 0, Tint = Tint.None,
                 Vibrance = 0, Dehaze = 0, MatchLuminance = 0, Neutralize = 0, Warmth = 0,
+                WbNeutral = null, WbBlack = null, WbWhite = null,
             },
         };
     }
@@ -120,6 +121,7 @@ public partial class MainViewModel
             DehazePasses = a.DehazePasses, DehazeClarity = a.DehazeClarity, DehazeContrast = a.DehazeContrast,
             DehazeVibrance = a.DehazeVibrance, DehazeSharpen = a.DehazeSharpen, DehazeEdge = a.DehazeEdge,
             DehazeBrightness = a.DehazeBrightness, DehazeDeband = a.DehazeDeband, DehazeCast = a.DehazeCast,
+            WbNeutral = a.WbNeutral, WbBlack = a.WbBlack, WbWhite = a.WbWhite,
         };
     }
 

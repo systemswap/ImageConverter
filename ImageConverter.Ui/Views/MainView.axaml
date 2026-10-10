@@ -554,6 +554,71 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
+                    <!-- Weißabgleich: drei Pipetten, jede allein oder zusammen; mehrere Klicks je Pipette werden gemittelt.
+                         Pipetten-Symbol: eigenes. -->
+                    <HeaderedContentControl Header="{l:T 'WEISSABGLEICH'}">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                <ToggleButton Classes="pipette" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                              IsChecked="{Binding PickNeutral}" ToolTip.Tip="{l:T 'Neutral: eine Stelle anklicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Entfernt den Farbstich, die Helligkeit bleibt.'}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Path Data="M 3,21 L 5.5,21 L 14,12.5 M 3,21 L 3,18.5 L 11.5,10 M 10.5,9 L 15,13.5 M 13.5,11 L 19,5.5 L 18.5,5 L 13,10.5" Width="14" Height="14" Stretch="Uniform"
+                                              Stroke="{DynamicResource TextBrush}" StrokeThickness="1.8"
+                                              StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center" />
+                                        <Border Width="14" Height="14" CornerRadius="3" VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1"
+                                                Background="{Binding WbNeutralBrush}" IsVisible="{Binding HasWbNeutral}" />
+                                        <TextBlock Text="{Binding WbNeutralText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Button Grid.Column="1" Classes="subtle" Content="×" Margin="4,0,0,0" Padding="8,2"
+                                        IsVisible="{Binding HasWbNeutral}"
+                                        Command="{Binding ClearPipetteCommand}" CommandParameter="Neutral"
+                                        ToolTip.Tip="{l:T 'Messungen dieser Pipette löschen (z. B. nach einem Fehlklick). Strg+Z nimmt nur den letzten Klick zurück.'}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                <ToggleButton Classes="pipette" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                              IsChecked="{Binding PickBlack}" ToolTip.Tip="{l:T 'Schwarz: die dunkelste Stelle anklicken, die schwarz sein sollte. Korrigiert die Schatten und macht sie satt schwarz.'}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Path Data="M 3,21 L 5.5,21 L 14,12.5 M 3,21 L 3,18.5 L 11.5,10 M 10.5,9 L 15,13.5 M 13.5,11 L 19,5.5 L 18.5,5 L 13,10.5" Width="14" Height="14" Stretch="Uniform"
+                                              Stroke="{DynamicResource TextBrush}" StrokeThickness="1.8"
+                                              StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center" />
+                                        <Border Width="14" Height="14" CornerRadius="3" VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1"
+                                                Background="{Binding WbBlackBrush}" IsVisible="{Binding HasWbBlack}" />
+                                        <TextBlock Text="{Binding WbBlackText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Button Grid.Column="1" Classes="subtle" Content="×" Margin="4,0,0,0" Padding="8,2"
+                                        IsVisible="{Binding HasWbBlack}"
+                                        Command="{Binding ClearPipetteCommand}" CommandParameter="Black"
+                                        ToolTip.Tip="{l:T 'Messungen dieser Pipette löschen (z. B. nach einem Fehlklick). Strg+Z nimmt nur den letzten Klick zurück.'}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                <ToggleButton Classes="pipette" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                              IsChecked="{Binding PickWhite}" ToolTip.Tip="{l:T 'Weiß: die hellste Stelle anklicken, die weiß sein sollte, aber noch Zeichnung hat. Korrigiert die Lichter und macht sie rein weiß.'}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Path Data="M 3,21 L 5.5,21 L 14,12.5 M 3,21 L 3,18.5 L 11.5,10 M 10.5,9 L 15,13.5 M 13.5,11 L 19,5.5 L 18.5,5 L 13,10.5" Width="14" Height="14" Stretch="Uniform"
+                                              Stroke="{DynamicResource TextBrush}" StrokeThickness="1.8"
+                                              StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center" />
+                                        <Border Width="14" Height="14" CornerRadius="3" VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1"
+                                                Background="{Binding WbWhiteBrush}" IsVisible="{Binding HasWbWhite}" />
+                                        <TextBlock Text="{Binding WbWhiteText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Button Grid.Column="1" Classes="subtle" Content="×" Margin="4,0,0,0" Padding="8,2"
+                                        IsVisible="{Binding HasWbWhite}"
+                                        Command="{Binding ClearPipetteCommand}" CommandParameter="White"
+                                        ToolTip.Tip="{l:T 'Messungen dieser Pipette löschen (z. B. nach einem Fehlklick). Strg+Z nimmt nur den letzten Klick zurück.'}" />
+                            </Grid>
+                            <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,2,0,0" Text="{Binding WbHint}" />
+                            <Button Classes="subtle" HorizontalAlignment="Left" Margin="0,6,0,0" Content="{l:T 'Zurücksetzen'}"
+                                    IsVisible="{Binding HasWhiteBalance}" Command="{Binding ResetWhiteBalanceCommand}"
+                                    ToolTip.Tip="{l:T 'Alle drei Pipetten zurücksetzen – der Weißabgleich ist dann aus.'}" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
                     </StackPanel>
 
                     <!-- ############################## Rubrik KI (eigenes Modul, Ordner Ai/) -->
@@ -925,6 +990,9 @@
                                     SelectionRadius="{Binding CornerRadius}"
                                     RotationAngle="{Binding RotationAngle}"
                                     Quad="{Binding PerspectiveQuad}"
+                                    PickActive="{Binding IsPicking}"
+                                    PickCommand="{Binding PickAtCommand}"
+                                    PickMarkers="{Binding WbMarkers}"
                                     CropCommand="{Binding CropToSelectionCommand}"
                                     GestureCompletedCommand="{Binding CommitSettingsStepCommand}"
                                     SelectionEnabled="{Binding SelectionTool}" />

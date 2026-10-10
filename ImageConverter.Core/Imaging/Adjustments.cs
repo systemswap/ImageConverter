@@ -38,7 +38,11 @@ public sealed record Adjustments(
     double DehazeEdge = 0,
     double DehazeBrightness = Imaging.Dehaze.DefaultBrightness,
     double DehazeDeband = Imaging.Dehaze.DefaultDeband,
-    double DehazeCast = Imaging.Dehaze.DefaultCast)
+    double DehazeCast = Imaging.Dehaze.DefaultCast,
+    // Weißabgleich mit Pipetten (Gruppe „Weißabgleich“): gemittelte Messungen; null = Pipette nicht benutzt
+    WbSample? WbNeutral = null,
+    WbSample? WbBlack = null,
+    WbSample? WbWhite = null)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -66,15 +70,19 @@ public sealed record Adjustments(
         DehazePasses = Normalized.DehazePasses, DehazeClarity = Normalized.DehazeClarity, DehazeContrast = Normalized.DehazeContrast,
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
         DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband, DehazeCast = Normalized.DehazeCast,
+        WbNeutral = WbNeutral, WbBlack = WbBlack, WbWhite = WbWhite,
     };
+
+    /// <summary>Wird ein Weißabgleich gerechnet?</summary>
+    public bool HasWhiteBalance => WhiteBalance.IsActive(WbNeutral, WbBlack, WbWhite);
 }
 
 /// <summary>
 /// Wendet <see cref="Adjustments"/> auf 8-Bit-BGRA-Pixel an — wie <see cref="Sharpen"/>
 /// für Vorschau und Export dieselbe Funktion, damit man exportiert, was man gesehen hat.
 ///
-/// Reihenfolge: Dunst → Tiefen/Lichter → Helligkeit → Kontrast → Gleiche Farbe (Ausgleichen,
-/// Luminanz) → Dynamik → Sättigung → Färben.
+/// Reihenfolge: Weißabgleich (Pipetten) → Dunst → Tiefen/Lichter → Helligkeit → Kontrast → Gleiche Farbe
+/// (Ausgleichen, Luminanz) → Dynamik → Sättigung → Färben.
 /// Tiefen und Lichter wirken lokal wie in Referenzwerkzeug: Ob eine Stelle als dunkel oder hell
 /// gilt, entscheidet ihre Umgebung auf jeder Größenordnung (Local Laplacian Filter, wie
 /// Referenzwerkzeug), nicht das einzelne Pixel. Ein dunkles
@@ -143,6 +151,11 @@ public static class Adjust
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = px;
+
+        // Weißabgleich zuerst: Er wirkt auf dasselbe Bild, an dem die Pipetten gemessen haben, und alles
+        // Weitere (Dunst, Licht, Farbe) arbeitet schon mit den richtigen Farben
+        if (a.HasWhiteBalance)
+            source = WhiteBalance.Apply(px, width, height, a.WbNeutral, a.WbBlack, a.WbWhite);
         if (dehaze != 0)
         {
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder

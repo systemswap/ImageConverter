@@ -25,6 +25,7 @@ public enum EditSteps
     Sharpen = 128,
     SkinDetails = 256,
     ColorNoise = 512,
+    WhiteBalance = 1024,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
@@ -101,6 +102,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Light) != 0) a = a with { Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0 };
         if ((hidden & EditSteps.Color) != 0) a = a with { Saturation = 0, Vibrance = 0, Tint = Tint.None };
         if ((hidden & EditSteps.MatchColor) != 0) a = a with { MatchLuminance = 0, Neutralize = 0, Warmth = 0 };
+        if ((hidden & EditSteps.WhiteBalance) != 0) a = a with { WbNeutral = null, WbBlack = null, WbWhite = null };
         return a;
     }
 
@@ -302,6 +304,11 @@ public partial class MainViewModel
                 rows.Add(Row(EditSteps.Denoise, Tr.T("Rauschen"), $"{NoiseReduction * 100:0} %"));
             if (ColorNoiseReduction > 0.005)
                 rows.Add(Row(EditSteps.ColorNoise, Tr.T("Farbrauschen"), $"{ColorNoiseReduction * 100:0} %"));
+            // Weißabgleich rechnet als Erstes der Kette (vor Dunst, Licht und Farbe)
+            if (HasWhiteBalance)
+                rows.Add(Row(EditSteps.WhiteBalance, Tr.T("Weißabgleich"), string.Join(" · ",
+                    new[] { WbNeutral is null ? null : WbNeutralText, WbBlack is null ? null : WbBlackText, WbWhite is null ? null : WbWhiteText }
+                        .Where(t => t is not null))));
             if (Math.Round(Dehaze) != 0)
                 rows.Add(Row(EditSteps.Dehaze, Tr.T("Dunst"), $"{Math.Round(Dehaze):+0;−0} · {Math.Round(DehazePasses)}×"));
             // Reihenfolge der Kette: Gleiche Farbe (Weißabgleich) vor Licht und Farbe
@@ -387,6 +394,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Light) != 0) s = s with { Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0 };
         if ((hidden & EditSteps.Color) != 0) s = s with { Saturation = 0, Vibrance = 0, SelectedTint = TintLabels[0].Label };
         if ((hidden & EditSteps.MatchColor) != 0) s = s with { MatchLuminance = 0, Neutralize = 0, Warmth = 0 };
+        if ((hidden & EditSteps.WhiteBalance) != 0) s = s with { WbNeutral = null, WbBlack = null, WbWhite = null };
         if ((hidden & EditSteps.Sharpen) != 0) s = s with { SharpenAmount = 0 };
         return s with { Hidden = EditSteps.None };
     }

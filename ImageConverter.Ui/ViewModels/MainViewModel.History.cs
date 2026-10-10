@@ -45,7 +45,10 @@ public partial class MainViewModel
         bool HighBitDepth,
         EditSteps Hidden = EditSteps.None,    // ausgeschaltete Funktionen (Liste „Bearbeitungen“)
         double ColorNoiseReduction = 0,
-        double RotationAngle = 0);            // noch nicht übernommene freie Drehung — gehört zum Rahmen
+        double RotationAngle = 0,             // noch nicht übernommene freie Drehung — gehört zum Rahmen
+        WbSample? WbNeutral = null,           // Weißabgleich: gemittelte Pipetten-Messungen
+        WbSample? WbBlack = null,
+        WbSample? WbWhite = null);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -70,6 +73,9 @@ public partial class MainViewModel
         [nameof(SelectedAspectPreset)] = null,
         [nameof(CropSelection)] = "Auswahl",
         [nameof(RotationAngle)] = "Auswahl",   // dreht den Rahmen mit — ein Schritt
+        [nameof(WbNeutral)] = null,            // jeder Pipetten-Klick ein Schritt
+        [nameof(WbBlack)] = null,
+        [nameof(WbWhite)] = null,
         [nameof(CornerRadius)] = "Ecken",
         [nameof(SharpenAmount)] = "Schärfen",
         [nameof(SharpenRadius)] = "Radius",
@@ -230,7 +236,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -264,6 +270,9 @@ public partial class MainViewModel
                 GammaCorrect = s.GammaCorrect;
                 SelectedAspectPreset = s.SelectedAspectPreset;
                 RotationAngle = s.RotationAngle;   // vor der Auswahl: der Winkel setzt sonst den automatischen Rahmen
+                WbNeutral = s.WbNeutral;
+                WbBlack = s.WbBlack;
+                WbWhite = s.WbWhite;
                 CropSelection = s.CropSelection;
                 CornerRadius = s.CornerRadius;   // nach der Auswahl, die den Radius sonst begrenzt
                 SharpenAmount = s.SharpenAmount;

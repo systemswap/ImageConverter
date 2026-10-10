@@ -162,7 +162,8 @@ public partial class MainViewModel
         TintOf(SelectedTint), Round(Vibrance), Round(TintHue), Round(Dehaze), Round(MatchLuminance),
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
-        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast)),
+        Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast),
+        WbNeutral, WbBlack, WbWhite),
         HiddenSteps);   // ausgeblendete Bearbeitungen wirken nicht
 
     internal static Tint TintOf(string? label) =>
