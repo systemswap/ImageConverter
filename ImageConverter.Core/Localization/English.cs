@@ -516,6 +516,17 @@ public static class English
         ["Dreht das Bild und schneidet es auf den Rahmen zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen."] =
             "Rotates the image and crops it to the frame – one step, Ctrl+Z undoes it. Also with Enter or a double-click inside the frame.",
         ["Gedreht und zugeschnitten"] = "Rotated and cropped",
+
+        // Entzerren
+        ["Entzerren: die vier Ecken des Rahmens auf die Ecken von etwas legen, das in Wirklichkeit rechteckig ist – Blatt, Bild an der Wand, Fenster, Hausfront. Daraus wird ein gerades Rechteck, genau der Inhalt des Rahmens. Beim Ziehen hilft eine Lupe; Pfeiltasten verschieben die zuletzt gezogene Ecke um 1 px (Umschalt: 10 px)."] =
+            "Straighten perspective: put the four corners of the frame on the corners of something that is really rectangular – a sheet, a picture on the wall, a window, a facade. It becomes a straight rectangle, exactly the content of the frame. A magnifier helps while dragging; arrow keys move the last dragged corner by 1 px (Shift: 10 px).",
+        ["Entzerren"] = "Straighten",
+        ["Die Ecken überkreuzen sich – bitte so legen, dass ein Viereck entsteht."] = "The corners cross – please place them so that they form a quadrilateral.",
+        ["Ergebnis: {0} × {1} px"] = "Result: {0} × {1} px",
+        ["Entzerren und zuschneiden"] = "Straighten and crop",
+        ["Macht aus dem Rahmen ein gerades Rechteck – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen; Esc bricht ab."] =
+            "Turns the frame into a straight rectangle – one step, Ctrl+Z undoes it. Also with Enter or a double-click inside the frame; Esc cancels.",
+        ["Entzerrt"] = "Straightened",
     };
 
     public static IReadOnlyDictionary<string, string> Texts => _texts;

@@ -97,6 +97,7 @@ public partial class MainViewModel
         _calc = new ResizeCalculator(width, height);
         UpdatePrintSizeFromPixels();
         RotationAngle = 0;        // eine noch nicht übernommene Drehung gilt nur für den Stand davor
+        PerspectiveTool = false;  // die Ecken zum Entzerren ebenso
         CropSelection = null;
         OnPropertyChanged(nameof(AspectRatio));
         NotifySizeDerived();

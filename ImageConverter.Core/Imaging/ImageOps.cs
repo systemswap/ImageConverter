@@ -131,6 +131,41 @@ public static class ImageOps
         return result;
     }
 
+    /// <summary>
+    /// Entzerren: Das Viereck (oben links, oben rechts, unten rechts, unten links; in Bildpixeln) wird zum
+    /// geraden Rechteck in der Größe von <see cref="PerspectiveGeometry.TargetSize"/> — z. B. ein schräg
+    /// fotografiertes Blatt. Nur der Inhalt des Vierecks bleibt.
+    /// </summary>
+    public static MagickImage Straighten(MagickImage source, IReadOnlyList<(double X, double Y)> quad)
+    {
+        if (!PerspectiveGeometry.IsValid(quad))
+            throw new ArgumentException("Die vier Ecken bilden kein brauchbares Viereck.", nameof(quad));
+
+        var (w, h) = PerspectiveGeometry.TargetSize(quad);
+        var hadAlpha = source.HasAlpha;
+        var result = CloneOf(source);
+        result.VirtualPixelMethod = VirtualPixelMethod.Transparent;
+
+        // Paare Quelle → Ziel; ImageMagick rechnet für jedes Zielpixel zurück (gute Glättung, kein Treppeneffekt).
+        // Pixelmitten: Die Ecke des Vierecks ist die Außenkante, im Ziel also (0,0) bis (w,h).
+        double[] corners = [0, 0, w, 0, w, h, 0, h];
+        var args = new double[16];
+        for (var i = 0; i < 4; i++)
+        {
+            args[i * 4] = quad[i].X;
+            args[i * 4 + 1] = quad[i].Y;
+            args[i * 4 + 2] = corners[i * 2];
+            args[i * 4 + 3] = corners[i * 2 + 1];
+        }
+
+        result.Distort(new DistortSettings(DistortMethod.Perspective) { Viewport = new MagickGeometry(0, 0, (uint)w, (uint)h) }, args);
+        result.ResetPage();
+
+        // Das Viereck liegt im Bild (die Griffe bleiben drin) — ohne Transparenz geladen, ohne Alphakanal zurück
+        if (!hadAlpha) result.Alpha(AlphaOption.Off);
+        return result;
+    }
+
     public static MagickImage FlipHorizontal(MagickImage source)
     {
         var result = CloneOf(source);

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -64,6 +66,23 @@ public sealed class CropView : Control
     }
 
     private bool IsRotated => Math.Abs(RotationAngle) > 1e-9;
+
+    /// <summary>
+    /// Entzerren: Rahmen mit vier frei verschiebbaren Ecken (oben links, oben rechts, unten rechts, unten
+    /// links) in Bildpixeln; null = aus. Außen abgedunkelt wie beim Zuschnitt — man sieht gleich, wo die
+    /// Ränder des Ergebnisses liegen. Griffe an Ecken und Kantenmitten, Innenfläche verschiebt das Ganze,
+    /// beim Ziehen einer Ecke eine Lupe. Pfeiltasten: zuletzt gezogene Ecke 1 px (Umschalt: 10 px).
+    /// </summary>
+    public static readonly StyledProperty<IReadOnlyList<Point>?> QuadProperty =
+        AvaloniaProperty.Register<CropView, IReadOnlyList<Point>?>(nameof(Quad), defaultBindingMode: BindingMode.TwoWay);
+
+    public IReadOnlyList<Point>? Quad
+    {
+        get => GetValue(QuadProperty);
+        set => SetValue(QuadProperty, value);
+    }
+
+    private bool QuadMode => Quad is { Count: 4 };
 
     /// <summary>Seitenverhältnis Breite/Höhe; 0 = frei.</summary>
     public static readonly StyledProperty<double> AspectRatioProperty =
@@ -229,7 +248,7 @@ public sealed class CropView : Control
     [Flags]
     private enum Edge { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 }
 
-    private enum DragMode { None, Create, Move, Resize, Pan, Split }
+    private enum DragMode { None, Create, Move, Resize, Pan, Split, QuadCorner, QuadEdge, QuadMove }
 
     // Oben mehr Luft: dort schwebt der Bedienhinweis über dem Bild.
     private static readonly Thickness ViewPadding = new(28, 50, 28, 28);
@@ -324,7 +343,7 @@ public sealed class CropView : Control
     static CropView()
     {
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
-            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty);
+            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -500,7 +519,7 @@ public sealed class CropView : Control
     }
 
     private static readonly IPen GridPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x60, 255, 255, 255)), 1);
-    private static readonly IPen GridShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x28, 0, 0, 0)), 1);
+    private static readonly IPen GridShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x40, 0, 0, 0)), 1);
     private const double GridSpacing = 32;   // Bildschirmpixel
 
     /// <summary>Feines, waagerechtes/senkrechtes Gitter über dem gedrehten Bild — zum Ausrichten von Horizont und Kanten.</summary>
@@ -724,6 +743,39 @@ public sealed class CropView : Control
             return;
         }
 
+        // Entzerren: Ecken, Kantenmitten oder das ganze Viereck ziehen
+        if (QuadMode)
+        {
+            if (e.ClickCount >= 2 && InsideQuad(p))
+            {
+                RequestCrop();
+                e.Handled = true;
+                return;
+            }
+
+            var (kind, index) = HitQuad(p);
+            if (kind != DragMode.None)
+            {
+                _mode = kind;
+                _quadIndex = index;
+                if (kind == DragMode.QuadCorner) _activeCorner = index;
+                _quadStart = Quad!.ToArray();
+                _anchorImage = ToImage(p);
+                e.Pointer.Capture(this);
+                e.Handled = true;
+                InvalidateVisual();
+                return;
+            }
+
+            if (_fitMode) return;
+            _mode = DragMode.Pan;   // daneben: im Zoom verschieben
+            _panStartRect = _imageRect;
+            Cursor = CursorGrab;
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+
         // Auswahlwerkzeug aus: Ziehen verschiebt das Bild (nur im Zoom — eingepasst gibt es nichts zu schieben)
         if (!SelectionEnabled)
         {
@@ -833,6 +885,22 @@ public sealed class CropView : Control
                 _split = Math.Clamp((p.X - _imageRect.X) / _imageRect.Width, 0, 1);
                 InvalidateVisual();
                 break;
+
+            case DragMode.QuadCorner:
+            {
+                var q = _quadStart.ToArray();
+                q[_quadIndex] = ClampToImage(ToImage(p));
+                Quad = q;
+                break;
+            }
+
+            case DragMode.QuadEdge:
+                Quad = ShiftQuad([_quadIndex, (_quadIndex + 1) % 4], ToImage(p) - _anchorImage);
+                break;
+
+            case DragMode.QuadMove:
+                Quad = ShiftQuad([0, 1, 2, 3], ToImage(p) - _anchorImage);
+                break;
         }
 
         e.Handled = true;
@@ -852,6 +920,7 @@ public sealed class CropView : Control
 
         var wasEdit = _mode is not (DragMode.Pan or DragMode.Split);
         _mode = DragMode.None;
+        InvalidateVisual();   // Lupe weg, aktive Ecke zeigen
         e.Pointer.Capture(null);
         UpdateHoverCursor(e.GetPosition(this), e.KeyModifiers);
         if (wasEdit && GestureCompletedCommand is { } done && done.CanExecute(null))
@@ -876,6 +945,18 @@ public sealed class CropView : Control
         if (OnSplitLine(p))
         {
             Cursor = CursorWestEast;
+            return;
+        }
+
+        if (QuadMode)
+        {
+            var (kind, _) = HitQuad(p);
+            Cursor = kind switch
+            {
+                DragMode.QuadCorner => CursorCross,
+                DragMode.QuadEdge or DragMode.QuadMove => CursorMove,
+                _ => _fitMode ? Cursor.Default : CursorHand,
+            };
             return;
         }
 
@@ -984,6 +1065,216 @@ public sealed class CropView : Control
         }
     }
 
+    // ------------------------------------------------------------ Entzerren (Viereck)
+
+    private const double QuadCornerHit = 14;
+    private const double QuadEdgeHit = 11;
+    private const double QuadCornerRadius = 7;
+    private const double LoupeRadius = 62;
+    private const double LoupeZoom = 4;
+
+    private int _quadIndex;
+    private int _activeCorner;
+    private Point[] _quadStart = [];
+
+    private static readonly IPen QuadShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x70, 0, 0, 0)), 3.5);
+    private static readonly IPen QuadInvalidPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0x5A, 0x4F)), 2);
+    private static readonly IBrush AccentFill = new ImmutableSolidColorBrush(Color.FromRgb(0x2F, 0x7B, 0xF6));
+    private static readonly IPen LoupeRingPen = new ImmutablePen(Brushes.White, 2.5);
+    private static readonly IPen LoupeEdgePen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0xE0, 0xFF, 0xD2, 0x3F)), 1.5);
+    private static readonly IPen LoupeCrossPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0xC0, 255, 255, 255)), 1);
+
+    private Point ToScreenPoint(Point image) => new(_imageRect.X + image.X * _scale, _imageRect.Y + image.Y * _scale);
+
+    private static IReadOnlyList<(double X, double Y)> Tuples(IReadOnlyList<Point> q) => q.Select(p => (p.X, p.Y)).ToArray();
+
+    /// <summary>Was liegt unter dem Mauszeiger: Ecke, Kantenmitte, Innenfläche — oder nichts.</summary>
+    private (DragMode Kind, int Index) HitQuad(Point screen)
+    {
+        if (Quad is not { Count: 4 } q) return (DragMode.None, -1);
+        var pts = q.Select(ToScreenPoint).ToArray();
+        for (var i = 0; i < 4; i++)
+            if (Point.Distance(screen, pts[i]) <= QuadCornerHit) return (DragMode.QuadCorner, i);
+        for (var i = 0; i < 4; i++)
+        {
+            var mid = (pts[i] + pts[(i + 1) % 4]) / 2;
+            if (Point.Distance(screen, mid) <= QuadEdgeHit) return (DragMode.QuadEdge, i);
+        }
+        return InsideQuad(screen) ? (DragMode.QuadMove, -1) : (DragMode.None, -1);
+    }
+
+    private bool InsideQuad(Point screen) =>
+        Quad is { Count: 4 } q && QuadGeometry(q.Select(ToScreenPoint).ToArray()).FillContains(screen);
+
+    /// <summary>Einige Ecken gemeinsam verschieben, aber nicht über den Bildrand hinaus.</summary>
+    private Point[] ShiftQuad(int[] indices, Vector delta)
+    {
+        var q = _quadStart.ToArray();
+        var img = ImageSize;
+        var dx = delta.X;
+        var dy = delta.Y;
+        foreach (var i in indices)
+        {
+            dx = Math.Clamp(dx, -q[i].X, img.Width - q[i].X);
+            dy = Math.Clamp(dy, -q[i].Y, img.Height - q[i].Y);
+        }
+        foreach (var i in indices) q[i] = new Point(q[i].X + dx, q[i].Y + dy);
+        return q;
+    }
+
+    private void OnQuadKey(KeyEventArgs e)
+    {
+        var step = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 10 : 1;
+        Vector delta = e.Key switch
+        {
+            Key.Left => new Vector(-step, 0),
+            Key.Right => new Vector(step, 0),
+            Key.Up => new Vector(0, -step),
+            Key.Down => new Vector(0, step),
+            _ => default,
+        };
+
+        if (e.Key == Key.Escape)
+        {
+            Quad = null;   // Werkzeug aus — nichts übernommen
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Enter or Key.Return)
+        {
+            RequestCrop();
+            e.Handled = true;
+        }
+        else if (delta != default && Quad is { Count: 4 } q)
+        {
+            _quadStart = q.ToArray();
+            Quad = ShiftQuad([_activeCorner], delta);
+            e.Handled = true;
+        }
+    }
+
+    private static StreamGeometry QuadGeometry(Point[] pts)
+    {
+        var g = new StreamGeometry();
+        using (var c = g.Open())
+        {
+            c.BeginFigure(pts[0], true);
+            for (var i = 1; i < pts.Length; i++) c.LineTo(pts[i]);
+            c.EndFigure(true);
+        }
+        return g;
+    }
+
+    /// <summary>Viereck: außen abgedunkelt, Drittel-Gitter perspektivisch richtig, Griffe, Zielgröße, beim Ziehen die Lupe.</summary>
+    private void RenderQuad(DrawingContext context)
+    {
+        var q = Quad!;
+        var pts = q.Select(ToScreenPoint).ToArray();
+        var outline = QuadGeometry(pts);
+        var tuples = Tuples(q);
+        var valid = PerspectiveGeometry.IsValid(tuples);
+
+        context.DrawGeometry(ShadeBrush, null, new GeometryGroup
+        {
+            FillRule = FillRule.EvenOdd,
+            Children = { new RectangleGeometry(_imageRect), outline },
+        });
+
+        if (valid)
+        {
+            // Wo im Ergebnis die Drittel liegen — so sieht man, wie gerade es wird
+            foreach (var t in new[] { 1 / 3.0, 2 / 3.0 })
+            {
+                Line(PerspectiveGeometry.PointAt(tuples, t, 0), PerspectiveGeometry.PointAt(tuples, t, 1));
+                Line(PerspectiveGeometry.PointAt(tuples, 0, t), PerspectiveGeometry.PointAt(tuples, 1, t));
+            }
+        }
+
+        context.DrawGeometry(null, QuadShadowPen, outline);
+        context.DrawGeometry(null, valid ? FramePen : QuadInvalidPen, outline);
+
+        // Kantenmitten (klein, eckig) und Ecken (rund, die aktive blau)
+        for (var i = 0; i < 4; i++)
+        {
+            var mid = (pts[i] + pts[(i + 1) % 4]) / 2;
+            context.DrawRectangle(HandleFill, HandlePen, new Rect(mid.X - 4, mid.Y - 4, 8, 8));
+        }
+        for (var i = 0; i < 4; i++)
+        {
+            var dragging = _mode == DragMode.QuadCorner && _quadIndex == i;
+            context.DrawEllipse(dragging || (_mode == DragMode.None && _activeCorner == i) ? AccentFill : HandleFill,
+                HandlePen, pts[i], QuadCornerRadius, QuadCornerRadius);
+        }
+
+        if (valid)
+        {
+            var (w, h) = PerspectiveGeometry.TargetSize(tuples);
+            var text = new FormattedText($"{w} × {h} px", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                Typeface.Default, 11, Brushes.White);
+            var pad = new Thickness(7, 3);
+            var box = new Size(text.Width + pad.Left + pad.Right, text.Height + pad.Top + pad.Bottom);
+            var bottom = pts.Max(p => p.Y);
+            var cx = pts.Average(p => p.X);
+            var bx = Math.Clamp(cx - box.Width / 2, 2, Math.Max(2, Bounds.Width - box.Width - 2));
+            var by = bottom + 12 + box.Height <= Bounds.Height ? bottom + 12 : bottom - box.Height - 12;
+            context.DrawRectangle(LabelBack, null, new RoundedRect(new Rect(new Point(bx, by), box), 4));
+            context.DrawText(text, new Point(bx + pad.Left, by + pad.Top));
+        }
+
+        if (_mode == DragMode.QuadCorner && _quadIndex is >= 0 and < 4)
+            DrawLoupe(context, q, _quadIndex);
+
+        // Hell mit dunklem Schatten: auf hellem Papier wie auf dunklem Grund zu sehen
+        void Line((double X, double Y) a, (double X, double Y) b)
+        {
+            var (pa, pb) = (ToScreenPoint(new Point(a.X, a.Y)), ToScreenPoint(new Point(b.X, b.Y)));
+            context.DrawLine(GridShadowPen, pa + new Vector(1, 1), pb + new Vector(1, 1));
+            context.DrawLine(ThirdsPen, pa, pb);
+        }
+    }
+
+    /// <summary>Lupe neben der gezogenen Ecke: Bild vergrößert, Fadenkreuz, die beiden Kanten an dieser Ecke.</summary>
+    private void DrawLoupe(DrawingContext context, IReadOnlyList<Point> quad, int index)
+    {
+        if (Source is not { } bmp || ImageSize.Width <= 0) return;
+        var corner = quad[index];
+        var sp = ToScreenPoint(corner);
+        var off = LoupeRadius + 26;
+        var cx = sp.X - off - LoupeRadius < 0 ? sp.X + off : sp.X - off;
+        var cy = sp.Y - off - LoupeRadius < 0 ? sp.Y + off : sp.Y - off;
+        var center = new Point(cx, cy);
+        var dest = new Rect(cx - LoupeRadius, cy - LoupeRadius, 2 * LoupeRadius, 2 * LoupeRadius);
+
+        // Bildpunkt → Lupe
+        var zoom = _scale * LoupeZoom;
+        Point ToLoupe(Point image) => new(cx + (image.X - corner.X) * zoom, cy + (image.Y - corner.Y) * zoom);
+
+        // Ausschnitt der Bitmap, auf die Bitmap begrenzt (Ecken am Bildrand)
+        var bmpPerImage = bmp.PixelSize.Width / (double)ImageSize.Width;
+        var half = LoupeRadius / zoom;
+        var srcImage = new Rect(corner.X - half, corner.Y - half, 2 * half, 2 * half)
+            .Intersect(new Rect(0, 0, ImageSize.Width, ImageSize.Height));
+
+        using (context.PushGeometryClip(new EllipseGeometry(dest)))
+        {
+            context.FillRectangle(CheckerBrush, dest);
+            if (srcImage.Width > 0 && srcImage.Height > 0)
+            {
+                var src = new Rect(srcImage.X * bmpPerImage, srcImage.Y * bmpPerImage,
+                    srcImage.Width * bmpPerImage, srcImage.Height * bmpPerImage);
+                var target = new Rect(ToLoupe(srcImage.TopLeft), ToLoupe(srcImage.BottomRight));
+                using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.None }))
+                    context.DrawImage(bmp, src, target);
+            }
+
+            context.DrawLine(LoupeEdgePen, ToLoupe(corner), ToLoupe(quad[(index + 1) % 4]));
+            context.DrawLine(LoupeEdgePen, ToLoupe(corner), ToLoupe(quad[(index + 3) % 4]));
+            context.DrawLine(LoupeCrossPen, new Point(cx - 10, cy), new Point(cx + 10, cy));
+            context.DrawLine(LoupeCrossPen, new Point(cx, cy - 10), new Point(cx, cy + 10));
+        }
+        context.DrawEllipse(null, QuadShadowPen, center, LoupeRadius, LoupeRadius);
+        context.DrawEllipse(null, LoupeRingPen, center, LoupeRadius, LoupeRadius);
+    }
+
     // ------------------------------------------------------------ Tastatur
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -1000,6 +1291,12 @@ public sealed class CropView : Control
                 case Key.OemPlus or Key.Add: ZoomAt(center, _scale * WheelZoomStep); e.Handled = true; return;
                 case Key.OemMinus or Key.Subtract: ZoomAt(center, _scale / WheelZoomStep); e.Handled = true; return;
             }
+        }
+
+        if (QuadMode)
+        {
+            OnQuadKey(e);
+            return;
         }
 
         if (Selection is not { } sel) return;
@@ -1154,11 +1451,17 @@ public sealed class CropView : Control
         }
 
         // Vorher/Nachher nur ungedreht — die Trennlinie gehört zum geraden Bild
-        if (!rotated && Source is not null && CompareSource is { } before)
+        if (!rotated && !QuadMode && Source is not null && CompareSource is { } before)
             RenderCompare(context, before);
 
         if (rotated && DateTime.UtcNow < _gridUntil)
             RenderGrid(context, imageArea);
+
+        if (QuadMode)
+        {
+            RenderQuad(context);
+            return;
+        }
 
         if (Selection is not { } sel) return;
 

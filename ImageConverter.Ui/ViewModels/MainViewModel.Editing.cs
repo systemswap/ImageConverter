@@ -114,9 +114,24 @@ public partial class MainViewModel
     /// Der Ausschnitt wird zum neuen Bild. Bei runden Ecken ist alles außerhalb
     /// der Rundung danach transparent; das Bild bleibt rechteckig.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(HasCropSelection))]
+    /// <summary>Zuschneiden geht mit Auswahl — oder beim Entzerren mit einem brauchbaren Viereck.</summary>
+    public bool CanCropToSelection => HasCropSelection || (PerspectiveTool && IsPerspectiveValid);
+
+    [RelayCommand(CanExecute = nameof(CanCropToSelection))]
     private async Task CropToSelection()
     {
+        // Entzerren: genau der Inhalt des Vierecks wird zum geraden Rechteck — ein Schritt
+        if (PerspectiveTool && PerspectiveQuad is { } quad)
+        {
+            var pts = AsTuples(quad);
+            if (!PerspectiveGeometry.IsValid(pts)) return;
+            var (tw, th) = PerspectiveGeometry.TargetSize(pts);
+            MagickImage Straighten(MagickImage img) => ImageOps.Straighten(img, pts);
+            if (await ApplyEditAsync(Straighten, null, new ImageStep(ImageStepKind.Crop, Tr.T("Entzerrt"), $"{tw} × {th} px", Straighten)))
+                PerspectiveTool = false;
+            return;
+        }
+
         if (CropSelection is not { } sel) return;
         var radius = CornerRadius;
         var (x, y, w, h) = ((int)Math.Round(sel.X), (int)Math.Round(sel.Y), (int)Math.Round(sel.Width), (int)Math.Round(sel.Height));
@@ -154,8 +169,65 @@ public partial class MainViewModel
 
     partial void OnRotationToolChanged(bool value)
     {
-        if (value) SelectionTool = true;          // ohne Rahmen kein Zuschnitt nach dem Drehen
+        if (value)
+        {
+            PerspectiveTool = false;              // immer nur ein Werkzeug
+            SelectionTool = true;                 // ohne Rahmen kein Zuschnitt nach dem Drehen
+        }
         else if (IsRotationPending) DiscardRotation();
+    }
+
+    // ------------------------------------------------------------ Entzerren
+
+    /// <summary>Werkzeug „Entzerren“: Viereck mit frei verschiebbaren Ecken auf etwas Rechteckiges legen.</summary>
+    [ObservableProperty] public partial bool PerspectiveTool { get; set; }
+
+    /// <summary>Die vier Ecken (oben links, oben rechts, unten rechts, unten links) in Bildpixeln; null = Werkzeug aus.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPerspectiveValid), nameof(PerspectiveInfo), nameof(CanCropToSelection))]
+    public partial IReadOnlyList<Point>? PerspectiveQuad { get; set; }
+
+    public bool IsPerspectiveValid => PerspectiveQuad is { Count: 4 } q && PerspectiveGeometry.IsValid(AsTuples(q));
+
+    /// <summary>Unten in der Leiste: Größe des Ergebnisses oder was am Viereck nicht stimmt.</summary>
+    public string PerspectiveInfo
+    {
+        get
+        {
+            if (PerspectiveQuad is not { Count: 4 } q) return "";
+            if (!IsPerspectiveValid) return Tr.T("Die Ecken überkreuzen sich – bitte so legen, dass ein Viereck entsteht.");
+            var (w, h) = PerspectiveGeometry.TargetSize(AsTuples(q));
+            return Tr.T("Ergebnis: {0} × {1} px", w, h);
+        }
+    }
+
+    private static IReadOnlyList<(double X, double Y)> AsTuples(IReadOnlyList<Point> q) => q.Select(p => (p.X, p.Y)).ToArray();
+
+    partial void OnPerspectiveToolChanged(bool value)
+    {
+        if (value)
+        {
+            RotationTool = false;
+            CropSelection = null;
+            ResetPerspectiveQuad();
+        }
+        else PerspectiveQuad = null;
+        OnPropertyChanged(nameof(CanCropToSelection));
+        CropToSelectionCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnPerspectiveQuadChanged(IReadOnlyList<Point>? value)
+    {
+        if (value is null && PerspectiveTool) PerspectiveTool = false;   // Esc in der Vorschau
+        CropToSelectionCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Ecken an den Anfang: ein Zehntel vom Bildrand nach innen.</summary>
+    [RelayCommand]
+    private void ResetPerspectiveQuad()
+    {
+        double w = SourceWidth, h = SourceHeight, ix = w * 0.1, iy = h * 0.1;
+        PerspectiveQuad = [new Point(ix, iy), new Point(w - ix, iy), new Point(w - ix, h - iy), new Point(ix, h - iy)];
     }
 
     partial void OnRotationAngleChanged(double value)

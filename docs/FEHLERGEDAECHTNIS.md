@@ -1041,3 +1041,38 @@ Test oder Nachweis.
   Testbild 1200 × 800 (schiefer Horizont): −8° → Rahmen 998 × 664, übernommen → Bild 998 × 664, alle vier
   Ecken Bildfarbe; Strg+Z → Bild, −8°, Rahmen und Regler zurück; Rahmen per Testmaus verkleinert (617),
   verschoben (bleibt 617, stößt an), links aufgezogen bis zur Kante – immer ganz im gedrehten Bild.
+
+## 31. Entzerren: Viereck mit freien Ecken – Bauweise und Fallen
+
+- **Neu in:** 0.5.31 beta (10.10.2026). Kein gemeldeter Fehler; Entscheidungen und Fallen beim Bau.
+- **Funktion:** Symbol neben „Frei drehen“. Der Rahmen hat vier frei verschiebbare Ecken (Griffe auch an den
+  Kantenmitten, Innenfläche verschiebt das Ganze), außen abgedunkelt – man sieht gleich, wo die Ränder des
+  Ergebnisses liegen (Wunsch des Benutzers statt zweitem Schritt mit automatischem Rahmen). Man legt die
+  Ecken auf etwas, das rechteckig ist (Blatt, Bild an der Wand, Fenster); „Entzerren und zuschneiden“
+  (Enter, Doppelklick) macht genau den Inhalt des Vierecks zum geraden Rechteck – ein Schritt, Strg+Z.
+  Lupe beim Ziehen einer Ecke, Pfeiltasten verschieben die zuletzt gezogene Ecke, Esc bricht ab.
+- **Rechnen:** `ImageOps.Straighten` = ImageMagick `Distort Perspective` mit den vier Paaren Ecke → Rechteckecke
+  und `Viewport` genau in Zielgröße (keine große Zwischenfläche). Zielgröße = Mittel der gegenüberliegenden
+  Kanten (`PerspectiveGeometry.TargetSize`) – das wahre Seitenverhältnis lässt sich aus vier Punkten allein nicht
+  bestimmen. Das Drittel-Gitter im Viereck ist perspektivisch richtig (`PointAt`, Homographie Einheitsquadrat →
+  Viereck), nicht linear gemittelt.
+- **Falle – gespiegeltes Ergebnis:** Ein Viereck, dessen Ecken andersherum umlaufen (z. B. links und rechts
+  vertauscht, aber nicht überkreuzt), ist konvex – ImageMagick hätte daraus ein *gespiegeltes* Bild gemacht.
+  `PerspectiveGeometry.IsValid` verlangt deshalb den Uhrzeigersinn (Bildschirm, y nach unten: Kreuzprodukt
+  aller Ecken positiv); sonst rote Rahmenlinie und Hinweis in der Leiste, Übernehmen gesperrt.
+- **Falle – Test ohne Alphakanal:** `Drawables.Draw` legt am Testbild einen Alphakanal an; „ohne Transparenz
+  geladen → ohne Alphakanal zurück“ lässt sich nur mit `Alpha(Off)` am Testbild prüfen.
+- **Vorschau perspektivisch zeichnen geht:** Avalonia/Skia zeichnet Bitmaps mit perspektivischer Matrix
+  (`new Matrix(m11, m12, m13, …, m33)` mit M13/M23 ≠ 0) – im unsichtbaren Test geprüft. Für die Viereck-Bedienung
+  nicht nötig, aber die Möglichkeit für eine spätere Live-Vorschau des Ergebnisses.
+- **Werkzeuge schließen sich gegenseitig aus:** Drehen an → Entzerren aus und umgekehrt; ein neuer Bildstand
+  (`ApplySourceSize`) schließt Entzerren, die Ecken gehören zum Bild davor.
+- **Wo:** `Core/Imaging/PerspectiveGeometry.cs`, `Core/Imaging/ImageOps.cs` (`Straighten`),
+  `Ui/Controls/CropView.cs` (`Quad`, `HitQuad`, `ShiftQuad`, `RenderQuad`, `DrawLoupe`, `OnQuadKey`),
+  `Ui/ViewModels/MainViewModel.Editing.cs` (`PerspectiveTool`, `PerspectiveQuad`, `CropToSelection`),
+  `Views/MainView.axaml`.
+- **Test/Nachweis:** `PerspectiveTests` (Viereck-Prüfung inkl. gespiegelt/überkreuzt/eingedellt, Zielgröße,
+  Homographie, schräges Blatt füllt das Ergebnis und die Markierung liegt oben links, Gegenprobe mit zu großem
+  Viereck). Unsichtbares Testfenster: Blatt auf Holztisch 1200 × 800, Ecke unten links per Testmaus auf die
+  Blattecke gezogen (Lupe sichtbar) → Ergebnis 528 × 427, Linien waagerecht, alle Ecken Papierfarbe; Strg+Z →
+  Original.

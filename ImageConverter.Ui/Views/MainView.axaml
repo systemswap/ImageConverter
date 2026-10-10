@@ -893,6 +893,7 @@
                                     AspectRatio="{Binding AspectRatio}"
                                     SelectionRadius="{Binding CornerRadius}"
                                     RotationAngle="{Binding RotationAngle}"
+                                    Quad="{Binding PerspectiveQuad}"
                                     CropCommand="{Binding CropToSelectionCommand}"
                                     GestureCompletedCommand="{Binding CommitSettingsStepCommand}"
                                     SelectionEnabled="{Binding SelectionTool}" />
@@ -976,6 +977,32 @@
                                         Content="{l:T 'Drehen und zuschneiden'}"
                                         Command="{Binding CropToSelectionCommand}"
                                         ToolTip.Tip="{l:T 'Dreht das Bild und schneidet es auf den Rahmen zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen.'}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Entzerren: Rahmen mit frei verschiebbaren Ecken. Symbol: schräges Viereck mit Eckpunkten (eigenes). -->
+                        <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Margin="150,12,12,12"
+                                      IsVisible="{Binding HasImage}"
+                                      IsChecked="{Binding PerspectiveTool}"
+                                      ToolTip.Tip="{l:T 'Entzerren: die vier Ecken des Rahmens auf die Ecken von etwas legen, das in Wirklichkeit rechteckig ist – Blatt, Bild an der Wand, Fenster, Hausfront. Daraus wird ein gerades Rechteck, genau der Inhalt des Rahmens. Beim Ziehen hilft eine Lupe; Pfeiltasten verschieben die zuletzt gezogene Ecke um 1 px (Umschalt: 10 px).'}">
+                            <Path Data="M 7,5 L 18,7 L 21,19 L 3,18 Z M 7,4 L 7,6 M 18,6 L 18,8 M 21,18 L 21,20 M 3,17 L 3,19" />
+                        </ToggleButton>
+
+                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                Margin="12" Padding="14,8,10,8" CornerRadius="12"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                IsVisible="{Binding PerspectiveTool}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:T 'Entzerren'}" />
+                                <TextBlock VerticalAlignment="Center" MinWidth="170" Text="{Binding PerspectiveInfo}" />
+                                <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Zurücksetzen'}"
+                                        Command="{Binding ResetPerspectiveQuadCommand}" />
+                                <Button Classes="primary" VerticalAlignment="Center"
+                                        Content="{l:T 'Entzerren und zuschneiden'}"
+                                        Command="{Binding CropToSelectionCommand}"
+                                        ToolTip.Tip="{l:T 'Macht aus dem Rahmen ein gerades Rechteck – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen; Esc bricht ab.'}" />
                             </StackPanel>
                         </Border>
 
