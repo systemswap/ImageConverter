@@ -892,6 +892,7 @@
                                     Selection="{Binding CropSelection}"
                                     AspectRatio="{Binding AspectRatio}"
                                     SelectionRadius="{Binding CornerRadius}"
+                                    RotationAngle="{Binding RotationAngle}"
                                     CropCommand="{Binding CropToSelectionCommand}"
                                     GestureCompletedCommand="{Binding CommitSettingsStepCommand}"
                                     SelectionEnabled="{Binding SelectionTool}" />
@@ -941,6 +942,42 @@
                                       ToolTip.Tip="{l:T 'Auswahlrahmen: an (blau) — mit der Maus einen Ausschnitt aufziehen, Enter schneidet zu, Esc hebt auf. Aus — Ziehen verschiebt das Bild. Strg + Ziehen verschiebt immer, Strg + Mausrad zoomt.'}">
                             <Path Data="M 5,3 A 2,2 0 0 0 3,5 M 9,3 L 10,3 M 14,3 L 15,3 M 19,3 A 2,2 0 0 1 21,5 M 21,9 L 21,10 M 21,14 L 21,15 M 21,19 A 2,2 0 0 1 19,21 M 14,21 L 15,21 M 9,21 L 10,21 M 5,21 A 2,2 0 0 1 3,19 M 3,14 L 3,15 M 3,9 L 3,10" />
                         </ToggleButton>
+
+                        <!-- Frei drehen: Regler unten, der Rahmen passt sich dem Winkel an. Symbol: Winkel mit Bogen (eigenes). -->
+                        <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Margin="104,12,12,12"
+                                      IsVisible="{Binding HasImage}"
+                                      IsChecked="{Binding RotationTool}"
+                                      ToolTip.Tip="{l:T 'Frei drehen: mit dem Regler unten um einen beliebigen Winkel drehen, z. B. den Horizont gerade richten. Der Rahmen zeigt, was übrig bleibt – er passt sich beim Drehen an und lässt sich danach verschieben und verkleinern. „Drehen und zuschneiden“ übernimmt, Esc verwirft.'}">
+                            <Path Data="M 3,20 L 21,20 M 3,20 L 16,5 M 11,20 A 8,8 0 0 0 8.4,14" />
+                        </ToggleButton>
+
+                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                Margin="12" Padding="14,8,10,8" CornerRadius="12"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                IsVisible="{Binding RotationTool}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:T 'Drehen'}" />
+                                <Slider Width="340" VerticalAlignment="Center"
+                                        Minimum="-180" Maximum="180" SmallChange="0.1" LargeChange="1"
+                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                        Value="{Binding RotationAngle}"
+                                        ToolTip.Tip="{l:T 'Drehwinkel in Grad, positiv im Uhrzeigersinn. Pfeiltasten: 0,1°, Bild auf/ab: 1°.'}" />
+                                <NumericUpDown Width="84" VerticalAlignment="Center" ShowButtonSpinner="False"
+                                               Minimum="-180" Maximum="180" Increment="0.1" FormatString="0.0"
+                                               HorizontalContentAlignment="Right"
+                                               Value="{Binding RotationAngle}" />
+                                <TextBlock VerticalAlignment="Center" Text="°" />
+                                <Button Classes="subtle" VerticalAlignment="Center" Content="0°"
+                                        Command="{Binding DiscardRotationCommand}"
+                                        ToolTip.Tip="{l:T 'Drehung verwerfen (Esc)'}" />
+                                <Button Classes="primary" VerticalAlignment="Center"
+                                        Content="{l:T 'Drehen und zuschneiden'}"
+                                        Command="{Binding CropToSelectionCommand}"
+                                        ToolTip.Tip="{l:T 'Dreht das Bild und schneidet es auf den Rahmen zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen.'}" />
+                            </StackPanel>
+                        </Border>
 
                         <!-- Ladeanzeige -->
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"

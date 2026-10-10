@@ -505,6 +505,17 @@ public static class English
         ["Kein Schreibrecht im Ordner {0}"] = "No write permission in the folder {0}",
         ["{0}: Deutsch ist eingebaut und lässt sich nicht ersetzen."] = "{0}: German is built in and cannot be replaced.",
         ["kein JSON-Objekt"] = "not a JSON object",
+
+        // Frei drehen
+        ["Frei drehen: mit dem Regler unten um einen beliebigen Winkel drehen, z. B. den Horizont gerade richten. Der Rahmen zeigt, was übrig bleibt – er passt sich beim Drehen an und lässt sich danach verschieben und verkleinern. „Drehen und zuschneiden“ übernimmt, Esc verwirft."] =
+            "Rotate freely: turn the image by any angle with the slider below, e.g. to straighten the horizon. The frame shows what remains – it follows the angle and can then be moved and made smaller. “Rotate and crop” applies, Esc discards.",
+        ["Drehen"] = "Rotate",
+        ["Drehwinkel in Grad, positiv im Uhrzeigersinn. Pfeiltasten: 0,1°, Bild auf/ab: 1°."] = "Rotation angle in degrees, positive is clockwise. Arrow keys: 0.1°, Page up/down: 1°.",
+        ["Drehung verwerfen (Esc)"] = "Discard rotation (Esc)",
+        ["Drehen und zuschneiden"] = "Rotate and crop",
+        ["Dreht das Bild und schneidet es auf den Rahmen zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen."] =
+            "Rotates the image and crops it to the frame – one step, Ctrl+Z undoes it. Also with Enter or a double-click inside the frame.",
+        ["Gedreht und zugeschnitten"] = "Rotated and cropped",
     };
 
     public static IReadOnlyDictionary<string, string> Texts => _texts;

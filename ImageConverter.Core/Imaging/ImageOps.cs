@@ -102,6 +102,35 @@ public static class ImageOps
         return result;
     }
 
+    /// <summary>
+    /// Frei drehen und zuschneiden in einem Schritt. Der Rahmen (<paramref name="x"/> … <paramref name="height"/>)
+    /// gilt im ungedrehten Koordinatensystem der Vorschau um die Bildmitte (siehe <see cref="RotationGeometry"/>);
+    /// er sollte ganz im gedrehten Bild liegen, sonst bleiben die Ecken außerhalb leer (transparent).
+    /// Positive Winkel drehen im Uhrzeigersinn. Radius wie bei <see cref="Crop"/>.
+    /// </summary>
+    public static MagickImage RotateAndCrop(MagickImage source, double degrees, int x, int y, int width, int height,
+        double radius)
+    {
+        degrees = RotationGeometry.Normalize(degrees);
+        if (Math.Abs(degrees) < 1e-9) return Crop(source, x, y, width, height, radius);
+
+        var hadAlpha = source.HasAlpha;
+        using var rotated = CloneOf(source);
+        // Nur die Kantenpixel außerhalb des Rahmens berühren den Hintergrund
+        rotated.BackgroundColor = MagickColors.Transparent;
+        rotated.Rotate(degrees);
+        rotated.ResetPage();
+
+        // Die Drehmitte bleibt die Mitte: Die Fläche wächst nach allen Seiten gleich
+        var dx = (rotated.Width - (double)source.Width) / 2;
+        var dy = (rotated.Height - (double)source.Height) / 2;
+        var result = Crop(rotated, (int)Math.Round(x + dx), (int)Math.Round(y + dy), width, height, radius);
+
+        // Bild ohne Transparenz: auch ohne Alphakanal zurückgeben (sonst wird z. B. ein PNG größer)
+        if (!hadAlpha && radius < 0.5) result.Alpha(AlphaOption.Off);
+        return result;
+    }
+
     public static MagickImage FlipHorizontal(MagickImage source)
     {
         var result = CloneOf(source);

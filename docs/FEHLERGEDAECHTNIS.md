@@ -1005,3 +1005,39 @@ Test oder Nachweis.
   Hinweis aus der Prüfung: Die Vorschau rechnet höchstens 2048 px; beim Hineinzoomen (120 %) wirkt schon
   ein kleiner Reglerwert wie Weichzeichnen, weil die Anzeige vom Original auf die Vorschau wechselt —
   nicht der Filter. Angeboten: sichtbaren Ausschnitt beim Zoomen in voller Auflösung rechnen.
+
+## 30. Frei drehen: drei Fallen beim Bau (Rahmen schrumpfte, Winkel nach Rückgängig, Regler weg)
+
+- **Entdeckt:** beim Bau von 0.5.29 beta (10.10.2026, auf 0.5.28 `fa9aa32`), im unsichtbaren Testfenster.
+  **Behoben:** 0.5.29 beta, vor der Auslieferung.
+- **Funktion:** Neues Symbol neben dem Auswahlrahmen, Regler unten (−180 … +180°, Zehntelgrad). Die
+  Vorschau dreht live; der Rahmen ist bei jedem Winkel das größte Rechteck im Seitenverhältnis des Bildes,
+  das ganz im gedrehten Bild liegt (`RotationGeometry.LargestInside`), danach verschieb- und verkleinerbar,
+  stößt aber an die schrägen Kanten. „Drehen und zuschneiden“ (Enter, Doppelklick) = ein Schritt
+  `ImageOps.RotateAndCrop`; Esc / „0°“ verwerfen. Kurz eingeblendetes Gitter beim Drehen.
+- **Falle 1 – Rahmen wurde beim Verschieben schmaler:** Stieß der Rahmen an die schräge Kante, wurde bei
+  jedem Mausschritt auf ganze Pixel *nach innen* gerundet (links aufrunden, rechts abrunden) – jedes Mal
+  1 px weniger (617 → 597 px nach einem Zug). Behoben: Verschieben rundet nur die Position, und zwar zurück
+  zur gültigen Lage (`CropView.MoveInRotated`); dazwischen liegt alles im konvexen gedrehten Bild.
+  **Nicht tun:** beim Verschieben `RoundInside` benutzen.
+- **Falle 2 – Winkel und Rahmen nach Rückgängig:** Der Winkel steht im `SettingsState` (Gruppe „Auswahl“),
+  damit Strg+Z auf „Drehen und zuschneiden“ Bild, Winkel *und* Rahmen zurückholt. `ApplySettings` setzt den
+  Winkel **vor** der Auswahl – umgekehrt setzt die Winkeländerung danach den automatischen Rahmen und
+  überschreibt den wiederhergestellten. `ApplySourceSize` (neuer Bildstand) setzt Winkel 0 vor `CropSelection = null`.
+- **Falle 3 – Regler nach Rückgängig unsichtbar:** Das Werkzeug wird beim Übernehmen geschlossen; nach Strg+Z
+  stand die Drehung wieder an, aber ohne Regler. Behoben: Steht ein Winkel an, öffnet sich das Werkzeug
+  (`OnRotationAngleChanged`).
+- **Weitere Regeln:** Positiver Winkel = im Uhrzeigersinn, in Vorschau (Avalonia `Matrix.CreateRotation`) und
+  ImageMagick gleich – Test `RotateAndCrop_PositiveIsClockwise`. Der Rahmen gilt im ungedrehten
+  Koordinatensystem um die Bildmitte; `RotateAndCrop` rechnet ihn auf die nach dem Drehen größere Fläche
+  um (Mitte bleibt Mitte). Automatischer Rahmen mit 1 px Abstand (Kantenpixel sind beim Drehen geglättet).
+  Ohne Transparenz geladene Bilder kommen ohne Alphakanal zurück. Vorher/Nachher wird nur ungedreht gezeichnet.
+- **Wo:** `Core/Imaging/RotationGeometry.cs`, `Core/Imaging/ImageOps.cs` (`RotateAndCrop`),
+  `Ui/Controls/CropView.cs` (`RotationAngle`, `AutoFrame`, `KeepInRotated`, `MoveInRotated`, `RenderGrid`),
+  `Ui/ViewModels/MainViewModel.Editing.cs` (`RotationTool`, `RotationAngle`, `CropToSelection`),
+  `MainViewModel.History.cs` (`SettingsState.RotationAngle`), `Views/MainView.axaml`.
+- **Test/Nachweis:** `RotationTests` (Rahmen passt genau und 1 % größer nicht mehr, schrumpft und wächst
+  wieder, Ecken ohne leeren Hintergrund – mit Gegenprobe, Drehrichtung). Unsichtbares Testfenster mit
+  Testbild 1200 × 800 (schiefer Horizont): −8° → Rahmen 998 × 664, übernommen → Bild 998 × 664, alle vier
+  Ecken Bildfarbe; Strg+Z → Bild, −8°, Rahmen und Regler zurück; Rahmen per Testmaus verkleinert (617),
+  verschoben (bleibt 617, stößt an), links aufgezogen bis zur Kante – immer ganz im gedrehten Bild.

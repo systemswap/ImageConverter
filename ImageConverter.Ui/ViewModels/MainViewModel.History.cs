@@ -44,7 +44,8 @@ public partial class MainViewModel
         double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband, double DehazeCast,
         bool HighBitDepth,
         EditSteps Hidden = EditSteps.None,    // ausgeschaltete Funktionen (Liste „Bearbeitungen“)
-        double ColorNoiseReduction = 0);
+        double ColorNoiseReduction = 0,
+        double RotationAngle = 0);            // noch nicht übernommene freie Drehung — gehört zum Rahmen
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -68,6 +69,7 @@ public partial class MainViewModel
         [nameof(DpiMetadataOnly)] = null,
         [nameof(SelectedAspectPreset)] = null,
         [nameof(CropSelection)] = "Auswahl",
+        [nameof(RotationAngle)] = "Auswahl",   // dreht den Rahmen mit — ein Schritt
         [nameof(CornerRadius)] = "Ecken",
         [nameof(SharpenAmount)] = "Schärfen",
         [nameof(SharpenRadius)] = "Radius",
@@ -228,7 +230,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -261,6 +263,7 @@ public partial class MainViewModel
                 DoNotEnlarge = s.DoNotEnlarge;
                 GammaCorrect = s.GammaCorrect;
                 SelectedAspectPreset = s.SelectedAspectPreset;
+                RotationAngle = s.RotationAngle;   // vor der Auswahl: der Winkel setzt sonst den automatischen Rahmen
                 CropSelection = s.CropSelection;
                 CornerRadius = s.CornerRadius;   // nach der Auswahl, die den Radius sonst begrenzt
                 SharpenAmount = s.SharpenAmount;

@@ -104,6 +104,7 @@ public partial class MainViewModel
             Calc = new ResizeCalculator(width, height),
             CropSelection = null,
             CornerRadius = 0,
+            RotationAngle = 0,
         };
     }
 

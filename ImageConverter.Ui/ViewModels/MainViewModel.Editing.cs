@@ -115,13 +115,65 @@ public partial class MainViewModel
     /// der Rundung danach transparent; das Bild bleibt rechteckig.
     /// </summary>
     [RelayCommand(CanExecute = nameof(HasCropSelection))]
-    private Task CropToSelection()
+    private async Task CropToSelection()
     {
-        if (CropSelection is not { } sel) return Task.CompletedTask;
+        if (CropSelection is not { } sel) return;
         var radius = CornerRadius;
         var (x, y, w, h) = ((int)Math.Round(sel.X), (int)Math.Round(sel.Y), (int)Math.Round(sel.Width), (int)Math.Round(sel.Height));
+
+        // Steht eine freie Drehung an: drehen und zuschneiden in einem Schritt (Rückgängig holt beides zurück)
+        if (IsRotationPending)
+        {
+            var angle = RotationAngle;
+            MagickImage Turn(MagickImage img) => ImageOps.RotateAndCrop(img, angle, x, y, w, h, radius);
+            var detail = $"{angle.ToString("+0.0;-0.0", System.Globalization.CultureInfo.CurrentCulture)}° · {w} × {h} px";
+            if (await ApplyEditAsync(Turn, null, new ImageStep(ImageStepKind.Rotate, Tr.T("Gedreht und zugeschnitten"), detail, Turn)))
+                RotationTool = false;
+            return;
+        }
+
         MagickImage Crop(MagickImage img) => ImageOps.Crop(img, x, y, w, h, radius);
-        return ApplyEditAsync(Crop, null, new ImageStep(ImageStepKind.Crop, Tr.T("Zuschnitt"), $"{w} × {h} px", Crop));
+        await ApplyEditAsync(Crop, null, new ImageStep(ImageStepKind.Crop, Tr.T("Zuschnitt"), $"{w} × {h} px", Crop));
+    }
+
+    // ------------------------------------------------------------ Frei drehen
+
+    /// <summary>Werkzeug „Frei drehen“: Regler unten in der Vorschau; der Auswahlrahmen gehört dazu.</summary>
+    [ObservableProperty] public partial bool RotationTool { get; set; }
+
+    /// <summary>
+    /// Noch nicht übernommene freie Drehung in Grad (−180 … +180, positiv = im Uhrzeigersinn). Die Vorschau zeigt
+    /// sie, übernommen wird sie zusammen mit dem Rahmen beim Zuschneiden. Der Rahmen gilt im ungedrehten
+    /// Koordinatensystem um die Bildmitte (<see cref="RotationGeometry"/>).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRotationPending))]
+    public partial double RotationAngle { get; set; }
+
+    public bool IsRotationPending => Math.Abs(RotationAngle) > 1e-9;
+
+    partial void OnRotationToolChanged(bool value)
+    {
+        if (value) SelectionTool = true;          // ohne Rahmen kein Zuschnitt nach dem Drehen
+        else if (IsRotationPending) DiscardRotation();
+    }
+
+    partial void OnRotationAngleChanged(double value)
+    {
+        // Auf −180 … +180 und Zehntelgrad — Regler und Zahlenfeld zeigen dasselbe
+        var tidy = double.IsFinite(value) ? Math.Round(RotationGeometry.Normalize(value), 1) : 0;
+        if (tidy != value) { RotationAngle = tidy; return; }
+
+        // Steht eine Drehung an (z. B. nach Rückgängig), gehört der Regler sichtbar dazu
+        if (IsRotationPending && !RotationTool) RotationTool = true;
+    }
+
+    /// <summary>Drehung verwerfen: Winkel 0, Rahmen weg (Esc in der Vorschau tut dasselbe).</summary>
+    [RelayCommand]
+    private void DiscardRotation()
+    {
+        RotationAngle = 0;
+        CropSelection = null;
     }
 
     [RelayCommand(CanExecute = nameof(HasImage))]
@@ -445,12 +497,28 @@ public partial class MainViewModel
         var y = Math.Clamp(CropY, 0, SourceHeight - 1);
         var w = Math.Clamp(CropWidth, 1, SourceWidth - x);
         var h = Math.Clamp(CropHeight, 1, SourceHeight - y);
+        var rect = new Rect(x, y, w, h);
+
+        // Beim Drehen: nicht über die schrägen Kanten hinaus — um die Mitte verkleinern
+        if (IsRotationPending)
+        {
+            var (fx, fy, fw, fh) = RotationGeometry.ShrinkInside(SourceWidth, SourceHeight, RotationAngle, x, y, w, h);
+            var x0 = Math.Ceiling(fx - 1e-6);
+            var y0 = Math.Ceiling(fy - 1e-6);
+            rect = new Rect(x0, y0, Math.Max(1, Math.Floor(fx + fw + 1e-6) - x0), Math.Max(1, Math.Floor(fy + fh + 1e-6) - y0));
+        }
 
         _isSyncingCrop = true;
-        CropSelection = new Rect(x, y, w, h);
+        CropSelection = rect;
         _isSyncingCrop = false;
+        if (rect != new Rect(x, y, w, h)) OnCropSelectionChanged(rect);   // Zahlenfelder auf den verkleinerten Rahmen
     }
 
+    /// <summary>Auswahl aufheben — beim Drehen auch die Drehung, denn der Rahmen gehört zu ihr.</summary>
     [RelayCommand]
-    private void ClearSelection() => CropSelection = null;
+    private void ClearSelection()
+    {
+        if (IsRotationPending) RotationAngle = 0;
+        CropSelection = null;
+    }
 }

@@ -8,6 +8,8 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
+using Avalonia.Threading;
+using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.Controls;
 
@@ -44,6 +46,24 @@ public sealed class CropView : Control
         get => GetValue(SelectionEnabledProperty);
         set => SetValue(SelectionEnabledProperty, value);
     }
+
+    /// <summary>
+    /// Noch nicht übernommene freie Drehung in Grad (positiv = im Uhrzeigersinn); 0 = keine.
+    /// Die Vorschau zeigt das Bild gedreht. Jede Änderung setzt den Rahmen auf das größte Rechteck im
+    /// Seitenverhältnis des Bildes, das ganz im gedrehten Bild liegt; danach lässt er sich verschieben und
+    /// in der Größe ändern, stößt aber an die schrägen Kanten — es entstehen nie leere Ecken. Der Rahmen
+    /// gilt im ungedrehten Koordinatensystem um die Bildmitte (<see cref="RotationGeometry"/>).
+    /// </summary>
+    public static readonly StyledProperty<double> RotationAngleProperty =
+        AvaloniaProperty.Register<CropView, double>(nameof(RotationAngle), defaultBindingMode: BindingMode.TwoWay);
+
+    public double RotationAngle
+    {
+        get => GetValue(RotationAngleProperty);
+        set => SetValue(RotationAngleProperty, value);
+    }
+
+    private bool IsRotated => Math.Abs(RotationAngle) > 1e-9;
 
     /// <summary>Seitenverhältnis Breite/Höhe; 0 = frei.</summary>
     public static readonly StyledProperty<double> AspectRatioProperty =
@@ -222,6 +242,7 @@ public sealed class CropView : Control
     private Point _pressScreen;
     private Point _anchorImage;
     private Rect _startSelection;
+    private Rect? _selectionBeforeCreate;
     private Vector _moveOffset;
 
     private Rect _imageRect;   // Bild auf dem Bildschirm
@@ -303,7 +324,7 @@ public sealed class CropView : Control
     static CropView()
     {
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
-            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty);
+            CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -340,7 +361,171 @@ public sealed class CropView : Control
         }
 
         if (change.Property == AspectRatioProperty && Selection is { } sel && AspectRatio > 0)
-            Selection = Round(ReshapeAroundCenter(sel, AspectRatio));
+            Selection = IsRotated ? ShrinkIntoRotated(ReshapeAroundCenter(sel, AspectRatio)) : Round(ReshapeAroundCenter(sel, AspectRatio));
+
+        if (change.Property == RotationAngleProperty && ImageSize.Width > 0)
+        {
+            if (IsRotated)
+            {
+                // Bei jedem Winkel neu: erst kleiner, ab 45° wieder größer, bei 180° das ganze Bild
+                Selection = AutoFrame();
+                ShowGridBriefly();
+            }
+            else if (Math.Abs(change.GetOldValue<double>()) > 1e-9 && Selection is not null)
+            {
+                // Zurück auf 0° geschoben: der Rahmen wieder über das ganze Bild (Verwerfen setzt ihn danach auf null)
+                Selection = new Rect(0, 0, ImageSize.Width, ImageSize.Height);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ Frei drehen
+
+    /// <summary>Drehung um die Mitte der Bildfläche auf dem Bildschirm (wie ImageMagick: positiv = Uhrzeigersinn).</summary>
+    private Matrix RotationMatrix()
+    {
+        var c = _imageRect.Center;
+        return Matrix.CreateTranslation(-c.X, -c.Y)
+               * Matrix.CreateRotation(RotationAngle * Math.PI / 180)
+               * Matrix.CreateTranslation(c.X, c.Y);
+    }
+
+    /// <summary>
+    /// Größtes Rechteck im Seitenverhältnis des Bildes, das ganz im gedrehten Bild liegt — mit 1 px
+    /// Abstand, denn die Kantenpixel sind beim Drehen mit dem leeren Hintergrund geglättet.
+    /// </summary>
+    private Rect AutoFrame()
+    {
+        var size = ImageSize;
+        var (x, y, w, h) = RotationGeometry.LargestInside(size.Width, size.Height, RotationAngle,
+            (double)size.Width / size.Height);
+        return RoundInside(new Rect(x + 1, y + 1, Math.Max(1, w - 2), Math.Max(1, h - 2)));
+    }
+
+    /// <summary>Liegt das Rechteck ganz im (gedrehten) Bild?</summary>
+    private bool InsideRotated(Rect r) =>
+        !IsRotated || RotationGeometry.ContainsRect(ImageSize.Width, ImageSize.Height, RotationAngle,
+            r.X, r.Y, r.Width, r.Height);
+
+    /// <summary>Liegt der Bildschirmpunkt auf dem (gedrehten) Bild?</summary>
+    private bool OnImage(Point screen)
+    {
+        if (!IsRotated) return _imageRect.Contains(screen);
+        var p = ToImage(screen);
+        return RotationGeometry.Contains(ImageSize.Width, ImageSize.Height, RotationAngle, p.X, p.Y);
+    }
+
+    /// <summary>
+    /// Gewünschter Rahmen, aber nicht über die schrägen Kanten hinaus: Von einem gültigen Rahmen aus
+    /// so weit in Richtung des gewünschten, wie es geht — der Rahmen „stößt an“.
+    /// </summary>
+    private Rect KeepInRotated(Rect requested, Rect valid)
+    {
+        var r = RoundInside(requested);
+        if (InsideRotated(r)) return r;
+
+        var lo = FurthestInside(valid, requested);
+        var best = RoundInside(Lerp(valid, requested, lo));
+        return InsideRotated(best) ? best : RoundInside(valid);
+    }
+
+    /// <summary>
+    /// Verschieben: wie <see cref="KeepInRotated"/>, aber die Größe bleibt. Gerundet wird nur die Position, und
+    /// zwar zurück zur gültigen Lage — dazwischen liegt alles im (konvexen) gedrehten Bild. Nach innen runden
+    /// würde den Rahmen bei jedem Mausschritt an der Kante um ein Pixel schmaler machen.
+    /// </summary>
+    private Rect MoveInRotated(Rect requested, Rect valid)
+    {
+        var r = new Rect(Math.Round(requested.X), Math.Round(requested.Y), valid.Width, valid.Height);
+        if (InsideRotated(r)) return r;
+
+        var lo = FurthestInside(valid, requested);
+        var dx = Math.Truncate((requested.X - valid.X) * lo);
+        var dy = Math.Truncate((requested.Y - valid.Y) * lo);
+        var best = new Rect(valid.X + dx, valid.Y + dy, valid.Width, valid.Height);
+        return InsideRotated(best) ? best : valid;
+    }
+
+    /// <summary>Größter Anteil 0 … 1 auf dem Weg von <paramref name="valid"/> zu <paramref name="requested"/>, der im Bild bleibt.</summary>
+    private double FurthestInside(Rect valid, Rect requested)
+    {
+
+        double lo = 0, hi = 1;
+        for (var i = 0; i < 24; i++)
+        {
+            var mid = (lo + hi) / 2;
+            if (InsideRotated(Lerp(valid, requested, mid))) lo = mid;
+            else hi = mid;
+        }
+        return lo;
+    }
+
+    /// <summary>Um die Mitte verkleinern, bis der Rahmen im gedrehten Bild liegt (neues Seitenverhältnis).</summary>
+    private Rect ShrinkIntoRotated(Rect r)
+    {
+        var (x, y, w, h) = RotationGeometry.ShrinkInside(ImageSize.Width, ImageSize.Height, RotationAngle,
+            r.X, r.Y, r.Width, r.Height);
+        return RoundInside(new Rect(x, y, w, h));
+    }
+
+    private static Rect Lerp(Rect a, Rect b, double t) => new(
+        new Point(a.Left + (b.Left - a.Left) * t, a.Top + (b.Top - a.Top) * t),
+        new Point(a.Right + (b.Right - a.Right) * t, a.Bottom + (b.Bottom - a.Bottom) * t));
+
+    /// <summary>Auf ganze Pixel nach innen runden — bleibt so sicher im gedrehten Bild.</summary>
+    private static Rect RoundInside(Rect r)
+    {
+        var x0 = Math.Ceiling(r.X - 1e-6);
+        var y0 = Math.Ceiling(r.Y - 1e-6);
+        var x1 = Math.Floor(r.Right + 1e-6);
+        var y1 = Math.Floor(r.Bottom + 1e-6);
+        return new Rect(x0, y0, Math.Max(1, x1 - x0), Math.Max(1, y1 - y0));
+    }
+
+    // Hilfsgitter beim Drehen: nach der letzten Winkeländerung noch kurz sichtbar
+    private static readonly TimeSpan GridTime = TimeSpan.FromSeconds(1.2);
+    private DateTime _gridUntil;
+    private DispatcherTimer? _gridTimer;
+
+    private void ShowGridBriefly()
+    {
+        _gridUntil = DateTime.UtcNow + GridTime;
+        _gridTimer ??= new DispatcherTimer(GridTime, DispatcherPriority.Background, (_, _) =>
+        {
+            _gridTimer!.Stop();
+            InvalidateVisual();
+        });
+        _gridTimer.Stop();
+        _gridTimer.Start();
+    }
+
+    private static readonly IPen GridPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x60, 255, 255, 255)), 1);
+    private static readonly IPen GridShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x28, 0, 0, 0)), 1);
+    private const double GridSpacing = 32;   // Bildschirmpixel
+
+    /// <summary>Feines, waagerechtes/senkrechtes Gitter über dem gedrehten Bild — zum Ausrichten von Horizont und Kanten.</summary>
+    private void RenderGrid(DrawingContext context, Geometry imageArea)
+    {
+        var area = imageArea.Bounds.Intersect(new Rect(Bounds.Size));
+        if (area.Width <= 0 || area.Height <= 0) return;
+        var c = _imageRect.Center;
+        using (context.PushGeometryClip(imageArea))
+        {
+            var startX = c.X - Math.Ceiling((c.X - area.Left) / GridSpacing) * GridSpacing;
+            for (var x = startX; x <= area.Right; x += GridSpacing)
+            {
+                var px = Math.Round(x) + 0.5;
+                context.DrawLine(GridShadowPen, new Point(px + 1, area.Top), new Point(px + 1, area.Bottom));
+                context.DrawLine(GridPen, new Point(px, area.Top), new Point(px, area.Bottom));
+            }
+            var startY = c.Y - Math.Ceiling((c.Y - area.Top) / GridSpacing) * GridSpacing;
+            for (var y = startY; y <= area.Bottom; y += GridSpacing)
+            {
+                var py = Math.Round(y) + 0.5;
+                context.DrawLine(GridShadowPen, new Point(area.Left, py + 1), new Point(area.Right, py + 1));
+                context.DrawLine(GridPen, new Point(area.Left, py), new Point(area.Right, py));
+            }
+        }
     }
 
     // ------------------------------------------------------------ Zoom
@@ -583,12 +768,15 @@ public sealed class CropView : Control
             }
         }
 
-        if (_imageRect.Contains(p))
+        if (OnImage(p))
         {
             // Neue Auswahl beginnt erst, wenn die Maus sich ein Stück bewegt —
-            // ein reiner Klick hebt die bestehende Auswahl nur auf.
+            // ein reiner Klick hebt die bestehende Auswahl nur auf (beim Drehen bleibt sie).
+            var anchor = ClampToImage(ToImage(p));
+            if (IsRotated && !InsideRotated(new Rect(anchor, new Size(0, 0)))) return;
             _mode = DragMode.Create;
-            _anchorImage = ClampToImage(ToImage(p));
+            _anchorImage = anchor;
+            _selectionBeforeCreate = Selection;
             e.Pointer.Capture(this);
             e.Handled = true;
         }
@@ -611,9 +799,10 @@ public sealed class CropView : Control
                 if (Selection is null && Math.Abs(d.X) < CreateThreshold && Math.Abs(d.Y) < CreateThreshold)
                     return;
                 var current = ClampToImage(ToImage(p));
-                Selection = Round(AspectRatio > 0
+                var wanted = AspectRatio > 0
                     ? ConstrainFromAnchor(_anchorImage, current, AspectRatio)
-                    : new Rect(_anchorImage, current).Normalize());
+                    : new Rect(_anchorImage, current).Normalize();
+                Selection = IsRotated ? KeepInRotated(wanted, new Rect(_anchorImage, new Size(0, 0))) : Round(wanted);
                 Cursor = CursorCross;
                 break;
             }
@@ -623,13 +812,17 @@ public sealed class CropView : Control
                 var ip = ToImage(p);
                 var x = Math.Clamp(ip.X - _moveOffset.X, 0, ImageSize.Width - sel.Width);
                 var y = Math.Clamp(ip.Y - _moveOffset.Y, 0, ImageSize.Height - sel.Height);
-                Selection = Round(new Rect(x, y, sel.Width, sel.Height));
+                var wanted = new Rect(x, y, sel.Width, sel.Height);
+                Selection = IsRotated ? MoveInRotated(wanted, sel) : Round(wanted);
                 break;
             }
 
             case DragMode.Resize:
-                Selection = Round(Resize(ClampToImage(ToImage(p))));
+            {
+                var wanted = Resize(ClampToImage(ToImage(p)));
+                Selection = IsRotated ? KeepInRotated(wanted, _startSelection) : Round(wanted);
                 break;
+            }
 
             case DragMode.Pan:
                 _imageRect = ClampPan(_panStartRect.Translate(p - _pressScreen));
@@ -654,7 +847,7 @@ public sealed class CropView : Control
         {
             var d = e.GetPosition(this) - _pressScreen;
             if (Math.Abs(d.X) < CreateThreshold && Math.Abs(d.Y) < CreateThreshold)
-                Selection = null;
+                Selection = IsRotated ? _selectionBeforeCreate : null;   // beim Drehen gehört der Rahmen dazu
         }
 
         var wasEdit = _mode is not (DragMode.Pan or DragMode.Split);
@@ -699,7 +892,7 @@ public sealed class CropView : Control
             if (edges != Edge.None) { Cursor = CursorFor(edges); return; }
             if (s.Contains(p)) { Cursor = CursorMove; return; }
         }
-        Cursor = _imageRect.Contains(p) ? CursorCross : Cursor.Default;
+        Cursor = OnImage(p) ? CursorCross : Cursor.Default;
     }
 
     // ------------------------------------------------------------ Vergleich
@@ -823,6 +1016,8 @@ public sealed class CropView : Control
 
         if (e.Key == Key.Escape)
         {
+            // Beim Drehen: Drehung verwerfen — der Rahmen gehört zu ihr
+            if (IsRotated) RotationAngle = 0;
             Selection = null;
             e.Handled = true;
         }
@@ -835,7 +1030,8 @@ public sealed class CropView : Control
         {
             var x = Math.Clamp(sel.X + delta.X, 0, ImageSize.Width - sel.Width);
             var y = Math.Clamp(sel.Y + delta.Y, 0, ImageSize.Height - sel.Height);
-            Selection = new Rect(x, y, sel.Width, sel.Height);
+            var wanted = new Rect(x, y, sel.Width, sel.Height);
+            Selection = IsRotated ? MoveInRotated(wanted, sel) : wanted;
             e.Handled = true;
         }
     }
@@ -935,25 +1131,38 @@ public sealed class CropView : Control
     {
         if (_imageRect.Width <= 0) return;
 
-        if (Source is { } bmp)
+        // Frei drehen: Bild, Schachbrett und Bildkante gedreht um die Mitte; Rahmen und Gitter bleiben gerade
+        var rotated = IsRotated && Source is not null;
+        var turn = rotated ? RotationMatrix() : Matrix.Identity;
+        Geometry imageArea = rotated
+            ? new RectangleGeometry(_imageRect) { Transform = new MatrixTransform(turn) }
+            : new RectangleGeometry(_imageRect);
+
+        using (rotated ? context.PushTransform(turn) : (IDisposable?)null)
         {
-            // Schachbrett unter dem Bild: sichtbar nur, wo das Bild transparent ist
-            // (z. B. die Ecken nach einem gerundeten Zuschnitt).
-            context.FillRectangle(CheckerBrush, _imageRect);
-            DrawBitmap(context, bmp);
+            if (Source is { } bmp)
+            {
+                // Schachbrett unter dem Bild: sichtbar nur, wo das Bild transparent ist
+                // (z. B. die Ecken nach einem gerundeten Zuschnitt).
+                context.FillRectangle(CheckerBrush, _imageRect);
+                DrawBitmap(context, bmp);
+            }
+            else
+                context.FillRectangle(PlaceholderBrush, _imageRect);
+
+            context.DrawRectangle(null, ImageEdgePen, _imageRect);
         }
-        else
-            context.FillRectangle(PlaceholderBrush, _imageRect);
 
-        context.DrawRectangle(null, ImageEdgePen, _imageRect);
-
-        if (Source is not null && CompareSource is { } before)
+        // Vorher/Nachher nur ungedreht — die Trennlinie gehört zum geraden Bild
+        if (!rotated && Source is not null && CompareSource is { } before)
             RenderCompare(context, before);
+
+        if (rotated && DateTime.UtcNow < _gridUntil)
+            RenderGrid(context, imageArea);
 
         if (Selection is not { } sel) return;
 
         var s = ToScreen(sel);
-        var r = _imageRect;
 
         // Radius pro Achse: kreisrunde Ecken, bis die kürzere Seite aufgebraucht
         // ist; danach wachsen sie elliptisch weiter bis zur vollen Ellipse.
@@ -972,7 +1181,7 @@ public sealed class CropView : Control
         var shade = new GeometryGroup
         {
             FillRule = FillRule.EvenOdd,
-            Children = { new RectangleGeometry(r), hole },
+            Children = { imageArea, hole },
         };
         context.DrawGeometry(ShadeBrush, null, shade);
 
