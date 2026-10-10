@@ -1076,3 +1076,29 @@ Test oder Nachweis.
   Viereck). Unsichtbares Testfenster: Blatt auf Holztisch 1200 × 800, Ecke unten links per Testmaus auf die
   Blattecke gezogen (Lupe sichtbar) → Ergebnis 528 × 427, Linien waagerecht, alle Ecken Papierfarbe; Strg+Z →
   Original.
+
+## 32. Standardformate (A4 …) und zwei Fallen an kleinen Knöpfen
+
+- **Neu in:** 0.5.32 beta (10.10.2026). **Fehler:** Winkel-Symbol ragte über den runden Knopf (vom Benutzer
+  gesehen, eingeführt 0.5.29 beta `cdcc02f`), behoben 0.5.32 beta.
+- **Funktion:** Knopf mit Blatt-Symbol über der Kette (Größe → Einheit). Menü mit DIN-Formaten, Fotoabzügen und
+  US-Formaten. Auswahl: Einheit mm, Hoch-/Querformat wie das Bild, bei geschlossener Kette ganz hinein
+  (eine Kante füllt das Format, `PaperFormats.Fit`), sonst genau das Format. Ziel des Benutzers: gleich passend
+  drucken, z. B. 65 × 110 mm → A4 = 175,2 × 297 mm. Die DPI bleibt; bei „Nur Metadaten ändern“ ändert sich die
+  DPI statt der Pixel. Muss das Bild dafür größer werden, wird „Nicht vergrößern“ ausgeschaltet – sonst käme
+  ein kleines Bild nie auf das Format. Ein Klick = ein Rückgängig-Schritt (Turns im Verlauf).
+- **Hinweis Druck:** Der Druckdialog lässt standardmäßig 5 mm Rand; ein Bild, das A4 ganz ausfüllt, wird dort
+  um diese Millimeter verkleinert (sonst würde es angeschnitten). Randlos: Rand im Druckdialog auf 0.
+- **Falle 1 – Symbol zu groß:** Der Winkel war als Pfad mit Bogenbefehl `A` gezeichnet; trotz `Width/Height = 18`
+  und `Stretch = Uniform` ragte er über den 38-px-Knopf. Neu mit Kurve `Q` und kompakt um die Mitte (4…20).
+  **Nicht tun:** in den runden Knöpfen Pfade mit `A` (Bogen) – nach Symboländerungen den Knopf vergrößert
+  ansehen.
+- **Falle 2 – „genauso groß wie die Kette“:** Die Kette ist im Einstellungsbereich kleiner als im Grundstil
+  (`.settings ToggleButton.chain`: 34 × 26 statt 42 × 36). Der Format-Knopf braucht dieselbe Regel
+  (`.settings Button.paper`), sonst steht ein größerer Knopf über der Kette. Maße im Testfenster ausgelesen
+  (`Bounds`), nicht geschätzt.
+- **Wo:** `Core/Imaging/PaperFormats.cs`, `Ui/ViewModels/MainViewModel.Size.cs` (`ApplyPaperFormat`),
+  `Views/MainView.axaml` (Größe → Einheit), `Styles/Controls.axaml` (`Button.paper`).
+- **Test/Nachweis:** `PaperFormatTests` (quer/hoch/quadratisch, schlank/breit, Kette offen, Liste eindeutig).
+  Unsichtbares Testfenster: Bild 184 × 312 px bei 72 DPI (64,9 × 110,1 mm) → A4: 175,2 × 297 mm,
+  496 × 842 px, „Nicht vergrößern“ aus; Knöpfe Kette und Format beide 34 × 26.

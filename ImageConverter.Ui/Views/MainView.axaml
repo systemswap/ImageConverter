@@ -359,12 +359,40 @@
                     <HeaderedContentControl Header="{l:T 'GRÖSSE'}">
                         <StackPanel>
                             <!-- Einheit: Pixel oder Millimeter (Druckgröße bei der eingestellten DPI) -->
-                            <Grid Classes="row" ColumnDefinitions="76,*">
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                 <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Einheit'}" />
                                 <ComboBox Classes="tr" Grid.Column="1"
                                           ItemsSource="{Binding SizeUnits}"
                                           SelectedItem="{Binding SelectedSizeUnit}"
                                           ToolTip.Tip="{l:T 'Pixel: Bildgröße in Pixeln. mm: Druckgröße in Millimetern — die Pixel ergeben sich aus der DPI (unten bei Auflösung).'}" />
+                                <!-- Standardformat: genau über der Kette, gleich groß. Symbol: Blatt mit Eselsohr (eigenes). -->
+                                <Button Grid.Column="2" Classes="paper" Margin="8,0,0,0"
+                                        ToolTip.Tip="{l:T 'Standardformat wählen (A4, A5, Fotoabzüge …): Das Bild wird in Millimetern darauf gebracht – Hoch- oder Querformat wie das Bild, bei geschlossener Kette ganz hinein mit gleichem Seitenverhältnis. Die DPI bleibt (für den Druck 300 einstellen); bei „Nur Metadaten ändern“ ändert sich statt der Pixel die DPI.'}">
+                                    <Path Data="M 7,3 L 14,3 L 18,7 L 18,21 L 7,21 Z M 14,3 L 14,7 L 18,7 M 9.5,12 L 15.5,12 M 9.5,15.5 L 15.5,15.5" />
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuItem Header="{l:T 'DIN-Formate'}" IsEnabled="False" />
+                                            <MenuItem Header="A3  ·  297 × 420 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A3" />
+                                            <MenuItem Header="A4  ·  210 × 297 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A4" />
+                                            <MenuItem Header="A5  ·  148 × 210 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A5" />
+                                            <MenuItem Header="A6  ·  105 × 148 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A6" />
+                                            <MenuItem Header="A7  ·  74 × 105 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A7" />
+                                            <MenuItem Header="DIN lang  ·  99 × 210 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="DL" />
+                                            <Separator />
+                                            <MenuItem Header="{l:T 'Fotoabzüge (cm)'}" IsEnabled="False" />
+                                            <MenuItem Header="9 × 13  ·  89 × 127 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="9x13" />
+                                            <MenuItem Header="10 × 15  ·  102 × 152 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="10x15" />
+                                            <MenuItem Header="13 × 18  ·  127 × 178 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="13x18" />
+                                            <MenuItem Header="15 × 20  ·  152 × 203 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="15x20" />
+                                            <MenuItem Header="20 × 30  ·  203 × 305 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="20x30" />
+                                            <MenuItem Header="30 × 45  ·  305 × 457 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="30x45" />
+                                            <Separator />
+                                            <MenuItem Header="{l:T 'US-Formate'}" IsEnabled="False" />
+                                            <MenuItem Header="Letter  ·  216 × 279 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="Letter" />
+                                            <MenuItem Header="Legal  ·  216 × 356 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="Legal" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
                             </Grid>
 
                             <!-- Breite × Höhe mit Kette: zu = proportional, offen = frei -->
@@ -944,13 +972,14 @@
                             <Path Data="M 5,3 A 2,2 0 0 0 3,5 M 9,3 L 10,3 M 14,3 L 15,3 M 19,3 A 2,2 0 0 1 21,5 M 21,9 L 21,10 M 21,14 L 21,15 M 21,19 A 2,2 0 0 1 19,21 M 14,21 L 15,21 M 9,21 L 10,21 M 5,21 A 2,2 0 0 1 3,19 M 3,14 L 3,15 M 3,9 L 3,10" />
                         </ToggleButton>
 
-                        <!-- Frei drehen: Regler unten, der Rahmen passt sich dem Winkel an. Symbol: Winkel mit Bogen (eigenes). -->
+                        <!-- Frei drehen: Regler unten, der Rahmen passt sich dem Winkel an. Symbol: Winkel mit Bogen (eigenes,
+                             Bogen als Kurve statt „A“ — mit A ragte das Symbol über den runden Knopf). -->
                         <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
                                       Margin="104,12,12,12"
                                       IsVisible="{Binding HasImage}"
                                       IsChecked="{Binding RotationTool}"
                                       ToolTip.Tip="{l:T 'Frei drehen: mit dem Regler unten um einen beliebigen Winkel drehen, z. B. den Horizont gerade richten. Der Rahmen zeigt, was übrig bleibt – er passt sich beim Drehen an und lässt sich danach verschieben und verkleinern. „Drehen und zuschneiden“ übernimmt, Esc verwirft.'}">
-                            <Path Data="M 3,20 L 21,20 M 3,20 L 16,5 M 11,20 A 8,8 0 0 0 8.4,14" />
+                            <Path Data="M 4,18 L 20,18 M 4,18 L 14.5,6 M 10,18 Q 10,15.3 7.95,13.5" />
                         </ToggleButton>
 
                         <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"

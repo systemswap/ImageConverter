@@ -527,6 +527,13 @@ public static class English
         ["Macht aus dem Rahmen ein gerades Rechteck – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen; Esc bricht ab."] =
             "Turns the frame into a straight rectangle – one step, Ctrl+Z undoes it. Also with Enter or a double-click inside the frame; Esc cancels.",
         ["Entzerrt"] = "Straightened",
+
+        // Standardformate
+        ["Standardformat wählen (A4, A5, Fotoabzüge …): Das Bild wird in Millimetern darauf gebracht – Hoch- oder Querformat wie das Bild, bei geschlossener Kette ganz hinein mit gleichem Seitenverhältnis. Die DPI bleibt (für den Druck 300 einstellen); bei „Nur Metadaten ändern“ ändert sich statt der Pixel die DPI."] =
+            "Choose a standard format (A4, A5, photo prints …): the image is brought to it in millimetres – portrait or landscape like the image, with the chain closed fully inside with the same aspect ratio. The DPI stays (set 300 for printing); with “Only change metadata” the DPI changes instead of the pixels.",
+        ["DIN-Formate"] = "ISO A sizes",
+        ["Fotoabzüge (cm)"] = "Photo prints (cm)",
+        ["US-Formate"] = "US sizes",
     };
 
     public static IReadOnlyDictionary<string, string> Texts => _texts;

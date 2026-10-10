@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Models;
 
@@ -217,6 +218,34 @@ public partial class MainViewModel
         _isSyncingSize = false;
         OnPropertyChanged(nameof(DpiPurpose));
         NotifySizeDerived();
+    }
+
+    /// <summary>
+    /// Standardformat wählen (A4, Fotoabzug …): Einheit auf mm, Hoch- oder Querformat wie das Bild, bei
+    /// geschlossener Kette ganz hinein (eine Kante füllt das Format), sonst genau das Format. Die DPI bleibt;
+    /// bei „Nur Metadaten ändern“ ändert sich statt der Pixel die DPI. Muss das Bild dafür größer werden, wird
+    /// „Nicht vergrößern“ ausgeschaltet — sonst käme ein kleines Bild nie auf das Format.
+    /// </summary>
+    [RelayCommand]
+    private void ApplyPaperFormat(string key)
+    {
+        if (PaperFormats.Find(key) is not { } format) return;
+
+        var (wMm, hMm, widthLeads) = PaperFormats.Fit(_calc.AspectRatio, format, KeepAspectRatio);
+        SelectedSizeUnit = "mm";
+        if (KeepAspectRatio)
+        {
+            if (widthLeads) FieldWidth = (decimal)wMm;
+            else FieldHeight = (decimal)hMm;
+        }
+        else
+        {
+            FieldWidth = (decimal)wMm;
+            FieldHeight = (decimal)hMm;
+        }
+
+        if (!DpiMetadataOnly && DoNotEnlarge && (TargetWidth > SourceWidth || TargetHeight > SourceHeight))
+            DoNotEnlarge = false;
     }
 
     public string SizeSummary =>
