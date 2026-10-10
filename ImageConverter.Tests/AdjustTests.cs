@@ -347,6 +347,38 @@ public class AdjustTests
         Assert.True(L(target, 60) > L(src, 60) + 0.1f);
     }
 
+    /// <summary>
+    /// Nur Zielwert (ohne Schwellwert, wie in der Praxis benutzt): Der Baum wird zum Ziel hin heller, der Himmel und die
+    /// Himmelsstückchen am Baumrand bleiben (dort ist der Bereich schon so hell wie das Ziel), und nichts wird dunkler.
+    /// </summary>
+    [Fact]
+    public void MatchTarget_Alone_LiftsTree_AndLeavesSkyAndGaps()
+    {
+        const int w = 400, h = 300;
+        var sky = (0.42f, 0.5f, 0.62f);
+        var src = Halves(w, h, (0.07f, 0.13f, 0.05f), sky);
+        void Spot(int x, int y, (float R, float G, float B) c)
+        {
+            for (var dy = 0; dy < 2; dy++)
+            for (var dx = 0; dx < 2; dx++)
+            {
+                var i = ((y + dy) * w + x + dx) * 4;
+                (src[i], src[i + 1], src[i + 2]) = (c.B, c.G, c.R);
+            }
+        }
+        for (var y = 20; y < h - 30; y += 24)
+        {
+            Spot(w / 2 - 6, y, sky);
+            Spot(w / 2 - 6, y + 12, (0.45f, 0.48f, 0.12f));
+        }
+        var r = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
+        int gap = w / 2 - 6, row = 140, sun = 152;
+        Assert.InRange(At(r, w, gap, row), At(src, w, gap, row) - 0.02f, At(src, w, gap, row) + 0.02f);     // Lücke bleibt
+        Assert.True(At(r, w, gap, sun) >= At(src, w, gap, sun) - 0.005f, "Sonnenfleck dunkler geworden");
+        Assert.True(At(r, w, 60, 150) > At(src, w, 60, 150) + 0.05f, "Baum nicht aufgehellt");
+        Assert.InRange(At(r, w, 300, 150), At(src, w, 300, 150) - 0.01f, At(src, w, 300, 150) + 0.01f);     // Himmel bleibt
+    }
+
     /// <summary>Helle Lücken in einem dunklen Bereich (Himmel zwischen Ästen) leuchten nicht auf.</summary>
     [Fact]
     public void MatchLimit_ProtectsBrightGapsInsideDarkRegions()

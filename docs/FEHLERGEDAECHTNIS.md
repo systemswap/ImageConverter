@@ -1423,3 +1423,26 @@ Test oder Nachweis.
   vorbelegtem Rahmen; Entzerren; Export-Größe; Pipette im gedrehten Bild misst Grau; zehnmal Strg+Z → Original;
   Entfernen im gedrehten Bild trifft die Stelle im Pixelbild; KI auf gedrehtes Bild: Ergebnis ungedreht im Pixelbild,
   Vorschau richtig gedreht über dem Bild.
+
+## 43. Luminanz: „Ferne schonen“ und KI-Tiefenkarte wieder entfernt
+
+- **Entschieden in:** 0.5.50 beta (10.10.2026), Rückmeldung des Benutzers zu 0.5.49: Mit Tiefenmodell „greift das zu
+  stark“ — und grundsätzlich: „ich würde gar nicht mit Ferne und Nähe arbeiten, weil es ja auf Luminanz gehen soll, und
+  da kann Sonne auch näher sein (anderer Winkel, Reflexionen mitten im Bild)“.
+- **Warum es weg ist:** Nähe/Ferne ist für eine Helligkeitsanpassung das falsche Merkmal. Den Mittelton (dunstiges Tal),
+  für den „Ferne“ einst gebaut wurde (#36), hält inzwischen der Zielwert (#40) ruhig — am Panorama mit den Werten des
+  Benutzers (Luminanz 173 %, Zielwert 45–52 %, Schwellwert aus) sieht das Tal ohne „Ferne“ fast so natürlich aus wie mit
+  Tiefenkarte, entschieden wird aber rein nach Helligkeit.
+- **Was entfiel:** Regler „Ferne“ samt Hinweis, Dunstkarte (#36, #37, #41), Tiefenkarte (#38: `IDepthEstimator`,
+  `OnnxDepthEstimator`, Modell „Depth Anything V2“ im Katalog und in der Verwaltung, `AiModelKind.Depth`),
+  `MatchDistance` in Einstellungen und Verlauf. Die Einträge #36–#41 bleiben als Geschichte stehen.
+  **Nicht wieder einbauen** ohne neuen Grund: Ferne/Nähe als Auswahl für Luminanz.
+- **Angepasst:** „Was liegt dahinter“ (Durchblicke, #39) richtete sich nach Schwellwert und Ferne — ohne beides gab es
+  mit nur Zielwert keine Durchblick-Erkennung. Jetzt zählen auch Bereiche, die der Zielwert kaum anhebt, als „dahinter“.
+  Beobachtung beim Test: Mit Zielwert werden Mischpixel am Baumrand ohnehin höchstens bis zum Ziel angehoben — die weißen
+  Ränder entstehen dort kaum.
+- **Wo:** `Core/Imaging/LuminanceRegions.cs` (neu geschrieben, schlanker; `TargetGain`, `For(limit, target, luminance)`),
+  `Core/Imaging/Adjustments.cs`, `Core/Ai/AiModels.cs`, `Core/Ai/OnnxModels.cs`; UI: `.Tools.cs`, `.History.cs`,
+  `.Edits.cs`, `.Look.cs`, `.PerImage.cs`, `MainViewModel.cs`, `Ai/AiViewModel.cs`, `Views/MainView.axaml`.
+- **Test/Nachweis:** `AdjustTests.MatchTarget_Alone_LiftsTree_AndLeavesSkyAndGaps`; die übrigen Luminanz-Tests
+  unverändert grün; `LuminanceDistanceTests` mit der Funktion entfallen. Panorama-Vergleich mit und ohne „Ferne“.

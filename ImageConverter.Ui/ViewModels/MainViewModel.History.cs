@@ -50,7 +50,6 @@ public partial class MainViewModel
         WbSample? WbBlack = null,
         WbSample? WbWhite = null,
         double MatchLimit = 100,            // Luminanz: Schwellwert der Bereiche, hellere bleiben
-        double MatchDistance = 0,           // Luminanz: Ferne schonen
         double MatchTarget = 0,             // Luminanz: Zielwert
         double MatchGlobal = 0);            // Luminanz: Gesamt
 
@@ -105,7 +104,6 @@ public partial class MainViewModel
         [nameof(TintHue)] = "Farbton",
         [nameof(MatchLuminance)] = "Luminanz",
         [nameof(MatchLimit)] = "Schwellwert",
-        [nameof(MatchDistance)] = "Ferne",
         [nameof(MatchTarget)] = "Zielwert",
         [nameof(MatchGlobal)] = "Gesamt",
         [nameof(Neutralize)] = "Ausgleichen",
@@ -244,7 +242,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchDistance, MatchTarget, MatchGlobal);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -307,7 +305,6 @@ public partial class MainViewModel
                 TintHue = s.TintHue;
                 MatchLuminance = s.MatchLuminance;
                 MatchLimit = s.MatchLimit;
-                MatchDistance = s.MatchDistance;
                 MatchTarget = s.MatchTarget;
                 MatchGlobal = s.MatchGlobal;
                 Neutralize = s.Neutralize;

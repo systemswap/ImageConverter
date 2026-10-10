@@ -34,16 +34,12 @@ public partial class MainViewModel
     [ObservableProperty] public partial double Highlights { get; set; }
     /// <summary>„Gleiche Farbe“ wie Referenzwerkzeug CS5: Luminanz −100 … +100 (Referenzwerkzeug 1–200 %).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanLimitLuminance), nameof(ShowDepthHint))]
+    [NotifyPropertyChangedFor(nameof(CanLimitLuminance))]
     public partial double MatchLuminance { get; set; }
 
     /// <summary>„Gleiche Farbe“: Schwellwert für Luminanz — bis zu dieser Helligkeit (%) wird aufgehellt, Helleres bleibt; 100 = keine Grenze.</summary>
     [ObservableProperty] public partial double MatchLimit { get; set; } = 100;
 
-    /// <summary>„Gleiche Farbe“: Ferne schonen 0–100 % — dunstige Bereiche (Talgrund, Hänge) werden entsprechend weniger aufgehellt.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowDepthHint))]
-    public partial double MatchDistance { get; set; }
 
     /// <summary>„Gleiche Farbe“: Zielwert 0–90 % — dunkle Bereiche nur bis zu dieser Helligkeit anheben; 0 = aus.</summary>
     [ObservableProperty] public partial double MatchTarget { get; set; }
@@ -51,8 +47,6 @@ public partial class MainViewModel
     /// <summary>„Gleiche Farbe“: Luminanz für das ganze Bild, nach der Bereichs-Luminanz — −100 … +100 (0–200 %).</summary>
     [ObservableProperty] public partial double MatchGlobal { get; set; }
 
-    /// <summary>„Ferne schonen“ in Gebrauch, aber ohne Tiefenkarte (dann rechnet es über den Dunst) — Hinweis zeigen.</summary>
-    public bool ShowDepthHint => CanLimitLuminance && MatchDistance >= 0.5 && !Ai.HasDepthModel;
 
     /// <summary>Der Schwellwert wirkt nur beim Aufhellen.</summary>
     public bool CanLimitLuminance => Math.Round(MatchLuminance) > 0;
@@ -100,7 +94,6 @@ public partial class MainViewModel
     public string HighlightsLabel => Signed(Highlights);
     public string MatchLuminanceLabel => $"{Math.Round(100 + MatchLuminance):0} %";
     public string MatchLimitLabel => MatchLimit >= 99.5 ? Tr.T("aus") : $"{Math.Round(MatchLimit):0} %";
-    public string MatchDistanceLabel => Percent(MatchDistance);
     public string MatchTargetLabel => Percent(MatchTarget);
     public string MatchGlobalLabel => $"{Math.Round(100 + MatchGlobal):0} %";
     public string NeutralizeLabel => Neutralize < 0.5 ? Tr.T("aus") : $"{Math.Round(Neutralize):0} %";
@@ -137,7 +130,6 @@ public partial class MainViewModel
     partial void OnHighlightsChanged(double value) => ToolChanged(nameof(HighlightsLabel));
     partial void OnMatchLuminanceChanged(double value) => ToolChanged(nameof(MatchLuminanceLabel));
     partial void OnMatchLimitChanged(double value) => ToolChanged(nameof(MatchLimitLabel));
-    partial void OnMatchDistanceChanged(double value) => ToolChanged(nameof(MatchDistanceLabel));
     partial void OnMatchTargetChanged(double value) => ToolChanged(nameof(MatchTargetLabel));
     partial void OnMatchGlobalChanged(double value) => ToolChanged(nameof(MatchGlobalLabel));
     partial void OnNeutralizeChanged(double value) => ToolChanged(nameof(NeutralizeLabel));
@@ -165,7 +157,6 @@ public partial class MainViewModel
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
         Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Neutralize = Warmth = Vibrance = Saturation = 0;
         MatchLimit = 100;
-        MatchDistance = 0;
         MatchTarget = 0;
         MatchGlobal = 0;
         NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
@@ -197,7 +188,7 @@ public partial class MainViewModel
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
         Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast),
-        WbNeutral, WbBlack, WbWhite, Round(MatchLimit), Round(MatchDistance), Round(MatchTarget), Round(MatchGlobal)),
+        WbNeutral, WbBlack, WbWhite, Round(MatchLimit), Round(MatchTarget), Round(MatchGlobal)),
         HiddenSteps);   // ausgeblendete Bearbeitungen wirken nicht
 
     internal static Tint TintOf(string? label) =>

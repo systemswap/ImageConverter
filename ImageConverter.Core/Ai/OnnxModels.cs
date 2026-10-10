@@ -53,11 +53,8 @@ public sealed class OnnxSessions : IDisposable
     private static bool IsHelper(string path) =>
         AiModelCatalog.All.Any(m => StaysOpen(m.Kind) && path.EndsWith(m.MainFile, StringComparison.Ordinal));
 
-    /// <summary>
-    /// Kleine Hilfsmodelle und die Tiefenkarte bleiben offen und schließen keine anderen: Die Tiefenkarte rechnet in der
-    /// Vorschau, auch während ein KI-Lauf sein Modell benutzt — es darf ihm nicht unter den Füßen geschlossen werden.
-    /// </summary>
-    private static bool StaysOpen(AiModelKind kind) => kind is AiModelKind.Helper or AiModelKind.Depth;
+    /// <summary>Kleine Hilfsmodelle bleiben offen und schließen keine anderen.</summary>
+    private static bool StaysOpen(AiModelKind kind) => kind is AiModelKind.Helper;
 
     public void Dispose()
     {

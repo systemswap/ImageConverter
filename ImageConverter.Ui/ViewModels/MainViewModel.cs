@@ -54,10 +54,6 @@ public partial class MainViewModel : ViewModelBase
         // KI-Modul (abtrennbar, siehe Ordner Ai/)
         Ai = new AiViewModel(this);
         Retouch = new RetouchViewModel(this, Ai);
-        Ai.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(AiViewModel.HasDepthModel)) OnPropertyChanged(nameof(ShowDepthHint));
-        };
 
         // Sprachwechsel: berechnete Texte (Hinweise, Druckgröße …) neu abfragen lassen
         Tr.Instance.PropertyChanged += (_, _) => RefreshTexts();

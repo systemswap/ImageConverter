@@ -43,10 +43,9 @@ public sealed record Adjustments(
     WbSample? WbNeutral = null,
     WbSample? WbBlack = null,
     WbSample? WbWhite = null,
-    // Gleiche Farbe, Luminanz: Schwellwert (Prozent Helligkeit der Bereiche) — hellere Bereiche bleiben, 100 = keine Grenze;
-    // Ferne schonen (0–100 %) — dunstige Bereiche werden entsprechend weniger aufgehellt. Beides nur beim Aufhellen.
+    // Gleiche Farbe, Luminanz: Schwellwert (Prozent Helligkeit der Bereiche) — hellere Bereiche bleiben, 100 = keine
+    // Grenze; nur beim Aufhellen. („Ferne schonen“ 0.5.38–0.5.49 ist entfallen: Luminanz entscheidet nach Helligkeit.)
     double MatchLimit = 100,
-    double MatchDistance = 0,
     // Luminanz: Ziel (Prozent Helligkeit) — dunkle Bereiche werden nur bis hierher angehoben (je Bereich, höchstens um
     // den Luminanz-Faktor); 0 = aus, alles im selben Verhältnis wie in Referenzwerkzeug
     double MatchTarget = 0,
@@ -69,7 +68,6 @@ public sealed record Adjustments(
         {
             var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
             if (MatchLuminance <= 0 || MatchLimit >= 100) n = n with { MatchLimit = 100 };   // wirkt nur beim Aufhellen
-            if (MatchLuminance <= 0 || MatchDistance <= 0) n = n with { MatchDistance = 0 };
             if (MatchLuminance <= 0 || MatchTarget <= 0) n = n with { MatchTarget = 0 };
             return Dehaze == 0 ? n with { DehazePasses = None.DehazePasses, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
                 DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness, DehazeDeband = None.DehazeDeband, DehazeCast = None.DehazeCast } : n;
@@ -84,14 +82,12 @@ public sealed record Adjustments(
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
         DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband, DehazeCast = Normalized.DehazeCast,
         WbNeutral = WbNeutral, WbBlack = WbBlack, WbWhite = WbWhite,
-        // Nur ob die Bereichskarten gebraucht werden (und ob mit Tiefenkarte), nicht die Reglerstände — die wirken
-        // erst in Apply (flüssig). Wird das Tiefenmodell geladen oder gelöscht, ändert sich der Schlüssel → neu rechnen.
+        // Nur ob die Bereichskarten gebraucht werden, nicht die Reglerstände — die wirken erst in Apply (flüssig)
         MatchLimit = NeedsRegions ? 0 : 100,
-        MatchDistance = NeedsRegions && LuminanceRegions.Depth is not null ? 1 : 0,
     };
 
     /// <summary>Braucht Luminanz die Bereichskarten (<see cref="LuminanceRegions"/>)?</summary>
-    public bool NeedsRegions => Normalized is { MatchLuminance: > 0 } n && (n.MatchLimit < 100 || n.MatchDistance > 0 || n.MatchTarget > 0);
+    public bool NeedsRegions => Normalized is { MatchLuminance: > 0 } n && (n.MatchLimit < 100 || n.MatchTarget > 0);
 
     /// <summary>Wird ein Weißabgleich gerechnet?</summary>
     public bool HasWhiteBalance => WhiteBalance.IsActive(WbNeutral, WbBlack, WbWhite);
@@ -177,7 +173,6 @@ public static class Adjust
         // Weitere (Dunst, Licht, Farbe) arbeitet schon mit den richtigen Farben
         if (a.HasWhiteBalance)
             source = WhiteBalance.Apply(px, width, height, a.WbNeutral, a.WbBlack, a.WbWhite);
-        var beforeDehaze = source;   // für die Dunstkarte von „Ferne“ — dort zeigt der Dunst noch, was weit weg ist
         if (dehaze != 0)
         {
             // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
@@ -242,7 +237,7 @@ public static class Adjust
         }
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
         return new Prepared(source, ToneMap(source, width, height, a),
-            a.NeedsRegions ? LuminanceRegions.Compute(source, width, height, beforeDehaze) : null);
+            a.NeedsRegions ? LuminanceRegions.Compute(source, width, height) : null);
     }
 
     /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>
@@ -281,9 +276,8 @@ public static class Adjust
         // heller macht jetzt „Gesamt“): sinnvoll mit Zielwert, der Faktor ist dann nur die Obergrenze für tiefe Schatten
         var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 2));
         var limit = (float)Math.Clamp(a.MatchLimit / 100, 0.05, 1);
-        var distance = (float)Math.Clamp(a.MatchDistance / 100, 0, 1);
         var target = a.MatchTarget > 0 ? (float)Math.Clamp(a.MatchTarget / 100, 0.05, 1) : 0f;
-        if (luminance <= 1 || !a.NeedsRegions) regions = null;   // Schwellwert und Ferne nur beim Aufhellen
+        if (luminance <= 1 || !a.NeedsRegions) regions = null;   // Schwellwert und Zielwert nur beim Aufhellen
         // Gleiche Farbe, Ausgleichen (0–100 %) und Farbe (kühl − … + warm): als Verschiebung in Oklab
         var neutralize = (float)Math.Clamp(a.Neutralize / 100, 0, 1);
         var (castA, castB) = neutralize > 0 ? ColourCast(bgra, width, height) : (0f, 0f);
@@ -313,7 +307,7 @@ public static class Adjust
         // (Laplace-Pyramide, wie die Belichtungsverschmelzung nach Mertens bzw. in Googles HDR+) — grobe Helligkeit
         // über große Flächen, Kanten über wenige Pixel. Pixelweise gemischt blieb an weichen Maskenrändern ein
         // heller Saum (0.5.38).
-        var lifted = regions is not null ? LiftByRegions(Toned, width, height, luminance, regions, limit, distance, target) : null;
+        var lifted = regions is not null ? LiftByRegions(Toned, width, height, luminance, regions, limit, target) : null;
 
         Parallel.For(0, height, y =>
         {
@@ -383,14 +377,14 @@ public static class Adjust
     /// <param name="target">Ziel als Oklab-L (0 = aus): Faktor je Bereich so, dass er bis hierher angehoben wird —
     /// höchstens <paramref name="luminance"/>, nie unter 1.</param>
     private static float[] LiftByRegions(Func<int, (float R, float G, float B)> pixel, int width, int height,
-        float luminance, LuminanceRegions regions, float limit, float distance, float target)
+        float luminance, LuminanceRegions regions, float limit, float target)
     {
         var n = width * height;
         var plain = PixelPool.Rent(n);
         var bright = PixelPool.Rent(n);
         var weight = PixelPool.Rent(n);
         var cap = PixelPool.Rent(n);
-        var weighting = regions.For(limit, distance);
+        var weighting = regions.For(limit, target, luminance);
         Parallel.For(0, height, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
@@ -399,18 +393,18 @@ public static class Adjust
                 var (l, oa, ob) = Oklab.FromSrgb(r, g, b);
                 // Ziel: je Bereich (nicht je Pixel — die Struktur im Baum bleibt) nur so stark, wie es bis zum Ziel braucht;
                 // ein dunkler Baum bekommt viel, eine Wiese im Mittelton kaum etwas
-                var gain = target > 0 ? Math.Clamp(target / Math.Max(regions.AreaBrightness(x, y), 0.02f), 1, luminance) : luminance;
+                var gain = LuminanceRegions.TargetGain(regions.AreaBrightness(x, y), target, luminance);
                 var lift = l > 1e-4f ? Shoulder(l * gain) : l;
-                var (all, byEdges) = weighting.Weight(x, y, l, oa, ob);
+                var weightHere = weighting.Weight(x, y, l, oa, ob);
                 plain[p] = l;
                 bright[p] = lift;
-                weight[p] = all;
-                cap[p] = l + (lift - l) * byEdges;
+                weight[p] = weightHere;
+                cap[p] = l + (lift - l) * weightHere;
             }
         });
         // Die Pyramide mischt grobe Helligkeit großflächig — auch über echte Kanten hinweg (Himmel neben dem Baum würde
-        // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Schwellwert, Schutz und Tiefenkarte folgen
-        // echten Kanten und sind deshalb die Obergrenze; frei weich gemischt wird nur „Ferne“ über den Dunst.
+        // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Die Gewichtung je Pixel ist deshalb die
+        // Obergrenze; die Pyramide glättet nur nach unten (weiche Übergänge ohne Saum).
         var blended = PyramidBlend.Blend(plain, bright, weight, width, height);
         Parallel.For(0, n, p => blended[p] = Math.Clamp(blended[p], plain[p], Math.Max(plain[p], cap[p])));
         PixelPool.Return(plain);
