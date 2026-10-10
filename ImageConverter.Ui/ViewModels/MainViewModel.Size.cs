@@ -105,6 +105,30 @@ public partial class MainViewModel
         NotifySizeDerived();
     }
 
+    /// <summary>
+    /// Format des fertigen Bildes geändert, ohne neuen Bildstand (eine Stufe des Ausrichtens ein/aus): Die Quelle folgt,
+    /// das Ziel nur, wenn es noch dem Bild entsprach — eine eingestellte Größe bleibt. Werkzeuge bleiben offen.
+    /// </summary>
+    private void FollowSourceSize(int width, int height)
+    {
+        if (width == SourceWidth && height == SourceHeight) return;
+        var untouched = TargetWidth == SourceWidth && TargetHeight == SourceHeight;
+        _isSyncingSize = true;
+        SourceWidth = width;
+        SourceHeight = height;
+        if (untouched)
+        {
+            TargetWidth = width;
+            TargetHeight = height;
+            WidthIsLeading = true;
+        }
+        _isSyncingSize = false;
+        _calc = new ResizeCalculator(width, height);
+        if (untouched) UpdatePrintSizeFromPixels();
+        OnPropertyChanged(nameof(AspectRatio));
+        NotifySizeDerived();
+    }
+
     private void UpdatePrintSizeFromPixels()
     {
         if (Dpi <= 0) return;

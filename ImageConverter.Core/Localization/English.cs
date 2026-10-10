@@ -480,7 +480,7 @@ public static class English
         ["Vergrößert — lässt sich nicht ausschalten, nur mit Rückgängig zurücknehmen."] = "Upscaled — can't be switched off, only taken back with Undo.",
         ["Danach wurde das Bild festgeschrieben — nur mit Rückgängig zurückzunehmen."] = "The image was made permanent afterwards — only Undo can take this back.",
         ["Das Bild wurde geändert — offenes Ergebnis verworfen, bitte neu berechnen."] = "The image was changed — open result discarded, please compute again.",
-        ["Ausgeschaltete Funktionen fehlen in „Nachher“ und im Export. Drehen und Zuschnitt stehen nicht in der Liste — dafür Rückgängig."] = "Switched-off functions are missing from “After” and from the export. Rotating and cropping are not in the list — use Undo for those.",
+        ["Ausgeschaltete Funktionen fehlen in „Nachher“ und im Export. Entzerren, Gerade richten, Zuschnitt und Drehen rechnen immer aus dem Original – jede Stufe lässt sich einzeln ausschalten."] = "Switched-off functions are missing from “After” and from the export. Straightening, levelling, cropping and rotating are always computed from the original – each step can be switched off on its own.",
         ["Bearbeitungen: alle Funktionen, die an diesem Bild wirken. Mit dem Auge eine Funktion aus „Nachher“ und dem Export ausschalten — wie in Referenzwerkzeug."] = "Edits: all functions that act on this image. Use the eye to switch a function off for “After” and the export — like in Referenzwerkzeug.",
         ["Nur die eingeschalteten Funktionen festschreiben: ausgeschaltete Regler gehen auf null, eine ausgeschaltete KI oder Haut & Details kommen aus dem Bild. Rückgängig mit Strg+Z."] = "Make only the switched-on functions permanent: switched-off sliders go to zero, a switched-off AI or skin details are taken out of the image. Undo with Ctrl+Z.",
         ["KI rechnet — Fortschritt unten in der Vorschau."] = "AI is computing — progress at the bottom of the preview.",
@@ -567,7 +567,10 @@ public static class English
         ["Drehen und zuschneiden"] = "Rotate and crop",
         ["Dreht das Bild und schneidet es auf den Rahmen zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen."] =
             "Rotates the image and crops it to the frame – one step, Ctrl+Z undoes it. Also with Enter or a double-click inside the frame.",
-        ["Gedreht und zugeschnitten"] = "Rotated and cropped",
+        ["Gedreht"] = "Rotated",
+        ["Gerade gerichtet"] = "Levelled",
+        ["gespiegelt"] = "flipped",
+        ["{0} × {1} px · runde Ecken"] = "{0} × {1} px · rounded corners",
 
         // Entzerren
         ["Entzerren: die vier Ecken des Rahmens auf die Ecken von etwas legen, das in Wirklichkeit rechteckig ist – Blatt, Bild an der Wand, Fenster, Hausfront. Daraus wird ein gerades Rechteck, genau der Inhalt des Rahmens. Beim Ziehen hilft eine Lupe; Pfeiltasten verschieben die zuletzt gezogene Ecke um 1 px (Umschalt: 10 px)."] =

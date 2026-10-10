@@ -164,7 +164,7 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()
     {
-        if (ShownDocument is not { } doc || _fileIndex < 0) return;   // ohne Ausgeblendetes (KI …)
+        if (_fileIndex < 0 || await Task.Run(() => ResultDocument) is not { } doc) return;   // ohne Ausgeblendetes (KI …), mit Ausrichten
 
         CommitPendingSettings();
 
@@ -254,7 +254,7 @@ public partial class MainViewModel
             // Nacheinander, nie gleichzeitig: alle teilen sich die verkleinerte Fassung
             try { await previous; } catch { /* vorige Schätzung abgebrochen */ }
             await Task.Delay(350, ct);
-            if (_history is not { } h || ShownDocument is not { } doc) return;
+            if (_history is not { } h || await Task.Run(() => ResultDocument) is not { } doc) return;
 
             var (tw, th) = EffectiveTarget();
             var options = BuildExportOptions(tw, th);

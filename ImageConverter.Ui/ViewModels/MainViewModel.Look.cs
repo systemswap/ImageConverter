@@ -57,7 +57,9 @@ public partial class MainViewModel
         get
         {
             var (tw, th) = EffectiveTarget();
-            return _history?.Current is { } doc && tw == (int)doc.Width && th == (int)doc.Height;
+            // Größe des fertigen Bildes (mit Ausrichten) — und nur ohne Ausrichten: sonst müsste das Zwischenergebnis
+            // in voller Größe gedreht/entzerrt werden
+            return _history is { } h && h.Recipe.IsNone && tw == SourceWidth && th == SourceHeight;
         }
     }
 

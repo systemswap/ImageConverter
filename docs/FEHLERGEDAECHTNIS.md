@@ -1375,3 +1375,51 @@ Test oder Nachweis.
   mit `hazeFrom`, `Shrink`).
 - **Test/Nachweis:** `LuminanceDistanceTests.Distance_UsesHazeFromBeforeDehaze` (enthält die Gegenprobe: ohne
   Vorher-Bild wird die Ferne aufgehellt).
+
+## 42. Ausrichten als Rezept (Entzerren, Gerade richten, Zuschnitt, Drehen/Spiegeln)
+
+- **Neu in:** 0.5.48 beta (Kern) und 0.5.49 beta (Einbau), 10.10.2026. Wunsch des Benutzers (Ganzes Ausrichten-Rezept):
+  Entzerren und Drehen fehlten in der Liste „Bearbeitungen“; dreimal 90° sollte als 270° zurückzunehmen sein, freies
+  Drehen ist die Feinkorrektur.
+- **Vorher:** Jede Geometrie-Aktion rechnete sofort in die Pixel (ein Bild je Schritt im Verlauf). Rückgängig ging,
+  aber keine Stufe ließ sich nachträglich ausschalten, und eine KI oder ein Entfernen danach ließ sich nicht mehr
+  „entdrehen“.
+- **Jetzt:** Je Bild ein `GeometryRecipe` im Bildverlauf (`EditHistory.Recipe`, **nicht** in den Einstellungen — ein
+  Zuschnitt gilt nie für alle Bilder). Das Pixelbild (`EditHistory.Current`: Original + KI + Entfernen) bleibt ungedreht
+  und unbeschnitten; angezeigt, exportiert und gedruckt wird Pixelbild + Rezept (`DocumentFor` = `WithGeometry(PixelsFor …)`).
+  Feste Reihenfolge Entzerren → Gerade richten (mit Zuschnitt) → Drehen/Spiegeln, egal in welcher Reihenfolge man die
+  Werkzeuge benutzt. Koordinaten relativ (Viereck zum Pixelbild, Zuschnitt zum entzerrten Bild): eine spätere Stufe
+  bleibt ungefähr an ihrer Stelle, wenn eine frühere ausgeschaltet wird, und das Rezept passt auf verkleinerte Fassungen.
+- **Liste:** je Stufe eine Zeile mit Auge („Entzerrt“, „Gerade gerichtet“, „Zuschnitt“, „Gedreht 270° · gespiegelt“ —
+  netto, ein Auge für alle Vierteldrehungen). „Neu anwenden“ entfernt ausgeschaltete Stufen aus dem Rezept.
+  Rückgängig weiter je Aktion (Snapshot mit `Recipe` davor).
+- **Werkzeuge:** „Frei drehen“ zeigt das Bild ohne freie Drehung und Zuschnitt, Winkel und Rahmen vorbelegt (ein
+  Zuschnitt lässt sich so wieder erweitern) und ersetzt beide; „Entzerren“ zeigt das Pixelbild nur gedreht/gespiegelt
+  mit dem bisherigen Viereck; ein Zuschnitt im fertigen Bild schneidet enger — ist der Zuschnitt ausgeschaltet, ersetzt
+  er ihn. Drehen/Spiegeln: `Rotated`/`Flipped` verknüpfen netto (nach dem Spiegeln dreht „rechts“ intern links herum).
+- **Umrechnen:** Pipette (Weißabgleich) und Pinsel (Entfernen, samt Radius) rechnen vom angezeigten Bild ins
+  Pixelbild (`ShownToPixels`, `ShownLengthToPixels`). Die KI bekommt das Pixelbild **nur gedreht/gespiegelt** (Gesichter
+  aufrecht — liegende Gesichter findet die Erkennung schlecht), das Ergebnis wird exakt zurückgedreht; Zwischenstände und
+  Vorschau werden für die Anzeige zurückgedreht und mit dem Rezept gezeigt (`ShowWithGeometry`). Export, Größe und Druck
+  nehmen immer das fertige Bild (`ResultDocument`), nie die Ansicht eines Werkzeugs (`ShownDocument`).
+- **Fallen:** (1) `ApplySourceSize` setzt Werkzeuge zurück — beim Umschalten in die Ansicht eines Werkzeugs darf es nicht
+  laufen (sonst schließt sich das Werkzeug sofort); Ein-/Ausschalten einer Stufe passt nur Quelle (und unveränderte
+  Zielgröße) an (`FollowSourceSize`). (2) Fassungen werden im Hintergrund gerechnet (Entzerren großer Bilder dauert);
+  verdrängte erst freigeben, wenn die Vorschau steht (`EmptyGeometryTrash`). (3) „Neu anwenden“ prüfte „angezeigtes Bild
+  ≠ Pixelbild“ — mit Rezept immer wahr; jetzt wird das Pixelbild mit/ohne KI verglichen.
+- **Bewusst so:** Beim Zuschneiden mit ausgeschaltetem Gerade-richten fällt die (unsichtbare) Drehung weg — der neue
+  Rahmen gilt im ungedrehten Bild. „Frei drehen“ setzt den Rahmen bei jeder Winkeländerung neu (wie bisher, vom Benutzer
+  abgenommen). Speicher: höchstens drei Fassungen je Bild, andere Bilder beim Wechsel freigegeben.
+- **Wo:** `Core/Imaging/GeometryRecipe.cs`; `Ui/ViewModels/MainViewModel.Editing.cs` (`EditHistory`, `Snapshot`,
+  `CropToSelection`, `CommitRecipeAsync`, `Orient`, Werkzeug-Ansichten, `RestoreAsync`, `ShowCurrentAsync`),
+  `.Edits.cs` (`EditSteps.Straighten/Level/CropStep/Orient`, `DocumentFor`, `WithGeometry`, Zeilen, „Neu anwenden“,
+  KI-Hilfen), `.Preview.cs` (Vorher mit Rezept), `.Size.cs` (`FollowSourceSize`), `.WhiteBalance.cs`, `.Export.cs`,
+  `.PerImage.cs`, `.Look.cs`; `Ui/Ai/AiViewModel.cs`, `Ui/Ai/RetouchViewModel.cs`.
+- **Test/Nachweis:** `GeometryRecipeTests` (dreimal rechts = 270° und pixelgleich wie nacheinander gedreht; Drehen/
+  Spiegeln in beliebiger Reihenfolge pixelgleich; Umrechnen hin und zurück; Umrechnen trifft einen markierten Punkt im
+  gerechneten Bild; Stufe aus behält die anderen; Gerade richten ohne Zuschnitt ohne leere Ecken — Gegenprobe ohne
+  automatischen Rahmen rot; Zuschnitt im gedrehten Bild; Werkzeug-Ansichten hin und zurück, auch gespiegelt).
+  Unsichtbares Testfenster: 3× rechts → „Gedreht 270°“, Strg+Z → 180°; Zuschnitt, Auge aus/an mit Größe; Frei drehen mit
+  vorbelegtem Rahmen; Entzerren; Export-Größe; Pipette im gedrehten Bild misst Grau; zehnmal Strg+Z → Original;
+  Entfernen im gedrehten Bild trifft die Stelle im Pixelbild; KI auf gedrehtes Bild: Ergebnis ungedreht im Pixelbild,
+  Vorschau richtig gedreht über dem Bild.

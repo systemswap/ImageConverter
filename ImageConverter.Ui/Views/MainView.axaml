@@ -1217,7 +1217,7 @@
                                         Content="{l:T 'Neu anwenden'}" Command="{Binding ApplySelectionCommand}"
                                         ToolTip.Tip="{l:T 'Nur die eingeschalteten Funktionen festschreiben: ausgeschaltete Regler gehen auf null, eine ausgeschaltete KI oder Haut &amp; Details kommen aus dem Bild. Rückgängig mit Strg+Z.'}" />
                                 <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding HasEditRows}"
-                                           Text="{l:T 'Ausgeschaltete Funktionen fehlen in „Nachher“ und im Export. Drehen und Zuschnitt stehen nicht in der Liste — dafür Rückgängig.'}" />
+                                           Text="{l:T 'Ausgeschaltete Funktionen fehlen in „Nachher“ und im Export. Entzerren, Gerade richten, Zuschnitt und Drehen rechnen immer aus dem Original – jede Stufe lässt sich einzeln ausschalten.'}" />
                             </StackPanel>
                         </Border>
 

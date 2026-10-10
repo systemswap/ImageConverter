@@ -165,7 +165,8 @@ public partial class RetouchViewModel : ViewModelBase
 
         var again = _last is { } last && ReferenceEquals(current, last.Result);
         var start = again ? _last!.Value.Base : current;
-        var strokes = Strokes;
+        // Gemalt wurde im angezeigten Bild (gedreht, zugeschnitten …) — gefüllt wird im Pixelbild
+        var strokes = Strokes.Select(ToPixels).ToArray();
         using var cts = new CancellationTokenSource();
         _runCts = cts;
         IsRunning = true;
@@ -208,6 +209,14 @@ public partial class RetouchViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void Cancel() => _runCts?.Cancel();
 
+    /// <summary>Strich aus dem angezeigten Bild ins Pixelbild — Punkte und Radius (beim Entzerren je Stelle verschieden).</summary>
+    private BrushStroke ToPixels(BrushStroke s)
+    {
+        var points = s.Points.Select(p => _main.ShownToPixels(p.X, p.Y)).ToArray();
+        var radius = s.Points.Count == 0 ? s.Radius : s.Points.Average(p => _main.ShownLengthToPixels(p.X, p.Y, s.Radius));
+        return new BrushStroke(points, radius);
+    }
+
     // ------------------------------------------------------------ Bildwechsel
 
     private void ClearAll()
@@ -233,11 +242,12 @@ public partial class RetouchViewModel : ViewModelBase
                 // anderes Bild: die Markierung gehört zum vorigen
                 if (!IsRunning) ClearAll();
                 break;
-            case nameof(MainViewModel.FullBitmap):
-                // Bildgröße geändert (Zuschnitt, Drehen, Rückgängig davon): die Markierung passt nicht mehr
-                if (!IsRunning && _main.CurrentImage is { } img && _size is { } size && (size.W != (int)img.Width || size.H != (int)img.Height))
-                    ClearAll();
-                _size = _main.CurrentImage is { } now ? ((int)now.Width, (int)now.Height) : null;
+            case nameof(MainViewModel.DocumentSize):
+                // Angezeigtes Format geändert (Zuschnitt, Drehen, Werkzeug-Ansicht, Rückgängig davon): die Markierung
+                // liegt im angezeigten Bild und passt nicht mehr
+                var now = (_main.DocumentSize.Width, _main.DocumentSize.Height);
+                if (!IsRunning && _size is { } size && size != now) ClearAll();
+                _size = now;
                 break;
         }
     }

@@ -91,7 +91,9 @@ public partial class MainViewModel
     {
         if (ActivePipette is not { } kind || CurrentImage is not { } image) return;
 
-        var sample = WhiteBalance.Measure(image, at.X, at.Y, kind);
+        // Geklickt wird im angezeigten Bild (gedreht, zugeschnitten …), gemessen im Pixelbild
+        var (px, py) = ShownToPixels(at.X, at.Y);
+        var sample = WhiteBalance.Measure(image, px, py, kind);
         if (sample is not { } s)
         {
             _wbProblem = Tr.T("Diese Stelle ist ausgefressen (reines Weiß, keine Farbe mehr) – bitte eine etwas dunklere Stelle wählen.");

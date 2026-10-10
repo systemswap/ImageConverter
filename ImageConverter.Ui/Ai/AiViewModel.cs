@@ -166,8 +166,10 @@ public partial class AiViewModel : ViewModelBase
     /// <param name="LookAfter">Reglerstand nach dem Übernehmen; null = Regler bleiben.</param>
     /// <param name="LookOnTop">Die Einstellungen wirken danach auf das Ergebnis — die Vorschau zeigt sie mit.</param>
     /// <param name="Current">Das aktuelle Bild beim Rechnen — „Übernehmen“ nur, solange es noch das aktuelle ist.</param>
+    /// <param name="Turns">Vierteldrehungen, mit denen <paramref name="Input"/> gedreht ist (Gesichter aufrecht, wie angezeigt).</param>
+    /// <param name="Flip">… und ob gespiegelt. Das Ergebnis wird damit vor dem Übernehmen zurückgedreht.</param>
     private sealed record RunSetup(MagickImage Base, MagickImage Input, MainViewModel.Look? Baked,
-        MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current);
+        MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current, int Turns = 0, bool Flip = false);
 
     /// <summary>
     /// Ergebnis des Modells, noch nicht übernommen: Stärke und Hautstruktur mischen es live neu
@@ -352,12 +354,19 @@ public partial class AiViewModel : ViewModelBase
             if (f > 0) Activity($"{f * 100:0} %{Remaining(clock.Elapsed, f)}", f * 100, cancel: true);
         });
 
-        void Preview(AiPreviewFrame frame) => Dispatcher.UIThread.Post(() =>
+        // Zwischenstände sind im gedrehten Pixelbild — für die Anzeige zurückdrehen und mit dem Rezept zeigen
+        var geometry = _main.ShownGeometry;
+        var (runTurns, runFlip) = setup is { } open ? (open.Turns, open.Flip) : _main.AiOrientation;
+        void Preview(AiPreviewFrame frame)
         {
-            // nur zeigen, solange noch dasselbe Bild angezeigt wird
-            if (IsRunning && _main.CurrentImagePath == path)
-                _main.OverrideBitmap = BitmapOps.FromBgra(frame.Bgra, frame.Width, frame.Height);
-        });
+            var shownFrame = MainViewModel.ShowWithGeometry(frame, runTurns, runFlip, geometry.Recipe, geometry.Stages);
+            Dispatcher.UIThread.Post(() =>
+            {
+                // nur zeigen, solange noch dasselbe Bild angezeigt wird
+                if (IsRunning && _main.CurrentImagePath == path)
+                    _main.OverrideBitmap = BitmapOps.FromBgra(shownFrame.Bgra, shownFrame.Width, shownFrame.Height);
+            });
+        }
 
         MagickImage? rendered = null;   // eigens gerechnetes Eingangsbild — gehört uns, bis es ein Lauf übernimmt
         try
@@ -374,13 +383,22 @@ public partial class AiViewModel : ViewModelBase
                         Progress = p.Fraction * 100;
                         Activity(p.Step, p.Fraction * 100, cancel: true);
                     }), cts.Token);
-                    rendered = await Task.Run(() => MainViewModel.RenderLook(from, apply, plan), cts.Token);
-                    setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false, current);
+                    rendered = await Task.Run(() =>
+                    {
+                        var looked = MainViewModel.RenderLook(from, apply, plan);
+                        if (MainViewModel.Orient(looked, runTurns, runFlip) is not { } turned) return looked;
+                        looked.Dispose();
+                        return turned;
+                    }, cts.Token);
+                    setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false, current, runTurns, runFlip);
                 }
                 else
                 {
-                    // KI zuerst; ein eingerechneter Look des letzten Schritts kommt beim Übernehmen in die Regler zurück
-                    setup = new RunSetup(start.Base, start.Base, null, start.Restore, LookOnTop: !lookFirst, current);
+                    // KI zuerst; ein eingerechneter Look des letzten Schritts kommt beim Übernehmen in die Regler zurück.
+                    // Das Modell bekommt das Bild so gedreht, wie es angezeigt wird (eigenes Bild, gehört dem Lauf).
+                    var from = start.Base;
+                    rendered = await Task.Run(() => MainViewModel.Orient(from, runTurns, runFlip), cts.Token);
+                    setup = new RunSetup(start.Base, rendered ?? start.Base, null, start.Restore, LookOnTop: !lookFirst, current, runTurns, runFlip);
                 }
                 image = setup.Input;
             }
@@ -504,10 +522,15 @@ public partial class AiViewModel : ViewModelBase
                 _previewDirty = false;
                 if (_run is not { } run || _setup is not { } setup) return;
                 var (blend, look, map) = (CurrentBlend, PreviewLook(setup), ShowMap ? run as FaceRun : null);
-                // wie die normale Vorschau: ohne Look und Größenänderung das Bild selbst, sonst verkleinert
-                var size = look is not { IsNone: false } && _main.TargetIsImageSize
+                var geometry = _main.ShownGeometry;
+                var shaped = (geometry.Recipe.Present & geometry.Stages) != 0 || setup.Turns != 0 || setup.Flip;
+                // wie die normale Vorschau: ohne Look und Größenänderung das Bild selbst, sonst verkleinert; mit Ausrichten
+                // verkleinert im Format des Pixelbilds (gedreht/zugeschnitten wird danach)
+                var size = !shaped && look is not { IsNone: false } && _main.TargetIsImageSize
                     ? new AiPreviewSize(run.Width, run.Height)
-                    : _main.PreviewSize();
+                    : shaped
+                        ? AiPreviewSize.Fit(run.Width, run.Height, Math.Max(_main.PreviewSize().Width, _main.PreviewSize().Height))
+                        : _main.PreviewSize();
 
                 // Einstellungen über dem Ergebnis (Dunst in mehreren Durchläufen …): Schritt im Label zeigen
                 using var cts = _previewCts = new CancellationTokenSource();
@@ -527,9 +550,10 @@ public partial class AiViewModel : ViewModelBase
                         Progress = 0;
                         IsRenderingLook = true;
                     }
+                    var (turns, flip) = (setup.Turns, setup.Flip);
                     shown = await Task.Run(() => map is not null
-                        ? Render(map.Map(blend, size), null, null)
-                        : Render(run.Preview(blend, size), look, plan), cts.Token);
+                        ? Render(MainViewModel.ShowWithGeometry(map.Map(blend, size), turns, flip, geometry.Recipe, geometry.Stages), null, null)
+                        : Render(MainViewModel.ShowWithGeometry(run.Preview(blend, size), turns, flip, geometry.Recipe, geometry.Stages), look, plan), cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -552,7 +576,10 @@ public partial class AiViewModel : ViewModelBase
                 if (_beforeOf is not { } b || !ReferenceEquals(b.Run, run) || b.Size != size)
                 {
                     var origin = setup.Base;
-                    var before = await Task.Run(() => Original(origin, size));
+                    // Vorher ist das ungedrehte Pixelbild: Größe passend zur gedrehten Vorschau, dann mit Rezept zeigen
+                    var baseSize = setup.Turns % 2 == 1 ? size with { Width = size.Height, Height = size.Width } : size;
+                    var before = await Task.Run(() =>
+                        MainViewModel.ShowWithGeometry(Original(origin, baseSize), 0, false, geometry.Recipe, geometry.Stages));
                     if (ReferenceEquals(run, _run))
                     {
                         _beforeOf = (run, size);
@@ -614,7 +641,14 @@ public partial class AiViewModel : ViewModelBase
         _committing = true;
         try
         {
-            ok = await _main.ApplyImageEditAsync(_ => (run.Compose(blend), details ? run.Compose(plainBlend) : null),
+            // Zurückgedreht ins Pixelbild (das Modell bekam es gedreht, wie es angezeigt wurde)
+            MagickImage Upright(MagickImage img)
+            {
+                if (MainViewModel.Unorient(img, setup.Turns, setup.Flip) is not { } back) return img;
+                img.Dispose();
+                return back;
+            }
+            ok = await _main.ApplyImageEditAsync(_ => (Upright(run.Compose(blend)), details ? Upright(run.Compose(plainBlend)) : null),
                 StepLabel(), StepDetail(blend), details ? SkinDetail(blend) : null, setup.LookAfter);
         }
         finally

@@ -188,7 +188,11 @@ public partial class MainViewModel
     internal async Task<(MagickImage Image, bool Owned, long FileBytes, double Dpi)> GetImageAsync(string path)
     {
         if (_histories.TryGetValue(path, out var h))
-            return (DocumentFor(path, h, HiddenFor(path)), false, h.FileBytes, h.Dpi);   // ohne Ausgeblendetes (KI …)
+        {
+            var hidden = HiddenFor(path);
+            // im Hintergrund: Ausrichten eines großen Bildes dauert
+            return (await Task.Run(() => DocumentFor(path, h, hidden)), false, h.FileBytes, h.Dpi);   // ohne Ausgeblendetes (KI …), mit Ausrichten
+        }
 
         var loaded = await ImageLoader.LoadAsync(path);
         return (loaded.Image, true, loaded.FileBytes, loaded.Dpi);

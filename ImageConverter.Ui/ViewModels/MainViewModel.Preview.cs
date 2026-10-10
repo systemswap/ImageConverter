@@ -115,7 +115,14 @@ public partial class MainViewModel
             return;
         }
 
-        var bitmap = await DisplayBitmapForAsync(before);
+        // Vorher ist ein früheres Pixelbild (vor der KI …) — angezeigt mit demselben Ausrichten wie jetzt
+        MagickImage shownBefore = before;
+        if (_history is { } h && CurrentPath is { } path)
+        {
+            var (recipe, stages) = (h.Recipe, StagesShown(HiddenSteps) & ToolView);
+            shownBefore = await Task.Run(() => WithGeometry(path, recipe, before, stages));
+        }
+        var bitmap = await DisplayBitmapForAsync(shownBefore);
         if (ShowOriginal && ReferenceEquals(FindBeforeImage(), before))
             BeforeBitmap = bitmap;
         TrimDisplayCache();
