@@ -33,7 +33,15 @@ public partial class MainViewModel
     [ObservableProperty] public partial double Shadows { get; set; }
     [ObservableProperty] public partial double Highlights { get; set; }
     /// <summary>„Gleiche Farbe“ wie Referenzwerkzeug CS5: Luminanz −100 … +100 (Referenzwerkzeug 1–200 %).</summary>
-    [ObservableProperty] public partial double MatchLuminance { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLimitLuminance))]
+    public partial double MatchLuminance { get; set; }
+
+    /// <summary>„Gleiche Farbe“: Schwellwert für Luminanz — bis zu dieser Helligkeit (%) wird aufgehellt, Helleres bleibt; 100 = keine Grenze.</summary>
+    [ObservableProperty] public partial double MatchLimit { get; set; } = 100;
+
+    /// <summary>Der Schwellwert wirkt nur beim Aufhellen.</summary>
+    public bool CanLimitLuminance => Math.Round(MatchLuminance) > 0;
 
     /// <summary>„Gleiche Farbe“: Ausgleichen — wie viel vom erkannten Farbstich entfernt wird, 0–100 %.</summary>
     [ObservableProperty] public partial double Neutralize { get; set; }
@@ -77,6 +85,7 @@ public partial class MainViewModel
     public string ShadowsLabel => Signed(Shadows);
     public string HighlightsLabel => Signed(Highlights);
     public string MatchLuminanceLabel => $"{Math.Round(100 + MatchLuminance):0} %";
+    public string MatchLimitLabel => MatchLimit >= 99.5 ? Tr.T("aus") : $"{Math.Round(MatchLimit):0} %";
     public string NeutralizeLabel => Neutralize < 0.5 ? Tr.T("aus") : $"{Math.Round(Neutralize):0} %";
     public string WarmthLabel => Signed(Warmth);
     public string VibranceLabel => Signed(Vibrance);
@@ -110,6 +119,7 @@ public partial class MainViewModel
     partial void OnShadowsChanged(double value) => ToolChanged(nameof(ShadowsLabel));
     partial void OnHighlightsChanged(double value) => ToolChanged(nameof(HighlightsLabel));
     partial void OnMatchLuminanceChanged(double value) => ToolChanged(nameof(MatchLuminanceLabel));
+    partial void OnMatchLimitChanged(double value) => ToolChanged(nameof(MatchLimitLabel));
     partial void OnNeutralizeChanged(double value) => ToolChanged(nameof(NeutralizeLabel));
     partial void OnWarmthChanged(double value) => ToolChanged(nameof(WarmthLabel));
     partial void OnVibranceChanged(double value) => ToolChanged(nameof(VibranceLabel));
@@ -134,6 +144,7 @@ public partial class MainViewModel
     {
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
         Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Neutralize = Warmth = Vibrance = Saturation = 0;
+        MatchLimit = 100;
         NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
@@ -163,7 +174,7 @@ public partial class MainViewModel
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
         Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast),
-        WbNeutral, WbBlack, WbWhite),
+        WbNeutral, WbBlack, WbWhite, Round(MatchLimit)),
         HiddenSteps);   // ausgeblendete Bearbeitungen wirken nicht
 
     internal static Tint TintOf(string? label) =>

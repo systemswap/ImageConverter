@@ -235,6 +235,8 @@ public static class English
         ["Schwarzweiß"] = "Black and white",
         ["GLEICHE FARBE"] = "MATCH COLOUR",
         ["Luminanz"] = "Luminance",
+        ["Schwellwert"] = "Threshold",
+        ["Luminanz hellt nur bis zu dieser Helligkeit auf, was schon heller ist, bleibt, wie es ist. So wird ein dunkler Vordergrund heller, ohne dass der Himmel ausbleicht. Ganz rechts: keine Grenze. Wirkt nur beim Aufhellen."] = "Luminance only brightens up to this level; anything brighter stays as it is. This lightens a dark foreground without washing out the sky. Far right: no limit. Only applies when brightening.",
         ["Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus."] = "Like “Match Color” in Referenzwerkzeug CS5: scales the brightness up instead of just lifting it — the image becomes more luminous and the contrasts stay. White rolls off softly, nothing blows out.",
         ["Ausgleichen"] = "Neutralise",
         ["Entfernt einen Farbstich (z. B. gelbes Kunstlicht, blauer Schatten): Graues und Weißes wird wieder neutral. Der Regler bestimmt, wie viel davon. Kräftige Farben zählen bei der Erkennung nicht mit."] = "Removes a colour cast (e.g. yellow artificial light, blue shade): greys and whites become neutral again. The slider sets how much. Strong colours are not counted when detecting the cast.",

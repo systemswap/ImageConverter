@@ -227,6 +227,28 @@ public class AdjustTests
         Assert.Equal(0, Gray(result, 0));                        // Schwarz bleibt
     }
 
+    /// <summary>Luminanz mit Schwellwert: Dunkles wird heller, Helleres als die Grenze bleibt, die Tonwerte bleiben in Reihenfolge.</summary>
+    [Fact]
+    public void MatchLimit_BrightensOnlyBelowThreshold_AndStaysMonotonic()
+    {
+        var limited = Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 80, MatchLimit: 50));
+        var free = Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 80));
+
+        Assert.True(Gray(limited, 40) > 40 + 15);                   // Dunkles deutlich heller
+        for (var v = 102; v <= 255; v++) Assert.InRange(Gray(limited, v), v - 1, v + 1);   // über der Grenze (Oklab L 0,5 ≈ Grau 99) unverändert
+        Assert.True(Gray(free, 190) > 190 + 15);                    // ohne Grenze würde es mit aufgehellt
+        // Reihenfolge der Töne auf den ungerundeten Werten prüfen (die 8-Bit-Ausgabe hat Dither-Rauschen)
+        var exact = Adjust.Apply(Pixels.FromBytes(Ramp()), 256, 1, new Adjustments(MatchLuminance: 80, MatchLimit: 50));
+        for (var v = 1; v < 256; v++) Assert.True(exact[v * 4 + 1] >= exact[(v - 1) * 4 + 1] - 1e-5f, $"Umkehr bei {v}");
+        Assert.Equal(0, Gray(limited, 0));
+
+        // Wirkt nur beim Aufhellen; 100 % = keine Grenze
+        Assert.Equal(Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: -30)),
+            Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: -30, MatchLimit: 50)));
+        Assert.True(new Adjustments(MatchLimit: 40).IsNone);
+        Assert.Equal(free, Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 80, MatchLimit: 100)));
+    }
+
     /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
     [Fact]
     public void Neutralize_RemovesColourCast_ButKeepsStrongColours()

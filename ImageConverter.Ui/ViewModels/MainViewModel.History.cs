@@ -48,7 +48,8 @@ public partial class MainViewModel
         double RotationAngle = 0,             // noch nicht übernommene freie Drehung — gehört zum Rahmen
         WbSample? WbNeutral = null,           // Weißabgleich: gemittelte Pipetten-Messungen
         WbSample? WbBlack = null,
-        WbSample? WbWhite = null);
+        WbSample? WbWhite = null,
+        double MatchLimit = 100);           // Luminanz: Schwellwert, bis zu dem aufgehellt wird
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -100,6 +101,7 @@ public partial class MainViewModel
         [nameof(SelectedTint)] = null,
         [nameof(TintHue)] = "Farbton",
         [nameof(MatchLuminance)] = "Luminanz",
+        [nameof(MatchLimit)] = "Schwellwert",
         [nameof(Neutralize)] = "Ausgleichen",
         [nameof(Warmth)] = "Farbe",
         [nameof(SelectedMetadataMode)] = null,
@@ -236,7 +238,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -298,6 +300,7 @@ public partial class MainViewModel
                 SelectedTint = s.SelectedTint;
                 TintHue = s.TintHue;
                 MatchLuminance = s.MatchLuminance;
+                MatchLimit = s.MatchLimit;
                 Neutralize = s.Neutralize;
                 Warmth = s.Warmth;
                 SelectedMetadataMode = s.SelectedMetadataMode;
