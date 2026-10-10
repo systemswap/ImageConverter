@@ -1479,3 +1479,14 @@ Test oder Nachweis.
 - **Test/Nachweis:** `AdjustTests.LumMask_WeightsDarkMost_AndFadesOutAtTheEnd`, `LumMask_NeverReversesTones` (4 Fälle,
   Gegenprobe: mit p = 0,5 erlaubt schlagen zwei fehl), `LumMask_Preview_ShowsTheMaskInGrey`. Unsichtbares Testfenster:
   Gruppe, Liste („Luminanzmaske: +100 % · bis 70 % · Verlauf 30“), Maske zeigen.
+- **Nachtrag 0.5.51 (Himmel „gräulicher“, gemessen, nichts geändert):** Mit den Werten des Benutzers (Stärke +49 %,
+  Auslaufen 87 %, Verlauf 49, dazu Dunst, Gleiche Farbe und Kontrast +45) nimmt die Maske dem Himmel keine Farbe:
+  Helligkeit und Buntheit steigen im selben Verhältnis (Blau oben L 0,48 → 0,52, C 0,036 → 0,039; insgesamt hat der
+  Himmel mehr Farbe als das Original, vor allem durch Kontrast und Dunst). Gräulich wirkt es, weil das dunkle, satte
+  Blau oben und an den Bäumen heller wird und sich dem fast grauen Himmel in der Mitte angleicht. Abhilfe ohne Umbau:
+  Auslaufen auf ca. 55–60 %, Stärke etwas höher. Vorgemerkt, falls es doch stört: beim Aufhellen mehr Farbe mitnehmen
+  oder Regler „Blau schonen“ (schützt auch das Blau zwischen den Zweigen). Der Benutzer lässt es so („wirklich gut“).
+- **Meilenstein 0.5.52 (11.10.2026):** Stand 0.5.51 beta – Ausrichten als Rezept (#42), Luminanz nur nach Helligkeit
+  ohne Ferne (#43) und Gruppe Luminanzmaske (#44) vom Benutzer als passend befunden. Tag `v0.5.52`, Sicherung
+  `../ImageConverter-0.5.52-Sicherung.zip`; Windows-Stand in den vom Benutzer genannten Ordner übertragen
+  (`KI-Modelle/` dort unverändert).
