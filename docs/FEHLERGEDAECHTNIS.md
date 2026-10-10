@@ -1296,3 +1296,29 @@ Test oder Nachweis.
   unverändert; `PrepareKey` ändert sich mit dem Modell). Panorama mit echtem Modell (ohne Netz): Tal und Hang bleiben
   natürlich, Vordergrund heller. Unsichtbares Testfenster: Hinweis ohne Modell an, mit Modell aus; Gruppe in den
   Einstellungen.
+
+## 39. Luminanz: weiße Ränder um Bäume, weißlicher Himmel zwischen Ästen (Durchblicke erkennen)
+
+- **Entdeckt in:** 0.5.40 beta (Commit `5a68ba1`), vom Benutzer gemeldet („Überstrahlungen … die weißen Ränder,
+  Säume um die Bäume“); bestätigt mit Lupe (3×) am Panorama. **Behoben in:** 0.5.41 beta.
+- **Was:** Zwischen den Nadeln am Baumrand wurde der Himmel weißlich, über dem Tal lag zwischen den Ästen ein
+  grauweißer Schleier.
+- **Warum:** Die Karten sind bewusst grob (Bereiche 1200 px, Tiefe 518 px). Für sie ist ein Baum ein dunkler, naher
+  Fleck *samt seiner Lücken* – was durchscheint, wurde mit aufgehellt. Der feste Schutz heller Pixel (ab Oklab-L 0,62)
+  griff beim etwas dunkleren Abendhimmel nicht, beim Tal gar nicht.
+- **Wie behoben:** Karte „was liegt dahinter“: Farbe und Helligkeit der nicht aufgehellten Flächen (Himmel, Ferne)
+  per normierter Faltung ein Stück in die aufgehellten Bereiche fortgesetzt (Reichweite 1/50 der längsten Kante – je
+  Reglerstand einmal in kleiner Auflösung). Ein Pixel ist Durchblick, wenn er (a) heller als sein Bereich ist,
+  (b) nicht heller als der Hintergrund (eine Mischung aus Ast und Hintergrund liegt immer dazwischen) und (c) dessen
+  Farbe hat (Oklab a/b nah). Nur dieser Anteil bleibt unverändert, auch als Obergrenze in der Pyramide.
+- **Verworfen / Fallen:** Einfaches Matting („heller als die lokale Umgebung = Durchblick“) hätte auch sonnige Nadeln
+  und Blätter für Durchblicke gehalten – der Busch wäre flach geworden. Erster Entwurf mit Reichweite 1/20 und ohne
+  Bedingung (b): Mit Tiefenkarte wurde der ganze sonnige Vordergrund zu wenig aufgehellt, weil die Blätter dieselbe
+  grüne Farbe hatten wie die Wiesen im Tal dahinter. **Nicht tun:** Durchblicke nur über Helligkeit erkennen;
+  Hintergrund tief ins Innere von Büschen fortsetzen.
+- **Kosten:** 28 MP: Karten ≈ 90 ms, Anwenden ≈ 0,8 s (vorher 0,6 s).
+- **Wo:** `Core/Imaging/LuminanceRegions.cs` (`For`, `Weighting.Weight`, `AreaWeight`, `BehindReach`, `ChromaSame/Other`),
+  `Core/Imaging/Adjustments.cs` (`LiftByRegions`: Gewichtung je Reglerstand, Oklab a/b je Pixel).
+- **Test/Nachweis:** `AdjustTests.MatchLimit_KeepsSkyGapsAtTreeEdge_ButLiftsSunlitLeaves` (Himmelslücken dunkler als
+  der feste Schutz bleiben, gleich helle gelbgrüne Sonnenflecken werden heller) – Gegenprobe: ohne Erkennung schlägt
+  er fehl. Lupe am Panorama vorher/nachher (Baumrand vor Himmel, Ast vor dem Tal), Gesamtbild mit und ohne Tiefenkarte.

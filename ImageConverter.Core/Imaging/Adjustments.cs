@@ -369,14 +369,15 @@ public static class Adjust
         var bright = PixelPool.Rent(n);
         var weight = PixelPool.Rent(n);
         var cap = PixelPool.Rent(n);
+        var weighting = regions.For(limit, distance);
         Parallel.For(0, height, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
                 var (r, g, b) = pixel(p);
-                var l = Oklab.FromSrgb(r, g, b).L;
+                var (l, oa, ob) = Oklab.FromSrgb(r, g, b);
                 var lift = l > 1e-4f ? Shoulder(l * luminance) : l;
-                var (all, byEdges) = regions.Weight(x, y, l, limit, distance);
+                var (all, byEdges) = weighting.Weight(x, y, l, oa, ob);
                 plain[p] = l;
                 bright[p] = lift;
                 weight[p] = all;

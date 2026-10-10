@@ -294,6 +294,40 @@ public class AdjustTests
         Assert.True(maxStep < 0.12f, $"Sprung {maxStep:0.000} am Maskenrand");
     }
 
+    /// <summary>
+    /// Durchblicke: Am Rand eines dunklen Baums scheinen Himmelsstückchen durch, die dunkler sind, als der feste Schutz
+    /// heller Pixel greift — sie bleiben trotzdem, weil sie aussehen wie der Himmel dahinter. Gleich große, gleich helle
+    /// Sonnenflecken in Gelbgrün werden dagegen aufgehellt (andere Farbe als der Himmel).
+    /// </summary>
+    [Fact]
+    public void MatchLimit_KeepsSkyGapsAtTreeEdge_ButLiftsSunlitLeaves()
+    {
+        const int w = 400, h = 300;
+        var sky = (0.42f, 0.5f, 0.62f);
+        var src = Halves(w, h, (0.07f, 0.13f, 0.05f), sky);              // dunkler Baum | Himmel
+        void Spot(int x, int y, (float R, float G, float B) c)
+        {
+            for (var dy = 0; dy < 2; dy++)
+            for (var dx = 0; dx < 2; dx++)
+            {
+                var i = ((y + dy) * w + x + dx) * 4;
+                (src[i], src[i + 1], src[i + 2]) = (c.B, c.G, c.R);
+            }
+        }
+        for (var y = 20; y < h - 20; y += 12)
+        {
+            Spot(w / 2 - 6, y, sky);                                       // Himmel scheint durch
+            Spot(w / 2 - 6, y + 6, (0.45f, 0.48f, 0.12f));                 // Sonnenfleck auf Nadeln
+        }
+        Assert.True(Oklab.FromSrgb(sky.Item1, sky.Item2, sky.Item3).L < 0.62f, "Testhimmel zu hell — der feste Schutz würde greifen");
+
+        var r = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchLimit: 45));
+        int gap = w / 2 - 6, row = 152;
+        Assert.InRange(At(r, w, gap, row), At(src, w, gap, row) - 0.02f, At(src, w, gap, row) + 0.02f);     // Lücke bleibt
+        Assert.True(At(r, w, gap, row + 6) > At(src, w, gap, row + 6) + 0.05f, "Sonnenfleck nicht aufgehellt");
+        Assert.True(At(r, w, 60, 150) > At(src, w, 60, 150) + 0.05f, "Baum nicht aufgehellt");
+    }
+
     /// <summary>Helle Lücken in einem dunklen Bereich (Himmel zwischen Ästen) leuchten nicht auf.</summary>
     [Fact]
     public void MatchLimit_ProtectsBrightGapsInsideDarkRegions()

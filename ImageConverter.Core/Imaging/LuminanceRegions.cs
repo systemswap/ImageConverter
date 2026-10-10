@@ -47,13 +47,13 @@ public sealed class LuminanceRegions
     /// <summary>Ab diesem Dunst (dunkelster Kanal, sRGB 0–1) gilt ein Bereich als Ferne; voll ab +0,12.</summary>
     private const float HazeFrom = 0.05f, HazeRange = 0.12f;
 
-    private readonly float[] _base, _haze;
+    private readonly float[] _base, _haze, _l, _a, _b;
     private readonly float[]? _near;
     private readonly int _w, _h;
     private readonly float _scale;   // Bildpixel je Kartenpixel
 
-    private LuminanceRegions(float[] baseMap, float[] haze, float[]? near, int w, int h, float scale) =>
-        (_base, _haze, _near, _w, _h, _scale) = (baseMap, haze, near, w, h, scale);
+    private LuminanceRegions(float[] baseMap, float[] haze, float[]? near, float[] l, float[] a, float[] b, int w, int h, float scale) =>
+        (_base, _haze, _near, _l, _a, _b, _w, _h, _scale) = (baseMap, haze, near, l, a, b, w, h, scale);
 
     /// <summary>Wurde die KI-Tiefenkarte benutzt?</summary>
     public bool UsesDepth => _near is not null;
@@ -85,11 +85,13 @@ public sealed class LuminanceRegions
         });
 
         var l = new float[n];
+        var la = new float[n];
+        var lb = new float[n];
         var minChannel = new float[n];
         for (var i = 0; i < n; i++)
         {
             float b = small[i * 3], g = small[i * 3 + 1], r = small[i * 3 + 2];
-            l[i] = Oklab.FromSrgb(r, g, b).L;
+            (l[i], la[i], lb[i]) = Oklab.FromSrgb(r, g, b);
             minChannel[i] = Math.Min(b, Math.Min(g, r));
         }
 
@@ -114,47 +116,125 @@ public sealed class LuminanceRegions
                 near = null;   // Modell nicht lesbar o. Ä.: Dunst als Ersatz, die Bearbeitung geht weiter
             }
         }
-        return new LuminanceRegions(baseMap, haze, near, w, h, f);
+        return new LuminanceRegions(baseMap, haze, near, l, la, lb, w, h, f);
+    }
+
+    /// <summary>Wie stark ein Bereich aufgehellt wird (0 … 1), ohne Blick auf den einzelnen Pixel.</summary>
+    private float AreaWeight(float b, float haze, float near, float limit, float distance)
+    {
+        var w = limit < 1 ? 1 - SmoothStep(limit - Soft, limit + Soft, b) : 1;
+        if (distance <= 0) return w;
+        var far = _near is not null ? 1 - SmoothStep(NearFrom, NearTo, near) : SmoothStep(HazeFrom, HazeFrom + HazeRange, haze);
+        return w * (1 - distance * far);
     }
 
     /// <summary>
-    /// Wie stark ein Pixel aufgehellt wird (0 … 1).
+    /// Gewichtung für bestimmte Reglerstände (Schwellwert, Ferne). Rechnet einmal die Karte „was liegt dahinter“:
+    /// Farbe und Helligkeit der Flächen, die nicht aufgehellt werden (Himmel, Ferne), in die aufgehellten Bereiche
+    /// hinein fortgesetzt (normierte Faltung) — damit lassen sich Durchblicke zwischen Ästen erkennen.
     /// </summary>
     /// <param name="limit">Schwellwert als Oklab-L (1 = keine Grenze): hellere Bereiche bleiben.</param>
-    /// <param name="distance">Ferne schonen 0 … 1: dunstige Bereiche entsprechend weniger.</param>
-    /// <param name="l">Helligkeit des Pixels selbst — sehr helle Pixel in dunklen Bereichen (Himmel zwischen
-    /// Ästen) bleiben, sonst leuchteten die Lücken auf.</param>
-    /// <returns>Gesamt — und der Teil, der echten Kanten folgt (Schwellwert, Schutz, Tiefenkarte; ohne den Dunst): die
-    /// Obergrenze, damit der Himmel neben einem Baum auch beim Verschmelzen über die Pyramide unverändert bleibt.</returns>
-    public (float All, float Cap) Weight(int x, int y, float l, float limit, float distance)
+    /// <param name="distance">Ferne schonen 0 … 1.</param>
+    public Weighting For(float limit, float distance)
     {
-        var (b, haze, near) = Sample(x, y);
-        var w = 1f;
-        if (limit < 1)
+        var n = _w * _h;
+        var excluded = new float[n];
+        var el = new float[n];
+        var ea = new float[n];
+        var eb = new float[n];
+        for (var i = 0; i < n; i++)
         {
-            w = 1 - SmoothStep(limit - Soft, limit + Soft, b);
-            var protect = Math.Max(0.62f, limit + 0.12f);
-            w *= 1 - SmoothStep(protect, protect + 0.18f, l);
+            var e = 1 - AreaWeight(_base[i], _haze[i], _near?[i] ?? 0, limit, distance);
+            excluded[i] = e;
+            el[i] = e * _l[i];
+            ea[i] = e * _a[i];
+            eb[i] = e * _b[i];
         }
-        // Ferne: mit Tiefenkarte über die Entfernung, sonst über den Dunst
-        var far = _near is not null ? 1 - SmoothStep(NearFrom, NearTo, near) : SmoothStep(HazeFrom, HazeFrom + HazeRange, haze);
-        var all = distance > 0 ? w * (1 - distance * far) : w;
-        // Die Tiefenkarte hat echte Kanten (Baum vor Himmel) → gehört zur Obergrenze; der Dunst nicht (dort weich mischen).
-        // Ohne das leuchtete bei Schwellwert „aus“ und nur „Ferne“ ein Hof um den Baum in den Himmel (0.5.40, Test).
-        return (all, _near is not null ? all : w);
+        var r = Math.Max(4, Math.Max(_w, _h) / BehindReach);
+        var cover = Box(excluded, _w, _h, r);
+        var bl = Box(el, _w, _h, r);
+        var ba = Box(ea, _w, _h, r);
+        var bb = Box(eb, _w, _h, r);
+        for (var i = 0; i < n; i++)
+        {
+            var c = Math.Max(cover[i], 1e-4f);
+            bl[i] /= c; ba[i] /= c; bb[i] /= c;
+        }
+        return new Weighting(this, limit, distance, cover, bl, ba, bb);
     }
 
-    /// <summary>Die Karten an einem Bildpixel, bilinear gelesen.</summary>
-    private (float Base, float Haze, float Near) Sample(int x, int y)
+    /// <summary>
+    /// Reichweite der Karte „was liegt dahinter“: ein Fünfzigstel der längsten Kante — Durchblicke gibt es am Rand eines
+    /// Baums, nicht tief im dichten Busch. Mit einem Zwanzigstel galten sonnige Blätter mitten im Busch als Durchblick.
+    /// </summary>
+    private const int BehindReach = 50;
+
+    /// <summary>Gewichtung je Pixel für feste Reglerstände (siehe <see cref="For"/>).</summary>
+    public sealed class Weighting
     {
-        var fx = Math.Clamp((x + 0.5f) / _scale - 0.5f, 0, _w - 1);
-        var fy = Math.Clamp((y + 0.5f) / _scale - 0.5f, 0, _h - 1);
+        private readonly LuminanceRegions _maps;
+        private readonly float _limit, _distance;
+        private readonly float[] _cover, _behindL, _behindA, _behindB;
+
+        internal Weighting(LuminanceRegions maps, float limit, float distance, float[] cover, float[] l, float[] a, float[] b) =>
+            (_maps, _limit, _distance, _cover, _behindL, _behindA, _behindB) = (maps, limit, distance, cover, l, a, b);
+
+        /// <summary>Wie stark ein Pixel aufgehellt wird (0 … 1).</summary>
+        /// <param name="l">Oklab des Pixels selbst (L, a, b).</param>
+        /// <returns>Gesamt — und der Teil, der echten Kanten folgt (Schwellwert, Schutz, Durchblicke, Tiefenkarte; ohne
+        /// den Dunst): die Obergrenze, damit der Himmel neben einem Baum auch beim Verschmelzen über die Pyramide
+        /// unverändert bleibt.</returns>
+        public (float All, float Cap) Weight(int x, int y, float l, float a, float b)
+        {
+            var m = _maps;
+            var (fx, fy) = m.MapPoint(x, y);
+            float area = m.Read(m._base, fx, fy), haze = m.Read(m._haze, fx, fy), near = m._near is null ? 0 : m.Read(m._near, fx, fy);
+
+            var w = _limit < 1 ? 1 - SmoothStep(_limit - Soft, _limit + Soft, area) : 1f;
+            if (_limit < 1)
+            {
+                // Fester Schutz sehr heller Pixel (bleibt als Rückfall, wo nichts „dahinter“ bekannt ist)
+                var protect = Math.Max(0.62f, _limit + 0.12f);
+                w *= 1 - SmoothStep(protect, protect + 0.18f, l);
+            }
+
+            // Durchblick: heller als der Bereich und in der Farbe dessen, was dahinter liegt (Himmel, dunstiges Tal) —
+            // nur dieser Anteil bleibt. Sonnige Nadeln sind auch heller, haben aber eine andere Farbe und werden
+            // aufgehellt. Vorher wurden Lücken mit aufgehellt: weiße Ränder um Bäume, weißlicher Himmel zwischen Ästen.
+            var cover = SmoothStep(0.03f, 0.15f, m.Read(_cover, fx, fy));
+            if (cover > 0)
+            {
+                float bl = m.Read(_behindL, fx, fy), ba = m.Read(_behindA, fx, fy), bb = m.Read(_behindB, fx, fy);
+                var share = Math.Clamp((l - area) / Math.Max(0.05f, bl - area), 0, 1);   // Anteil „dahinter“ nach Helligkeit
+                // Ein Durchblick (Mischung aus dunklem Ast und Hintergrund) ist nie heller als der Hintergrund — was heller
+                // ist, ist sonniges Laub. Ohne diese Grenze galten Blätter vor grünen Wiesen als Durchblick.
+                var notBrighter = 1 - SmoothStep(bl + 0.01f, bl + 0.06f, l);
+                var chroma = MathF.Sqrt((a - ba) * (a - ba) + (b - bb) * (b - bb));
+                var gap = cover * share * notBrighter * (1 - SmoothStep(ChromaSame, ChromaOther, chroma));
+                w *= 1 - gap;
+            }
+
+            if (_distance <= 0) return (w, w);
+            var far = m._near is not null ? 1 - SmoothStep(NearFrom, NearTo, near) : SmoothStep(HazeFrom, HazeFrom + HazeRange, haze);
+            var all = w * (1 - _distance * far);
+            // Die Tiefenkarte hat echte Kanten (Baum vor Himmel) → gehört zur Obergrenze; der Dunst nicht (dort weich mischen).
+            // Ohne das leuchtete bei Schwellwert „aus“ und nur „Ferne“ ein Hof um den Baum in den Himmel (0.5.40, Test).
+            return (all, m._near is not null ? all : w);
+        }
+    }
+
+    /// <summary>Farbabstand (Oklab a/b) zu „dahinter“: bis hier gleiche Farbe (Durchblick), ab hier eine andere.</summary>
+    private const float ChromaSame = 0.03f, ChromaOther = 0.08f;
+
+    private (float X, float Y) MapPoint(int x, int y) =>
+        (Math.Clamp((x + 0.5f) / _scale - 0.5f, 0, _w - 1), Math.Clamp((y + 0.5f) / _scale - 0.5f, 0, _h - 1));
+
+    private float Read(float[] m, float fx, float fy)
+    {
         int x0 = (int)fx, y0 = (int)fy, x1 = Math.Min(x0 + 1, _w - 1), y1 = Math.Min(y0 + 1, _h - 1);
         float tx = fx - x0, ty = fy - y0;
-        float Read(float[] m) =>
-            (m[y0 * _w + x0] * (1 - tx) + m[y0 * _w + x1] * tx) * (1 - ty) +
-            (m[y1 * _w + x0] * (1 - tx) + m[y1 * _w + x1] * tx) * ty;
-        return (Read(_base), Read(_haze), _near is null ? 0 : Read(_near));
+        return (m[y0 * _w + x0] * (1 - tx) + m[y0 * _w + x1] * tx) * (1 - ty) +
+               (m[y1 * _w + x0] * (1 - tx) + m[y1 * _w + x1] * tx) * ty;
     }
 
     private static float SmoothStep(float e0, float e1, float x)
