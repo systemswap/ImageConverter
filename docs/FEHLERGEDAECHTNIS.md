@@ -1446,3 +1446,36 @@ Test oder Nachweis.
   `.Edits.cs`, `.Look.cs`, `.PerImage.cs`, `MainViewModel.cs`, `Ai/AiViewModel.cs`, `Views/MainView.axaml`.
 - **Test/Nachweis:** `AdjustTests.MatchTarget_Alone_LiftsTree_AndLeavesSkyAndGaps`; die übrigen Luminanz-Tests
   unverändert grün; `LuminanceDistanceTests` mit der Funktion entfallen. Panorama-Vergleich mit und ohne „Ferne“.
+
+## 44. Neue Gruppe „Luminanzmaske“ (wie die Luminanzmasken in Referenzwerkzeug)
+
+- **Neu in:** 0.5.51 beta (11.10.2026). Wunsch des Benutzers: Dunkles stärker anheben als Helles, um die Sonne nichts,
+  Felder etwas, Himmel dezent — „eine feine Maske wie bei Referenzwerkzeug drüber, was dunkler ist bekommt mehr, bei den hellen
+  Bereichen lässt man sie auslaufen“. Das Blau zwischen den Zweigen wurde mit „Gleiche Farbe“ zu hell (Saum).
+- **Ursache des Saums (gemessen, Lupe):** Richtig blaue Lücken erkannte schon die Durchblick-Erkennung; der Saum kam von
+  Mischpixeln (halb Nadel, halb Himmel), die die grobe Bereichskarte als Baum sah und voll anhob.
+- **Bewusst als eigene Gruppe** neben „Gleiche Farbe“ (Entscheidung des Benutzers): das Erreichte bleibt unangetastet,
+  die Gruppe lässt sich einfach wieder entfernen (`LumMask.cs`, Felder `Mask*`, eine Gruppe in der XAML, Zeile in der Liste).
+- **Rechnen (`LumMask`):** Gewicht = (1 − Helligkeit/Auslaufen)^p, Helligkeit zu 70 % die des Pixels (pixelgenau, kein
+  Hof, Mischpixel bekommen nur anteilig) und zu 30 % die eingeebnete des Bereichs (sonst hebt die Maske im Baum dunkle
+  Nadeln stärker als sonnige — die Struktur würde flach). Aufhellen in Oklab wie Luminanz (Helligkeit und Buntheit im
+  selben Verhältnis, weiche Schulter). Läuft nach „Gleiche Farbe“, vor Helligkeit/Kontrast.
+- **Umkehr der Tonwerte ausgeschlossen:** L + (k·L − L)·(1 − L/E)^p bleibt steigend, solange
+  1 + (k − 1)·min[(1 − u)^p − p·u·(1 − u)^(p−1)] ≥ 0 — für p ≥ 1,5 bis k = 3 erfüllt; p = 1 nur bis k = 2, p &lt; 1 nie
+  (am Auslaufpunkt fällt die Kurve). Deshalb Verlauf p = 1,5 („weich“) … 4 („steil“), Stärke bis +200 %.
+  **Nicht tun:** den Verlauf weicher als p = 1,5 zulassen.
+- **„Maske zeigen“:** nur Ansicht (Graustufen weiß = volle Stärke, schwarz = nichts), kein Rückgängig-Schritt, nie im
+  Export (`MaskPreview` setzt nur der Vorschau-Auftrag).
+- **Weitere Wege abgewogen:** Mischpixel aufteilen (Matting) wäre am Baumrand genauer, hängt aber an Schätzungen — als
+  Verfeinerung in dieser Gruppe vorgemerkt, falls nach dem Test noch ein Schleier stört. Belichtungsverschmelzung (Mertens)
+  wirkt großflächiger, aber weniger fein an Zweigen. Mehrere Durchläufe (wie Dunst) helfen nicht: Jeder Durchlauf sieht
+  dieselbe grobe Karte, Mischpixel würden wieder angehoben; „unter dem Schwellwert wieder berücksichtigen“ läuft auf eine
+  feste Kurve je Pixel hinaus (siehe #36, #38).
+- **Am Panorama:** Mit Maske (Stärke 100–150 %, Auslaufen 70–75 %, Verlauf 30–50) Nadeln so hell wie mit „Gleiche Farbe“,
+  Blau zwischen den Nadeln natürlicher (weniger weißliche Sprenkel), Felder und Tal ruhiger; offener Himmel +0,01.
+- **Wo:** `Core/Imaging/LumMask.cs`, `Core/Imaging/Adjustments.cs` (`MaskAmount`, `MaskEnd`, `MaskCurve`, `MaskPreview`,
+  `HasLumMask`, `NeedsRegions`, `Apply`); UI `.Tools.cs`, `.History.cs`, `.Edits.cs` (`EditSteps.LumMask`), `.Look.cs`,
+  `.PerImage.cs`, `.Preview.cs`; `Views/MainView.axaml` (Gruppe nach „Gleiche Farbe“).
+- **Test/Nachweis:** `AdjustTests.LumMask_WeightsDarkMost_AndFadesOutAtTheEnd`, `LumMask_NeverReversesTones` (4 Fälle,
+  Gegenprobe: mit p = 0,5 erlaubt schlagen zwei fehl), `LumMask_Preview_ShowsTheMaskInGrey`. Unsichtbares Testfenster:
+  Gruppe, Liste („Luminanzmaske: +100 % · bis 70 % · Verlauf 30“), Maske zeigen.

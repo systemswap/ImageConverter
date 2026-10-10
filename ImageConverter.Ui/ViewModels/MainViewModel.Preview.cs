@@ -486,7 +486,8 @@ public partial class MainViewModel
         var resize = tw != (int)doc.Width || th != (int)doc.Height;
         var noise = (EffectiveNoise, EffectiveColorNoise);
         var sharpen = EffectiveSharpen;
-        var adjust = CurrentAdjustments();
+        // „Maske zeigen“ gilt nur hier in der Vorschau (nicht im Export, nicht in der Größenschätzung)
+        var adjust = CurrentAdjustments() is var a && ShowMask && Shows(EditSteps.LumMask) ? a with { MaskPreview = true } : CurrentAdjustments();
         if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone) return null;
 
         // Vorschau höchstens PreviewMaxEdge groß; der Schärferadius wird

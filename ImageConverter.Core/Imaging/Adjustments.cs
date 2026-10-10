@@ -51,7 +51,14 @@ public sealed record Adjustments(
     double MatchTarget = 0,
     // Luminanz „Gesamt“: das ganze Bild noch einmal heller/dunkler (wie Referenzwerkzeug 1–200 %), ohne Masken, nach der
     // Bereichs-Luminanz — die gleicht Bereiche an, macht das Bild insgesamt aber nicht heller (Wunsch 0.5.44)
-    double MatchGlobal = 0)
+    double MatchGlobal = 0,
+    // Luminanzmaske (eigene Gruppe, wie die Luminanzmasken in Referenzwerkzeug): Stärke 0–200 (% mehr Licht im Dunkelsten),
+    // Auslaufen ab (% Helligkeit, darüber nichts), Verlauf 0–100 (weich … steil). MaskPreview nur für die Vorschau:
+    // die Maske als Graustufen statt des Bildes — nie im Export.
+    double MaskAmount = 0,
+    double MaskEnd = 75,
+    double MaskCurve = 30,
+    bool MaskPreview = false)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -69,6 +76,7 @@ public sealed record Adjustments(
             var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
             if (MatchLuminance <= 0 || MatchLimit >= 100) n = n with { MatchLimit = 100 };   // wirkt nur beim Aufhellen
             if (MatchLuminance <= 0 || MatchTarget <= 0) n = n with { MatchTarget = 0 };
+            if (MaskAmount <= 0 && !MaskPreview) n = n with { MaskAmount = 0, MaskEnd = None.MaskEnd, MaskCurve = None.MaskCurve };
             return Dehaze == 0 ? n with { DehazePasses = None.DehazePasses, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
                 DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness, DehazeDeband = None.DehazeDeband, DehazeCast = None.DehazeCast } : n;
         }
@@ -87,7 +95,11 @@ public sealed record Adjustments(
     };
 
     /// <summary>Braucht Luminanz die Bereichskarten (<see cref="LuminanceRegions"/>)?</summary>
-    public bool NeedsRegions => Normalized is { MatchLuminance: > 0 } n && (n.MatchLimit < 100 || n.MatchTarget > 0);
+    public bool NeedsRegions => Normalized is var n
+        && ((n.MatchLuminance > 0 && (n.MatchLimit < 100 || n.MatchTarget > 0)) || n.MaskAmount > 0 || n.MaskPreview);
+
+    /// <summary>Wirkt die Luminanzmaske (oder wird sie gezeigt)?</summary>
+    public bool HasLumMask => Normalized is { } n && (n.MaskAmount > 0 || n.MaskPreview);
 
     /// <summary>Wird ein Weißabgleich gerechnet?</summary>
     public bool HasWhiteBalance => WhiteBalance.IsActive(WbNeutral, WbBlack, WbWhite);
@@ -288,6 +300,12 @@ public static class Adjust
         // Dynamik/Sättigung — ein Farbstich soll weg sein, bevor Kontrast und Buntheit ihn verstärken (0.5.27)
         var global = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchGlobal / 100, -1, 1));
         var balance = luminance != 1 || global != 1 || shiftA != 0 || shiftB != 0;
+        // Luminanzmaske: nach „Gleiche Farbe“, pixelgenau; die Bereichskarte gibt 30 % Struktur dazu
+        var lumMask = a.HasLumMask;
+        var areaMap = lumMask ? prepared.Regions : null;
+        var maskGain = 1 + (float)Math.Clamp(a.MaskAmount / 100, 0, 2);
+        var maskEnd = (float)Math.Clamp(a.MaskEnd / 100, 0.05, 1);
+        var maskPower = LumMask.Power(a.MaskCurve);
         var chroma = vibrance != 0 || saturation != 0;
 
         // Pixel nach Tiefen/Lichtern (Zielhelligkeit aus Prepare, Farbton bleibt)
@@ -344,6 +362,23 @@ public static class Adjust
                         L = all;
                     }
                     (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);
+                }
+
+                if (lumMask)
+                {
+                    var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
+                    var m = LumMask.Weight(L, areaMap?.AreaBrightness(x, y) ?? L, maskEnd, maskPower);
+                    if (a.MaskPreview)
+                    {
+                        // Maske zeigen: weiß = bekommt alles, schwarz = nichts — wie eine Maske in Referenzwerkzeug
+                        result[i] = result[i + 1] = result[i + 2] = m;
+                        continue;
+                    }
+                    if (m > 0 && L > 1e-4f)
+                    {
+                        var lifted = L + (Shoulder(L * maskGain) - L) * m;
+                        (r, g, b) = Oklab.ScaleChroma(lifted, oa, ob, lifted / L);
+                    }
                 }
 
                 r = Lookup(curve, r); g = Lookup(curve, g); b = Lookup(curve, b);

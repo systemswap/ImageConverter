@@ -32,6 +32,7 @@ public enum EditSteps
     Level = 8192,
     CropStep = 16384,
     Orient = 32768,
+    LumMask = 65536,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
@@ -126,6 +127,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Color) != 0) a = a with { Saturation = 0, Vibrance = 0, Tint = Tint.None };
         if ((hidden & EditSteps.MatchColor) != 0) a = a with { MatchLuminance = 0, MatchLimit = 100, MatchTarget = 0, MatchGlobal = 0, Neutralize = 0, Warmth = 0 };
         if ((hidden & EditSteps.WhiteBalance) != 0) a = a with { WbNeutral = null, WbBlack = null, WbWhite = null };
+        if ((hidden & EditSteps.LumMask) != 0) a = a with { MaskAmount = 0, MaskPreview = false };
         return a;
     }
 
@@ -554,6 +556,9 @@ public partial class MainViewModel
                     MatchLimit < 99.5 ? $"{Tr.T("Schwellwert")} {Math.Round(MatchLimit):0} %" : null,
                 }.Where(t => t is not null)) is { Length: > 0 } extra ? extra : null : null,
                 (Tr.T("Luminanz"), MatchLuminance), (Tr.T("Gesamt"), MatchGlobal), (Tr.T("Ausgleichen"), Neutralize), (Tr.T("Farbe"), Warmth));
+            if (MaskAmount >= 0.5)
+                rows.Add(Row(EditSteps.LumMask, Tr.T("Luminanzmaske"),
+                    Tr.T("+{0:0} % · bis {1:0} % · Verlauf {2:0}", MaskAmount, MaskEnd, MaskCurve)));
             AddIfAny(rows, EditSteps.Light, Tr.T("Licht"),
                 (Tr.T("Helligkeit"), Brightness), (Tr.T("Kontrast"), Contrast), (Tr.T("Tiefen"), Shadows), (Tr.T("Lichter"), Highlights));
             var tint = TintOf(SelectedTint) switch
@@ -655,6 +660,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Color) != 0) s = s with { Saturation = 0, Vibrance = 0, SelectedTint = TintLabels[0].Label };
         if ((hidden & EditSteps.MatchColor) != 0) s = s with { MatchLuminance = 0, MatchLimit = 100, MatchTarget = 0, MatchGlobal = 0, Neutralize = 0, Warmth = 0 };
         if ((hidden & EditSteps.WhiteBalance) != 0) s = s with { WbNeutral = null, WbBlack = null, WbWhite = null };
+        if ((hidden & EditSteps.LumMask) != 0) s = s with { MaskAmount = 0 };
         if ((hidden & EditSteps.Sharpen) != 0) s = s with { SharpenAmount = 0 };
         return s with { Hidden = EditSteps.None };
     }

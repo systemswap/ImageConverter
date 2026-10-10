@@ -51,7 +51,10 @@ public partial class MainViewModel
         WbSample? WbWhite = null,
         double MatchLimit = 100,            // Luminanz: Schwellwert der Bereiche, hellere bleiben
         double MatchTarget = 0,             // Luminanz: Zielwert
-        double MatchGlobal = 0);            // Luminanz: Gesamt
+        double MatchGlobal = 0,             // Luminanz: Gesamt
+        double MaskAmount = 0,              // Luminanzmaske: Stärke, Auslaufen ab, Verlauf
+        double MaskEnd = 75,
+        double MaskCurve = 30);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -106,6 +109,9 @@ public partial class MainViewModel
         [nameof(MatchLimit)] = "Schwellwert",
         [nameof(MatchTarget)] = "Zielwert",
         [nameof(MatchGlobal)] = "Gesamt",
+        [nameof(MaskAmount)] = "Maske Stärke",
+        [nameof(MaskEnd)] = "Maske Auslaufen",
+        [nameof(MaskCurve)] = "Maske Verlauf",
         [nameof(Neutralize)] = "Ausgleichen",
         [nameof(Warmth)] = "Farbe",
         [nameof(SelectedMetadataMode)] = null,
@@ -242,7 +248,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal, MaskAmount, MaskEnd, MaskCurve);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -307,6 +313,9 @@ public partial class MainViewModel
                 MatchLimit = s.MatchLimit;
                 MatchTarget = s.MatchTarget;
                 MatchGlobal = s.MatchGlobal;
+                MaskAmount = s.MaskAmount;
+                MaskEnd = s.MaskEnd;
+                MaskCurve = s.MaskCurve;
                 Neutralize = s.Neutralize;
                 Warmth = s.Warmth;
                 SelectedMetadataMode = s.SelectedMetadataMode;

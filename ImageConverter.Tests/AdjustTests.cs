@@ -440,6 +440,52 @@ public class AdjustTests
         Assert.Equal(Adjustments.None.PrepareKey, new Adjustments(MatchGlobal: 40).PrepareKey);   // kein teurer Teil
     }
 
+    /// <summary>Luminanzmaske: Dunkles bekommt viel, Mitteltöne anteilig, ab „Auslaufen“ nichts; steiler = Mitte weniger.</summary>
+    [Fact]
+    public void LumMask_WeightsDarkMost_AndFadesOutAtTheEnd()
+    {
+        float W(float l, double curve) => LumMask.Weight(l, l, 0.75f, LumMask.Power(curve));
+        Assert.Equal(1f, W(0, 30), 3);
+        Assert.True(W(0.2f, 30) > W(0.4f, 30) && W(0.4f, 30) > W(0.6f, 30));
+        Assert.Equal(0f, W(0.75f, 30));
+        Assert.Equal(0f, W(0.9f, 30));
+        Assert.True(W(0.4f, 100) < W(0.4f, 0), "steiler Verlauf soll Mitteltönen weniger geben");
+
+        // Über das ganze Bild: Dunkles wird viel heller, Helles über „Auslaufen“ bleibt (Grau 0..255)
+        var ramp = Pixels.FromBytes(Ramp());
+        var r = Adjust.Apply(ramp, 256, 1, new Adjustments(MaskAmount: 100, MaskEnd: 60));
+        float L(float[] px, int x) => Oklab.FromSrgb(px[x * 4 + 2], px[x * 4 + 1], px[x * 4]).L;
+        Assert.True(L(r, 40) - L(ramp, 40) > L(r, 120) - L(ramp, 120), "Dunkles soll mehr bekommen als Mitteltöne");
+        for (var x = 160; x < 256; x++) Assert.Equal(L(ramp, x), L(r, x), 3);   // über 60 % unverändert
+    }
+
+    /// <summary>Luminanzmaske ohne Umkehr der Tonwerte — auch im ungünstigsten Fall (weichster Verlauf, +200 %).</summary>
+    [Theory]
+    [InlineData(0, 200, 100)]
+    [InlineData(0, 200, 50)]
+    [InlineData(100, 200, 75)]
+    [InlineData(30, 150, 30)]
+    public void LumMask_NeverReversesTones(double curve, double amount, double end)
+    {
+        var ramp = Pixels.FromBytes(Ramp());
+        var r = Adjust.Apply(ramp, 256, 1, new Adjustments(MaskAmount: amount, MaskEnd: end, MaskCurve: curve));
+        for (var x = 1; x < 256; x++)
+            Assert.True(r[x * 4 + 1] >= r[(x - 1) * 4 + 1] - 1e-4f, $"Umkehr bei {x}: {r[(x - 1) * 4 + 1]:0.0000} → {r[x * 4 + 1]:0.0000}");
+    }
+
+    /// <summary>„Maske zeigen“: Graustufen statt Bild — weiß wo die volle Stärke wirkt, schwarz wo nichts.</summary>
+    [Fact]
+    public void LumMask_Preview_ShowsTheMaskInGrey()
+    {
+        var ramp = Pixels.FromBytes(Ramp());
+        var r = Adjust.Apply(ramp, 256, 1, new Adjustments(MaskAmount: 80, MaskEnd: 75, MaskPreview: true));
+        Assert.True(r[1] > 0.9f, $"Schwarz → Maske fast weiß: {r[1]:0.000}");   // 30 % Bereich: knapp unter Weiß
+        Assert.Equal(0f, r[255 * 4 + 1], 3);                         // Weiß → Maske schwarz
+        Assert.Equal(r[100 * 4], r[100 * 4 + 2], 4);                 // grau (R = B)
+        Assert.False(new Adjustments(MaskPreview: true).IsNone);
+        Assert.True(new Adjustments(MaskEnd: 40, MaskCurve: 90).IsNone);   // ohne Stärke wirkt nichts
+    }
+
     /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
     [Fact]
     public void Neutralize_RemovesColourCast_ButKeepsStrongColours()

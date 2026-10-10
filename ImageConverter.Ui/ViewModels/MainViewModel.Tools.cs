@@ -47,6 +47,29 @@ public partial class MainViewModel
     /// <summary>„Gleiche Farbe“: Luminanz für das ganze Bild, nach der Bereichs-Luminanz — −100 … +100 (0–200 %).</summary>
     [ObservableProperty] public partial double MatchGlobal { get; set; }
 
+    // ------------------------------------------------------------ Luminanzmaske (eigene Gruppe)
+
+    /// <summary>Luminanzmaske: wie viel mehr Licht das Dunkelste bekommt, 0–200 %.</summary>
+    [ObservableProperty] public partial double MaskAmount { get; set; }
+
+    /// <summary>Luminanzmaske: ab welcher Helligkeit (%) nichts mehr passiert.</summary>
+    [ObservableProperty] public partial double MaskEnd { get; set; } = 75;
+
+    /// <summary>Luminanzmaske: Verlauf 0 (weich, Mitteltöne bekommen mit) … 100 (steil, nur das Dunkelste).</summary>
+    [ObservableProperty] public partial double MaskCurve { get; set; } = 30;
+
+    /// <summary>Maske als Graustufen in der Vorschau zeigen (nur Ansicht: kein Rückgängig-Schritt, nie im Export).</summary>
+    [ObservableProperty] public partial bool ShowMask { get; set; }
+
+    public string MaskAmountLabel => MaskAmount < 0.5 ? Tr.T("aus") : $"+{Math.Round(MaskAmount):0} %";
+    public string MaskEndLabel => $"{Math.Round(MaskEnd):0} %";
+    public string MaskCurveLabel => MaskCurve < 20 ? Tr.T("weich") : MaskCurve > 70 ? Tr.T("steil") : $"{Math.Round(MaskCurve):0}";
+
+    partial void OnMaskAmountChanged(double value) => ToolChanged(nameof(MaskAmountLabel));
+    partial void OnMaskEndChanged(double value) => ToolChanged(nameof(MaskEndLabel));
+    partial void OnMaskCurveChanged(double value) => ToolChanged(nameof(MaskCurveLabel));
+    partial void OnShowMaskChanged(bool value) => RequestPreview();
+
 
     /// <summary>Der Schwellwert wirkt nur beim Aufhellen.</summary>
     public bool CanLimitLuminance => Math.Round(MatchLuminance) > 0;
@@ -159,6 +182,9 @@ public partial class MainViewModel
         MatchLimit = 100;
         MatchTarget = 0;
         MatchGlobal = 0;
+        MaskAmount = 0;
+        MaskEnd = 75;
+        MaskCurve = 30;
         NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
@@ -188,7 +214,8 @@ public partial class MainViewModel
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
         Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast),
-        WbNeutral, WbBlack, WbWhite, Round(MatchLimit), Round(MatchTarget), Round(MatchGlobal)),
+        WbNeutral, WbBlack, WbWhite, Round(MatchLimit), Round(MatchTarget), Round(MatchGlobal),
+        Round(MaskAmount), Round(MaskEnd), Round(MaskCurve)),
         HiddenSteps);   // ausgeblendete Bearbeitungen wirken nicht
 
     internal static Tint TintOf(string? label) =>
