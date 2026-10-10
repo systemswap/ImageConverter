@@ -372,6 +372,9 @@
                                     <Button.Flyout>
                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                                             <MenuItem Header="{l:T 'DIN-Formate'}" IsEnabled="False" />
+                                            <MenuItem Header="A0  ·  841 × 1189 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A0" />
+                                            <MenuItem Header="A1  ·  594 × 841 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A1" />
+                                            <MenuItem Header="A2  ·  420 × 594 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A2" />
                                             <MenuItem Header="A3  ·  297 × 420 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A3" />
                                             <MenuItem Header="A4  ·  210 × 297 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A4" />
                                             <MenuItem Header="A5  ·  148 × 210 mm" Command="{Binding ApplyPaperFormatCommand}" CommandParameter="A5" />

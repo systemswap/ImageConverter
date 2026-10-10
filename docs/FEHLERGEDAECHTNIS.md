@@ -1102,3 +1102,8 @@ Test oder Nachweis.
 - **Test/Nachweis:** `PaperFormatTests` (quer/hoch/quadratisch, schlank/breit, Kette offen, Liste eindeutig).
   Unsichtbares Testfenster: Bild 184 × 312 px bei 72 DPI (64,9 × 110,1 mm) → A4: 175,2 × 297 mm,
   496 × 842 px, „Nicht vergrößern“ aus; Knöpfe Kette und Format beide 34 × 26.
+- **Nachtrag 0.5.33:** Standardformate um A2, A1 und A0 erweitert (Menü jetzt A0 … A7, DIN lang, Fotoabzüge,
+  US); Test `Din_GoesFromA0ToA7`.
+- **Meilenstein 0.5.33 (10.10.2026):** Stand 0.5.32 beta plus A0–A2 – Frei drehen mit automatischem Rahmen,
+  Entzerren mit frei verschiebbaren Ecken und Standardformate vom Benutzer als gut befunden. Tag `v0.5.33`,
+  Sicherung `../ImageConverter-0.5.33-Sicherung.zip`.

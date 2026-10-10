@@ -16,6 +16,9 @@ public static class PaperFormats
 {
     public static IReadOnlyList<PaperFormat> Din { get; } =
     [
+        new("A0", "A0", 841, 1189),
+        new("A1", "A1", 594, 841),
+        new("A2", "A2", 420, 594),
         new("A3", "A3", 297, 420),
         new("A4", "A4", 210, 297),
         new("A5", "A5", 148, 210),

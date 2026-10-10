@@ -51,6 +51,14 @@ public class PaperFormatTests
     }
 
     [Fact]
+    public void Din_GoesFromA0ToA7()
+    {
+        Assert.Equal(["A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"],
+            PaperFormats.Din.Where(f => f.Key.StartsWith('A')).Select(f => f.Key));
+        Assert.Equal((841, 1189), (PaperFormats.Find("A0")!.WidthMm, PaperFormats.Find("A0")!.HeightMm));
+    }
+
+    [Fact]
     public void Formats_AreUniqueAndPortrait()
     {
         var all = PaperFormats.All.ToList();
