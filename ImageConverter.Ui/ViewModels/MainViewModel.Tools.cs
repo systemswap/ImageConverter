@@ -34,14 +34,19 @@ public partial class MainViewModel
     [ObservableProperty] public partial double Highlights { get; set; }
     /// <summary>„Gleiche Farbe“ wie Referenzwerkzeug CS5: Luminanz −100 … +100 (Referenzwerkzeug 1–200 %).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanLimitLuminance))]
+    [NotifyPropertyChangedFor(nameof(CanLimitLuminance), nameof(ShowDepthHint))]
     public partial double MatchLuminance { get; set; }
 
     /// <summary>„Gleiche Farbe“: Schwellwert für Luminanz — bis zu dieser Helligkeit (%) wird aufgehellt, Helleres bleibt; 100 = keine Grenze.</summary>
     [ObservableProperty] public partial double MatchLimit { get; set; } = 100;
 
     /// <summary>„Gleiche Farbe“: Ferne schonen 0–100 % — dunstige Bereiche (Talgrund, Hänge) werden entsprechend weniger aufgehellt.</summary>
-    [ObservableProperty] public partial double MatchDistance { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowDepthHint))]
+    public partial double MatchDistance { get; set; }
+
+    /// <summary>„Ferne schonen“ in Gebrauch, aber ohne Tiefenkarte (dann rechnet es über den Dunst) — Hinweis zeigen.</summary>
+    public bool ShowDepthHint => CanLimitLuminance && MatchDistance >= 0.5 && !Ai.HasDepthModel;
 
     /// <summary>Der Schwellwert wirkt nur beim Aufhellen.</summary>
     public bool CanLimitLuminance => Math.Round(MatchLuminance) > 0;

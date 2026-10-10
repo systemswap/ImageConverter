@@ -20,8 +20,24 @@ namespace ImageConverter.Core.Imaging;
 /// vom Mischen; die fertige Karte kantentreu nachzuführen machte ihn breiter (dort gibt es keine Kante zum Ausrichten).
 /// Gemischt wird über eine Laplace-Pyramide (<see cref="PyramidBlend"/>, 0.5.39).
 /// </remarks>
+/// <summary>Schätzt die Entfernung je Bildteil (KI-Tiefenkarte).</summary>
+public interface IDepthEstimator
+{
+    /// <param name="bgr">Bild klein, B, G, R je Pixel, sRGB 0–1.</param>
+    /// <returns>Nähe je Pixel in derselben Größe, 0 = fern … 1 = nah; null, wenn nicht möglich.</returns>
+    float[]? Estimate(float[] bgr, int width, int height);
+}
+
 public sealed class LuminanceRegions
 {
+    /// <summary>
+    /// Tiefenkarte, falls das Modell geladen ist (setzt das KI-Modul); null = „Ferne schonen“ nimmt den Dunst.
+    /// </summary>
+    public static IDepthEstimator? Depth { get; set; }
+
+    /// <summary>Nähe, ab der ein Bereich nicht mehr geschont wird (Tiefenkarte 0 = fern … 1 = nah): bis 0,25 voll, ab 0,5 gar nicht.</summary>
+    private const float NearFrom = 0.25f, NearTo = 0.5f;
+
     /// <summary>Längste Kante der Karten — genug für Bereiche, schnell genug für die Vorschau.</summary>
     private const int MapEdge = 1200;
 
@@ -32,11 +48,15 @@ public sealed class LuminanceRegions
     private const float HazeFrom = 0.05f, HazeRange = 0.12f;
 
     private readonly float[] _base, _haze;
+    private readonly float[]? _near;
     private readonly int _w, _h;
     private readonly float _scale;   // Bildpixel je Kartenpixel
 
-    private LuminanceRegions(float[] baseMap, float[] haze, int w, int h, float scale) =>
-        (_base, _haze, _w, _h, _scale) = (baseMap, haze, w, h, scale);
+    private LuminanceRegions(float[] baseMap, float[] haze, float[]? near, int w, int h, float scale) =>
+        (_base, _haze, _near, _w, _h, _scale) = (baseMap, haze, near, w, h, scale);
+
+    /// <summary>Wurde die KI-Tiefenkarte benutzt?</summary>
+    public bool UsesDepth => _near is not null;
 
     /// <summary>Die Karten zu einem Pixelpuffer (B, G, R, A; sRGB 0–1).</summary>
     public static LuminanceRegions Compute(float[] bgra, int width, int height)
@@ -80,7 +100,21 @@ public sealed class LuminanceRegions
         // trug die dunklen Werte der Büsche ins Tal — dort galt das Tal als nah und hellte als Saum mit auf (0.5.38).
         // Kleiner Glättungsradius: Am Übergang sind Ferne und Vordergrund oft gleich hell, es gibt keine Kante zum Ausrichten.
         var haze = Guided(minChannel, l, w, h, Math.Max(2, edge / 200), 1e-3f);
-        return new LuminanceRegions(baseMap, haze, w, h, f);
+
+        // Tiefenkarte (falls geladen): kantentreu an die Bildkanten angelegt — das Modell rechnet mit 518 px
+        float[]? near = null;
+        if (Depth is { } depth)
+        {
+            try
+            {
+                if (depth.Estimate(small, w, h) is { } raw) near = Guided(raw, l, w, h, Math.Max(2, edge / 200), 1e-3f);
+            }
+            catch (Exception)
+            {
+                near = null;   // Modell nicht lesbar o. Ä.: Dunst als Ersatz, die Bearbeitung geht weiter
+            }
+        }
+        return new LuminanceRegions(baseMap, haze, near, w, h, f);
     }
 
     /// <summary>
@@ -90,11 +124,11 @@ public sealed class LuminanceRegions
     /// <param name="distance">Ferne schonen 0 … 1: dunstige Bereiche entsprechend weniger.</param>
     /// <param name="l">Helligkeit des Pixels selbst — sehr helle Pixel in dunklen Bereichen (Himmel zwischen
     /// Ästen) bleiben, sonst leuchteten die Lücken auf.</param>
-    /// <returns>Gesamt — und der Teil aus Schwellwert und Schutz allein (folgt echten Kanten; als Obergrenze, damit
-    /// der Himmel neben einem Baum auch beim Verschmelzen über die Pyramide unverändert bleibt).</returns>
-    public (float All, float Limit) Weight(int x, int y, float l, float limit, float distance)
+    /// <returns>Gesamt — und der Teil, der echten Kanten folgt (Schwellwert, Schutz, Tiefenkarte; ohne den Dunst): die
+    /// Obergrenze, damit der Himmel neben einem Baum auch beim Verschmelzen über die Pyramide unverändert bleibt.</returns>
+    public (float All, float Cap) Weight(int x, int y, float l, float limit, float distance)
     {
-        var (b, haze) = Sample(x, y);
+        var (b, haze, near) = Sample(x, y);
         var w = 1f;
         if (limit < 1)
         {
@@ -102,12 +136,16 @@ public sealed class LuminanceRegions
             var protect = Math.Max(0.62f, limit + 0.12f);
             w *= 1 - SmoothStep(protect, protect + 0.18f, l);
         }
-        var all = distance > 0 ? w * (1 - distance * SmoothStep(HazeFrom, HazeFrom + HazeRange, haze)) : w;
-        return (all, w);
+        // Ferne: mit Tiefenkarte über die Entfernung, sonst über den Dunst
+        var far = _near is not null ? 1 - SmoothStep(NearFrom, NearTo, near) : SmoothStep(HazeFrom, HazeFrom + HazeRange, haze);
+        var all = distance > 0 ? w * (1 - distance * far) : w;
+        // Die Tiefenkarte hat echte Kanten (Baum vor Himmel) → gehört zur Obergrenze; der Dunst nicht (dort weich mischen).
+        // Ohne das leuchtete bei Schwellwert „aus“ und nur „Ferne“ ein Hof um den Baum in den Himmel (0.5.40, Test).
+        return (all, _near is not null ? all : w);
     }
 
-    /// <summary>Beide Karten an einem Bildpixel, bilinear gelesen.</summary>
-    private (float Base, float Haze) Sample(int x, int y)
+    /// <summary>Die Karten an einem Bildpixel, bilinear gelesen.</summary>
+    private (float Base, float Haze, float Near) Sample(int x, int y)
     {
         var fx = Math.Clamp((x + 0.5f) / _scale - 0.5f, 0, _w - 1);
         var fy = Math.Clamp((y + 0.5f) / _scale - 0.5f, 0, _h - 1);
@@ -116,7 +154,7 @@ public sealed class LuminanceRegions
         float Read(float[] m) =>
             (m[y0 * _w + x0] * (1 - tx) + m[y0 * _w + x1] * tx) * (1 - ty) +
             (m[y1 * _w + x0] * (1 - tx) + m[y1 * _w + x1] * tx) * ty;
-        return (Read(_base), Read(_haze));
+        return (Read(_base), Read(_haze), _near is null ? 0 : Read(_near));
     }
 
     private static float SmoothStep(float e0, float e1, float x)

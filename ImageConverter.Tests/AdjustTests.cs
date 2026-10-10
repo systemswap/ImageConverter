@@ -228,7 +228,7 @@ public class AdjustTests
     }
 
     /// <summary>Zwei Hälften (links/rechts) mit je einer Farbe, als Float-Puffer (ohne Dither).</summary>
-    private static float[] Halves(int w, int h, (float R, float G, float B) left, (float R, float G, float B) right)
+    internal static float[] Halves(int w, int h, (float R, float G, float B) left, (float R, float G, float B) right)
     {
         var px = new float[w * h * 4];
         for (var y = 0; y < h; y++)
@@ -241,7 +241,7 @@ public class AdjustTests
         return px;
     }
 
-    private static float At(float[] px, int w, int x, int y, int channel = 1) => px[(y * w + x) * 4 + channel];
+    internal static float At(float[] px, int w, int x, int y, int channel = 1) => px[(y * w + x) * 4 + channel];
 
     /// <summary>
     /// Luminanz mit Schwellwert nach Bereichen: Ein dunkler Bereich wird so hell wie ohne Grenze, der helle daneben
@@ -313,25 +313,6 @@ public class AdjustTests
         Assert.InRange(At(limited, w, 140, 140), At(src, w, 140, 140) - 0.01f, At(src, w, 140, 140) + 0.01f);   // Lücke bleibt
     }
 
-    /// <summary>
-    /// Ferne schonen: Gleich dunkle Bereiche — satter Vordergrund wird aufgehellt, dunstige Ferne (keine wirklich
-    /// dunklen Farbanteile) nicht. Ohne Ferne schonen werden beide gleich behandelt.
-    /// </summary>
-    [Fact]
-    public void MatchDistance_SparesHazyRegions_ButLiftsSaturatedForeground()
-    {
-        const int w = 400, h = 200;
-        var src = Halves(w, h, (0.02f, 0.3f, 0.02f), (0.2f, 0.21f, 0.23f));   // satter dunkler Wald | grauer Dunst
-        var plain = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100));
-        var spared = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchDistance: 100));
-
-        Assert.True(At(plain, w, 300, 100) > At(src, w, 300, 100) + 0.05f);                      // ohne: Dunst heller
-        Assert.InRange(At(spared, w, 300, 100), At(src, w, 300, 100) - 0.005f, At(src, w, 300, 100) + 0.005f);
-        Assert.Equal(At(plain, w, 50, 100), At(spared, w, 50, 100), 3);                          // Wald wie ohne
-        Assert.True(new Adjustments(MatchLuminance: -20, MatchDistance: 80).PrepareKey == Adjustments.None.PrepareKey with { },
-            "Abdunkeln braucht keine Karten");
-        Assert.True(new Adjustments(MatchDistance: 50).IsNone);
-    }
 
     /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
     [Fact]

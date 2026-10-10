@@ -18,7 +18,7 @@ public sealed class OnnxSessions : IDisposable
         {
             if (_open.TryGetValue(path, out var session)) return session;
 
-            if (model.Kind != AiModelKind.Helper)
+            if (!StaysOpen(model.Kind))
             {
                 // anderes großes Modell schließen
                 foreach (var (key, other) in _open.Where(p => !IsHelper(p.Key)).ToList())
@@ -51,7 +51,13 @@ public sealed class OnnxSessions : IDisposable
     }
 
     private static bool IsHelper(string path) =>
-        AiModelCatalog.All.Any(m => m.Kind == AiModelKind.Helper && path.EndsWith(m.MainFile, StringComparison.Ordinal));
+        AiModelCatalog.All.Any(m => StaysOpen(m.Kind) && path.EndsWith(m.MainFile, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Kleine Hilfsmodelle und die Tiefenkarte bleiben offen und schließen keine anderen: Die Tiefenkarte rechnet in der
+    /// Vorschau, auch während ein KI-Lauf sein Modell benutzt — es darf ihm nicht unter den Füßen geschlossen werden.
+    /// </summary>
+    private static bool StaysOpen(AiModelKind kind) => kind is AiModelKind.Helper or AiModelKind.Depth;
 
     public void Dispose()
     {

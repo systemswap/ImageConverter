@@ -374,6 +374,9 @@ public partial class MainViewModel
     /// Fordert eine neue Vorschau an. Läuft schon eine Berechnung, wird danach genau
     /// einmal mit den dann aktuellen Werten nachgerechnet („die letzte gewinnt").
     /// </summary>
+    /// <summary>Vorschau neu anfordern (z. B. Tiefenmodell geladen — der Schlüssel des teuren Teils ändert sich mit).</summary>
+    internal void RefreshPreview() => RequestPreview();
+
     private void RequestPreview()
     {
         RequestEstimate();   // Größe, Schärfe, Rauschen … ändern auch die Dateigröße

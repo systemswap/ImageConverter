@@ -1262,3 +1262,37 @@ Test oder Nachweis.
 - **Test/Nachweis:** `AdjustTests.PyramidBlend_GivesSoftTransition_ButKeepsImageEdgesSharp`; die drei Tests aus #36
   (Himmel bis an die Kante unverändert – schlug mit Pyramide ohne Obergrenze fehl). Sichtvergleich Ausschnitt Tal
   0.5.38 ↔ 0.5.39.
+
+## 38. Luminanz: „Ferne schonen“ mit KI-Tiefenkarte (Depth Anything V2)
+
+- **Neu in:** 0.5.40 beta (10.10.2026). Folgt auf #37 (Wunsch des Benutzers nach der Recherche: beide Teile umsetzen).
+- **Funktion:** Ist das Modell „Tiefenkarte – Depth Anything V2 (klein)“ geladen (Einstellungen → KI-Modelle, Gruppe
+  Tiefenkarte, 99 MB, Apache-2.0), nimmt „Ferne schonen“ die geschätzte Entfernung statt des Dunstes; ohne Modell
+  wie bisher der Dunst, unter dem Regler ein Hinweis mit „Laden …“. Vorbild: Adobe Referenzwerkzeug, Tiefenbereichsmaske
+  für jedes Foto (April 2026).
+- **Bauweise:** `IDepthEstimator` (Core.Imaging) und `OnnxDepthEstimator` (Core.Ai, lange Seite 518, Vielfaches von 14,
+  ImageNet-Normierung, Ausgang 2 %/98 % auf 0 fern … 1 nah). Das KI-Modul meldet es an (`LuminanceRegions.Depth`),
+  sobald das Modell im Ordner liegt; der `PrepareKey` enthält, ob eine Tiefenkarte da ist → nach dem Laden rechnet
+  die Vorschau neu. Die Karte wird kantentreu an das Bild angelegt (Guided Filter) und ist Teil der **Obergrenze**
+  (echte Kanten); der Dunst nicht. Tiefenmodell bleibt offen und schließt keine anderen (`OnnxSessions.StaysOpen`) –
+  es rechnet in der Vorschau, auch während ein KI-Lauf sein Modell benutzt. Rechnet immer aus dem Bild vor den
+  Einstellungen (Regler, kein Knopf) – nichts häuft sich an; das Modell läuft einmal je Bild.
+- **Falle (im eigenen Test gefunden, vor der Auslieferung behoben):** Mit Schwellwert „aus“ und nur „Ferne“ leuchtete
+  ein Hof um den Baum in den Himmel – die Obergrenze kam nur vom Schwellwert, die Pyramide mischte die Aufhellung über
+  die Kante. Jetzt gehört die Tiefenkarte zur Obergrenze. Gegenprobe: mit der alten Regel schlägt
+  `WithDepthMap_DistanceFollowsDepth_AndKeepsFarSideUpToTheEdge` fehl.
+- **Durchläufe geprüft (Frage des Benutzers):** zwei bzw. drei schwächere Durchläufe hintereinander, Bereiche jedes
+  Mal neu aus dem Zwischenstand – kaum Unterschied zu einem Durchlauf, eher weniger Aufhellung im Vordergrund (er ist
+  nach dem ersten schon heller als die Grenze), nur mehr Rechenzeit. Wie schon Rolling Guidance (#36): **keine
+  Durchläufe**. Nicht wieder vorschlagen ohne neuen Befund.
+- **Modell gewählt:** volle Fassung (fp32, 99 MB, 0,14 s je Bild); die gerundete (int8, 27 MB) gab eine sichtbar
+  körnige Karte. Größere Fassungen (Base/Large) sind nur nicht-kommerziell lizenziert.
+- **Wo:** `Core/Ai/DepthEstimator.cs`, `Core/Ai/AiModels.cs` (`DepthMap`, `AiModelKind.Depth`), `Core/Ai/OnnxModels.cs`
+  (`StaysOpen`), `Core/Imaging/LuminanceRegions.cs` (`IDepthEstimator`, `Depth`, `Weight`), `Core/Imaging/Adjustments.cs`
+  (`PrepareKey`); `Ui/Ai/AiViewModel.cs` (`UpdateDepth`, Gruppe), `Ui/ViewModels/MainViewModel.Tools.cs`
+  (`ShowDepthHint`), `.Preview.cs` (`RefreshPreview`); `Views/MainView.axaml`.
+- **Test/Nachweis:** `LuminanceDistanceTests` (eigene Sammlung, nicht parallel – die Tiefenkarte ist global
+  angemeldet): Dunst-Fall und Ersatz-Tiefenkarte (links nah, rechts fern: nur links heller, rechts bis an die Kante
+  unverändert; `PrepareKey` ändert sich mit dem Modell). Panorama mit echtem Modell (ohne Netz): Tal und Hang bleiben
+  natürlich, Vordergrund heller. Unsichtbares Testfenster: Hinweis ohne Modell an, mit Modell aus; Gruppe in den
+  Einstellungen.

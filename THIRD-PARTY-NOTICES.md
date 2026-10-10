@@ -83,6 +83,7 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 | Gesichter – CodeFormer | **S-Lab License 1.0 – nur nicht-kommerzielle Nutzung** | Shangchen Zhou (CodeFormer), ONNX von FaceFusion |
 | Entfernen – LaMa (big-lama) | Apache-2.0 | Roman Suvorov u. a. (LaMa, Samsung AI Center), ONNX von Carve (Hugging Face `Carve/LaMa-ONNX`, feste Fassung) |
 | Entfernen – MI-GAN | MIT | Andranik Sargsyan u. a. (MI-GAN, Picsart AI Research), Hugging Face `andraniksargsyan/migan`, feste Fassung |
+| Tiefenkarte – Depth Anything V2 Small | Apache-2.0 | Lihe Yang u. a. (Depth Anything V2, arXiv:2406.09414), ONNX von onnx-community (Hugging Face `onnx-community/depth-anything-v2-small`, feste Fassung) |
 
 ## Netzzugriffe
 

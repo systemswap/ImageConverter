@@ -13,6 +13,9 @@ public enum AiModelKind
 
     /// <summary>Markierte Stellen neu malen: Wasserzeichen, Schrift, Störendes entfernen (Tab „Entfernen“).</summary>
     Inpaint,
+
+    /// <summary>Entfernung je Bildteil schätzen — für „Ferne schonen“ (Gleiche Farbe → Luminanz).</summary>
+    Depth,
 }
 
 /// <summary>
@@ -222,7 +225,25 @@ public static class AiModelCatalog
         Origin: "Andranik Sargsyan u. a. (MI-GAN, Picsart AI Research)",
         TileSize: 512);
 
-    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, FaceDetector, FaceParser];
+    public static AiModel DepthMap { get; } = new(
+        "depth",
+        "Tiefenkarte – Depth Anything V2 (klein)",
+        "Entfernung im Bild – für „Ferne schonen“",
+        "Depth Anything V2 (Small): schätzt aus einem normalen Foto, wie weit jeder Bildteil entfernt ist. Damit " +
+        "erkennt „Ferne schonen“ (Tools → Gleiche Farbe) den Hintergrund auch ohne Dunst und mit sauberen Grenzen.",
+        AiModelKind.Depth,
+        "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/4472b7362082ad9968fee890ca0f1e5aca36b93d/onnx/model.onnx",
+        99_060_839,
+        "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c",
+        IsZip: false,
+        MainFile: "depth_anything_v2_small.onnx",
+        License: "Apache-2.0",
+        NonCommercial: false,
+        Origin: "Lihe Yang u. a. (Depth Anything V2), ONNX von onnx-community",
+        TileSize: 518,
+        FixedTile: false);
+
+    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, DepthMap, FaceDetector, FaceParser];
 
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

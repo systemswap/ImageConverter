@@ -778,6 +778,13 @@
                                             ToolTip.Tip="{l:T 'Ferne schonen: Dunstige Bereiche (Talgrund, ferne Hänge) werden weniger aufgehellt, der dunkle Vordergrund voll. Hilft bei Fernsicht mit Dunst; bei klarer Luft wirkt es kaum. Wirkt nur beim Aufhellen.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchDistanceLabel}" />
                                 </Grid>
+                                <Grid ColumnDefinitions="*,Auto" Margin="76,0,0,4" IsVisible="{Binding ShowDepthHint}">
+                                    <TextBlock Grid.Column="0" Classes="hint" TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Text="{l:T 'Rechnet über den Dunst. Genauer mit der Tiefenkarte (KI-Modell).'}" />
+                                    <Button Grid.Column="1" Classes="subtle" Margin="6,0,0,0" Content="{l:T 'Laden …'}"
+                                            Command="{Binding OpenSettingsCommand}"
+                                            ToolTip.Tip="{l:T 'Öffnet die Einstellungen – unter KI-Modelle → Tiefenkarte herunterladen (99 MB, läuft auf deinem Rechner).'}" />
+                                </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ausgleichen'}" />
                                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Neutralize}"

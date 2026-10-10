@@ -77,8 +77,10 @@ public sealed record Adjustments(
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
         DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband, DehazeCast = Normalized.DehazeCast,
         WbNeutral = WbNeutral, WbBlack = WbBlack, WbWhite = WbWhite,
-        // Nur ob die Bereichskarten gebraucht werden, nicht die Reglerstände — die wirken erst in Apply (flüssig)
+        // Nur ob die Bereichskarten gebraucht werden (und ob mit Tiefenkarte), nicht die Reglerstände — die wirken
+        // erst in Apply (flüssig). Wird das Tiefenmodell geladen oder gelöscht, ändert sich der Schlüssel → neu rechnen.
         MatchLimit = NeedsRegions ? 0 : 100,
+        MatchDistance = NeedsRegions && LuminanceRegions.Depth is not null ? 1 : 0,
     };
 
     /// <summary>Braucht Luminanz die Bereichskarten (<see cref="LuminanceRegions"/>)?</summary>
@@ -374,16 +376,16 @@ public static class Adjust
                 var (r, g, b) = pixel(p);
                 var l = Oklab.FromSrgb(r, g, b).L;
                 var lift = l > 1e-4f ? Shoulder(l * luminance) : l;
-                var (all, byLimit) = regions.Weight(x, y, l, limit, distance);
+                var (all, byEdges) = regions.Weight(x, y, l, limit, distance);
                 plain[p] = l;
                 bright[p] = lift;
                 weight[p] = all;
-                cap[p] = l + (lift - l) * byLimit;
+                cap[p] = l + (lift - l) * byEdges;
             }
         });
         // Die Pyramide mischt grobe Helligkeit großflächig — auch über echte Kanten hinweg (Himmel neben dem Baum würde
-        // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Schwellwert und Schutz folgen den echten
-        // Kanten und sind deshalb die Obergrenze; frei weich gemischt wird nur „Ferne schonen“, wo es keine Kante gibt.
+        // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Schwellwert, Schutz und Tiefenkarte folgen
+        // echten Kanten und sind deshalb die Obergrenze; frei weich gemischt wird nur „Ferne“ über den Dunst.
         var blended = PyramidBlend.Blend(plain, bright, weight, width, height);
         Parallel.For(0, n, p => blended[p] = Math.Clamp(blended[p], plain[p], Math.Max(plain[p], cap[p])));
         PixelPool.Return(plain);

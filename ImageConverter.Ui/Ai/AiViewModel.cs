@@ -45,6 +45,7 @@ public partial class AiViewModel : ViewModelBase
             Group("GESICHTER", "Unscharfe oder beschädigte Gesichter wiederherstellen – in der Rubrik „KI“.", AiModelKind.Face),
             Group("GESICHTSERKENNUNG", "Hilfsmodelle für die Gesichtsmodelle: finden Gesichter und ihre Bereiche. Werden mit jedem Gesichtsmodell automatisch geladen.", AiModelKind.Helper),
             Group("ENTFERNEN", "Wasserzeichen, Schrift oder Störendes übermalen und füllen lassen – in der Rubrik „Entfernen“.", AiModelKind.Inpaint),
+            Group("TIEFENKARTE", "Für „Ferne schonen“ (Tools → Gleiche Farbe): erkennt den Hintergrund über die Entfernung statt über den Dunst – genauer und mit sauberen Grenzen.", AiModelKind.Depth),
         ];
 
         SizeOptions = ["Größe behalten", "Doppelte Größe (2×)", "Vierfache Größe (4×)"];
@@ -766,6 +767,7 @@ public partial class AiViewModel : ViewModelBase
         SelectedModel = usable.Contains(selected!) ? selected : usable.FirstOrDefault();
         OnPropertyChanged(nameof(HasModels));
         OnPropertyChanged(nameof(FolderText));
+        UpdateDepth();
         ModelsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -789,6 +791,22 @@ public partial class AiViewModel : ViewModelBase
     }
 
     internal bool IsBusy => IsRunning || BusyElsewhere?.Invoke() == true;
+
+    /// <summary>Ist die Tiefenkarte geladen? (Hinweis bei „Ferne schonen“.)</summary>
+    public bool HasDepthModel => LuminanceRegions.Depth is not null;
+
+    /// <summary>Tiefenkarte für „Ferne schonen“ an- oder abmelden, je nachdem, ob das Modell da ist.</summary>
+    private void UpdateDepth()
+    {
+        var path = Store.PathOf(AiModelCatalog.DepthMap);
+        var had = LuminanceRegions.Depth is not null;
+        LuminanceRegions.Depth = path is null
+            ? null
+            : new OnnxDepthEstimator(() => _sessions.Get(AiModelCatalog.DepthMap, path));
+        if (had == (path is not null)) return;
+        OnPropertyChanged(nameof(HasDepthModel));
+        _main.RefreshPreview();
+    }
 
     /// <summary>Rechnet gerade das Entfernen? (Modelle dann nicht löschen.)</summary>
     internal Func<bool>? BusyElsewhere { get; set; }
