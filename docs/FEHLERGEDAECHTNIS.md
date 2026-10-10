@@ -1322,3 +1322,23 @@ Test oder Nachweis.
 - **Test/Nachweis:** `AdjustTests.MatchLimit_KeepsSkyGapsAtTreeEdge_ButLiftsSunlitLeaves` (Himmelslücken dunkler als
   der feste Schutz bleiben, gleich helle gelbgrüne Sonnenflecken werden heller) – Gegenprobe: ohne Erkennung schlägt
   er fehl. Lupe am Panorama vorher/nachher (Baumrand vor Himmel, Ast vor dem Tal), Gesamtbild mit und ohne Tiefenkarte.
+
+## 40. Luminanz: Regler „Zielwert“ (Aufhellen bis zu einer Helligkeit statt mit festem Faktor)
+
+- **Neu in:** 0.5.42 beta (10.10.2026). Wunsch des Benutzers: Überstrahlung z. B. der Wiesen links.
+- **Warum:** Luminanz 200 % verdoppelt alles in den gewählten Bereichen – ein Mittelton (Wiese, sonniger Busch) wird
+  fast so stark angehoben wie ein dunkler Baum und strahlt über.
+- **Wie:** Faktor **je Bereich** (eingeebnete Helligkeit, nicht je Pixel – die Struktur im Baum bleibt):
+  `Ziel / Bereichshelligkeit`, begrenzt auf 1 … Luminanz-Faktor. Ein Baum bei 20 % bekommt viel, eine Wiese bei 45 % mit
+  Ziel 40 % nichts. „Luminanz“ bleibt unverändert wie in Referenzwerkzeug (Entscheidung des Benutzers: eigener Regler statt
+  Umdeuten); Zielwert ganz links = aus.
+- **Falle:** Der Regler sollte „Ziel“ heißen – den deutschen Text gab es schon („Ziel“ = Speicherort beim Export,
+  englisch „Destination“). Die englische Tabelle wird über den Indexer gefüllt, ein zweiter Eintrag überschreibt den
+  ersten **still**; die Export-Beschriftung wäre englisch zu „Target“ geworden, kein Test hätte es gemerkt. Regler heißt
+  jetzt „Zielwert“, neuer Test `LocalizationTests.English_HasNoDuplicateKeys` (Gegenprobe: mit doppeltem „Ziel“ rot).
+  **Nicht tun:** einen deutschen Text, den es schon gibt, für etwas anderes verwenden.
+- **Wo:** `Core/Imaging/Adjustments.cs` (`MatchTarget`, `NeedsRegions`, `LiftByRegions`), `Core/Imaging/LuminanceRegions.cs`
+  (`AreaBrightness`); `Ui/ViewModels/MainViewModel.Tools.cs`, `.History.cs`, `.Edits.cs`, `.Look.cs`, `.PerImage.cs`;
+  `Views/MainView.axaml` (unter Luminanz).
+- **Test/Nachweis:** `AdjustTests.MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone` (Gegenprobe: ohne Zielwert
+  rot); Panorama mit Tiefenkarte: sonnige Büsche nicht mehr grell, dunkler Vordergrund gleichmäßig angehoben.

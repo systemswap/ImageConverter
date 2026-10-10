@@ -3,6 +3,6 @@
          Schema: 0.4.x — die letzte Zahl wird bei jedem Commit um eins erhöht.
          Erscheint in der Titelleiste (die AppImage heißt bewusst ohne Nummer). -->
     <PropertyGroup>
-        <Version>0.5.41-beta</Version>
+        <Version>0.5.42-beta</Version>
     </PropertyGroup>
 </Project>

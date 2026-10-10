@@ -767,6 +767,12 @@
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsEnabled="{Binding CanLimitLuminance}">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Zielwert'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="90" Value="{Binding MatchTarget}"
+                                            ToolTip.Tip="{l:T 'Hellt dunkle Bereiche nur bis zu dieser Helligkeit auf: ein dunkler Baum bekommt viel, eine Wiese im Mittelton kaum etwas – so strahlt nichts über. Luminanz bestimmt, wie stark höchstens. Ganz links: aus, alles wird im selben Verhältnis heller. Wirkt nur beim Aufhellen.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchTargetLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsEnabled="{Binding CanLimitLuminance}">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Schwellwert'}" />
                                     <Slider Grid.Column="1" Minimum="5" Maximum="100" Value="{Binding MatchLimit}"
                                             ToolTip.Tip="{l:T 'Luminanz hellt nur Bereiche auf, die dunkler sind als dieser Wert – ein dunkler Baum wird als Ganzes heller, der helle Himmel daneben und zwischen den Ästen bleibt. Ganz rechts: keine Grenze. Wirkt nur beim Aufhellen.'}" />

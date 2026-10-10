@@ -35,7 +35,7 @@ public partial class MainViewModel
             Adjust = Adjust with
             {
                 Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0, Saturation = 0, Tint = Tint.None,
-                Vibrance = 0, Dehaze = 0, MatchLuminance = 0, MatchLimit = 100, MatchDistance = 0, Neutralize = 0, Warmth = 0,
+                Vibrance = 0, Dehaze = 0, MatchLuminance = 0, MatchLimit = 100, MatchDistance = 0, MatchTarget = 0, Neutralize = 0, Warmth = 0,
                 WbNeutral = null, WbBlack = null, WbWhite = null,
             },
         };
@@ -117,7 +117,7 @@ public partial class MainViewModel
             Brightness = a.Brightness, Contrast = a.Contrast, Shadows = a.Shadows, Highlights = a.Highlights,
             Saturation = a.Saturation, Vibrance = a.Vibrance, Dehaze = a.Dehaze,
             SelectedTint = TintLabels.First(t => t.Tint == a.Tint).Label, TintHue = a.TintHue,
-            MatchLuminance = a.MatchLuminance, MatchLimit = a.MatchLimit, MatchDistance = a.MatchDistance, Neutralize = a.Neutralize, Warmth = a.Warmth,
+            MatchLuminance = a.MatchLuminance, MatchLimit = a.MatchLimit, MatchDistance = a.MatchDistance, MatchTarget = a.MatchTarget, Neutralize = a.Neutralize, Warmth = a.Warmth,
             DehazePasses = a.DehazePasses, DehazeClarity = a.DehazeClarity, DehazeContrast = a.DehazeContrast,
             DehazeVibrance = a.DehazeVibrance, DehazeSharpen = a.DehazeSharpen, DehazeEdge = a.DehazeEdge,
             DehazeBrightness = a.DehazeBrightness, DehazeDeband = a.DehazeDeband, DehazeCast = a.DehazeCast,

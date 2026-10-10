@@ -93,6 +93,22 @@ public sealed partial class LocalizationTests : IDisposable
             string.Join("\n", missing.Select(t => $"[{Quote(t)}] = {Quote(t)},")));
     }
 
+    /// <summary>
+    /// Kein deutscher Text doppelt in English.cs: Die Tabelle wird über den Indexer gefüllt, ein zweiter Eintrag
+    /// überschreibt den ersten still. So hätte „Ziel“ für den neuen Luminanz-Regler (0.5.42) die Beschriftung des
+    /// Speicherorts beim Export in „Target“ verwandelt.
+    /// </summary>
+    [Fact]
+    public void English_HasNoDuplicateKeys()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "ImageConverter.Core", "Localization", "English.cs"));
+        var keys = Regex.Matches(source, @"^\s*\[(""(?:[^""\\]|\\.)*"")\]\s*=", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value).ToList();
+        Assert.True(keys.Count > 500, $"nur {keys.Count} Einträge gefunden — Muster passt nicht mehr");
+        var duplicates = keys.GroupBy(k => k).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        Assert.True(duplicates.Count == 0, "Doppelt in English.cs: " + string.Join(", ", duplicates));
+    }
+
     [Fact]
     public void English_HasNoLeftovers()
     {

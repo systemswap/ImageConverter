@@ -105,7 +105,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Dehaze) != 0) a = a with { Dehaze = 0 };
         if ((hidden & EditSteps.Light) != 0) a = a with { Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0 };
         if ((hidden & EditSteps.Color) != 0) a = a with { Saturation = 0, Vibrance = 0, Tint = Tint.None };
-        if ((hidden & EditSteps.MatchColor) != 0) a = a with { MatchLuminance = 0, MatchLimit = 100, MatchDistance = 0, Neutralize = 0, Warmth = 0 };
+        if ((hidden & EditSteps.MatchColor) != 0) a = a with { MatchLuminance = 0, MatchLimit = 100, MatchDistance = 0, MatchTarget = 0, Neutralize = 0, Warmth = 0 };
         if ((hidden & EditSteps.WhiteBalance) != 0) a = a with { WbNeutral = null, WbBlack = null, WbWhite = null };
         return a;
     }
@@ -331,6 +331,7 @@ public partial class MainViewModel
             AddIfAny(rows, EditSteps.MatchColor, Tr.T("Gleiche Farbe"),
                 CanLimitLuminance ? string.Join(" · ", new[]
                 {
+                    MatchTarget >= 0.5 ? $"{Tr.T("Zielwert")} {Math.Round(MatchTarget):0} %" : null,
                     MatchLimit < 99.5 ? $"{Tr.T("Schwellwert")} {Math.Round(MatchLimit):0} %" : null,
                     MatchDistance >= 0.5 ? $"{Tr.T("Ferne schonen")} {Math.Round(MatchDistance):0} %" : null,
                 }.Where(t => t is not null)) is { Length: > 0 } extra ? extra : null : null,
@@ -414,7 +415,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.Dehaze) != 0) s = s with { Dehaze = 0 };
         if ((hidden & EditSteps.Light) != 0) s = s with { Brightness = 0, Contrast = 0, Shadows = 0, Highlights = 0 };
         if ((hidden & EditSteps.Color) != 0) s = s with { Saturation = 0, Vibrance = 0, SelectedTint = TintLabels[0].Label };
-        if ((hidden & EditSteps.MatchColor) != 0) s = s with { MatchLuminance = 0, MatchLimit = 100, MatchDistance = 0, Neutralize = 0, Warmth = 0 };
+        if ((hidden & EditSteps.MatchColor) != 0) s = s with { MatchLuminance = 0, MatchLimit = 100, MatchDistance = 0, MatchTarget = 0, Neutralize = 0, Warmth = 0 };
         if ((hidden & EditSteps.WhiteBalance) != 0) s = s with { WbNeutral = null, WbBlack = null, WbWhite = null };
         if ((hidden & EditSteps.Sharpen) != 0) s = s with { SharpenAmount = 0 };
         return s with { Hidden = EditSteps.None };

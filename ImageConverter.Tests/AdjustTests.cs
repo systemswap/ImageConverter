@@ -328,6 +328,25 @@ public class AdjustTests
         Assert.True(At(r, w, 60, 150) > At(src, w, 60, 150) + 0.05f, "Baum nicht aufgehellt");
     }
 
+    /// <summary>
+    /// Zielwert: Ein dunkler Bereich wird bis etwa zum Ziel angehoben, ein Bereich im Mittelton darüber bleibt — ohne
+    /// Zielwert würde er im selben Verhältnis mit hochgezogen und überstrahlen.
+    /// </summary>
+    [Fact]
+    public void MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone()
+    {
+        const int w = 400, h = 200;
+        var src = Halves(w, h, (0.08f, 0.12f, 0.06f), (0.42f, 0.5f, 0.28f));   // dunkler Baum | sonnige Wiese
+        var free = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100));
+        var target = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
+        float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
+
+        Assert.True(L(free, 300) > L(src, 300) + 0.15f, "ohne Zielwert würde die Wiese stark aufhellen");
+        Assert.InRange(L(target, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);   // Wiese bleibt
+        Assert.InRange(L(target, 60), 0.36f, 0.44f);                              // Baum etwa bis zum Ziel (40 %)
+        Assert.True(L(target, 60) > L(src, 60) + 0.1f);
+    }
+
     /// <summary>Helle Lücken in einem dunklen Bereich (Himmel zwischen Ästen) leuchten nicht auf.</summary>
     [Fact]
     public void MatchLimit_ProtectsBrightGapsInsideDarkRegions()

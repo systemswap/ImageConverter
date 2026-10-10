@@ -50,7 +50,8 @@ public partial class MainViewModel
         WbSample? WbBlack = null,
         WbSample? WbWhite = null,
         double MatchLimit = 100,            // Luminanz: Schwellwert der Bereiche, hellere bleiben
-        double MatchDistance = 0);          // Luminanz: Ferne schonen
+        double MatchDistance = 0,           // Luminanz: Ferne schonen
+        double MatchTarget = 0);            // Luminanz: Ziel
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -104,6 +105,7 @@ public partial class MainViewModel
         [nameof(MatchLuminance)] = "Luminanz",
         [nameof(MatchLimit)] = "Schwellwert",
         [nameof(MatchDistance)] = "Ferne",
+        [nameof(MatchTarget)] = "Zielwert",
         [nameof(Neutralize)] = "Ausgleichen",
         [nameof(Warmth)] = "Farbe",
         [nameof(SelectedMetadataMode)] = null,
@@ -240,7 +242,7 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchDistance);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchDistance, MatchTarget);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -304,6 +306,7 @@ public partial class MainViewModel
                 MatchLuminance = s.MatchLuminance;
                 MatchLimit = s.MatchLimit;
                 MatchDistance = s.MatchDistance;
+                MatchTarget = s.MatchTarget;
                 Neutralize = s.Neutralize;
                 Warmth = s.Warmth;
                 SelectedMetadataMode = s.SelectedMetadataMode;

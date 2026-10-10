@@ -226,6 +226,13 @@ public sealed class LuminanceRegions
     /// <summary>Farbabstand (Oklab a/b) zu „dahinter“: bis hier gleiche Farbe (Durchblick), ab hier eine andere.</summary>
     private const float ChromaSame = 0.03f, ChromaOther = 0.08f;
 
+    /// <summary>Helligkeit des Bereichs an einem Bildpixel (eingeebnet, Oklab-L).</summary>
+    public float AreaBrightness(int x, int y)
+    {
+        var (fx, fy) = MapPoint(x, y);
+        return Read(_base, fx, fy);
+    }
+
     private (float X, float Y) MapPoint(int x, int y) =>
         (Math.Clamp((x + 0.5f) / _scale - 0.5f, 0, _w - 1), Math.Clamp((y + 0.5f) / _scale - 0.5f, 0, _h - 1));
 
