@@ -40,6 +40,9 @@ public partial class MainViewModel
     /// <summary>„Gleiche Farbe“: Schwellwert für Luminanz — bis zu dieser Helligkeit (%) wird aufgehellt, Helleres bleibt; 100 = keine Grenze.</summary>
     [ObservableProperty] public partial double MatchLimit { get; set; } = 100;
 
+    /// <summary>„Gleiche Farbe“: Ferne schonen 0–100 % — dunstige Bereiche (Talgrund, Hänge) werden entsprechend weniger aufgehellt.</summary>
+    [ObservableProperty] public partial double MatchDistance { get; set; }
+
     /// <summary>Der Schwellwert wirkt nur beim Aufhellen.</summary>
     public bool CanLimitLuminance => Math.Round(MatchLuminance) > 0;
 
@@ -86,6 +89,7 @@ public partial class MainViewModel
     public string HighlightsLabel => Signed(Highlights);
     public string MatchLuminanceLabel => $"{Math.Round(100 + MatchLuminance):0} %";
     public string MatchLimitLabel => MatchLimit >= 99.5 ? Tr.T("aus") : $"{Math.Round(MatchLimit):0} %";
+    public string MatchDistanceLabel => Percent(MatchDistance);
     public string NeutralizeLabel => Neutralize < 0.5 ? Tr.T("aus") : $"{Math.Round(Neutralize):0} %";
     public string WarmthLabel => Signed(Warmth);
     public string VibranceLabel => Signed(Vibrance);
@@ -120,6 +124,7 @@ public partial class MainViewModel
     partial void OnHighlightsChanged(double value) => ToolChanged(nameof(HighlightsLabel));
     partial void OnMatchLuminanceChanged(double value) => ToolChanged(nameof(MatchLuminanceLabel));
     partial void OnMatchLimitChanged(double value) => ToolChanged(nameof(MatchLimitLabel));
+    partial void OnMatchDistanceChanged(double value) => ToolChanged(nameof(MatchDistanceLabel));
     partial void OnNeutralizeChanged(double value) => ToolChanged(nameof(NeutralizeLabel));
     partial void OnWarmthChanged(double value) => ToolChanged(nameof(WarmthLabel));
     partial void OnVibranceChanged(double value) => ToolChanged(nameof(VibranceLabel));
@@ -145,6 +150,7 @@ public partial class MainViewModel
         CommitPendingSettings();   // vorige Reglerbewegung bleibt ein eigener Schritt
         Dehaze = Brightness = Contrast = Shadows = Highlights = MatchLuminance = Neutralize = Warmth = Vibrance = Saturation = 0;
         MatchLimit = 100;
+        MatchDistance = 0;
         NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;
@@ -174,7 +180,7 @@ public partial class MainViewModel
         Round(Neutralize), Round(Warmth),
         (int)Round(DehazePasses), Round(DehazeClarity), Round(DehazeContrast), Round(DehazeVibrance),
         Round(DehazeSharpen), Round(DehazeEdge), Round(DehazeBrightness), Round(DehazeDeband), Round(DehazeCast),
-        WbNeutral, WbBlack, WbWhite, Round(MatchLimit)),
+        WbNeutral, WbBlack, WbWhite, Round(MatchLimit), Round(MatchDistance)),
         HiddenSteps);   // ausgeblendete Bearbeitungen wirken nicht
 
     internal static Tint TintOf(string? label) =>

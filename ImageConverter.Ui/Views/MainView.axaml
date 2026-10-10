@@ -769,8 +769,14 @@
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsEnabled="{Binding CanLimitLuminance}">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Schwellwert'}" />
                                     <Slider Grid.Column="1" Minimum="5" Maximum="100" Value="{Binding MatchLimit}"
-                                            ToolTip.Tip="{l:T 'Luminanz hellt nur bis zu dieser Helligkeit auf, was schon heller ist, bleibt, wie es ist. So wird ein dunkler Vordergrund heller, ohne dass der Himmel ausbleicht. Ganz rechts: keine Grenze. Wirkt nur beim Aufhellen.'}" />
+                                            ToolTip.Tip="{l:T 'Luminanz hellt nur Bereiche auf, die dunkler sind als dieser Wert – ein dunkler Baum wird als Ganzes heller, der helle Himmel daneben und zwischen den Ästen bleibt. Ganz rechts: keine Grenze. Wirkt nur beim Aufhellen.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLimitLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsEnabled="{Binding CanLimitLuminance}">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ferne'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MatchDistance}"
+                                            ToolTip.Tip="{l:T 'Ferne schonen: Dunstige Bereiche (Talgrund, ferne Hänge) werden weniger aufgehellt, der dunkle Vordergrund voll. Hilft bei Fernsicht mit Dunst; bei klarer Luft wirkt es kaum. Wirkt nur beim Aufhellen.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchDistanceLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Ausgleichen'}" />

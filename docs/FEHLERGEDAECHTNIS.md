@@ -1207,3 +1207,32 @@ Test oder Nachweis.
   Stückgrenzen; Stücke zusammenfassen/teilen; Ausschnitt im Bild; dünne Linien in der Maske; Alpha bleibt).
   Unsichtbares Testfenster ohne Netz mit Testmaus: zwei „Wasserzeichen“ übermalt, LaMa (≈ 15 s, 7 Stücke) entfernt
   beide sauber, MI-GAN (≈ 3 s) vom Bild davor, Liste ersetzt die Zeile, Strg+Z → LaMa-Ergebnis, Strg+Z → Original.
+
+## 36. Luminanz: Schwellwert nach Bereichen und „Ferne schonen“
+
+- **Neu in:** 0.5.38 beta (10.10.2026). Folgt auf #34: Rückmeldung des Benutzers zu 0.5.36 – mit 200 % und ohne
+  Schwellwert sind die Bäume gut zu sehen, aber hinten im Bild ist alles überstrahlt; der Schwellwert ließ sich
+  nicht so einstellen, dass nur die Bäume heller werden.
+- **Warum der alte Schwellwert nicht reichte:** Er entschied je Pixel. Dunkles durfte nur bis zur Grenze hell
+  werden (Bäume blieben dunkler als ohne Grenze), und alles gleich Dunkle (Talgrund, Hang) wurde gleich behandelt.
+- **Untersucht** (Testprogramm, Panorama mit dunklem Vordergrund, Luminanz 200 %; Messwert: Aufhellung heller
+  Pixel neben dunklen, Oklab-L): ohne Grenze +0,31; Maske aus weichgezeichneter Helligkeit +0,19 (Hof am Himmel);
+  dieselbe kantentreu nachgeführt +0,18; mehrere Durchläufe grob → fein +0,20; Rolling Guidance (Durchläufe wie
+  beim Dunst) +0,16, Maske klumpig; **Helligkeit kantentreu eingeebnet (selbstgeführter Guided Filter) +0,003** –
+  gewählt. Dazu Schutz sehr heller Pixel (Himmel zwischen Ästen).
+- **Ferne schonen:** Helligkeit allein trennt dunkle Ferne nicht vom dunklen Vordergrund. Dunstkarte wie beim
+  Dunst-Regler (dunkelster Farbkanal in der Umgebung): Vordergrund hat wirklich dunkle Farbanteile, dunstige Ferne
+  nicht. Regler 0–100 %, Vorgabe aus. **Grenze:** Wo Ferne und Vordergrund gleich hell aneinanderstoßen, bleibt ein
+  schmaler heller Saum (Übergang der Karte). Kleinere Radien machten ihn schmaler; die fertige Karte noch einmal
+  kantentreu nachzuführen machte ihn breiter (dort gibt es keine Kante zum Ausrichten) – verworfen.
+- **Bauweise:** Die Karten (Bereichshelligkeit, Dunst) rechnen einmal in kleiner Auflösung (längste Kante 1200) im
+  teuren, zwischengespeicherten Teil (`Adjust.Prepare` → `Prepared.Regions`); im `PrepareKey` steht nur, *ob* sie
+  gebraucht werden – Schwellwert und Ferne wirken erst in `Apply` und bleiben flüssig. 28 MP: Karten 88 ms,
+  Anwenden 189 ms. `Adjust.Limited` (Grenze je Pixel) entfallen.
+- **Wo:** `Core/Imaging/LuminanceRegions.cs`, `Core/Imaging/Adjustments.cs` (`MatchDistance`, `NeedsRegions`,
+  `PrepareKey`, `Prepared`, `Apply`); `Ui/ViewModels/MainViewModel.Tools.cs`, `.History.cs`, `.Edits.cs`, `.Look.cs`,
+  `.PerImage.cs`; `Views/MainView.axaml` (Gleiche Farbe: Schwellwert, Ferne).
+- **Test/Nachweis:** `AdjustTests.MatchLimit_LiftsDarkRegionsFully_AndLeavesBrightOnesIncludingTheEdge`,
+  `MatchLimit_ProtectsBrightGapsInsideDarkRegions`, `MatchDistance_SparesHazyRegions_ButLiftsSaturatedForeground` –
+  Gegenprobe: ohne Bereichskarten schlagen alle drei fehl. Unsichtbares Testfenster: Regler, Liste
+  („Schwellwert 40 % · Ferne schonen 100 % · Luminanz +80“), Rückgängig.

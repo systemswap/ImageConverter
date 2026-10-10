@@ -227,26 +227,78 @@ public class AdjustTests
         Assert.Equal(0, Gray(result, 0));                        // Schwarz bleibt
     }
 
-    /// <summary>Luminanz mit Schwellwert: Dunkles wird heller, Helleres als die Grenze bleibt, die Tonwerte bleiben in Reihenfolge.</summary>
-    [Fact]
-    public void MatchLimit_BrightensOnlyBelowThreshold_AndStaysMonotonic()
+    /// <summary>Zwei Hälften (links/rechts) mit je einer Farbe, als Float-Puffer (ohne Dither).</summary>
+    private static float[] Halves(int w, int h, (float R, float G, float B) left, (float R, float G, float B) right)
     {
-        var limited = Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 80, MatchLimit: 50));
-        var free = Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 80));
+        var px = new float[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var c = x < w / 2 ? left : right;
+            var i = (y * w + x) * 4;
+            (px[i], px[i + 1], px[i + 2], px[i + 3]) = (c.B, c.G, c.R, 1);
+        }
+        return px;
+    }
 
-        Assert.True(Gray(limited, 40) > 40 + 15);                   // Dunkles deutlich heller
-        for (var v = 102; v <= 255; v++) Assert.InRange(Gray(limited, v), v - 1, v + 1);   // über der Grenze (Oklab L 0,5 ≈ Grau 99) unverändert
-        Assert.True(Gray(free, 190) > 190 + 15);                    // ohne Grenze würde es mit aufgehellt
-        // Reihenfolge der Töne auf den ungerundeten Werten prüfen (die 8-Bit-Ausgabe hat Dither-Rauschen)
-        var exact = Adjust.Apply(Pixels.FromBytes(Ramp()), 256, 1, new Adjustments(MatchLuminance: 80, MatchLimit: 50));
-        for (var v = 1; v < 256; v++) Assert.True(exact[v * 4 + 1] >= exact[(v - 1) * 4 + 1] - 1e-5f, $"Umkehr bei {v}");
-        Assert.Equal(0, Gray(limited, 0));
+    private static float At(float[] px, int w, int x, int y, int channel = 1) => px[(y * w + x) * 4 + channel];
 
-        // Wirkt nur beim Aufhellen; 100 % = keine Grenze
-        Assert.Equal(Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: -30)),
-            Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: -30, MatchLimit: 50)));
-        Assert.True(new Adjustments(MatchLimit: 40).IsNone);
-        Assert.Equal(free, Adjust.Apply(Ramp(), 256, 1, new Adjustments(MatchLuminance: 80, MatchLimit: 100)));
+    /// <summary>
+    /// Luminanz mit Schwellwert nach Bereichen: Ein dunkler Bereich wird so hell wie ohne Grenze, der helle daneben
+    /// bleibt — auch direkt an der Kante (kein Hof), anders als mit weichgezeichneter Maske.
+    /// </summary>
+    [Fact]
+    public void MatchLimit_LiftsDarkRegionsFully_AndLeavesBrightOnesIncludingTheEdge()
+    {
+        const int w = 400, h = 200;
+        var src = Halves(w, h, (0.18f, 0.2f, 0.15f), (0.8f, 0.85f, 0.9f));   // dunkler Wald | heller Himmel
+        var free = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100));
+        var limited = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchLimit: 45));
+
+        Assert.True(At(limited, w, 50, 100) > At(src, w, 50, 100) + 0.1f, "dunkler Bereich nicht aufgehellt");
+        Assert.Equal(At(free, w, 50, 100), At(limited, w, 50, 100), 3);              // so hell wie ohne Grenze
+        Assert.True(At(free, w, 300, 100) > At(src, w, 300, 100) + 0.02f);           // ohne Grenze würde der Himmel heller
+        for (var x = w / 2; x < w; x += 1)                                           // Himmel bis an die Kante unverändert
+            Assert.InRange(At(limited, w, x, 100), At(src, w, x, 100) - 0.004f, At(src, w, x, 100) + 0.004f);
+    }
+
+    /// <summary>Helle Lücken in einem dunklen Bereich (Himmel zwischen Ästen) leuchten nicht auf.</summary>
+    [Fact]
+    public void MatchLimit_ProtectsBrightGapsInsideDarkRegions()
+    {
+        const int w = 300, h = 300;
+        var src = Halves(w, h, (0.15f, 0.18f, 0.12f), (0.15f, 0.18f, 0.12f));
+        for (var y = 20; y < h; y += 30)
+        for (var x = 20; x < w; x += 30)
+        for (var dy = 0; dy < 2; dy++)
+        for (var dx = 0; dx < 2; dx++)
+        {
+            var i = ((y + dy) * w + x + dx) * 4;
+            (src[i], src[i + 1], src[i + 2]) = (0.95f, 0.9f, 0.85f);
+        }
+        var limited = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchLimit: 45));
+        Assert.True(At(limited, w, 35, 35) > At(src, w, 35, 35) + 0.1f);                                 // Wald heller
+        Assert.InRange(At(limited, w, 140, 140), At(src, w, 140, 140) - 0.01f, At(src, w, 140, 140) + 0.01f);   // Lücke bleibt
+    }
+
+    /// <summary>
+    /// Ferne schonen: Gleich dunkle Bereiche — satter Vordergrund wird aufgehellt, dunstige Ferne (keine wirklich
+    /// dunklen Farbanteile) nicht. Ohne Ferne schonen werden beide gleich behandelt.
+    /// </summary>
+    [Fact]
+    public void MatchDistance_SparesHazyRegions_ButLiftsSaturatedForeground()
+    {
+        const int w = 400, h = 200;
+        var src = Halves(w, h, (0.02f, 0.3f, 0.02f), (0.2f, 0.21f, 0.23f));   // satter dunkler Wald | grauer Dunst
+        var plain = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100));
+        var spared = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchDistance: 100));
+
+        Assert.True(At(plain, w, 300, 100) > At(src, w, 300, 100) + 0.05f);                      // ohne: Dunst heller
+        Assert.InRange(At(spared, w, 300, 100), At(src, w, 300, 100) - 0.005f, At(src, w, 300, 100) + 0.005f);
+        Assert.Equal(At(plain, w, 50, 100), At(spared, w, 50, 100), 3);                          // Wald wie ohne
+        Assert.True(new Adjustments(MatchLuminance: -20, MatchDistance: 80).PrepareKey == Adjustments.None.PrepareKey with { },
+            "Abdunkeln braucht keine Karten");
+        Assert.True(new Adjustments(MatchDistance: 50).IsNone);
     }
 
     /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>

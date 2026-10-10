@@ -43,8 +43,10 @@ public sealed record Adjustments(
     WbSample? WbNeutral = null,
     WbSample? WbBlack = null,
     WbSample? WbWhite = null,
-    // Gleiche Farbe, Schwellwert für Luminanz (Prozent Helligkeit): bis hierher wird aufgehellt, Helleres bleibt; 100 = keine Grenze
-    double MatchLimit = 100)
+    // Gleiche Farbe, Luminanz: Schwellwert (Prozent Helligkeit der Bereiche) — hellere Bereiche bleiben, 100 = keine Grenze;
+    // Ferne schonen (0–100 %) — dunstige Bereiche werden entsprechend weniger aufgehellt. Beides nur beim Aufhellen.
+    double MatchLimit = 100,
+    double MatchDistance = 0)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -61,6 +63,7 @@ public sealed record Adjustments(
         {
             var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
             if (MatchLuminance <= 0 || MatchLimit >= 100) n = n with { MatchLimit = 100 };   // wirkt nur beim Aufhellen
+            if (MatchLuminance <= 0 || MatchDistance <= 0) n = n with { MatchDistance = 0 };
             return Dehaze == 0 ? n with { DehazePasses = None.DehazePasses, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
                 DehazeVibrance = None.DehazeVibrance, DehazeSharpen = None.DehazeSharpen, DehazeEdge = 0, DehazeBrightness = None.DehazeBrightness, DehazeDeband = None.DehazeDeband, DehazeCast = None.DehazeCast } : n;
         }
@@ -74,7 +77,12 @@ public sealed record Adjustments(
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
         DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband, DehazeCast = Normalized.DehazeCast,
         WbNeutral = WbNeutral, WbBlack = WbBlack, WbWhite = WbWhite,
+        // Nur ob die Bereichskarten gebraucht werden, nicht die Reglerstände — die wirken erst in Apply (flüssig)
+        MatchLimit = NeedsRegions ? 0 : 100,
     };
+
+    /// <summary>Braucht Luminanz die Bereichskarten (<see cref="LuminanceRegions"/>)?</summary>
+    public bool NeedsRegions => Normalized is { MatchLuminance: > 0 } n && (n.MatchLimit < 100 || n.MatchDistance > 0);
 
     /// <summary>Wird ein Weißabgleich gerechnet?</summary>
     public bool HasWhiteBalance => WhiteBalance.IsActive(WbNeutral, WbBlack, WbWhite);
@@ -143,7 +151,8 @@ public static class Adjust
 
     /// <summary>Ergebnis des teuren Teils: Bild nach „Dunst entfernen“ und die Zielhelligkeit
     /// aus Tiefen/Lichtern (null, wenn beide auf 0).</summary>
-    public sealed record Prepared(float[] Source, float[]? Toned);
+    /// <param name="Regions">Bereichskarten für Luminanz mit Schwellwert / Ferne schonen; null = nicht gebraucht.</param>
+    public sealed record Prepared(float[] Source, float[]? Toned, LuminanceRegions? Regions = null);
 
     /// <summary>
     /// Der teure Teil — Dunst entfernen und Tiefen/Lichter über den Local Laplacian Filter.
@@ -222,7 +231,8 @@ public static class Adjust
             source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
         }
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
-        return new Prepared(source, ToneMap(source, width, height, a));
+        return new Prepared(source, ToneMap(source, width, height, a),
+            a.NeedsRegions ? LuminanceRegions.Compute(source, width, height) : null);
     }
 
     /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>
@@ -246,7 +256,7 @@ public static class Adjust
     /// <param name="prepared">Ergebnis von <see cref="Prepare"/> für dasselbe Bild.</param>
     public static float[] Apply(Prepared prepared, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
-        var (bgra, toned) = (prepared.Source, prepared.Toned);
+        var (bgra, toned, regions) = (prepared.Source, prepared.Toned, prepared.Regions);
         ArgumentOutOfRangeException.ThrowIfNotEqual(bgra.Length, width * height * 4, nameof(prepared));
 
         var result = PixelPool.Rent(bgra.Length);
@@ -258,7 +268,9 @@ public static class Adjust
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
         var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 1));   // wie Referenzwerkzeug 1–200 %
-        var limit = luminance > 1 && a.MatchLimit < 100 ? (float)Math.Clamp(a.MatchLimit / 100, 0.05, 1) : 1f;
+        var limit = (float)Math.Clamp(a.MatchLimit / 100, 0.05, 1);
+        var distance = (float)Math.Clamp(a.MatchDistance / 100, 0, 1);
+        if (luminance <= 1 || !a.NeedsRegions) regions = null;   // Schwellwert und Ferne nur beim Aufhellen
         // Gleiche Farbe, Ausgleichen (0–100 %) und Farbe (kühl − … + warm): als Verschiebung in Oklab
         var neutralize = (float)Math.Clamp(a.Neutralize / 100, 0, 1);
         var (castA, castB) = neutralize > 0 ? ColourCast(bgra, width, height) : (0f, 0f);
@@ -309,7 +321,9 @@ public static class Adjust
                     {
                         // Luminanz: wie mehr Licht — Helligkeit und Buntheit im selben Verhältnis (in Oklab
                         // exakt eine stärkere Beleuchtung). Nur die Helligkeit zu heben ließ die Farben blass wirken.
-                        var lifted = limit < 1 ? Limited(L, luminance, limit) : Shoulder(L * luminance);
+                        var lifted = Shoulder(L * luminance);
+                        // Schwellwert / Ferne schonen: je Bereich, wie stark aufgehellt wird
+                        if (regions is not null) lifted = L + (lifted - L) * regions.Weight(x, y, L, limit, distance);
                         factor = lifted / L;
                         L = lifted;
                     }
@@ -460,15 +474,6 @@ public static class Adjust
         const float knee = 0.8f;
         return l <= knee ? Math.Max(0, l) : knee + (1 - knee) * (1 - MathF.Exp(-(l - knee) / (1 - knee)));
     }
-
-    /// <summary>
-    /// Luminanz mit Schwellwert: hellt nur bis zur Grenze auf, was schon heller ist, bleibt. Dieselbe weiche Schulter
-    /// wie ohne Grenze, nur auf die Grenze statt auf Weiß gestaucht; das Maximum mit dem Ausgangswert hält die Kurve
-    /// stetig und steigend — ein dunkler Ton wird nie heller als ein vorher hellerer (keine Umkehr der Tonwerte).
-    /// Bei Grenze 100 % ergibt es bis auf das oberste Weiß dasselbe wie <see cref="Shoulder"/>.
-    /// </summary>
-    internal static float Limited(float l, float luminance, float limit) =>
-        l >= limit ? l : Math.Max(l, limit * Shoulder(l * luminance / limit));
 
     /// <summary>
     /// „Gleiche Farbe“, Ausgleichen: Farbstich als mittlere Oklab-Farbrichtung der nicht
