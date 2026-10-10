@@ -760,6 +760,14 @@
                         <!-- Nachbau von Referenzwerkzeug CS5 „Bild > Korrekturen > Gleiche Farbe“ ohne Quellbild -->
                         <HeaderedContentControl Header="{l:T 'GLEICHE FARBE'}">
                             <StackPanel>
+                                <!-- Gesamt: das ganze Bild heller/dunkler, gerechnet nach der Bereichs-Luminanz darunter -->
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Gesamt'}" />
+                                    <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding MatchGlobal}"
+                                            ToolTip.Tip="{l:T 'Luminanz für das ganze Bild, ohne Bereiche und Masken: macht alles im selben Verhältnis heller oder dunkler, Weiß läuft weich aus. Wirkt nach der Luminanz darunter – erst die Bereiche angleichen, dann das Ganze heller machen.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchGlobalLabel}" />
+                                </Grid>
+                                <Border Height="1" Margin="0,2,0,6" Background="{DynamicResource BorderBrush2}" />
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Luminanz'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="300" Value="{Binding MatchLuminance}"

@@ -1346,3 +1346,8 @@ Test oder Nachweis.
   allem mit Zielwert – der Faktor ist dann nur die Obergrenze, tiefe Schatten (8 %) brauchen ×5 bis 40 %. Ohne Zielwert
   wird bei 400 % fast alles weiß, und Rauschen in tiefen Schatten wird stark sichtbar (Tooltip sagt es).
   Test `MatchLuminance_UpTo400_LetsDeepShadowsReachTheTarget` (Gegenprobe: mit Grenze 200 % rot).
+- **Nachtrag 0.5.44:** Regler „Gesamt“ oben in „Gleiche Farbe“, durch einen Strich abgesetzt (Wunsch des Benutzers):
+  Luminanz für das ganze Bild ohne Masken (0–200 %, weiche Schulter), gerechnet **nach** der Bereichs-Luminanz –
+  die gleicht mit Zielwert und Ferne die Bereiche an, macht das Bild insgesamt aber nicht heller. Kein Einfluss auf
+  den teuren Teil (`PrepareKey` unverändert). Test `MatchGlobal_BrightensWholeImage_AfterRegionalLuminance`
+  (Gegenprobe: ohne den Regler rot).

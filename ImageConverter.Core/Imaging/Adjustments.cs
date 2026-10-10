@@ -49,7 +49,10 @@ public sealed record Adjustments(
     double MatchDistance = 0,
     // Luminanz: Ziel (Prozent Helligkeit) — dunkle Bereiche werden nur bis hierher angehoben (je Bereich, höchstens um
     // den Luminanz-Faktor); 0 = aus, alles im selben Verhältnis wie in Referenzwerkzeug
-    double MatchTarget = 0)
+    double MatchTarget = 0,
+    // Luminanz „Gesamt“: das ganze Bild noch einmal heller/dunkler (wie Referenzwerkzeug 1–200 %), ohne Masken, nach der
+    // Bereichs-Luminanz — die gleicht Bereiche an, macht das Bild insgesamt aber nicht heller (Wunsch 0.5.44)
+    double MatchGlobal = 0)
 {
     /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
     public const double SepiaHue = 30;
@@ -288,7 +291,8 @@ public static class Adjust
         var shiftB = -castB * neutralize + warmth * WarmthB;
         // Reihenfolge wie in Referenzwerkzeug: erst Weißabgleich und Belichtung (Gleiche Farbe), dann Kontrastkurve, dann
         // Dynamik/Sättigung — ein Farbstich soll weg sein, bevor Kontrast und Buntheit ihn verstärken (0.5.27)
-        var balance = luminance != 1 || shiftA != 0 || shiftB != 0;
+        var global = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchGlobal / 100, -1, 1));
+        var balance = luminance != 1 || global != 1 || shiftA != 0 || shiftB != 0;
         var chroma = vibrance != 0 || saturation != 0;
 
         // Pixel nach Tiefen/Lichtern (Zielhelligkeit aus Prepare, Farbton bleibt)
@@ -336,6 +340,13 @@ public static class Adjust
                         var target = lifted is not null ? Math.Clamp(lifted[p], 0, 1) : Shoulder(L * luminance);
                         factor = target / L;
                         L = target;
+                    }
+                    if (global != 1 && L > 1e-4f)
+                    {
+                        // Gesamt: auf das Ergebnis der Bereichs-Luminanz, für das ganze Bild gleich
+                        var all = Shoulder(L * global);
+                        factor *= all / L;
+                        L = all;
                     }
                     (r, g, b) = Oklab.ScaleChroma(L, oa, ob, factor);
                 }

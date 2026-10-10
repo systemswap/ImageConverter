@@ -385,6 +385,26 @@ public class AdjustTests
         Assert.InRange(L(at400, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // Wiese bleibt
     }
 
+    /// <summary>
+    /// Luminanz „Gesamt“ wirkt nach der Bereichs-Luminanz auf das ganze Bild: Was der Zielwert angeglichen hat, wird
+    /// danach insgesamt heller — die Wiese, die der Zielwert stehen ließ, jetzt auch.
+    /// </summary>
+    [Fact]
+    public void MatchGlobal_BrightensWholeImage_AfterRegionalLuminance()
+    {
+        const int w = 400, h = 200;
+        var src = Halves(w, h, (0.08f, 0.12f, 0.06f), (0.42f, 0.5f, 0.28f));   // dunkler Baum | Wiese
+        float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
+        var even = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
+        var brighter = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40, MatchGlobal: 25));
+
+        Assert.InRange(L(even, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);     // Zielwert lässt die Wiese stehen
+        Assert.InRange(L(brighter, 300) / L(even, 300), 1.2f, 1.3f);                  // Gesamt +25 %: auch die Wiese
+        Assert.InRange(L(brighter, 60) / L(even, 60), 1.2f, 1.3f);                    // und der angeglichene Baum
+        Assert.False(new Adjustments(MatchGlobal: 10).IsNone);
+        Assert.Equal(Adjustments.None.PrepareKey, new Adjustments(MatchGlobal: 40).PrepareKey);   // kein teurer Teil
+    }
+
     /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
     [Fact]
     public void Neutralize_RemovesColourCast_ButKeepsStrongColours()
