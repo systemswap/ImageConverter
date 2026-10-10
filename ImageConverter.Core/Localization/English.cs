@@ -544,8 +544,8 @@ public static class English
         ["N"] = "N",
         ["S"] = "B",
         ["W"] = "W",
-        ["Neutral: eine Stelle anklicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Entfernt den Farbstich, die Helligkeit bleibt."] =
-            "Neutral: click a spot that should be colourless grey – asphalt, concrete, a grey cloud, paper in the shade. Removes the colour cast, the brightness stays.",
+        ["Neutral: etwas anklicken, das in Wirklichkeit farblos ist (grau oder weiß ohne Farbton) – egal ob hell oder dunkel, z. B. Asphalt, Beton, eine graue Wolke, weißes Papier im Schatten. Nicht: grelles Weiß, fast Schwarzes, Beige oder Holz. Entfernt den Farbstich, die Helligkeit bleibt."] =
+            "Neutral: click something that is really colourless (grey or white without a tint) – light or dark does not matter, e.g. asphalt, concrete, a grey cloud, white paper in the shade. Not: glaring white, near black, beige or wood. Removes the colour cast, the brightness stays.",
         ["Schwarz: die dunkelste Stelle anklicken, die schwarz sein sollte. Korrigiert die Schatten und macht sie satt schwarz."] =
             "Black: click the darkest spot that should be black. Corrects the shadows and makes them deep black.",
         ["Weiß: die hellste Stelle anklicken, die weiß sein sollte, aber noch Zeichnung hat. Korrigiert die Lichter und macht sie rein weiß."] =
@@ -555,8 +555,8 @@ public static class English
         ["Alle drei Pipetten zurücksetzen – der Weißabgleich ist dann aus."] = "Reset all three eyedroppers – white balance is then off.",
         ["Diese Stelle ist ausgefressen (reines Weiß, keine Farbe mehr) – bitte eine etwas dunklere Stelle wählen."] =
             "This spot is blown out (pure white, no colour left) – please choose a slightly darker spot.",
-        ["Neutral: auf eine Stelle klicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Nicht reines Weiß. Mehrere Klicks werden gemittelt; Esc beendet."] =
-            "Neutral: click a spot that should be colourless grey – asphalt, concrete, a grey cloud, paper in the shade. Not pure white. Several clicks are averaged; Esc ends.",
+        ["Neutral: auf etwas klicken, das in Wirklichkeit farblos ist – egal ob hell oder dunkel, z. B. Asphalt, Beton, eine graue Wolke, weißes Papier im Schatten. Nicht: grelles Weiß, fast Schwarzes, Beige oder Holz. Mehrere Klicks werden gemittelt; Esc beendet."] =
+            "Neutral: click something that is really colourless – light or dark does not matter, e.g. asphalt, concrete, a grey cloud, white paper in the shade. Not: glaring white, near black, beige or wood. Several clicks are averaged; Esc ends.",
         ["Schwarz: auf die dunkelste Stelle klicken, die schwarz sein sollte. Mehrere Klicks werden gemittelt; Esc beendet."] =
             "Black: click the darkest spot that should be black. Several clicks are averaged; Esc ends.",
         ["Weiß: auf die hellste Stelle klicken, die weiß sein sollte, aber noch Zeichnung hat (nicht ausgefressen). Mehrere Klicks werden gemittelt; Esc beendet."] =

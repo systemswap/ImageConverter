@@ -1141,3 +1141,9 @@ Test oder Nachweis.
   Schwarz+Weiß; alle drei; nur Weiß; Ausgefressenes; Mitteln nach Anzahl; durch die ganze Kette). Unsichtbares
   Testfenster mit Testmaus: Zimmer unter warmem Licht, Neutral 2×, Schwarz, Weiß → Wand 161/161/160, Weiß 255,
   Schwarz 0; Liste „Neutral 2× · Schwarz · Weiß“; Strg+Z Klick für Klick samt Markierungen; × schaltet ab.
+- **Nachtrag 0.5.35:** Hinweis und Tooltip zu „Neutral“ verständlicher (Rückfrage des Benutzers, welches Grau):
+  Es kommt nicht auf hell oder dunkel an, sondern darauf, dass die Stelle in Wirklichkeit farblos ist; genannt
+  sind gute (Asphalt, Beton, graue Wolke, weißes Papier im Schatten) und ungeeignete Stellen (grelles Weiß, fast
+  Schwarzes, Beige, Holz).
+- **Meilenstein 0.5.35 (10.10.2026):** Stand 0.5.34 beta plus Hinweistext – Weißabgleich mit drei Pipetten vom
+  Benutzer als passend befunden. Tag `v0.5.35`, Sicherung `../ImageConverter-0.5.35-Sicherung.zip`.

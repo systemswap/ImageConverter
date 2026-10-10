@@ -138,7 +138,7 @@ public partial class MainViewModel
     /// <summary>Was zu tun ist: je Pipette, was man wählen soll — oder was an der letzten Stelle nicht ging.</summary>
     public string WbHint => _wbProblem ?? ActivePipette switch
     {
-        WbPoint.Neutral => Tr.T("Neutral: auf eine Stelle klicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Nicht reines Weiß. Mehrere Klicks werden gemittelt; Esc beendet."),
+        WbPoint.Neutral => Tr.T("Neutral: auf etwas klicken, das in Wirklichkeit farblos ist – egal ob hell oder dunkel, z. B. Asphalt, Beton, eine graue Wolke, weißes Papier im Schatten. Nicht: grelles Weiß, fast Schwarzes, Beige oder Holz. Mehrere Klicks werden gemittelt; Esc beendet."),
         WbPoint.Black => Tr.T("Schwarz: auf die dunkelste Stelle klicken, die schwarz sein sollte. Mehrere Klicks werden gemittelt; Esc beendet."),
         WbPoint.White => Tr.T("Weiß: auf die hellste Stelle klicken, die weiß sein sollte, aber noch Zeichnung hat (nicht ausgefressen). Mehrere Klicks werden gemittelt; Esc beendet."),
         _ => Tr.T("Pipette wählen und ins Bild klicken. Eine Pipette reicht – Neutral (grau) ist meist die beste. Mit Schwarz und Weiß dazu und mit mehreren Klicks wird es genauer."),

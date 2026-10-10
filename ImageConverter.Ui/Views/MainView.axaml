@@ -560,7 +560,7 @@
                         <StackPanel>
                             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                                 <ToggleButton Classes="pipette" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                              IsChecked="{Binding PickNeutral}" ToolTip.Tip="{l:T 'Neutral: eine Stelle anklicken, die farblos grau sein sollte – Asphalt, Beton, eine graue Wolke, Papier im Schatten. Entfernt den Farbstich, die Helligkeit bleibt.'}">
+                                              IsChecked="{Binding PickNeutral}" ToolTip.Tip="{l:T 'Neutral: etwas anklicken, das in Wirklichkeit farblos ist (grau oder weiß ohne Farbton) – egal ob hell oder dunkel, z. B. Asphalt, Beton, eine graue Wolke, weißes Papier im Schatten. Nicht: grelles Weiß, fast Schwarzes, Beige oder Holz. Entfernt den Farbstich, die Helligkeit bleibt.'}">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Path Data="M 3,21 L 5.5,21 L 14,12.5 M 3,21 L 3,18.5 L 11.5,10 M 10.5,9 L 15,13.5 M 13.5,11 L 19,5.5 L 18.5,5 L 13,10.5" Width="14" Height="14" Stretch="Uniform"
                                               Stroke="{DynamicResource TextBrush}" StrokeThickness="1.8"
