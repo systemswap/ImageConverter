@@ -1354,3 +1354,7 @@ Test oder Nachweis.
 - **Nachtrag 0.5.45:** Luminanz wieder höchstens 300 % (Wunsch des Benutzers) – insgesamt heller macht jetzt „Gesamt“,
   die Bereichs-Luminanz braucht über 300 % nicht mehr. Test `MatchLuminance_UpTo300_LetsDeepShadowsReachTheTarget`
   (prüft auch, dass Werte darüber begrenzt werden).
+- **Meilenstein 0.5.46 (10.10.2026):** Stand 0.5.45 beta – Entfernen mit LaMa/MI-GAN (#35) und Luminanz mit Bereichen,
+  Zielwert, Ferne (Tiefenkarte), Durchblicken und „Gesamt“ (#34, #36–#40) vom Benutzer als passend befunden. Tag
+  `v0.5.46`, Sicherung `../ImageConverter-0.5.46-Sicherung.zip`; Windows-Stand einmalig in den vom Benutzer genannten
+  Ordner übertragen (`KI-Modelle/` dort unverändert).
