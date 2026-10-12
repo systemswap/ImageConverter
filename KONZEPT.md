@@ -242,6 +242,13 @@ Ziehen wie dort.
 - Ohne Download: Textzeilen (wie page_dewarp), Blattrand, Falz, gezeichnete Linien (auch
   schwache wie Karoraster), Ränder von Balken, farbigen Kästen und Fotos, Textränder.
   Seitenverhältnis nur, wenn die senkrechten Linien wenigstens 60 % der Höhe überspannen.
+- **KI begradigen** (eigenes Symbol neben „Gewölbtes Blatt“, beide in einem Rahmen; 0.5.59):
+  SyntheticDoc (ECCV 2026, UVDoc-Nachfolger, 31 MB ONNX, MIT) sagt das Gitter 121 × 177 der
+  Rückabbildung voraus — ein Klick, keine Linien, eine Stufe im Rezept (dieselbe wie
+  „Gewölbtes Blatt“, ersetzt dessen Linien), ein zweiter Klick nimmt sie heraus. Stark bei
+  Knittern, Bons in der Hand, Büchern; bei glatten Arbeitsblättern ist das Linienverfahren
+  10- bis 30-mal genauer. Seitenverhältnis aus unserem Blattmodell über die Gitterlinien
+  (DIN-Einrasten), ersatzweise Bogenlängen. ONNX muss selbst gebaut und gehostet werden.
 - Mit **UVDoc** (MIT, ≈ 31 MB ONNX, nach `KI-Modelle/`): liefert ein Gitter, daraus
   einige waagerechte und senkrechte Linien als Vorschläge; Doppelseite am Falz
   geteilt, jede Hälfte einzeln (UVDoc kennt nur Einzelseiten). Eingabe nur

@@ -434,6 +434,34 @@ public sealed record GeometryRecipe(
         return this with { Dewarp = spec.IsUsable ? spec : null };
     }
 
+    /// <summary>
+    /// Gitter einer KI-Begradigung aus der Ansicht <see cref="DewarpView"/> übernehmen (ersetzt die Linien). Das Gitter gilt
+    /// für die gedrehte/gespiegelte Ansicht, die Stufe rechnet aber am Pixelbild: Knoten und Ausdehnung werden zurückgedreht.
+    /// </summary>
+    public GeometryRecipe AiDewarpedInView(DewarpGrid viewGrid, int width, int height, double focal35)
+    {
+        var odd = (((NormalTurns % 4) + 4) % 4) % 2 == 1;
+        var (viewW, viewH) = odd ? (height, width) : (width, height);
+        var view = new DewarpMap(viewGrid.Nx, viewGrid.Ny, viewGrid.Sx, viewGrid.Sy, viewGrid.RelWidth, viewGrid.RelHeight);
+        double wv = viewGrid.RelWidth * viewW, hv = viewGrid.RelHeight * viewW;   // Ergebnis in der Ansicht, Pixel
+        var (ws, hs) = odd ? (hv, wv) : (wv, hv);                                  // Ergebnis vor dem Drehen
+        var (nx, ny) = odd ? (viewGrid.Ny, viewGrid.Nx) : (viewGrid.Nx, viewGrid.Ny);
+        var sx = new float[nx * ny];
+        var sy = new float[nx * ny];
+        for (var b = 0; b < ny; b++)
+        for (var a = 0; a < nx; a++)
+        {
+            // Stelle im Ergebnis vor dem Drehen → in der gedrehten Ansicht (Einheitsquadrat) → im Ansichtsbild → im Pixelbild
+            var (u, v) = OrientPoint(a / (double)(nx - 1), b / (double)(ny - 1), (1, 1), NormalTurns, Flip);
+            var (rx, ry) = view.Source(u, v);
+            var (px, py) = UnOrientPoint(rx * viewW, ry * viewH, (width, height), NormalTurns, Flip);
+            (sx[b * nx + a], sy[b * nx + a]) = ((float)(px / width), (float)(py / height));
+        }
+        var aspect = viewGrid.PageAspect is { } pa ? (odd ? 1 / pa : pa) : (double?)null;
+        var grid = new DewarpGrid(nx, ny, sx, sy, ws / width, hs / width, aspect, viewGrid.Din);
+        return this with { Dewarp = new DewarpSpec([], focal35, Grid: grid) };
+    }
+
     /// <summary>Ecken neu ordnen: oben links, oben rechts, unten rechts, unten links (nach Winkel um den Schwerpunkt).</summary>
     private static (double X, double Y)[] Reorder((double X, double Y)[] q)
     {

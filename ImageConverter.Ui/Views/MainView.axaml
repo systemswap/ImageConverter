@@ -1211,6 +1211,13 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Rahmen um die zwei Begradigungen (mit Linien, mit KI): sie gehören zusammen -->
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="190,6,12,12"
+                                Width="96" Height="50" CornerRadius="12"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                IsHitTestVisible="False"
+                                IsVisible="{Binding HasImage}" />
+
                         <!-- Gewölbtes Blatt: Linien nachzeichnen, die in Wirklichkeit gerade sind. Symbol: Blatt mit gewölbten
                              Kanten und einer Linie mit Punkten (eigenes). -->
                         <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -1219,6 +1226,18 @@
                                       IsChecked="{Binding DewarpTool}"
                                       ToolTip.Tip="{l:T 'Gewölbtes Blatt gerade ziehen: Punkte auf Linien setzen, die in Wirklichkeit gerade sind – Textzeilen, Blattkanten, Tabellenlinien, bei Büchern der Falz. Daraus wird das Blatt geglättet und das Seitenverhältnis berechnet; das ganze Bild bleibt. Beim Ziehen hilft eine Lupe.'}">
                             <Path Data="M 4,5 Q 12,8 20,5 L 20,19 Q 12,22 4,19 Z M 7,12 Q 12,14.5 17,12 M 7,11.2 L 7,12.8 M 12,12.6 L 12,14.2 M 17,11.2 L 17,12.8" />
+                        </ToggleButton>
+
+                        <!-- KI begradigen: SyntheticDoc rechnet das Blatt mit einem Klick gerade, ohne Linien. Symbol: dasselbe
+                             Blatt mit einem Funken (eigenes). Gedrückt, solange die KI-Begradigung im Rezept ist; ein zweiter
+                             Klick nimmt sie heraus. -->
+                        <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Margin="242,12,12,12"
+                                      IsVisible="{Binding HasImage}"
+                                      IsChecked="{Binding AiStraightenActive, Mode=OneWay}"
+                                      Command="{Binding StraightenWithAiCommand}"
+                                      ToolTip.Tip="{l:T 'KI begradigen: ein Klick, keine Linien – das Modell SyntheticDoc zieht das fotografierte Blatt gerade. Gut bei zerknitterten Blättern, Bons in der Hand und Büchern; bei glatten Arbeitsblättern ist „Gewölbtes Blatt“ mit Linien genauer. Ein zweiter Klick nimmt die Begradigung wieder heraus. Braucht das Modell SyntheticDoc (Tab KI).'}">
+                            <Path Data="M 4,5 Q 12,8 20,5 L 20,19 Q 12,22 4,19 Z M 12,9 L 13.1,12.4 L 16.5,13.5 L 13.1,14.6 L 12,18 L 10.9,14.6 L 7.5,13.5 L 10.9,12.4 Z" />
                         </ToggleButton>
 
                         <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"

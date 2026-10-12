@@ -899,13 +899,14 @@ public partial class AiModelItem : ObservableObject
     [ObservableProperty] public partial double Progress { get; set; }
     [ObservableProperty] public partial string? Problem { get; set; }
 
-    public bool ShowDownload => !IsInstalled && !IsDownloading;
+    /// <summary>Herunterladen anbieten — nicht für Modelle ohne Adresse (die Datei wird von Hand abgelegt).</summary>
+    public bool ShowDownload => !IsInstalled && !IsDownloading && Model.Url.Length > 0;
 
     public string StateText => IsDownloading ? Tr.T("wird geladen …") : IsInstalled ? Tr.T("✓ vorhanden") : Tr.T("nicht geladen");
 
     internal void Refresh() => IsInstalled = _owner.Store.IsInstalled(Model);
 
-    private bool CanDownload => !IsInstalled && !IsDownloading;
+    private bool CanDownload => !IsInstalled && !IsDownloading && Model.Url.Length > 0;
 
     [RelayCommand(CanExecute = nameof(CanDownload))]
     private async Task Download()

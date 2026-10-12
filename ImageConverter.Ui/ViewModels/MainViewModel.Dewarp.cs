@@ -7,6 +7,7 @@ using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Controls;
+using ImageConverter.Core.Ai;
 using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.ViewModels;
@@ -253,6 +254,89 @@ public partial class MainViewModel
             parts.Add(map.Din ? Tr.T("Seite 1 : {0:0.00} (DIN)", Math.Max(a, 1 / a)) : Tr.T("Seite 1 : {0:0.00}", Math.Max(a, 1 / a)));
         if (!map.Modelled) parts.Add(Tr.T("nur die Linien gerade gezogen – für das ganze Blatt mehr Linien setzen"));
         return string.Join(" · ", parts);
+    }
+
+    // ------------------------------------------------------------ KI begradigen (SyntheticDoc)
+
+    /// <summary>Die KI-Begradigung ist im Rezept (Symbol gedrückt).</summary>
+    public bool AiStraightenActive => CurrentRecipe.Dewarp?.Grid is not null;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StraightenWithAiCommand))]
+    public partial bool IsStraighteningWithAi { get; set; }
+
+    private bool CanStraightenWithAi => HasImage && !IsStraighteningWithAi;
+
+    /// <summary>
+    /// „KI begradigen“: SyntheticDoc rechnet aus dem Bild (nur gedreht/gespiegelt, verkleinert auf 1600 px) das Gitter, damit
+    /// wird das Blatt gerade gezogen — ein Schritt, Strg+Z macht ihn rückgängig; Linien des Werkzeugs „Gewölbtes Blatt“
+    /// werden ersetzt. Ist die KI-Begradigung schon drin, nimmt der Klick sie wieder heraus.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStraightenWithAi))]
+    private async Task StraightenWithAi()
+    {
+        if (_history is not { } h) return;
+        if (AiStraightenActive)
+        {
+            CloseToolsQuietly();
+            await CommitRecipeAsync(h.Recipe with { Dewarp = null }, new ImageStep(ImageStepKind.Crop, Tr.T("KI-Begradigung entfernt"), null, null));
+            OnPropertyChanged(nameof(AiStraightenActive));
+            return;
+        }
+        var model = AiModelCatalog.SyntheticDoc;
+        if (Ai.Store.PathOf(model) is not { } modelPath)
+        {
+            ErrorMessage = Tr.T("Das Modell „{0}“ fehlt: die Datei {1} nach {2} legen.", model.Name, model.MainFile,
+                System.IO.Path.Combine(Ai.Store.DownloadFolder, model.Id));
+            OnPropertyChanged(nameof(AiStraightenActive));
+            return;
+        }
+        IsStraighteningWithAi = true;
+        ActivityText = Tr.T("KI begradigt …");
+        ActivityProgress = -1;
+        try
+        {
+            CloseToolsQuietly();
+            var focal = Dewarp.Focal35Of(h.Current);
+            var grid = await Task.Run(() =>
+            {
+                if (CurrentPath is not { } path || DocumentFor(path, h, HiddenSteps, GeometryRecipe.DewarpView) is not { } doc) return null;
+                int w, ht;
+                lock (doc) (w, ht) = ((int)doc.Width, (int)doc.Height);
+                var scale = Math.Min(1.0, LineFinder.WorkEdge / (double)Math.Max(w, ht));
+                int sw = Math.Max(1, (int)Math.Round(w * scale)), sh = Math.Max(1, (int)Math.Round(ht * scale));
+                using var small = ImageOps.Resize(doc, sw, sh, ResampleFilter.Mitchell, gammaCorrect: false);
+                var px = ImageOps.ToDisplayPixels(small);
+                try
+                {
+                    var session = Ai.Sessions.Get(model, modelPath);
+                    return Core.Ai.AiDewarp.Run(session, px, sw, sh, focal, CancellationToken.None);
+                }
+                finally
+                {
+                    PixelPool.Return(px);
+                }
+            });
+            if (grid is null) return;
+            var (pw, ph) = PixelSize();
+            var next = h.Recipe.AiDewarpedInView(grid, pw, ph, focal);
+            var (fw, fh) = await Task.Run(() => next.FlatSize(pw, ph));
+            var detail = $"{fw} × {fh} px";
+            if (grid.PageAspect is { } a)
+                detail += " · " + (grid.Din ? Tr.T("Seite 1 : {0:0.00} (DIN)", Math.Max(a, 1 / a)) : Tr.T("Seite 1 : {0:0.00}", Math.Max(a, 1 / a)));
+            await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, Tr.T("KI begradigt"), detail, null),
+                s => s with { Hidden = s.Hidden & ~EditSteps.Dewarp });
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = Tr.T("KI begradigen fehlgeschlagen: {0}", ex.Message);
+        }
+        finally
+        {
+            IsStraighteningWithAi = false;
+            ActivityText = null;
+            OnPropertyChanged(nameof(AiStraightenActive));
+        }
     }
 
     /// <summary>„Gerade ziehen“: die Linien ins Rezept — ein Schritt, Strg+Z macht ihn rückgängig.</summary>

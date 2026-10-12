@@ -27,6 +27,9 @@ public sealed class DewarpMap
     /// <summary>Mit Blattmodell im Raum gerechnet (sonst nur die Linien gerade gezogen, Seitenverhältnis wie vorher).</summary>
     public bool Modelled { get; internal init; }
 
+    /// <summary>Gitter aus einem KI-Modell (<c>AiDewarp</c>), kein Blattmodell im Raum.</summary>
+    public bool Ai { get; internal init; }
+
     /// <summary>Doppelseite (mit Falz).</summary>
     public bool DoublePage { get; internal init; }
 
@@ -239,6 +242,8 @@ public static class Dewarp
 
     internal static DewarpMap? Solve(DewarpSpec spec, double aspect)
     {
+        if (spec.Grid is { } g)
+            return new DewarpMap(g.Nx, g.Ny, g.Sx, g.Sy, g.RelWidth, g.RelHeight) { Modelled = true, Ai = true, PageAspect = g.PageAspect, Din = g.Din };
         var (obs, cam) = Prepare(spec, aspect);
         if (obs.Count == 0) return null;
         if (spec.GridOnly) return FlatMap(obs, aspect);

@@ -1703,3 +1703,35 @@ Test oder Nachweis.
 - **Werkzeuge** (außerhalb des Projekts, `~/.cache/imageconverter-build/werkzeuge/`): `vergleich-alle.sh` (alt gegen
   neu mit echtem Fehler), `stapel/` (viele Bilder in einem Prozess, 0.5.57 aus einem `git worktree`), `ki/` (KI-Modelle),
   `raster/`, `vergleich/`. Jedes Werkzeug braucht einen eigenen `ArtifactsPath`, sonst überschreiben sie sich gegenseitig.
+
+## 52. „KI begradigen“ mit SyntheticDoc (0.5.59 beta, erst einmal nur lokal)
+
+- **Neu in:** 0.5.59 beta (12.10.2026), Entscheidung des Benutzers nach dem Test: SyntheticDoc (ECCV 2026, Nachfolger von
+  UVDoc vom selben Autor, 8,45 Mio. Parameter) als **eigene Option** neben „Gewölbtes Blatt“ — eigenes Symbol in der Vorschau,
+  beide Symbole in einem Rahmen, weil es zwei Begradigungen derselben Stufe sind. Andere Modelle (UVDoc, Flattener, DvD)
+  bleiben verworfen (#51).
+- **Modell:** Beim Autor gibt es nur den PyTorch-Checkpoint (`highres_121x177.ckpt`, 97 MB, davon Optimierer). Die ONNX-Datei
+  (31 MB) baut `werkzeuge/ki/export_syntheticdoc.py` (außerhalb des Projekts, Python über `uv`, Torch CPU): nur der Ausgang
+  `bm_map` (1 × 2 × 121 × 177), Eingabe 1 × 3 × 1440 × 1024 RGB, normalisiert (x − 0,5) / 0,5, Opset 17. Die 31 × 45-Fassung
+  ist durchweg schlechter. **Kein Download-Ziel:** im Katalog steht eine leere Adresse, die Datei liegt von Hand unter
+  `KI-Modelle/syntheticdoc/syntheticdoc_121x177.onnx` (Programmordner oder `%LOCALAPPDATA%\ImageConverter\KI-Modelle`);
+  `AiModelItem.ShowDownload` blendet den Knopf ohne Adresse aus. Hosten (Git-Release oder Hugging Face) ist offen.
+- **Rechnung (`AiDewarp`):** Bild verkleinert auf 1600 px, Verkleinern aufs Modellmaß mit Flächenmittel (wie PIL mit
+  Vorfilter — bilinear ohne Filter lag daneben); zwei Läufe, der zweite auf dem Ausschnitt um das gefundene Blatt (+ 4 %);
+  Gitterwerte mit align_corners = True (±1 = Mitten der äußersten Pixel des Ausschnitts — mit Pixelkanten gerechnet lag es
+  um ein halbes Pixel daneben). Das Modell kennt kein Seitenverhältnis (es gibt in der Originalpipeline einfach das
+  Eingabeformat zurück): wir nehmen 9 Gitterzeilen und 4 -spalten als Linien für unser Blattmodell → `PageAspect`, DIN;
+  ersatzweise Bogenlängen des Gitters. Ergebnisbreite = längste Gitterzeile in Bildpixeln.
+- **Rezept:** `DewarpSpec.Grid` (`DewarpGrid`, relativ, mit Gleichheit über die Werte für den Zwischenspeicher) — dann
+  zählen keine Linien; `Dewarp.Solve` liefert daraus die `DewarpMap` (`Ai = true`). `GeometryRecipe.AiDewarpedInView` dreht das
+  Gitter der (gedrehten/gespiegelten) Ansicht ins Pixelbild zurück: Knoten über `OrientPoint` auf dem Einheitsquadrat und
+  `UnOrientPoint`, bei einer Vierteldrehung Nx/Ny und Breite/Höhe getauscht, Seitenverhältnis gestürzt (Test
+  `AiDewarpTests`).
+- **Oberfläche:** `StraightenWithAiCommand` (MainViewModel.Dewarp.cs): Ansicht `DewarpView` holen, Modell über
+  `Ai.Sessions.Get`, Gitter rechnen, `CommitRecipeAsync` als ein Schritt („KI begradigt · 1234 × 1700 px · Seite 1 : 1,41
+  (DIN)“); Symbol gedrückt, solange `CurrentRecipe.Dewarp.Grid` da ist (`AiStraightenActive`, nach jedem Umbau der
+  Bearbeitungsliste gemeldet), zweiter Klick nimmt die Stufe heraus. Bearbeitungsliste: „KI begradigt · KI (SyntheticDoc)“.
+  Fehlt das Modell, sagt die Fehlermeldung, wohin die Datei gehört.
+- **Messung** (`werkzeuge/ki/Ki.cs`, echter Fehler gegen den Generator): Arbeitsblätter 13–18 px (Linienverfahren 0,4–2 px),
+  Doppelseiten 31 px; echte Fotos: Bon in der Hand und zerknittertes Faltblatt sichtbar besser als das Linienverfahren,
+  Fotobuch brauchbar. 1,6–1,8 s je Bild auf der CPU.

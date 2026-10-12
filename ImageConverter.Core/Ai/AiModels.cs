@@ -13,6 +13,9 @@ public enum AiModelKind
 
     /// <summary>Markierte Stellen neu malen: Wasserzeichen, Schrift, Störendes entfernen (Tab „Entfernen“).</summary>
     Inpaint,
+
+    /// <summary>Fotografiertes Blatt begradigen („KI begradigen“ in der Vorschau).</summary>
+    Dewarp,
 }
 
 /// <summary>
@@ -222,7 +225,29 @@ public static class AiModelCatalog
         Origin: "Andranik Sargsyan u. a. (MI-GAN, Picsart AI Research)",
         TileSize: 512);
 
-    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, FaceDetector, FaceParser];
+    /// <summary>
+    /// SyntheticDoc (Nachfolger von UVDoc): sagt für ein fotografiertes Blatt die Rückabbildung als Gitter 121 × 177 voraus.
+    /// Beim Autor gibt es nur den PyTorch-Checkpoint; die ONNX-Datei entsteht mit einem eigenen Skript daraus (Fehlergedächtnis
+    /// #52) und muss selbst gehostet werden — bis dahin ohne Download-Adresse: die Datei von Hand nach
+    /// <c>KI-Modelle/syntheticdoc/</c> legen.
+    /// </summary>
+    public static AiModel SyntheticDoc { get; } = new(
+        "syntheticdoc",
+        "SyntheticDoc",
+        "Gewölbtes Blatt mit KI begradigen – Bons, Bücher, zerknitterte Blätter",
+        "SyntheticDoc: begradigt ein fotografiertes Blatt mit einem Klick, ohne Linien. Stark bei Knittern, Bons in der " +
+        "Hand und Büchern; bei glatten Arbeitsblättern ist „Gewölbtes Blatt“ mit Linien genauer.",
+        AiModelKind.Dewarp,
+        "",
+        31_595_647,
+        "e76e338b7629456bf72ad58d275b02c14312c806b9ad46ae19d3c7c3c4100220",
+        IsZip: false,
+        MainFile: "syntheticdoc_121x177.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "Tanguy Magne u. a. (SyntheticDoc, ETH Zürich), ONNX-Export des Checkpoints highres_121x177");
+
+    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, FaceDetector, FaceParser];
 
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

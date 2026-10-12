@@ -522,9 +522,13 @@ public partial class MainViewModel
                 var map = recipe.DewarpMapFor(pw, ph);
                 var (fw, fh) = recipe.FlatSize(pw, ph);
                 var lines = spec.UsableLines.Count();
-                var parts = new List<string> { lines == 1 ? Tr.T("1 Linie") : Tr.T("{0} Linien", lines), $"{fw} × {fh} px" };
+                var parts = new List<string>
+                {
+                    spec.Grid is not null ? Tr.T("KI (SyntheticDoc)") : lines == 1 ? Tr.T("1 Linie") : Tr.T("{0} Linien", lines),
+                    $"{fw} × {fh} px",
+                };
                 if (map?.Din == true) parts.Add("DIN");
-                rows.Add(Row(EditSteps.Dewarp, Tr.T("Gerade gezogen"), string.Join(" · ", parts)));
+                rows.Add(Row(EditSteps.Dewarp, spec.Grid is not null ? Tr.T("KI begradigt") : Tr.T("Gerade gezogen"), string.Join(" · ", parts)));
             }
             if (recipe.HasStraighten)
             {
@@ -597,6 +601,7 @@ public partial class MainViewModel
         EditRows.Clear();
         foreach (var row in rows) EditRows.Add(row);
         OnPropertyChanged(nameof(HasEditRows));
+        OnPropertyChanged(nameof(AiStraightenActive));   // Symbol „KI begradigen“ folgt dem Rezept (auch nach Rückgängig)
         ApplySelectionCommand.NotifyCanExecuteChanged();
     }
 
