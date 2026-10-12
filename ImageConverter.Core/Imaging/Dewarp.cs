@@ -241,6 +241,7 @@ public static class Dewarp
     {
         var (obs, cam) = Prepare(spec, aspect);
         if (obs.Count == 0) return null;
+        if (spec.GridOnly) return FlatMap(obs, aspect);
         var best = BestFit(obs, cam);
         return best is not null ? ModelMap(best, obs, cam, aspect) : FlatMap(obs, aspect);
     }
@@ -307,6 +308,23 @@ public static class Dewarp
             (active, fit) = (without, next);
         }
         return keep;
+    }
+
+    /// <summary>
+    /// Zur Diagnose: wie gut passt jede Linie zum Blattmodell aus allen Linien (mittlere Abweichung ihrer Punkte in Tausendsteln
+    /// der Bildbreite, je Linie aus <paramref name="spec"/>; NaN für Linien mit weniger als 2 Punkten). null: kein Modell.
+    /// </summary>
+    public static double[]? LineErrors(DewarpSpec spec, int width, int height)
+    {
+        var aspect = (double)height / Math.Max(1, width);
+        var usable = spec.Lines.Select(l => l.Points.Count >= 2).ToArray();
+        var (obs, cam) = Prepare(spec with { Lines = spec.Lines.Where((_, i) => usable[i]).ToArray() }, aspect);
+        var fit = BestFit(obs, cam);
+        if (fit is null) return null;
+        var result = new double[spec.Lines.Count];
+        var k = 0;
+        for (var i = 0; i < result.Length; i++) result[i] = usable[i] ? fit.LineRms[k++] : double.NaN;
+        return result;
     }
 
     // ------------------------------------------------------------ Kamera und Blatt
@@ -756,11 +774,20 @@ public static class Dewarp
         var turns = ((int)Math.Round(Math.Atan2(cX.V - c0.V, cX.U - c0.U) / (Math.PI / 2)) % 4 + 4) % 4;
         var density = Math.Sqrt(Math.Sqrt(Sq(cX.U - c0.U) + Sq(cX.V - c0.V)) / delta * (Math.Sqrt(Sq(cY.U - c0.U) + Sq(cY.V - c0.V)) / delta));
 
-        // Seitenverhältnis: nur, wenn die Linien das Blatt umranden (je zwei waagerechte und senkrechte)
         var (dx0, dy0) = Developed(bx0, by0);
         var (dx1, dy1) = Developed(bx1, by1);
         double devW = Math.Abs(dx1 - dx0), devH = Math.Abs(dy1 - dy0), devCx = (dx0 + dx1) / 2, devCy = (dy0 + dy1) / 2;
-        var framed = obs.Count(o => o.Kind == WarpLineKind.Horizontal) >= 2 && obs.Count(o => o.Kind != WarpLineKind.Horizontal) >= 2;
+        // Seitenverhältnis: nur, wenn die Linien das Blatt umranden — je zwei waagerechte und senkrechte, und die senkrechten
+        // überspannen wenigstens 60 % der Höhe, die waagerechten 60 % der Breite (acht kurze Rasterstriche in einem Kasten
+        // sagen nichts über die Blatthöhe)
+        double Span(Func<Obs, bool> which, Func<(double X, double Y), double> coord)
+        {
+            var pts = fit.Page.Where((_, k) => which(obs[k])).SelectMany(p => p).Select(coord).ToList();
+            return pts.Count == 0 ? 0 : pts.Max() - pts.Min();
+        }
+        var framed = obs.Count(o => o.Kind == WarpLineKind.Horizontal) >= 2 && obs.Count(o => o.Kind != WarpLineKind.Horizontal) >= 2
+                     && Span(o => o.Kind != WarpLineKind.Horizontal, p => p.Y) >= 0.6 * bh
+                     && Span(o => o.Kind == WarpLineKind.Horizontal, p => p.X) >= 0.6 * bw;
         double? pageAspect = null;
         var din = false;
         var stretch = 1.0;

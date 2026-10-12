@@ -1664,3 +1664,42 @@ Test oder Nachweis.
   Verlängern (#50) — vom Benutzer als passend befunden. Tag `v0.5.57`; schlanke Sicherung auf Wunsch des Benutzers in
   `published/ImageConverter-0.5.57-Sicherung.zip` (mit `.git` samt Hooks und der lokalen Anweisungsdatei; ohne `bin/`, `obj/`, `published/`,
   `KI-Modelle/`, `TestBilder/`).
+
+## 51. Gewölbtes Blatt: Linienfindung — schwache Striche, Flächenkanten, Auswahl (0.5.58 beta)
+
+- **Neu in:** 0.5.58 beta (12.10.2026). Wunsch des Benutzers: klare, präzisere Linien, mehr senkrechte und waagerechte,
+  insbesondere Überschriftenbalken, farbige Kästen und das Karoraster, die 0.5.57 nicht fand.
+- **Befund vorher** (`Fehlerbild.cs`, Streuung je Linie quer zur wahren Linie, Schulbuch-Blatt): Textzeilen und Blattkanten
+  0,1–0,7 px, gezeichnete waagerechte nur 4 (alle am Fußende, nach Länge gewählt), senkrechte: zwei Würfelkanten aus den
+  Zeichnungen 12–13 px daneben (Schrägen bis 19° erlaubt, an Ecken mit der Diagonalen verbunden), Balken und grüne Box
+  gar nicht (keine dünnen dunklen Striche), Karoraster nicht (hellgrau auf Grün unter der Tintenschwelle).
+- **Umbau in `LineFinder`:**
+  - `ThinDark`: schwache Striche = Schließen (Max/Min-Filter) minus Bild über 4 σ Rauschen (mind. 0,025), nur im Innern
+    des Blatts (1,5 Buchstabenhöhen vom Rand: Schatten, Heftrücken, Kantensaum gaben sonst parallele Falschlinien — DocUNet
+    1_1 kippte das Modell). `RuledLines` bekommt dazu die echte Tinte: Breite und Mitte eines Stücks aus seinem Tintenkern,
+    sonst gilt ein dunkler Strich samt Saum als zu dick (Arbeitsblatt verlor so seine Kastenränder).
+  - Spuren: Verbinden nur bei gleicher Steigung (±0,15), `Smooth` (Sehne unter 14°, Parabelrest ≤ 2,5 px), `Spread`:
+    längste zuerst, dann die am weitesten entfernte (Karoraster gäbe sonst 8 Nachbarn), bis 8 je Richtung, Mindestabstand
+    0,6 Buchstabenhöhen (1,5 warf bei Arbeitsblatt den doppelten Kastenrand weg).
+  - `BoxEdges` (neue Quelle `FoundLineSource.Box`, Status „Flächenkanten“): Abstand zur örtlichen Papierfarbe je Kanal
+    (weit geglättet nur über papierähnliche Pixel — ein dunkler Balken zog die Schätzung sonst zu sich, und das Papier galt
+    als Fläche), buchstabengroße und dünne Tinte ausgeschlossen (fette Überschriften verschmolzen sonst mit dem Balken),
+    Löcher gefüllt, Füllung im Rahmen der Schrift (schräg liegt ein Balken in einem zu großen Bildachsen-Rechteck), Kanten
+    wie beim Blattrand über `EdgesOf` auf dem Abstandsbild (Hellgrün neben Weiß ist in der Helligkeit kein Sprung), mit
+    Mindestsprung 0,04. `Refine` behandelt `Box` wie `Edge`.
+  - Textränder: Toleranz 0,4 statt 0,6 Buchstabenhöhen.
+- **`Dewarp`:** Seitenverhältnis nur, wenn die senkrechten Linien 60 % der Höhe und die waagerechten 60 % der Breite
+  überspannen (acht kurze Rasterstriche im Kasten sagten sonst 1,314 statt DIN). `DewarpSpec.GridOnly` (nur Gitter) und
+  `Dewarp.LineErrors` (Modellrest je Linie) für Werkzeuge und einen späteren zweiten Durchgang.
+- **Messung** (echter Fehler gegen den Generator, Mittel/max px): Schulbuch-Blatt 0,4/4,5 → 0,5/2,8 · Schulbuch-Doppelseite 2,0 →
+  1,4 · Schulbuch wellig 6,7 → 5,9 · Arbeitsblatt-Blatt 2,0 → 1,9 · Arbeitsblatt-Doppelseite 1,1 → 1,9 (schlechter; mit 6 statt 8 Linien
+  je Richtung sogar 6,6 — die Auswahl ist dort empfindlich). 130 echte DocUNet-Fotos: in der Stichprobe 3 besser, 6
+  gleich, keins schlechter; die schweren Fälle (Bon in der Hand, Heftrücken) scheitern in beiden Fassungen am Blattmodell.
+- **Zweiter Durchgang** (Linien im Ergebnis erneut suchen, nur Gitter nachziehen): auf dem Generator ±0,1 px, beim
+  zerknitterten Faltblatt 60_1 sichtbar geradere Ränder. Nur im Werkzeug (`Stapel.neu.cs`, `ZWEITER=1`), nicht in der App.
+- **Verworfen am selben Tag:** KI-Modelle UVDoc, Flattener (13–25 px direkt), SyntheticDoc (13 px direkt auf
+  Arbeitsblättern, aber klar besser als wir bei Bon in der Hand und Knitter — ONNX müsste selbst gebaut und gehostet
+  werden, Export-Skript außerhalb des Projekts) und DvD (AGPL, ~800 MB, kein ONNX). Entscheidung des Benutzers: keine KI.
+- **Werkzeuge** (außerhalb des Projekts, `~/.cache/imageconverter-build/werkzeuge/`): `vergleich-alle.sh` (alt gegen
+  neu mit echtem Fehler), `stapel/` (viele Bilder in einem Prozess, 0.5.57 aus einem `git worktree`), `ki/` (KI-Modelle),
+  `raster/`, `vergleich/`. Jedes Werkzeug braucht einen eigenen `ArtifactsPath`, sonst überschreiben sie sich gegenseitig.

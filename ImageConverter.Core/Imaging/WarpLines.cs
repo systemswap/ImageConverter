@@ -33,7 +33,9 @@ public sealed record WarpLine(WarpLineKind Kind, IReadOnlyList<(double X, double
 /// Gewölbtes Blatt gerade ziehen: die nachgezeichneten Linien und die Brennweite der Aufnahme (Kleinbild-Äquivalent,
 /// aus den EXIF-Daten; ohne Angabe 28 mm wie bei Handys üblich).
 /// </summary>
-public sealed record DewarpSpec(IReadOnlyList<WarpLine> Lines, double Focal35 = DewarpSpec.DefaultFocal35)
+/// <param name="GridOnly">Kein Blattmodell im Raum: nur die Linien gerade ziehen (Gitter), Seitenverhältnis wie vorher — für
+/// einen zweiten Durchgang auf einem schon begradigten Bild.</param>
+public sealed record DewarpSpec(IReadOnlyList<WarpLine> Lines, double Focal35 = DewarpSpec.DefaultFocal35, bool GridOnly = false)
 {
     public const double DefaultFocal35 = 28;
 
@@ -43,12 +45,13 @@ public sealed record DewarpSpec(IReadOnlyList<WarpLine> Lines, double Focal35 = 
     public bool IsUsable => UsableLines.Any();
 
     public bool Equals(DewarpSpec? other) =>
-        other is not null && Focal35.Equals(other.Focal35) && Lines.SequenceEqual(other.Lines);
+        other is not null && Focal35.Equals(other.Focal35) && GridOnly == other.GridOnly && Lines.SequenceEqual(other.Lines);
 
     public override int GetHashCode()
     {
         var h = new HashCode();
         h.Add(Focal35);
+        h.Add(GridOnly);
         foreach (var l in Lines) h.Add(l);
         return h.ToHashCode();
     }

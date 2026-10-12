@@ -239,7 +239,9 @@ Ziehen wie dort.
    gezogenen Punkt auf einer verkleinerten Fassung neu.
 
 **Vorschläge** (später, s. Reihenfolge)
-- Ohne Download: Textzeilen (wie page_dewarp), Blattrand, Falz.
+- Ohne Download: Textzeilen (wie page_dewarp), Blattrand, Falz, gezeichnete Linien (auch
+  schwache wie Karoraster), Ränder von Balken, farbigen Kästen und Fotos, Textränder.
+  Seitenverhältnis nur, wenn die senkrechten Linien wenigstens 60 % der Höhe überspannen.
 - Mit **UVDoc** (MIT, ≈ 31 MB ONNX, nach `KI-Modelle/`): liefert ein Gitter, daraus
   einige waagerechte und senkrechte Linien als Vorschläge; Doppelseite am Falz
   geteilt, jede Hälfte einzeln (UVDoc kennt nur Einzelseiten). Eingabe nur

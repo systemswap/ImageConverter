@@ -19,6 +19,8 @@ public class LineFinderTests(ITestOutputHelper output)
         public bool Whole;                     // Blatt füllt das ganze Bild (kein Rand zu sehen)
         public double Bend = 18;               // Zeilen nach unten gebogen (Pixel in der Mitte)
         public bool Frame;                     // gezeichneter Rahmen (2 px) bei x 230 … 990, y 160 … 760, dazu eine Spalte bei x 610
+        public bool Boxes;                     // grauer Überschriftenbalken (x 230 … 990, y 140 … 176) und hellgrüner Kasten mit
+                                               // schwachem Karoraster (x 240 … 980, y 480 … 720, Linien alle 20 px; der Text läuft hindurch)
         public List<double> Rows = [];         // Grundlinien (y am Zeilenanfang)
 
         public double Baseline(double row, double x) => row + Bend * Math.Sin(Math.PI * Math.Clamp((x - 260) / 700, 0, 1));
@@ -65,6 +67,22 @@ public class LineFinderTests(ITestOutputHelper output)
                 }
             }
             Box(230, 160, 990, 162); Box(230, 758, 990, 760); Box(230, 160, 232, 760); Box(988, 160, 990, 760); Box(609, 160, 611, 760);
+        }
+        if (page.Boxes)
+        {
+            void Fill(int x0, int y0, int x1, int y1, float r, float g, float b)
+            {
+                for (var y = y0; y < y1; y++)
+                for (var x = x0; x < x1; x++)
+                {
+                    var i = (y * W + x) * 4;
+                    (px[i], px[i + 1], px[i + 2]) = (b, g, r);
+                }
+            }
+            Fill(230, 140, 990, 176, 0.45f, 0.45f, 0.45f);
+            Fill(240, 480, 980, 720, 0.86f, 0.92f, 0.78f);
+            for (var y = 500; y < 720; y += 20) Fill(240, y, 980, y + 1, 0.80f, 0.86f, 0.72f);
+            for (var x = 260; x < 980; x += 20) Fill(x, 480, x + 1, 720, 0.80f, 0.86f, 0.72f);
         }
 
         // Zeilen: Wörter aus Kästchen, zwischen x 260 und 960 (bzw. nur bis vor den Falz und danach)
@@ -174,6 +192,29 @@ public class LineFinderTests(ITestOutputHelper output)
         // Ober- und Unterkante des Rahmens
         foreach (var y in new[] { 161.0, 759.0 })
             Assert.Contains(ruled, r => r.Kind == WarpLineKind.Horizontal && r.Points.All(p => Math.Abs(p.Y - y) < 1.5));
+    }
+
+    [Fact]
+    public void FindsBoxEdges_AndFaintGridLines()
+    {
+        var page = new Page { Boxes = true, Bend = 0 };
+        var found = LineFinder.Find(Render(page), W, H);
+        var boxes = found.Where(f => f.Source == FoundLineSource.Box).ToList();
+        var ruled = found.Where(f => f.Source == FoundLineSource.Ruled).ToList();
+        output.WriteLine("Flächen: " + string.Join("; ", boxes.Select(r => $"{r.Kind} {r.Points.Average(p => p.X):0},{r.Points.Average(p => p.Y):0}")));
+        output.WriteLine("Striche: " + string.Join("; ", ruled.Select(r => $"{r.Kind} {r.Points.Average(p => p.X):0},{r.Points.Average(p => p.Y):0}")));
+
+        // Balken oben und unten, Kasten oben und unten (Pixelkanten bei 140, 176, 480, 720), auf ± 1,5 px — die Seiten des
+        // Kastens sind zu kurz für den Balken, beim Kasten können sie mit dem Raster zusammenfallen (dann zählt das Raster)
+        foreach (var y in new[] { 140.0, 176.0, 480.0, 720.0 })
+            Assert.Contains(found, f => f.Source is FoundLineSource.Box or FoundLineSource.Ruled && f.Kind == WarpLineKind.Horizontal
+                                        && f.Points.All(p => Math.Abs(p.Y - y) < 1.5));
+        foreach (var x in new[] { 240.0, 980.0 })
+            Assert.Contains(found, f => f.Source is FoundLineSource.Box or FoundLineSource.Ruled && f.Kind == WarpLineKind.Vertical
+                                        && f.Points.All(p => Math.Abs(p.X - x) < 1.5));
+        // das schwache Raster: mindestens 3 waagerechte und 3 senkrechte Striche auf einer Rasterlinie (Mitte bei 20 k + 0,5)
+        Assert.True(ruled.Count(r => r.Kind == WarpLineKind.Horizontal && r.Points.All(p => Math.Abs((p.Y - 0.5) % 20) < 1.5)) >= 3, "Raster waagerecht");
+        Assert.True(ruled.Count(r => r.Kind == WarpLineKind.Vertical && r.Points.All(p => Math.Abs((p.X - 0.5) % 20) < 1.5)) >= 3, "Raster senkrecht");
     }
 
     [Fact]

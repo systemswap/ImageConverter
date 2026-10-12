@@ -1,7 +1,7 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>Woher ein Vorschlag stammt.</summary>
-public enum FoundLineSource { Text, Edge, Fold, Ruled, Margin }
+public enum FoundLineSource { Text, Edge, Fold, Ruled, Margin, Box }
 
 /// <summary>Vorgeschlagene Linie in Pixeln des untersuchten Bildes.</summary>
 public sealed record FoundLine(WarpLineKind Kind, FoundLineSource Source, IReadOnlyList<(double X, double Y)> Points);
@@ -21,7 +21,10 @@ public sealed record FoundLine(WarpLineKind Kind, FoundLineSource Source, IReadO
 /// <para><b>Falz:</b> schmales dunkles Tal im mittleren Drittel des Blatts, in mehreren Höhen an fast derselben Stelle; Ober- und
 /// Unterkante werden dort geteilt (sie knicken).</para>
 /// <para><b>Gezeichnete Linien</b> (Rahmen, Tabellen, Raster, Schreiblinien), waagerecht und senkrecht: dünne dunkle Querstücke
-/// von Spalte zu Spalte verfolgt. <b>Textränder:</b> übereinanderstehende Zeilenanfänge (bzw. -enden) als senkrechte Linie.</para>
+/// von Spalte zu Spalte verfolgt — auch schwache (Karoraster auf farbigem Grund, hellgraue Linien); nur glatte Spuren, über
+/// das Blatt verteilt. <b>Flächenkanten:</b> Ränder von Überschriftenbalken, farbigen Kästen und Fotos (alles, was sich in der
+/// Farbe vom Papier abhebt und keine Schrift ist), wie beim Blattrand. <b>Textränder:</b> übereinanderstehende Zeilenanfänge
+/// (bzw. -enden) als senkrechte Linie.</para>
 /// <para>Gefunden wird verkleinert; <see cref="Refine"/> schärft Kanten, Falz und gezeichnete Linien im Original nach. Welche
 /// Vorschläge nicht zu den übrigen passen, entscheidet danach das Blattmodell (<see cref="Dewarp.RejectOutliers"/>).</para>
 /// </remarks>
@@ -56,10 +59,14 @@ public static class LineFinder
             result.AddRange(ChooseText(candidates.Where(c => c.AlongMid >= foldAlong).ToList(), 6));
         }
         result.AddRange(edges);
-        // senkrechte (und weitere waagerechte) Linien: Textränder und gezeichnete Linien
+        // senkrechte (und weitere waagerechte) Linien: Textränder und gezeichnete Linien — auch schwache (Karoraster auf
+        // farbigem Grund, hellgraue Schreiblinien)
         result.AddRange(Margins(candidates, d, letter));
         var textSpan = candidates.Count > 0 ? candidates.Max(c => c.Extent) : Math.Max(w, h) / 2.0;
-        result.AddRange(RuledLines(ink, w, h, d, letter, textSpan));
+        result.AddRange(RuledLines(ThinDark(gray, ink, page, w, h, letter), ink, w, h, d, letter, textSpan));
+        // Ränder von Flächen (Überschriftenbalken, farbige Kästen, Fotos) — nicht doppelt zu einer gezeichneten Linie dort
+        foreach (var box in BoxEdges(bgra, ink, page, w, h, d, letter, fold))
+            if (result.All(r => r.Kind != box.Kind || !Near(r.Points, box.Points, letter))) result.Add(box);
         if (fold is not null) result.Add(fold);
         return result;
     }
@@ -297,7 +304,7 @@ public static class LineFinder
 
     /// <summary>
     /// Textränder als senkrechte Linien: Zeilenanfänge (bzw. -enden bei Blocksatz), die übereinander stehen. Robust: die
-    /// größte Gruppe von Zeilen, deren Anfänge auf einer Geraden quer zur Schrift liegen (Einrückungen, Aufzählungen fallen
+    /// größte Gruppe von Zeilen, deren Anfänge auf einer Geraden quer zur Schrift liegen (±0,4 Buchstabenhöhen; Einrückungen, Aufzählungen fallen
     /// heraus) — mindestens 5 Zeilen über ein Viertel der Texthöhe.
     /// </summary>
     private static List<FoundLine> Margins(List<TextCandidate> lines, (double X, double Y) d, double hm)
@@ -310,7 +317,7 @@ public static class LineFinder
         {
             var ends = lines.Select(l => useEnd ? l.End : l.Start).ToList();
             List<(double Along, double Base)>? best = null;
-            // Gerade durch je zwei Zeilenenden; die mit den meisten Zeilen in ±0,6 Buchstabenhöhen
+            // Gerade durch je zwei Zeilenenden; die mit den meisten Zeilen in ±0,4 Buchstabenhöhen
             for (var i = 0; i < ends.Count; i++)
             for (var j = i + 1; j < ends.Count; j++)
             {
@@ -318,7 +325,7 @@ public static class LineFinder
                 if (Math.Abs(db) < 2 * hm) continue;
                 var slope = (ends[j].Along - ends[i].Along) / db;
                 if (Math.Abs(slope) > 0.35) continue;
-                var inliers = ends.Where(e => Math.Abs(ends[i].Along + slope * (e.Base - ends[i].Base) - e.Along) < 0.6 * hm).ToList();
+                var inliers = ends.Where(e => Math.Abs(ends[i].Along + slope * (e.Base - ends[i].Base) - e.Along) < 0.4 * hm).ToList();
                 if (best is null || inliers.Count > best.Count) best = inliers;
             }
             if (best is null || best.Count < 5) continue;
@@ -334,9 +341,13 @@ public static class LineFinder
     /// <summary>
     /// Gezeichnete Linien (Rahmen, Tabellen, Raster, Schreiblinien): im Rahmen der Schrift Spalte für Spalte die dünnen
     /// dunklen Querstücke suchen und von Spalte zu Spalte verfolgen — so folgt die Spur auch einer gebogenen Linie. Buchstaben
-    /// geben nur kurze Spuren. Senkrechte Linien genauso Zeile für Zeile.
+    /// geben nur kurze Spuren. Senkrechte Linien genauso Zeile für Zeile. Es bleiben nur glatte Spuren ungefähr in Richtung
+    /// (Würfelkanten aus Zeichnungen samt Diagonale fallen heraus), bis zu 8 je Richtung, über das Blatt verteilt.
     /// </summary>
-    private static List<FoundLine> RuledLines(bool[] ink, int w, int h, (double X, double Y) d, double hm, double textSpan)
+    /// <param name="strokes">Dünne dunkle Striche, auch schwache (<see cref="ThinDark"/>).</param>
+    /// <param name="ink">Nur die richtige Tinte: ein dunkler Strich hat in <paramref name="strokes"/> einen Saum und wäre sonst zu dick;
+    /// gezählt wird die Breite seines Tintenkerns, und dessen Mitte ist die Mitte.</param>
+    private static List<FoundLine> RuledLines(bool[] strokes, bool[] ink, int w, int h, (double X, double Y) d, double hm, double textSpan)
     {
         (double X, double Y) n = (-d.Y, d.X);
         // Raster im Rahmen der Schrift: a entlang, b quer (gedreht, nächster Nachbar)
@@ -345,13 +356,14 @@ public static class LineFinder
         double b0 = corners.Min(c => c.Item1 * n.X + c.Item2 * n.Y), b1 = corners.Max(c => c.Item1 * n.X + c.Item2 * n.Y);
         int rw = (int)Math.Ceiling(a1 - a0) + 1, rh = (int)Math.Ceiling(b1 - b0) + 1;
         var grid = new bool[rw * rh];
+        var inkGrid = new bool[rw * rh];
         Parallel.For(0, rh, j =>
         {
             for (var i = 0; i < rw; i++)
             {
                 double a = a0 + i, b = b0 + j;
                 int x = (int)Math.Round(a * d.X + b * n.X), y = (int)Math.Round(a * d.Y + b * n.Y);
-                if (x >= 0 && y >= 0 && x < w && y < h) grid[j * rw + i] = ink[y * w + x];
+                if (x >= 0 && y >= 0 && x < w && y < h) (grid[j * rw + i], inkGrid[j * rw + i]) = (strokes[y * w + x], ink[y * w + x]);
             }
         });
 
@@ -363,6 +375,7 @@ public static class LineFinder
             // „Spalten“ entlang der Linie, „Zeilen“ quer dazu
             int along = vertical ? rh : rw, across = vertical ? rw : rh;
             bool At(int s, int t) => vertical ? grid[s * rw + t] : grid[t * rw + s];
+            bool Ink(int s, int t) => vertical ? inkGrid[s * rw + t] : inkGrid[t * rw + s];
             var tracks = new List<List<(double S, double T)>>();
             var open = new List<(List<(double S, double T)> Track, int Last)>();
             for (var s = 0; s < along; s++)
@@ -374,7 +387,11 @@ public static class LineFinder
                     if (!At(s, t)) continue;
                     var t0 = t;
                     while (t < across && At(s, t)) t++;
-                    if (t - t0 <= thin) centers.Add((t0 + t - 1) / 2.0);
+                    // Breite und Mitte: die des Tintenkerns, wenn es einen gibt (der Saum zählt nicht), sonst des ganzen Stücks
+                    int i0 = -1, i1 = -1;
+                    for (var k = t0; k < t; k++) if (Ink(s, k)) { if (i0 < 0) i0 = k; i1 = k + 1; }
+                    var (c0, c1) = i0 >= 0 ? (i0, i1) : (t0, t);
+                    if (c1 - c0 <= thin) centers.Add((c0 + c1 - 1) / 2.0);
                 }
                 var used = new bool[centers.Count];
                 foreach (var (track, last) in open.ToArray())
@@ -400,7 +417,8 @@ public static class LineFinder
             }
             tracks.AddRange(open.Select(o => o.Track).Where(t => t[^1].S - t[0].S >= 2 * hm));
 
-            // Stücke, die an Kreuzungen oder Lücken abreißen, wieder verbinden (in Verlängerung, Lücke bis 2 Buchstabenhöhen)
+            // Stücke, die an Kreuzungen oder Lücken abreißen, wieder verbinden (in Verlängerung, gleiche Steigung, Lücke bis
+            // 2 Buchstabenhöhen) — nicht die Würfelkante mit der Diagonalen daneben
             tracks = tracks.OrderBy(t => t[0].S).ToList();
             for (var i = 0; i < tracks.Count; i++)
             {
@@ -412,20 +430,16 @@ public static class LineFinder
                     if (gap <= 0 || gap > 2 * hm) continue;
                     var slope = EndSlope(tracks[i]);
                     if (Math.Abs(end.T + slope * gap - start.T) > 2) continue;
+                    if (Math.Abs(slope - StartSlope(tracks[j])) > 0.15) continue;
                     tracks[i].AddRange(tracks[j]);
                     tracks[j].Clear();
                     j = -1;
                 }
             }
 
-            var lines = tracks.Where(t => t.Count > 0 && t[^1].S - t[0].S >= minLength)
-                .Where(t => Math.Abs(t[^1].T - t[0].T) <= 0.35 * (t[^1].S - t[0].S))   // ungefähr in Richtung, keine Schrägen
-                .OrderByDescending(t => t[^1].S - t[0].S).ToList();
-            // doppelte (Rahmen mit zwei Strichen, Kanten eines dicken Strichs) weg: Abstand quer unter einer Buchstabenhöhe
-            var chosen = new List<List<(double S, double T)>>();
-            foreach (var t in lines)
-                if (chosen.All(c => !Overlaps(c, t) || Math.Abs(MeanT(c) - MeanT(t)) > hm)) chosen.Add(t);
-            chosen = chosen.Take(vertical ? 6 : 4).ToList();
+            var lines = tracks.Where(t => t.Count > 0 && t[^1].S - t[0].S >= minLength && Smooth(t))
+                .OrderByDescending(Length).ToList();
+            var chosen = Spread(lines, hm, 8);
 
             foreach (var t in chosen)
             {
@@ -450,9 +464,259 @@ public static class LineFinder
             var ds = t[^1].S - t[k].S;
             return ds > 0 ? (t[^1].T - t[k].T) / ds : 0;
         }
-        static double MeanT(List<(double S, double T)> t) => t.Average(p => p.T);
-        static bool Overlaps(List<(double S, double T)> a, List<(double S, double T)> b) =>
-            Math.Min(a[^1].S, b[^1].S) - Math.Max(a[0].S, b[0].S) > 0;
+        static double StartSlope(List<(double S, double T)> t)
+        {
+            var k = Math.Min(t.Count - 1, 9);
+            var ds = t[k].S - t[0].S;
+            return ds > 0 ? (t[k].T - t[0].T) / ds : 0;
+        }
+        static double Length(List<(double S, double T)> t) => t[^1].S - t[0].S;
+
+        // ungefähr in Richtung (Sehne unter 14°) und glatt gebogen: eine Parabel quer, kein Punkt weiter als 2,5 px (bzw. 0,4 %
+        // der Länge) daneben — ein Buchstabenzug oder eine Würfelkante mit angehängter Diagonale hat Knicke
+        static bool Smooth(List<(double S, double T)> t)
+        {
+            var len = Length(t);
+            if (Math.Abs(t[^1].T - t[0].T) > 0.25 * len) return false;
+            var m = new double[3, 3];
+            var r = new double[3];
+            foreach (var (s, tt) in t)
+            {
+                var u = (s - t[0].S) / len;
+                double[] b = [1, u, u * u];
+                for (var i = 0; i < 3; i++) { r[i] += b[i] * tt; for (var j = 0; j < 3; j++) m[i, j] += b[i] * b[j]; }
+            }
+            if (SolveSmall(m, r) is not { } c) return false;
+            var limit = Math.Max(2.5, 0.004 * len);
+            foreach (var (s, tt) in t)
+            {
+                var u = (s - t[0].S) / len;
+                if (Math.Abs(c[0] + c[1] * u + c[2] * u * u - tt) > limit) return false;
+            }
+            return true;
+        }
+
+        // Auswahl: die längste, dann immer die am weitesten von den gewählten entfernte (so verteilen sie sich über das Blatt —
+        // ein Karoraster gäbe sonst 8 Nachbarn) unter denen mit wenigstens halber Länge, danach der Länge nach, was noch Platz
+        // hat; nie näher als 0,6 Buchstabenhöhen an einer gewählten (die zwei Kanten eines dicken Strichs — ein Rahmen aus zwei
+        // Strichen dagegen sind zwei Linien, beide gerade)
+        static List<List<(double S, double T)>> Spread(List<List<(double S, double T)>> lines, double hm, int max)
+        {
+            var chosen = new List<List<(double S, double T)>>();
+            if (lines.Count == 0) return chosen;
+            var pool = lines.Where(t => Length(t) >= 0.5 * Length(lines[0])).ToList();
+            while (chosen.Count < max && pool.Count > 0)
+            {
+                var best = pool.MaxBy(t => chosen.Count == 0 ? 0 : chosen.Min(c => Distance(c, t)))!;
+                if (chosen.Count > 0 && chosen.Min(c => MinGap(c, best)) < 0.6 * hm) break;
+                chosen.Add(best);
+                pool.Remove(best);
+            }
+            foreach (var t in lines)
+                if (chosen.Count < max && !chosen.Contains(t) && chosen.All(c => MinGap(c, t) >= 0.6 * hm)) chosen.Add(t);
+            return chosen;
+        }
+        // Abstand quer: im gemeinsamen Stück der kleinste, sonst der der Mitten
+        static double Distance(List<(double S, double T)> a, List<(double S, double T)> b)
+        {
+            var gap = MinGap(a, b);
+            return double.IsFinite(gap) ? gap : Math.Abs(a.Average(p => p.T) - b.Average(p => p.T));
+        }
+    }
+
+    /// <summary>Kleinster Abstand quer im gemeinsamen Stück zweier Spuren; ohne Überlappung unendlich.</summary>
+    private static double MinGap(List<(double S, double T)> a, List<(double S, double T)> b)
+    {
+        var min = double.PositiveInfinity;
+        var k = 0;
+        foreach (var p in b)
+        {
+            while (k < a.Count && a[k].S < p.S) k++;
+            if (k == 0 || k == a.Count) continue;
+            var (p0, p1) = (a[k - 1], a[k]);
+            var u = p1.S > p0.S ? (p.S - p0.S) / (p1.S - p0.S) : 0;
+            min = Math.Min(min, Math.Abs(p0.T + u * (p1.T - p0.T) - p.T));
+        }
+        return min;
+    }
+
+    /// <summary>Liegt <paramref name="b"/> zum großen Teil (mindestens 40 % der Punkte) näher als <paramref name="tolerance"/> an <paramref name="a"/>?</summary>
+    private static bool Near(IReadOnlyList<(double X, double Y)> a, IReadOnlyList<(double X, double Y)> b, double tolerance)
+    {
+        var near = 0;
+        foreach (var p in b)
+        {
+            var best = double.PositiveInfinity;
+            for (var i = 0; i + 1 < a.Count; i++)
+            {
+                var (ax, ay, dx, dy) = (a[i].X, a[i].Y, a[i + 1].X - a[i].X, a[i + 1].Y - a[i].Y);
+                var len2 = dx * dx + dy * dy;
+                var u = len2 > 0 ? Math.Clamp(((p.X - ax) * dx + (p.Y - ay) * dy) / len2, 0, 1) : 0;
+                best = Math.Min(best, Math.Sqrt(Sq(p.X - ax - u * dx) + Sq(p.Y - ay - u * dy)));
+            }
+            if (best < tolerance) near++;
+        }
+        return near >= 0.4 * b.Count;
+    }
+
+    /// <summary>
+    /// Dünne dunkle Striche, auch schwache: zur Tinte kommt, was gegenüber seiner nächsten Umgebung dunkler ist, als das
+    /// Rauschen erklärt (morphologisches Schließen minus Bild) — Karoraster auf farbigem Grund, hellgraue Schreib- und
+    /// Tabellenlinien, die die Tintenschwelle nicht erreichen. Nur im Innern des Blatts (der Untergrund hat Struktur, der Rand
+    /// Schatten).
+    /// </summary>
+    private static bool[] ThinDark(float[] gray, bool[] ink, bool[]? page, int w, int h, double hm)
+    {
+        var r = (int)Math.Ceiling(Math.Max(3, 0.3 * hm)) + 1;
+        var closed = Extreme(Extreme(gray, w, h, r, max: true), w, h, r, max: false);
+        // Rauschen: Median der Differenz benachbarter Pixel (× 1,4826 ≈ Standardabweichung), aus jedem 7. Pixel
+        var diffs = new List<float>();
+        for (var i = 0; i + 1 < gray.Length; i += 7) if (i % w != w - 1) diffs.Add(Math.Abs(gray[i + 1] - gray[i]));
+        diffs.Sort();
+        var noise = diffs.Count == 0 ? 0 : diffs[diffs.Count / 2] * 1.4826f;
+        var tau = Math.Max(0.025f, 4 * noise);
+        var mask = new bool[w * h];
+        // schwache Striche nur im Innern des Blatts: am Rand liegen Schatten, Heftrücken und der Saum der Kante — lauter
+        // parallele „Linien“, die nicht auf dem Blatt liegen
+        var inner = page is null ? null : Morph(page, w, h, (int)Math.Ceiling(1.5 * hm), grow: false);
+        Parallel.For(0, w * h, i => mask[i] = ink[i] || (closed[i] - gray[i] > tau && (inner?[i] ?? true)));
+        return mask;
+    }
+
+    /// <summary>Größtes (bzw. kleinstes) Pixel im Quadrat ±<paramref name="r"/>, zeilen- und dann spaltenweise.</summary>
+    private static float[] Extreme(float[] src, int w, int h, int r, bool max)
+    {
+        var rows = new float[w * h];
+        Parallel.For(0, h, y =>
+        {
+            for (var x = 0; x < w; x++)
+            {
+                var v = src[y * w + x];
+                for (var k = Math.Max(0, x - r); k <= Math.Min(w - 1, x + r); k++)
+                    v = max ? Math.Max(v, src[y * w + k]) : Math.Min(v, src[y * w + k]);
+                rows[y * w + x] = v;
+            }
+        });
+        var result = new float[w * h];
+        Parallel.For(0, h, y =>
+        {
+            for (var x = 0; x < w; x++)
+            {
+                var v = rows[y * w + x];
+                for (var k = Math.Max(0, y - r); k <= Math.Min(h - 1, y + r); k++)
+                    v = max ? Math.Max(v, rows[k * w + x]) : Math.Min(v, rows[k * w + x]);
+                result[y * w + x] = v;
+            }
+        });
+        return result;
+    }
+
+    // ------------------------------------------------------------ Flächen (Balken, Kästen, Fotos)
+
+    /// <summary>
+    /// Ränder von Flächen auf dem Blatt — Überschriftenbalken, farbig hinterlegte Kästen, Fotos: alles, was sich in der Farbe
+    /// vom Papier abhebt und keine Schrift ist, zu Flecken geschlossen (Text und Raster darin sind Löcher); von jedem großen,
+    /// gefüllten Fleck die vier Kanten wie beim Blattrand, nur lange und mit deutlichem Sprung (keine Schatten). Nur im Innern
+    /// des Blatts.
+    /// </summary>
+    private static List<FoundLine> BoxEdges(float[] bgra, bool[] ink, bool[]? page, int w, int h,
+        (double X, double Y) d, double hm, FoundLine? fold)
+    {
+        var maxDim = Math.Max(w, h);
+        var inside = page is null ? null : Morph(page, w, h, maxDim / 90 + 2, grow: false);
+        // Schrift samt Rand (Kantenglättung, Schatten) zählt nicht — sonst würden Absätze zu Flächen: alle buchstabengroßen
+        // Tintenflecken (auch fette Überschriften) und alles Dünne (Striche). Ein dunkler Balken ist am Rand auch „Tinte“,
+        // bleibt aber eine Fläche: groß, und Öffnen lässt ihn stehen
+        var r = Math.Max(2, (int)(0.25 * hm));
+        var thick = Morph(Morph(ink, w, h, r, grow: false), w, h, r, grow: true);
+        var text = new bool[w * h];
+        var (inkBlobs, inkPixels) = Components(ink, w, h);
+        foreach (var b in inkBlobs.Where(b => b.Height <= 3 * hm && b.Width <= 6 * hm))
+            for (var k = b.Start; k < b.Start + b.Count; k++) text[inkPixels[k]] = true;
+        var thinInk = new bool[w * h];
+        for (var i = 0; i < w * h; i++) thinInk[i] = ink[i] && (text[i] || !thick[i]);
+        var inkWide = Morph(thinInk, w, h, Math.Max(3, (int)(0.3 * hm)), grow: true);
+        var valid = new bool[w * h];
+        for (var i = 0; i < w * h; i++) valid[i] = (inside?[i] ?? true) && !inkWide[i];
+        // Kanäle leicht geglättet; Papier im Groben: Median je Kanal über das Blatt
+        var ch = new float[3][];
+        var median = new float[3];
+        for (var c = 0; c < 3; c++)
+        {
+            var v = new float[w * h];
+            for (var i = 0; i < w * h; i++) v[i] = bgra[i * 4 + c];
+            Blur.Gauss(v, w, h, 1.5);
+            ch[c] = v;
+            var sample = new List<float>();
+            for (var i = 0; i < w * h; i += 5) if (valid[i]) sample.Add(v[i]);
+            if (sample.Count < 100) return [];
+            sample.Sort();
+            median[c] = sample[sample.Count / 2];
+        }
+        // Papierfarbe örtlich (Abschattung zum Rand hin, dunkles Foto): weit geglättet, aber nur über Pixel, die grob wie
+        // Papier aussehen — sonst zögen ein dunkler Balken oder ein großer Kasten die Schätzung zu sich, und das Papier
+        // daneben gälte als Fläche
+        var paperLike = new float[w * h];
+        for (var i = 0; i < w * h; i++)
+            paperLike[i] = valid[i] && Math.Abs(ch[0][i] - median[0]) < 0.12f && Math.Abs(ch[1][i] - median[1]) < 0.12f
+                           && Math.Abs(ch[2][i] - median[2]) < 0.12f ? 1 : 0;
+        var weight = (float[])paperLike.Clone();
+        Blur.Gauss(weight, w, h, maxDim / 10.0);
+        // Abstand zur örtlichen Papierfarbe, je Kanal der größte: auf diesem Bild liegen die Kanten der Flächen auch dann
+        // klar, wenn sich nur der Farbton vom Papier unterscheidet (Hellgrün auf Weiß)
+        var diff = new float[w * h];
+        for (var c = 0; c < 3; c++)
+        {
+            var bg = new float[w * h];
+            for (var i = 0; i < w * h; i++) bg[i] = ch[c][i] * paperLike[i];
+            Blur.Gauss(bg, w, h, maxDim / 10.0);
+            var v = ch[c];
+            Parallel.For(0, w * h, i =>
+            {
+                if (weight[i] < 0.05f) return;
+                diff[i] = Math.Max(diff[i], Math.Abs(v[i] - bg[i] / weight[i]));
+            });
+        }
+        var fill = new bool[w * h];
+        for (var i = 0; i < w * h; i++) fill[i] = valid[i] && diff[i] > 0.08f;
+        // Löcher (Schrift, Raster, Kasteninneres) füllen: was nicht vom Rand her erreichbar ist, gehört zur Fläche
+        var closed = Close(fill, w, h, Math.Max(2, (int)(0.3 * hm)));
+        var reach = new bool[w * h];
+        var stack = new Stack<int>();
+        void Seed(int i) { if (reach[i] || closed[i]) return; reach[i] = true; stack.Push(i); }
+        for (var x = 0; x < w; x++) { Seed(x); Seed((h - 1) * w + x); }
+        for (var y = 0; y < h; y++) { Seed(y * w); Seed(y * w + w - 1); }
+        while (stack.Count > 0)
+        {
+            var p = stack.Pop();
+            int x = p % w, y = p / w;
+            if (x > 0) Seed(p - 1);
+            if (x < w - 1) Seed(p + 1);
+            if (y > 0) Seed(p - w);
+            if (y < h - 1) Seed(p + w);
+        }
+        for (var i = 0; i < w * h; i++) closed[i] = !reach[i];
+        var (blobs, pixels) = Components(closed, w, h);
+        Blur.Gauss(diff, w, h, 1.2);
+        var result = new List<FoundLine>();
+        foreach (var b in blobs)
+        {
+            if (b.Count < 0.004 * w * h || Math.Max(b.Width, b.Height) < 0.2 * maxDim) continue;
+            // gefüllter Kasten, nicht Winkel oder Streifen: Füllung im Rahmen der Schrift (schräg liegt ein Balken in einem
+            // viel größeren Rechteck der Bildachsen)
+            double minA = double.MaxValue, maxA = double.MinValue, minB = double.MaxValue, maxB = double.MinValue;
+            for (var k = b.Start; k < b.Start + b.Count; k++)
+            {
+                double x = pixels[k] % w, y = pixels[k] / w, a = x * d.X + y * d.Y, bb = -x * d.Y + y * d.X;
+                (minA, maxA, minB, maxB) = (Math.Min(minA, a), Math.Max(maxA, a), Math.Min(minB, bb), Math.Max(maxB, bb));
+            }
+            var solidity = b.Count / ((maxA - minA + 1) * (maxB - minB + 1));
+            if (solidity < 0.5) continue;
+            var mask = new bool[w * h];
+            for (var k = b.Start; k < b.Start + b.Count; k++) mask[pixels[k]] = true;
+            result.AddRange(EdgesOf(mask, diff, w, h, d, fold, FoundLineSource.Box, Math.Max(6 * hm, 0.12 * maxDim), 0.06, 0.04));
+        }
+        return result;
     }
 
     /// <summary>Typische Buchstabenhöhe einer Zeile (Median).</summary>
@@ -655,36 +919,35 @@ public static class LineFinder
         return mask;
     }
 
-    /// <summary>Morphologisches Schließen (erst wachsen, dann schrumpfen) mit einem Quadrat ±<paramref name="r"/> — über Summenbilder.</summary>
-    private static bool[] Close(bool[] mask, int w, int h, int r)
+    /// <summary>Morphologisches Schließen (erst wachsen, dann schrumpfen) mit einem Quadrat ±<paramref name="r"/>.</summary>
+    private static bool[] Close(bool[] mask, int w, int h, int r) => Morph(Morph(mask, w, h, r, grow: true), w, h, r, grow: false);
+
+    /// <summary>Wachsen (irgendein Pixel im Quadrat ±<paramref name="r"/>) oder Schrumpfen (alle) — über Summenbilder.</summary>
+    private static bool[] Morph(bool[] m, int w, int h, int r, bool grow)
     {
-        bool[] Filter(bool[] m, bool grow)
+        var sum = new int[(w + 1) * (h + 1)];
+        for (var y = 0; y < h; y++)
         {
-            var sum = new int[(w + 1) * (h + 1)];
-            for (var y = 0; y < h; y++)
+            var row = 0;
+            for (var x = 0; x < w; x++)
             {
-                var row = 0;
-                for (var x = 0; x < w; x++)
-                {
-                    row += m[y * w + x] ? 1 : 0;
-                    sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row;
-                }
+                row += m[y * w + x] ? 1 : 0;
+                sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row;
             }
-            var result = new bool[w * h];
-            Parallel.For(0, h, y =>
-            {
-                int y0 = Math.Max(0, y - r), y1 = Math.Min(h, y + r + 1);
-                for (var x = 0; x < w; x++)
-                {
-                    int x0 = Math.Max(0, x - r), x1 = Math.Min(w, x + r + 1);
-                    var count = sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0];
-                    // wachsen: irgendein Pixel im Quadrat; schrumpfen: alle (am Bildrand zählt nur, was im Bild liegt)
-                    result[y * w + x] = grow ? count > 0 : count == (y1 - y0) * (x1 - x0);
-                }
-            });
-            return result;
         }
-        return Filter(Filter(mask, grow: true), grow: false);
+        var result = new bool[w * h];
+        Parallel.For(0, h, y =>
+        {
+            int y0 = Math.Max(0, y - r), y1 = Math.Min(h, y + r + 1);
+            for (var x = 0; x < w; x++)
+            {
+                int x0 = Math.Max(0, x - r), x1 = Math.Min(w, x + r + 1);
+                var count = sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0];
+                // wachsen: irgendein Pixel im Quadrat; schrumpfen: alle (am Bildrand zählt nur, was im Bild liegt)
+                result[y * w + x] = grow ? count > 0 : count == (y1 - y0) * (x1 - x0);
+            }
+        });
+        return result;
     }
 
     private static float Otsu(float[] v)
@@ -710,11 +973,23 @@ public static class LineFinder
 
     private static List<FoundLine> PageEdges(float[] gray, bool[] page, int w, int h, (double X, double Y)? direction, FoundLine? fold)
     {
-        var contour = TraceContour(page, w, h);
+        var blurred = (float[])gray.Clone();
+        Blur.Gauss(blurred, w, h, 1.2);
+        return EdgesOf(page, blurred, w, h, direction ?? (1, 0), fold, FoundLineSource.Edge, 30, 0.02, 0);
+    }
+
+    /// <summary>
+    /// Die vier Kanten eines Flecks (Blatt, Kasten): Ecken im Rahmen der Schrift, dazwischen je eine Kante von mindestens
+    /// <paramref name="minLength"/> Umrisspunkten, ohne <paramref name="trim"/> an jedem Ende (runde Ecken), mit Sprung von
+    /// mindestens <paramref name="minStep"/> (0: egal).
+    /// </summary>
+    private static List<FoundLine> EdgesOf(bool[] mask, float[] blurred, int w, int h, (double X, double Y) d, FoundLine? fold,
+        FoundLineSource source, double minLength, double trim, double minStep)
+    {
+        var contour = TraceContour(mask, w, h);
         if (contour.Count < 40) return [];
 
         // Ecken im Rahmen der Schrift (sonst des Bildes): oben links, oben rechts, unten rechts, unten links
-        var d = direction ?? (1, 0);
         (double X, double Y) n = (-d.Y, d.X);
         double A(int i) => contour[i].X * d.X + contour[i].Y * d.Y;
         double B(int i) => contour[i].X * n.X + contour[i].Y * n.Y;
@@ -731,42 +1006,40 @@ public static class LineFinder
             corners = corners.Select(c => contour.Count - 1 - c).ToArray();
         }
 
-        var blurred = (float[])gray.Clone();
-        Blur.Gauss(blurred, w, h, 1.2);
         var lines = new List<FoundLine>();
         for (var e = 0; e < 4; e++)
         {
             int from = corners[e], to = corners[(e + 1) % 4];
             var length = Forward(from, to, contour.Count);
-            if (length < 30) continue;
+            if (length < minLength) continue;
             var kind = e % 2 == 0 ? WarpLineKind.Horizontal : WarpLineKind.Vertical;
             // Doppelseite: Ober- und Unterkante knicken am Falz — je Seite eine eigene Kante (eine glatte Kurve über den
             // Knick läge bis zu 50 px daneben)
             var split = kind == WarpLineKind.Horizontal && fold is not null ? FoldCrossing(contour, from, length, fold) : -1;
             var parts = split > 0 ? new[] { (from, split), (from + split, length - split) } : [(from, length)];
             foreach (var (start, count) in parts)
-                if (count >= 30 && EdgeLine(contour, start, count, blurred, w, h) is { } points)
-                    lines.Add(new FoundLine(kind, FoundLineSource.Edge, points));
+                if (count >= minLength && EdgeLine(contour, start, count, blurred, w, h, trim, minStep) is { } points)
+                    lines.Add(new FoundLine(kind, source, points));
         }
         return lines;
     }
 
     /// <summary>
     /// Punkte auf einem Stück des Umrisses: 15 Stellen (nicht ganz bis in die Ecken), geglättet über die Nachbarn, auf den
-    /// stärksten Sprung quer zur Kante geschoben und durch eine glatte Kurve entrauscht. null: liegt am Fotorand oder der
-    /// Umriss läuft hin und her (dann ist es nicht der Blattrand).
+    /// stärksten Sprung quer zur Kante geschoben und durch eine glatte Kurve entrauscht. null: liegt am Fotorand, der
+    /// Umriss läuft hin und her (dann ist es nicht der Blattrand) oder der Sprung ist zu schwach (Schatten statt Kante).
     /// </summary>
     private static IReadOnlyList<(double X, double Y)>? EdgeLine(List<(double X, double Y)> contour, int from, int length,
-        float[] blurred, int w, int h)
+        float[] blurred, int w, int h, double trim, double minStep)
     {
         var points = new List<(double X, double Y)>();
-        var onBorder = 0;
+        int onBorder = 0, weak = 0;
         const int samples = 15;
         var window = Math.Max(2, length / 40);
         (double X, double Y) At(int i) => contour[((i % contour.Count) + contour.Count) % contour.Count];
         for (var k = 0; k < samples; k++)
         {
-            var at = from + (int)Math.Round(length * (0.02 + 0.96 * k / (samples - 1)));   // nicht ganz in die Ecken
+            var at = from + (int)Math.Round(length * (trim + (1 - 2 * trim) * k / (samples - 1)));   // nicht ganz in die Ecken
             double sx = 0, sy = 0;
             for (var j = -window; j <= window; j++)
             {
@@ -778,10 +1051,17 @@ public static class LineFinder
             // quer zur Kante auf den stärksten Sprung
             var (a, b) = (At(at - window), At(at + window));
             double tx = b.X - a.X, ty = b.Y - a.Y, tl = Math.Sqrt(tx * tx + ty * ty);
-            if (tl > 1e-9) c = Refine(blurred, w, h, c, (-ty / tl, tx / tl));
+            if (tl > 1e-9)
+            {
+                (double X, double Y) normal = (-ty / tl, tx / tl);
+                c = Refine(blurred, w, h, c, normal);
+                if (minStep > 0 && Math.Abs(Sample(blurred, w, h, c.X + 1.5 * normal.X, c.Y + 1.5 * normal.Y)
+                                            - Sample(blurred, w, h, c.X - 1.5 * normal.X, c.Y - 1.5 * normal.Y)) < minStep) weak++;
+            }
             points.Add(c);
         }
         if (onBorder > samples * 0.3) return null;   // liegt am Fotorand: nicht das Blatt
+        if (weak > samples * 0.3) return null;       // kein klarer Sprung: Schatten, weicher Verlauf
         // der Umriss muss der Kante folgen, nicht hin und her laufen (höchstens 30 % länger als die Verbindung)
         double path = 0;
         for (var j = 0; j < length; j++)
@@ -865,24 +1145,25 @@ public static class LineFinder
 
     private static int Forward(int from, int to, int count) => ((to - from) % count + count) % count;
 
+    /// <summary>Helligkeit an einer Stelle, bilinear. Punkte meinen Flächen (Pixel i reicht von i bis i + 1), der Wert eines Pixels gilt in seiner Mitte.</summary>
+    private static double Sample(float[] g, int w, int h, double x, double y)
+    {
+        x = Math.Clamp(x - 0.5, 0, w - 1.001); y = Math.Clamp(y - 0.5, 0, h - 1.001);
+        int ix = (int)x, iy = (int)y;
+        double fx = x - ix, fy = y - iy;
+        var i = iy * w + ix;
+        return (g[i] * (1 - fx) + g[i + 1] * fx) * (1 - fy) + (g[i + w] * (1 - fx) + g[i + w + 1] * fx) * fy;
+    }
+
     /// <summary>Punkt entlang der Normalen (± 4 px) auf den stärksten Helligkeitssprung, mit Unterpixel (Parabel).</summary>
     private static (double X, double Y) Refine(float[] g, int w, int h, (double X, double Y) p, (double X, double Y) normal)
     {
-        double Sample(double x, double y)
-        {
-            // Punkte meinen Flächen (Pixel i reicht von i bis i + 1), der Wert eines Pixels gilt in seiner Mitte
-            x = Math.Clamp(x - 0.5, 0, w - 1.001); y = Math.Clamp(y - 0.5, 0, h - 1.001);
-            int ix = (int)x, iy = (int)y;
-            double fx = x - ix, fy = y - iy;
-            var i = iy * w + ix;
-            return (g[i] * (1 - fx) + g[i + 1] * fx) * (1 - fy) + (g[i + w] * (1 - fx) + g[i + w + 1] * fx) * fy;
-        }
         const int reach = 4;
         var grad = new double[2 * reach + 1];
         for (var k = -reach; k <= reach; k++)
         {
             double x = p.X + k * normal.X, y = p.Y + k * normal.Y;
-            grad[k + reach] = Math.Abs(Sample(x + 0.5 * normal.X, y + 0.5 * normal.Y) - Sample(x - 0.5 * normal.X, y - 0.5 * normal.Y));
+            grad[k + reach] = Math.Abs(Sample(g, w, h, x + 0.5 * normal.X, y + 0.5 * normal.Y) - Sample(g, w, h, x - 0.5 * normal.X, y - 0.5 * normal.Y));
         }
         var best = Array.IndexOf(grad, grad.Max());
         double offset = best - reach;
@@ -994,3 +1275,4 @@ public static class LineFinder
 
     private static double Sq(double v) => v * v;
 }
+

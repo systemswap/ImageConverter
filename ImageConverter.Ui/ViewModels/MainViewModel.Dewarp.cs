@@ -133,8 +133,8 @@ public partial class MainViewModel
             var count = (FoundLineSource s) => found.Count(f => f.Source == s);
             StatusMessage = found.Count == 0
                 ? Tr.T("Keine Linien gefunden – bitte von Hand setzen.")
-                : Tr.T("Vorgeschlagen: {0} Textzeilen, {1} Blattkanten, {2} gezeichnete Linien, {3} Textränder, {4} Falz – ein Klick auf eine gestrichelte Linie wählt sie ab oder an.",
-                      count(FoundLineSource.Text), count(FoundLineSource.Edge), count(FoundLineSource.Ruled), count(FoundLineSource.Margin), count(FoundLineSource.Fold))
+                : Tr.T("Vorgeschlagen: {0} Textzeilen, {1} Blattkanten, {2} gezeichnete Linien, {3} Flächenkanten, {4} Textränder, {5} Falz – ein Klick auf eine gestrichelte Linie wählt sie ab oder an.",
+                      count(FoundLineSource.Text), count(FoundLineSource.Edge), count(FoundLineSource.Ruled), count(FoundLineSource.Box), count(FoundLineSource.Margin), count(FoundLineSource.Fold))
                   + (off == 0 ? "" : " " + (off == 1
                       ? Tr.T("1 Vorschlag passt nicht zu den übrigen und ist abgewählt (grau).")
                       : Tr.T("{0} Vorschläge passen nicht zu den übrigen und sind abgewählt (grau).", off)));
