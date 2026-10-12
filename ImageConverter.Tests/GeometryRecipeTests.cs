@@ -111,7 +111,7 @@ public class GeometryRecipeTests
     public void HidingAStage_KeepsTheOthers()
     {
         var r = Busy();
-        Assert.Equal(GeometryStages.All, r.Present);
+        Assert.Equal(GeometryStages.All & ~GeometryStages.Dewarp, r.Present);   // alles außer der Wölbung
         var noStraighten = r.PlanFor(120, 80, GeometryStages.All & ~GeometryStages.Straighten);
         Assert.Null(noStraighten.QuadPixels);
         Assert.Equal(1, noStraighten.Turns);

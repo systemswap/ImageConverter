@@ -85,6 +85,34 @@ public sealed class CropView : Control
 
     private bool QuadMode => Quad is { Count: 4 };
 
+    /// <summary>
+    /// Gewölbtes Blatt: nachgezeichnete Linien in Bildpixeln; null = aus. Ein Klick setzt einen Punkt auf die aktive
+    /// Linie (ohne aktive Linie beginnt eine neue), Enter oder Doppelklick beendet sie. Punkte lassen sich ziehen (mit
+    /// Lupe), ein Klick auf eine Linie fügt dort einen Punkt ein und macht sie wieder aktiv, Rechtsklick wechselt die
+    /// Richtung (waagerecht → senkrecht → Falz). Entf löscht den Punkt, Umschalt+Entf die Linie, Pfeiltasten
+    /// verschieben ihn um 1 px (Umschalt: 10 px). Esc beendet die Linie, ohne aktive Linie das Werkzeug.
+    /// </summary>
+    public static readonly StyledProperty<IReadOnlyList<WarpLineShape>?> WarpLinesProperty =
+        AvaloniaProperty.Register<CropView, IReadOnlyList<WarpLineShape>?>(nameof(WarpLines), defaultBindingMode: BindingMode.TwoWay);
+
+    public IReadOnlyList<WarpLineShape>? WarpLines
+    {
+        get => GetValue(WarpLinesProperty);
+        set => SetValue(WarpLinesProperty, value);
+    }
+
+    /// <summary>Wechselt, wenn die aktive Linie fertig sein soll (Knopf „Neue Linie“).</summary>
+    public static readonly StyledProperty<object?> EndLineTokenProperty =
+        AvaloniaProperty.Register<CropView, object?>(nameof(EndLineToken));
+
+    public object? EndLineToken
+    {
+        get => GetValue(EndLineTokenProperty);
+        set => SetValue(EndLineTokenProperty, value);
+    }
+
+    private bool LinesMode => WarpLines is not null;
+
     /// <summary>Pipette aktiv (Weißabgleich): Ein Klick ins Bild misst, statt einen Rahmen aufzuziehen; beim Zeigen eine Lupe mit Messfeld. Esc beendet.</summary>
     public static readonly StyledProperty<bool> PickActiveProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(PickActive), defaultBindingMode: BindingMode.TwoWay);
@@ -334,7 +362,7 @@ public sealed class CropView : Control
     [Flags]
     private enum Edge { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 }
 
-    private enum DragMode { None, Create, Move, Resize, Pan, Split, QuadCorner, QuadEdge, QuadMove, Brush }
+    private enum DragMode { None, Create, Move, Resize, Pan, Split, QuadCorner, QuadEdge, QuadMove, Brush, WarpPoint }
 
     // Oben mehr Luft: dort schwebt der Bedienhinweis über dem Bild.
     private static readonly Thickness ViewPadding = new(28, 50, 28, 28);
@@ -430,7 +458,8 @@ public sealed class CropView : Control
     {
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
             CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty,
-            PickActiveProperty, PickMarkersProperty, BrushActiveProperty, BrushStrokesProperty, BrushDimProperty, BrushSizeProperty);
+            PickActiveProperty, PickMarkersProperty, BrushActiveProperty, BrushStrokesProperty, BrushDimProperty, BrushSizeProperty,
+            WarpLinesProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -454,6 +483,17 @@ public sealed class CropView : Control
             _fitMode = true;
             UpdateGeometry();
             InvalidateVisual();
+        }
+        else if (change.Property == EndLineTokenProperty)
+        {
+            EndActiveLine();
+        }
+        else if (change.Property == WarpLinesProperty)
+        {
+            // von außen geändert (Zurücksetzen, Werkzeug neu): aktive Linie und Auswahl nur, wenn es sie noch gibt
+            var count = WarpLines?.Count ?? 0;
+            if (_activeLine >= count) _activeLine = -1;
+            if (_warpSel.Line >= count || (_warpSel.Line >= 0 && _warpSel.Point >= WarpLines![_warpSel.Line].Points.Count)) _warpSel = (-1, -1);
         }
         else if (change.Property == BoundsProperty
                  || change.Property == SourceProperty
@@ -823,6 +863,15 @@ public sealed class CropView : Control
             return;
         }
 
+        // Gewölbtes Blatt: Rechtsklick auf eine Linie wechselt ihre Richtung
+        if (LinesMode && props.IsRightButtonPressed)
+        {
+            if (HitWarpPoint(p) is { } hp) ChangeWarpLine(hp.Line, l => l.NextKind());
+            else if (HitWarpSegment(p) is { } hs) ChangeWarpLine(hs.Line, l => l.NextKind());
+            e.Handled = true;
+            return;
+        }
+
         if (!props.IsLeftButtonPressed) return;
 
         Focus();
@@ -861,6 +910,13 @@ public sealed class CropView : Control
             Cursor = CursorWestEast;
             e.Pointer.Capture(this);
             e.Handled = true;
+            return;
+        }
+
+        // Gewölbtes Blatt: Punkte setzen und ziehen
+        if (LinesMode)
+        {
+            PressWarp(e, p);
             return;
         }
 
@@ -1029,6 +1085,16 @@ public sealed class CropView : Control
                 break;
             }
 
+            case DragMode.WarpPoint when WarpLines is { } wl && _warpSel.Line >= 0 && _warpSel.Line < wl.Count:
+            {
+                var line = wl[_warpSel.Line];
+                if (_warpSel.Point >= line.Points.Count) break;
+                var pts = line.Points.ToArray();
+                pts[_warpSel.Point] = ClampToImage(ToImage(p));
+                ChangeWarpLine(_warpSel.Line, _ => (line with { Points = pts }).WithGuessedKind());
+                break;
+            }
+
             case DragMode.QuadEdge:
                 Quad = ShiftQuad([_quadIndex, (_quadIndex + 1) % 4], ToImage(p) - _anchorImage);
                 break;
@@ -1115,6 +1181,12 @@ public sealed class CropView : Control
         if (OnSplitLine(p))
         {
             Cursor = CursorWestEast;
+            return;
+        }
+
+        if (LinesMode)
+        {
+            Cursor = HitWarpPoint(p) is not null ? CursorMove : OnImage(p) ? CursorCross : Cursor.Default;
             return;
         }
 
@@ -1453,6 +1525,242 @@ public sealed class CropView : Control
         context.DrawEllipse(null, LoupeRingPen, center, LoupeRadius, LoupeRadius);
     }
 
+    // ------------------------------------------------------------ Gewölbtes Blatt (Linien)
+
+    private const double WarpPointHit = 9;
+    private const double WarpSegmentHit = 6;
+
+    private int _activeLine = -1;                    // Linie, die gerade wächst
+    private (int Line, int Point) _warpSel = (-1, -1); // zuletzt angefasster Punkt (Tastatur, Lupe)
+
+    // Farben je Richtung: waagerecht blau, senkrecht orange, Falz pink — hell, mit dunklem Schatten darunter
+    private static readonly Color[] WarpColors = [Color.FromRgb(0x3F, 0xA9, 0xF5), Color.FromRgb(0xFF, 0xA6, 0x30), Color.FromRgb(0xFF, 0x4F, 0xA3)];
+    private static readonly IPen[] WarpPens = WarpColors.Select(c => (IPen)new ImmutablePen(new ImmutableSolidColorBrush(c), 1.8)).ToArray();
+    private static readonly IPen[] WarpActivePens = WarpColors.Select(c => (IPen)new ImmutablePen(new ImmutableSolidColorBrush(c), 2.6)).ToArray();
+    private static readonly IBrush[] WarpFills = WarpColors.Select(c => (IBrush)new ImmutableSolidColorBrush(c)).ToArray();
+
+    private (int Line, int Point)? HitWarpPoint(Point screen)
+    {
+        if (WarpLines is not { } lines) return null;
+        (int, int)? best = null;
+        var bestD = WarpPointHit;
+        for (var i = 0; i < lines.Count; i++)
+        for (var j = 0; j < lines[i].Points.Count; j++)
+        {
+            var d = Point.Distance(screen, ToScreenPoint(lines[i].Points[j]));
+            if (d <= bestD) (bestD, best) = (d, (i, j));
+        }
+        return best;
+    }
+
+    private (int Line, int Segment)? HitWarpSegment(Point screen)
+    {
+        if (WarpLines is not { } lines) return null;
+        (int, int)? best = null;
+        var bestD = WarpSegmentHit;
+        for (var i = 0; i < lines.Count; i++)
+        for (var j = 0; j + 1 < lines[i].Points.Count; j++)
+        {
+            var d = DistanceToSegment(screen, ToScreenPoint(lines[i].Points[j]), ToScreenPoint(lines[i].Points[j + 1]));
+            if (d <= bestD) (bestD, best) = (d, (i, j));
+        }
+        return best;
+    }
+
+    private static double DistanceToSegment(Point p, Point a, Point b)
+    {
+        var ab = b - a;
+        var len2 = ab.X * ab.X + ab.Y * ab.Y;
+        var t = len2 < 1e-9 ? 0 : Math.Clamp(((p.X - a.X) * ab.X + (p.Y - a.Y) * ab.Y) / len2, 0, 1);
+        return Point.Distance(p, a + ab * t);
+    }
+
+    private void ChangeWarpLine(int index, Func<WarpLineShape, WarpLineShape> change)
+    {
+        if (WarpLines is not { } lines || index < 0 || index >= lines.Count) return;
+        var next = lines.ToArray();
+        next[index] = change(next[index]);
+        WarpLines = next;
+    }
+
+    /// <summary>Linker Klick im Werkzeug: Punkt ziehen, auf einer Linie einfügen, an die aktive Linie anhängen oder neu beginnen.</summary>
+    private void PressWarp(PointerPressedEventArgs e, Point p)
+    {
+        e.Handled = true;
+        if (e.ClickCount >= 2)
+        {
+            EndActiveLine();   // Doppelklick: der erste Klick hat den letzten Punkt schon gesetzt
+            return;
+        }
+
+        if (HitWarpPoint(p) is { } hp)
+        {
+            StartWarpDrag(e, hp.Line, hp.Point);
+            return;
+        }
+        if (HitWarpSegment(p) is { } hs)
+        {
+            var line = WarpLines![hs.Line];
+            var pts = line.Points.ToList();
+            pts.Insert(hs.Segment + 1, ClampToImage(ToImage(p)));
+            ChangeWarpLine(hs.Line, _ => line with { Points = pts });
+            StartWarpDrag(e, hs.Line, hs.Segment + 1);
+            return;
+        }
+        if (!OnImage(p))
+        {
+            if (_fitMode) return;
+            _mode = DragMode.Pan;   // daneben: im Zoom verschieben
+            _panStartRect = _imageRect;
+            Cursor = CursorGrab;
+            e.Pointer.Capture(this);
+            return;
+        }
+
+        var at = ClampToImage(ToImage(p));
+        var lines = WarpLines!.ToList();
+        if (_activeLine < 0 || _activeLine >= lines.Count)
+        {
+            lines.Add(new WarpLineShape(WarpLineKind.Horizontal, [at]));
+            _activeLine = lines.Count - 1;
+        }
+        else
+        {
+            var line = lines[_activeLine];
+            lines[_activeLine] = (line with { Points = [.. line.Points, at] }).WithGuessedKind();
+        }
+        WarpLines = lines;
+        StartWarpDrag(e, _activeLine, lines[_activeLine].Points.Count - 1);
+    }
+
+    private void StartWarpDrag(PointerPressedEventArgs e, int line, int point)
+    {
+        _mode = DragMode.WarpPoint;
+        _warpSel = (line, point);
+        _activeLine = line;   // angefasste Linie wächst weiter
+        e.Pointer.Capture(this);
+        InvalidateVisual();
+    }
+
+    /// <summary>Aktive Linie fertig; eine Linie mit nur einem Punkt fällt weg (sie zeigt keine Richtung).</summary>
+    private void EndActiveLine()
+    {
+        if (WarpLines is { } lines && _activeLine >= 0 && _activeLine < lines.Count && lines[_activeLine].Points.Count < 2)
+        {
+            var removed = _activeLine;
+            _activeLine = -1;
+            _warpSel = (-1, -1);
+            WarpLines = lines.Where((_, i) => i != removed).ToArray();
+        }
+        _activeLine = -1;
+        InvalidateVisual();
+    }
+
+    private void OnWarpKey(KeyEventArgs e)
+    {
+        var lines = WarpLines!;
+        switch (e.Key)
+        {
+            case Key.Enter or Key.Return:
+                if (_activeLine >= 0) EndActiveLine();
+                else RequestCrop();
+                e.Handled = true;
+                return;
+            case Key.Escape:
+                if (_activeLine >= 0) EndActiveLine();
+                else WarpLines = null;   // Werkzeug aus — nichts übernommen
+                e.Handled = true;
+                return;
+            case Key.N:
+                EndActiveLine();
+                e.Handled = true;
+                return;
+            case Key.Delete or Key.Back when _warpSel.Line >= 0 && _warpSel.Line < lines.Count:
+            {
+                var (li, pi) = _warpSel;
+                var keep = lines.ToList();
+                var pts = keep[li].Points.ToList();
+                if (!e.KeyModifiers.HasFlag(KeyModifiers.Shift) && pi < pts.Count) pts.RemoveAt(pi);
+                else pts.Clear();
+                if (pts.Count == 0)
+                {
+                    keep.RemoveAt(li);
+                    _activeLine = _activeLine == li ? -1 : _activeLine > li ? _activeLine - 1 : _activeLine;
+                    _warpSel = (-1, -1);
+                }
+                else
+                {
+                    keep[li] = (keep[li] with { Points = pts }).WithGuessedKind();
+                    _warpSel = (li, Math.Min(pi, pts.Count - 1));
+                }
+                WarpLines = keep;
+                e.Handled = true;
+                return;
+            }
+        }
+
+        var step = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 10 : 1;
+        Vector delta = e.Key switch
+        {
+            Key.Left => new Vector(-step, 0),
+            Key.Right => new Vector(step, 0),
+            Key.Up => new Vector(0, -step),
+            Key.Down => new Vector(0, step),
+            _ => default,
+        };
+        if (delta == default || _warpSel.Line < 0 || _warpSel.Line >= lines.Count) return;
+        var target = lines[_warpSel.Line];
+        if (_warpSel.Point >= target.Points.Count) return;
+        var moved = target.Points.ToArray();
+        moved[_warpSel.Point] = ClampToImage(moved[_warpSel.Point] + delta);
+        ChangeWarpLine(_warpSel.Line, _ => (target with { Points = moved }).WithGuessedKind());
+        e.Handled = true;
+    }
+
+    /// <summary>Linien in der Farbe ihrer Richtung, die aktive kräftiger; Punkte; beim Ziehen die Lupe.</summary>
+    private void RenderWarpLines(DrawingContext context)
+    {
+        var lines = WarpLines!;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            var kind = (int)line.Kind;
+            var active = i == _activeLine;
+            var pts = line.Points.Select(ToScreenPoint).ToArray();
+            if (pts.Length >= 2)
+            {
+                var g = new StreamGeometry();
+                using (var c = g.Open())
+                {
+                    c.BeginFigure(pts[0], false);
+                    foreach (var q in pts.Skip(1)) c.LineTo(q);
+                    c.EndFigure(false);
+                }
+                context.DrawGeometry(null, QuadShadowPen, g);
+                context.DrawGeometry(null, active ? WarpActivePens[kind] : WarpPens[kind], g);
+            }
+            for (var j = 0; j < pts.Length; j++)
+            {
+                var selected = _warpSel == (i, j);
+                var r = selected ? 6 : 4.5;
+                context.DrawEllipse(active ? HandleFill : WarpFills[kind], HandlePen, pts[j], r, r);
+                if (selected) context.DrawEllipse(null, WarpPens[kind], pts[j], r + 2, r + 2);
+            }
+        }
+
+        if (_mode == DragMode.WarpPoint && _warpSel.Line >= 0 && _warpSel.Line < lines.Count
+            && _warpSel.Point < lines[_warpSel.Line].Points.Count)
+        {
+            var line = lines[_warpSel.Line];
+            var j = _warpSel.Point;
+            DrawLoupe(context, line.Points[j], toLoupe =>
+            {
+                if (j > 0) context.DrawLine(LoupeEdgePen, toLoupe(line.Points[j - 1]), toLoupe(line.Points[j]));
+                if (j + 1 < line.Points.Count) context.DrawLine(LoupeEdgePen, toLoupe(line.Points[j]), toLoupe(line.Points[j + 1]));
+            });
+        }
+    }
+
     private static readonly IBrush MarkerNeutral = new ImmutableSolidColorBrush(Color.FromRgb(0x8C, 0x8C, 0x8C));
     private static readonly IBrush MarkerBlack = new ImmutableSolidColorBrush(Color.FromRgb(0x14, 0x14, 0x14));
     private static readonly IBrush MarkerWhite = new ImmutableSolidColorBrush(Colors.White);
@@ -1542,6 +1850,12 @@ public sealed class CropView : Control
             PickActive = false;
             _pickHover = null;
             e.Handled = true;
+            return;
+        }
+
+        if (LinesMode)
+        {
+            OnWarpKey(e);
             return;
         }
 
@@ -1703,7 +2017,7 @@ public sealed class CropView : Control
         }
 
         // Vorher/Nachher nur ungedreht — die Trennlinie gehört zum geraden Bild
-        if (!rotated && !QuadMode && Source is not null && CompareSource is { } before)
+        if (!rotated && !QuadMode && !LinesMode && Source is not null && CompareSource is { } before)
             RenderCompare(context, before);
 
         if (rotated && DateTime.UtcNow < _gridUntil)
@@ -1722,6 +2036,12 @@ public sealed class CropView : Control
                 context.DrawRectangle(null, QuadShadowPen, box);
                 context.DrawRectangle(null, LoupeEdgePen, box);
             });
+            return;
+        }
+
+        if (LinesMode)
+        {
+            RenderWarpLines(context);
             return;
         }
 

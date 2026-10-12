@@ -80,6 +80,7 @@ public partial class RetouchViewModel : ViewModelBase
         // Gemalt wird auf dem ungedrehten Bild — Drehen, Entzerren und Pipette schließen
         _main.RotationTool = false;
         _main.PerspectiveTool = false;
+        _main.DewarpTool = false;
         _main.IsPicking = false;
     }
 

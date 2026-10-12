@@ -99,6 +99,7 @@ public partial class MainViewModel
         UpdatePrintSizeFromPixels();
         RotationAngle = 0;        // eine noch nicht übernommene Drehung gilt nur für den Stand davor
         PerspectiveTool = false;  // die Ecken zum Entzerren ebenso
+        DewarpTool = false;       // und die Linien der Wölbung
         ResetWbForNewImage();     // Messstellen gehören zum Bild davor (die Messwerte bleiben, gleiches Licht)
         CropSelection = null;
         OnPropertyChanged(nameof(AspectRatio));

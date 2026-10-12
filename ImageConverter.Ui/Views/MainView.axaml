@@ -1088,6 +1088,8 @@
                                     SelectionRadius="{Binding CornerRadius}"
                                     RotationAngle="{Binding RotationAngle}"
                                     Quad="{Binding PerspectiveQuad}"
+                                    WarpLines="{Binding DewarpLines}"
+                                    EndLineToken="{Binding DewarpNewLineToken}"
                                     PickActive="{Binding IsPicking}"
                                     PickCommand="{Binding PickAtCommand}"
                                     PickMarkers="{Binding WbMarkers}"
@@ -1206,6 +1208,41 @@
                                         Content="{l:T 'Entzerren und zuschneiden'}"
                                         Command="{Binding CropToSelectionCommand}"
                                         ToolTip.Tip="{l:T 'Macht aus dem Rahmen ein gerades Rechteck – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter oder Doppelklick in den Rahmen; Esc bricht ab.'}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Gewölbtes Blatt: Linien nachzeichnen, die in Wirklichkeit gerade sind. Symbol: Blatt mit gewölbten
+                             Kanten und einer Linie mit Punkten (eigenes). -->
+                        <ToggleButton Classes="corner" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Margin="196,12,12,12"
+                                      IsVisible="{Binding HasImage}"
+                                      IsChecked="{Binding DewarpTool}"
+                                      ToolTip.Tip="{l:T 'Gewölbtes Blatt gerade ziehen: Punkte auf Linien setzen, die in Wirklichkeit gerade sind – Textzeilen, Blattkanten, Tabellenlinien, bei Büchern der Falz. Daraus wird das Blatt geglättet und das Seitenverhältnis berechnet; das ganze Bild bleibt. Beim Ziehen hilft eine Lupe.'}">
+                            <Path Data="M 4,5 Q 12,8 20,5 L 20,19 Q 12,22 4,19 Z M 7,12 Q 12,14.5 17,12 M 7,11.2 L 7,12.8 M 12,12.6 L 12,14.2 M 17,11.2 L 17,12.8" />
+                        </ToggleButton>
+
+                        <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                Margin="12" Padding="14,8,10,8" CornerRadius="12"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                IsVisible="{Binding DewarpTool}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="hint" TextWrapping="Wrap" MaxWidth="640"
+                                           Text="{l:T 'Klick setzt einen Punkt, Enter oder Doppelklick beendet die Linie. Blau: waagerecht auf dem Blatt, orange: senkrecht, pink: Falz – Rechtsklick wechselt. Entf löscht den Punkt, Umschalt+Entf die Linie.'}" />
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:T 'Gewölbtes Blatt'}" />
+                                    <TextBlock VerticalAlignment="Center" MinWidth="200" MaxWidth="420" TextWrapping="Wrap" Text="{Binding DewarpInfo}" />
+                                    <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Neue Linie'}"
+                                            Command="{Binding NewDewarpLineCommand}"
+                                            ToolTip.Tip="{l:T 'Die aktive Linie beenden – der nächste Klick beginnt eine neue (auch mit Enter, Doppelklick oder N).'}" />
+                                    <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Zurücksetzen'}"
+                                            Command="{Binding ResetDewarpLinesCommand}"
+                                            ToolTip.Tip="{l:T 'Alle Linien entfernen. Übernommen wird erst mit „Gerade ziehen“.'}" />
+                                    <Button Classes="primary" VerticalAlignment="Center"
+                                            Content="{l:T 'Gerade ziehen'}"
+                                            Command="{Binding CropToSelectionCommand}"
+                                            ToolTip.Tip="{l:T 'Zieht das Blatt gerade und schneidet auf das größte volle Rechteck zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter (ohne aktive Linie); Esc bricht ab.'}" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 

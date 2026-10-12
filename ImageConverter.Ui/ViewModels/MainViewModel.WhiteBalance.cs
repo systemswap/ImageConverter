@@ -77,6 +77,7 @@ public partial class MainViewModel
             // Gemessen wird am ungedrehten Bild — Drehen und Entzerren schließen
             RotationTool = false;
             PerspectiveTool = false;
+            DewarpTool = false;
             _wbProblem = null;
             ActivePipette = kind;
         }

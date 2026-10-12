@@ -34,6 +34,7 @@ public enum EditSteps
     Orient = 32768,
     LumMask = 65536,
     Grain = 131072,
+    Dewarp = 262144,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
@@ -96,7 +97,7 @@ public partial class MainViewModel
     private const EditSteps ImageVariants = EditSteps.Ai | EditSteps.SkinDetails;
 
     /// <summary>Die Stufen des Ausrichtens in der Liste.</summary>
-    internal const EditSteps GeometrySteps = EditSteps.Straighten | EditSteps.Level | EditSteps.CropStep | EditSteps.Orient;
+    internal const EditSteps GeometrySteps = EditSteps.Dewarp | EditSteps.Straighten | EditSteps.Level | EditSteps.CropStep | EditSteps.Orient;
 
     partial void OnHiddenStepsChanged(EditSteps oldValue, EditSteps newValue)
     {
@@ -115,6 +116,7 @@ public partial class MainViewModel
     /// <summary>Welche Stufen des Ausrichtens eingeschaltet sind.</summary>
     internal static GeometryStages StagesShown(EditSteps hidden) =>
         GeometryStages.All
+        & ~((hidden & EditSteps.Dewarp) != 0 ? GeometryStages.Dewarp : 0)
         & ~((hidden & EditSteps.Straighten) != 0 ? GeometryStages.Straighten : 0)
         & ~((hidden & EditSteps.Level) != 0 ? GeometryStages.Level : 0)
         & ~((hidden & EditSteps.CropStep) != 0 ? GeometryStages.Crop : 0)
@@ -333,7 +335,8 @@ public partial class MainViewModel
 
     /// <summary>Stufen, die ein offenes Werkzeug zeigt: Frei drehen ohne Drehung/Zuschnitt, Entzerren ohne alles bis auf Drehen/Spiegeln.</summary>
     private GeometryStages ToolView =>
-        RotationTool ? GeometryRecipe.LevelView : PerspectiveTool ? GeometryRecipe.StraightenView : GeometryStages.All;
+        RotationTool ? GeometryRecipe.LevelView : PerspectiveTool ? GeometryRecipe.StraightenView
+        : DewarpTool ? GeometryRecipe.DewarpView : GeometryStages.All;
 
     /// <summary>Das gerade angezeigte Bild — mit oder ohne KI …, mit den eingeschalteten Stufen, beim Werkzeug in dessen Ansicht.</summary>
     private MagickImage? ShownDocument =>
@@ -514,9 +517,18 @@ public partial class MainViewModel
             // Ausrichten: je Stufe eine Zeile, in der festen Reihenfolge des Rezepts (immer aus dem Pixelbild gerechnet)
             var recipe = h.Recipe;
             var (pw, ph) = PixelSize();
+            if (recipe.HasDewarp && recipe.Dewarp is { } spec)
+            {
+                var map = recipe.DewarpMapFor(pw, ph);
+                var (fw, fh) = recipe.FlatSize(pw, ph);
+                var lines = spec.UsableLines.Count();
+                var parts = new List<string> { lines == 1 ? Tr.T("1 Linie") : Tr.T("{0} Linien", lines), $"{fw} × {fh} px" };
+                if (map?.Din == true) parts.Add("DIN");
+                rows.Add(Row(EditSteps.Dewarp, Tr.T("Gerade gezogen"), string.Join(" · ", parts)));
+            }
             if (recipe.HasStraighten)
             {
-                var (sw, sh) = recipe.SizeFor(pw, ph, GeometryStages.Straighten);
+                var (sw, sh) = recipe.SizeFor(pw, ph, GeometryStages.Dewarp | GeometryStages.Straighten);
                 rows.Add(Row(EditSteps.Straighten, Tr.T("Entzerrt"), $"{sw} × {sh} px"));
             }
             if (recipe.HasLevel)
@@ -524,7 +536,7 @@ public partial class MainViewModel
                     $"{recipe.Angle.ToString("+0.0;−0.0", System.Globalization.CultureInfo.CurrentCulture)}°"));
             if (recipe.HasCrop)
             {
-                var (cw, ch) = recipe.SizeFor(pw, ph, GeometryStages.Straighten | GeometryStages.Level | GeometryStages.Crop);
+                var (cw, ch) = recipe.SizeFor(pw, ph, GeometryStages.Dewarp | GeometryStages.Straighten | GeometryStages.Level | GeometryStages.Crop);
                 rows.Add(Row(EditSteps.CropStep, Tr.T("Zuschnitt"),
                     recipe.CornerRadius > 0 ? Tr.T("{0} × {1} px · runde Ecken", cw, ch) : $"{cw} × {ch} px"));
             }
@@ -651,6 +663,7 @@ public partial class MainViewModel
     /// <summary>Rezept ohne die ausgeschalteten Stufen des Ausrichtens.</summary>
     private static GeometryRecipe WithoutHiddenStages(GeometryRecipe r, EditSteps hidden)
     {
+        if ((hidden & EditSteps.Dewarp) != 0) r = r with { Dewarp = null };
         if ((hidden & EditSteps.Straighten) != 0) r = r with { Quad = null };
         if ((hidden & EditSteps.Level) != 0) r = r with { Angle = 0 };
         if ((hidden & EditSteps.CropStep) != 0) r = r with { Crop = null, CornerRadius = 0 };

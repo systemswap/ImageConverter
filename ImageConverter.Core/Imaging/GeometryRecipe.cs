@@ -15,7 +15,9 @@ public enum GeometryStages
     Crop = 4,
     /// <summary>Drehen um 90°-Schritte und Spiegeln.</summary>
     Orient = 8,
-    All = Straighten | Level | Crop | Orient,
+    /// <summary>Gewölbtes Blatt gerade ziehen (nachgezeichnete Linien) — die erste Stufe.</summary>
+    Dewarp = 16,
+    All = Dewarp | Straighten | Level | Crop | Orient,
 }
 
 /// <summary>Viereck in relativen Koordinaten (0 … 1 der Bildbreite bzw. -höhe): oben links, oben rechts, unten rechts, unten links.</summary>
@@ -35,12 +37,13 @@ public readonly record struct RelRect(double X, double Y, double Width, double H
 /// <summary>
 /// Das Ausrichten eines Bildes als Rezept, nicht in die Pixel eingerechnet: Das Pixelbild (Original, KI, Entfernen)
 /// bleibt ungedreht und unbeschnitten; angezeigt und gespeichert wird Pixelbild + Rezept. Feste Reihenfolge:
-/// <b>Entzerren → Gerade richten (mit Zuschnitt) → Drehen/Spiegeln</b> — gleich, in welcher Reihenfolge man die
-/// Werkzeuge benutzt hat. So lässt sich jede Stufe ausschalten, ohne die anderen zu verlieren, und eine 90°-Drehung
+/// <b>Wölbung → Entzerren → Gerade richten (mit Zuschnitt) → Drehen/Spiegeln</b> — gleich, in welcher Reihenfolge man
+/// die Werkzeuge benutzt hat. So lässt sich jede Stufe ausschalten, ohne die anderen zu verlieren, und eine 90°-Drehung
 /// hängt an nichts anderem.
 /// </summary>
 /// <remarks>
-/// Koordinaten sind relativ gespeichert: das Viereck zum Pixelbild, der Zuschnitt zum Bild nach dem Entzerren.
+/// Koordinaten sind relativ gespeichert: die Linien der Wölbung zum Pixelbild, das Viereck zum Bild nach der Wölbung,
+/// der Zuschnitt zum Bild nach dem Entzerren.
 /// Damit bleibt eine spätere Stufe ungefähr an ihrer Stelle, wenn eine frühere ausgeschaltet wird, und dasselbe Rezept
 /// passt auf eine verkleinerte Fassung (Vorschau der KI).
 /// Der Zuschnitt gilt wie bei <see cref="ImageOps.RotateAndCrop"/> im Rahmen der Drehung: achsparallel im gedrehten
@@ -48,18 +51,21 @@ public readonly record struct RelRect(double X, double Y, double Width, double H
 /// Drehen/Spiegeln: erst <see cref="Turns"/> Vierteldrehungen im Uhrzeigersinn, dann links ↔ rechts gespiegelt.
 /// </remarks>
 /// <param name="CornerRadius">Runde Ecken des Zuschnitts als Anteil der kürzeren Seite des Zuschnitts (0 = eckig).</param>
+/// <param name="Dewarp">Gewölbtes Blatt: nachgezeichnete Linien (<see cref="Imaging.Dewarp"/>); null = keine.</param>
 public sealed record GeometryRecipe(
     RelQuad? Quad = null,
     double Angle = 0,
     RelRect? Crop = null,
     double CornerRadius = 0,
     int Turns = 0,
-    bool Flip = false)
+    bool Flip = false,
+    DewarpSpec? Dewarp = null)
 {
     public static readonly GeometryRecipe None = new();
 
     public bool IsNone => this == None with { Turns = 0 } && Turns % 4 == 0;
 
+    public bool HasDewarp => Dewarp is { IsUsable: true };
     public bool HasStraighten => Quad is not null;
     public bool HasLevel => Math.Abs(Angle) > 1e-9;
     public bool HasCrop => Crop is not null;
@@ -70,7 +76,7 @@ public sealed record GeometryRecipe(
 
     /// <summary>Welche Stufen etwas tun.</summary>
     public GeometryStages Present =>
-        (HasStraighten ? GeometryStages.Straighten : 0) | (HasLevel ? GeometryStages.Level : 0)
+        (HasDewarp ? GeometryStages.Dewarp : 0) | (HasStraighten ? GeometryStages.Straighten : 0) | (HasLevel ? GeometryStages.Level : 0)
         | (HasCrop ? GeometryStages.Crop : 0) | (HasOrient ? GeometryStages.Orient : 0);
 
     // ------------------------------------------------------------ Aktionen (für die Werkzeuge)
@@ -87,6 +93,8 @@ public sealed record GeometryRecipe(
     /// <summary>Alle Zwischengrößen und Rahmen für ein Pixelbild der Größe <paramref name="width"/> × <paramref name="height"/>.</summary>
     internal readonly record struct Plan(
         int SourceWidth, int SourceHeight,
+        DewarpMap? Map,
+        int FlatWidth, int FlatHeight,
         IReadOnlyList<(double X, double Y)>? QuadPixels,
         int StraightWidth, int StraightHeight,
         double Angle,
@@ -97,11 +105,15 @@ public sealed record GeometryRecipe(
 
     internal Plan PlanFor(int width, int height, GeometryStages stages = GeometryStages.All)
     {
+        // Wölbung: das Pixelbild gerade gezogen, eigene Größe; alles Weitere gilt für dieses Bild
+        var map = (stages & GeometryStages.Dewarp) != 0 && Dewarp is { IsUsable: true } spec ? Imaging.Dewarp.MapFor(spec, width, height) : null;
+        var (fw, fh) = map?.SizeFor(width) ?? (width, height);
+
         IReadOnlyList<(double X, double Y)>? quad = null;
-        int sw = width, sh = height;
+        int sw = fw, sh = fh;
         if ((stages & GeometryStages.Straighten) != 0 && Quad is { } q)
         {
-            var px = q.ToPixels(width, height);
+            var px = q.ToPixels(fw, fh);
             if (PerspectiveGeometry.IsValid(px))
             {
                 quad = px;
@@ -128,8 +140,18 @@ public sealed record GeometryRecipe(
         var turns = (stages & GeometryStages.Orient) != 0 ? NormalTurns : 0;
         var flip = (stages & GeometryStages.Orient) != 0 && Flip;
         var (ow, oh) = turns % 2 == 1 ? (ch, cw) : (cw, ch);
-        return new Plan(width, height, quad, sw, sh, angle, rect, radius, turns, flip, ow, oh);
+        return new Plan(width, height, map, fw, fh, quad, sw, sh, angle, rect, radius, turns, flip, ow, oh);
     }
+
+    /// <summary>Größe nach der Wölbung (vor dem Entzerren) für ein Pixelbild dieser Größe.</summary>
+    public (int Width, int Height) FlatSize(int width, int height)
+    {
+        var p = PlanFor(width, height, GeometryStages.Dewarp);
+        return (p.FlatWidth, p.FlatHeight);
+    }
+
+    /// <summary>Die Abbildung der Wölbung für ein Pixelbild dieser Größe (Seitenverhältnis, DIN …); null = keine.</summary>
+    public DewarpMap? DewarpMapFor(int width, int height) => PlanFor(width, height, GeometryStages.Dewarp).Map;
 
     private static (int, int, int, int) Whole(double x, double y, double w, double h, int sw, int sh, bool clamp)
     {
@@ -157,7 +179,7 @@ public sealed record GeometryRecipe(
         int width, height;
         lock (source) (width, height) = ((int)source.Width, (int)source.Height);
         var p = PlanFor(width, height, stages);
-        if (p.QuadPixels is null && p.Rect is null && p.Turns == 0 && !p.Flip) return null;
+        if (p.Map is null && p.QuadPixels is null && p.Rect is null && p.Turns == 0 && !p.Flip) return null;
 
         MagickImage? work = null;
         MagickImage Current() => work ?? source;
@@ -167,6 +189,7 @@ public sealed record GeometryRecipe(
             work = next;
         }
 
+        if (p.Map is { } map) Replace(map.Render(Current()));
         if (p.QuadPixels is { } quad) Replace(ImageOps.Straighten(Current(), quad));
         if (p.Rect is { } r)
         {
@@ -195,6 +218,11 @@ public sealed record GeometryRecipe(
         (x, y) = UnLevel(x, y, p);
         if (p.QuadPixels is { } quad)
             (x, y) = PerspectiveGeometry.Apply(PerspectiveGeometry.Homography(Corners(p), quad), x, y);
+        if (p.Map is { } map)
+        {
+            var (rx, ry) = map.Source(x / p.FlatWidth, y / p.FlatHeight);
+            (x, y) = (rx * width, ry * height);
+        }
         return (x, y);
     }
 
@@ -202,6 +230,11 @@ public sealed record GeometryRecipe(
     public (double X, double Y) ToResult(double x, double y, int width, int height, GeometryStages stages = GeometryStages.All)
     {
         var p = PlanFor(width, height, stages);
+        if (p.Map is { } map)
+        {
+            var (u, v) = map.Result(x / width, y / height);
+            (x, y) = (u * p.FlatWidth, v * p.FlatHeight);
+        }
         if (p.QuadPixels is { } quad)
             (x, y) = PerspectiveGeometry.Apply(PerspectiveGeometry.Homography(quad, Corners(p)), x, y);
         (x, y) = Level(x, y, p);
@@ -318,7 +351,7 @@ public sealed record GeometryRecipe(
     /// Ansicht für „Frei drehen“: Pixelbild entzerrt und gedreht/gespiegelt, aber ohne freie Drehung und Zuschnitt.
     /// Winkel und Rahmen darin für die Anzeige (Rahmen in Pixeln dieser Ansicht, wie <see cref="ImageOps.RotateAndCrop"/>).
     /// </summary>
-    public const GeometryStages LevelView = GeometryStages.Straighten | GeometryStages.Orient;
+    public const GeometryStages LevelView = GeometryStages.Dewarp | GeometryStages.Straighten | GeometryStages.Orient;
 
     /// <summary>Winkel und Rahmen des Rezepts in der Ansicht <see cref="LevelView"/>; Rahmen null = keiner.</summary>
     public (double Angle, (double X, double Y, double W, double H)? Frame) LevelInView(int width, int height)
@@ -338,7 +371,7 @@ public sealed record GeometryRecipe(
     /// </summary>
     public GeometryRecipe LevelledInView(double angle, double x, double y, double w, double h, double radius, int width, int height)
     {
-        var p = PlanFor(width, height, GeometryStages.Straighten);
+        var p = PlanFor(width, height, GeometryStages.Dewarp | GeometryStages.Straighten);
         var size = (p.StraightWidth, p.StraightHeight);
         var (rx, ry, rw, rh) = UnOrientRect(x, y, w, h, size, NormalTurns, Flip);
         return this with
@@ -349,23 +382,56 @@ public sealed record GeometryRecipe(
         };
     }
 
-    /// <summary>Ansicht für „Entzerren“: nur gedreht/gespiegelt — das Viereck liegt auf dem Pixelbild.</summary>
-    public const GeometryStages StraightenView = GeometryStages.Orient;
+    /// <summary>Ansicht für „Entzerren“: gerade gezogen (Wölbung) und gedreht/gespiegelt — das Viereck liegt auf dem Bild nach der Wölbung.</summary>
+    public const GeometryStages StraightenView = GeometryStages.Dewarp | GeometryStages.Orient;
 
-    /// <summary>Das Viereck des Rezepts in der Ansicht <see cref="StraightenView"/> (Pixel); null = keins.</summary>
-    public IReadOnlyList<(double X, double Y)>? QuadInView(int width, int height)
+    /// <summary>
+    /// Das Viereck des Rezepts in der Ansicht <see cref="StraightenView"/> (Pixel); null = keins.
+    /// <paramref name="width"/> × <paramref name="height"/> ist das Pixelbild; ist die Wölbung in <paramref name="stages"/>
+    /// eingeschaltet, liegt das Viereck auf dem Bild danach.
+    /// </summary>
+    public IReadOnlyList<(double X, double Y)>? QuadInView(int width, int height, GeometryStages stages = GeometryStages.All)
     {
         if (Quad is not { } q) return null;
-        return q.ToPixels(width, height).Select(pt => OrientPoint(pt.X, pt.Y, (width, height), NormalTurns, Flip)).ToArray();
+        var size = (stages & GeometryStages.Dewarp) != 0 ? FlatSize(width, height) : (width, height);
+        return q.ToPixels(size.Item1, size.Item2).Select(pt => OrientPoint(pt.X, pt.Y, size, NormalTurns, Flip)).ToArray();
     }
 
     /// <summary>Viereck aus der Ansicht <see cref="StraightenView"/> übernehmen (ersetzt das bisherige).</summary>
-    public GeometryRecipe StraightenedInView(IReadOnlyList<(double X, double Y)> quadInView, int width, int height)
+    public GeometryRecipe StraightenedInView(IReadOnlyList<(double X, double Y)> quadInView, int width, int height,
+        GeometryStages stages = GeometryStages.All)
     {
-        var src = quadInView.Select(pt => UnOrientPoint(pt.X, pt.Y, (width, height), NormalTurns, Flip)).ToArray();
+        var size = (stages & GeometryStages.Dewarp) != 0 ? FlatSize(width, height) : (width, height);
+        var src = quadInView.Select(pt => UnOrientPoint(pt.X, pt.Y, size, NormalTurns, Flip)).ToArray();
         // Nach dem Spiegeln ist die Reihenfolge der Ecken links ↔ rechts vertauscht; ungerade Drehungen verschieben sie
         var ordered = Reorder(src);
-        return this with { Quad = RelQuad.FromPixels(ordered, width, height) };
+        return this with { Quad = RelQuad.FromPixels(ordered, size.Item1, size.Item2) };
+    }
+
+    /// <summary>Ansicht für „Gewölbtes Blatt“: das Pixelbild, nur gedreht/gespiegelt — die Linien liegen auf dem Original.</summary>
+    public const GeometryStages DewarpView = GeometryStages.Orient;
+
+    /// <summary>Die Linien der Wölbung in der Ansicht <see cref="DewarpView"/> (Pixel); leer = keine.</summary>
+    public IReadOnlyList<(WarpLineKind Kind, IReadOnlyList<(double X, double Y)> Points)> WarpLinesInView(int width, int height) =>
+        Dewarp is not { } spec
+            ? []
+            : spec.Lines.Select(l => (l.Kind, (IReadOnlyList<(double X, double Y)>)l.Points
+                .Select(p => OrientPoint(p.X * width, p.Y * height, (width, height), NormalTurns, Flip)).ToArray())).ToArray();
+
+    /// <summary>
+    /// Linien aus der Ansicht <see cref="DewarpView"/> übernehmen (ersetzen die bisherigen; ohne brauchbare Linie: keine
+    /// Wölbung). <paramref name="focal35"/>: Brennweite der Aufnahme (Kleinbild), aus den EXIF-Daten.
+    /// </summary>
+    public GeometryRecipe DewarpedInView(IEnumerable<(WarpLineKind Kind, IReadOnlyList<(double X, double Y)> Points)> lines,
+        int width, int height, double focal35)
+    {
+        var spec = new DewarpSpec(lines
+            .Where(l => l.Points.Count >= 2)
+            .Select(l => new WarpLine(l.Kind, l.Points
+                .Select(p => UnOrientPoint(p.X, p.Y, (width, height), NormalTurns, Flip))
+                .Select(p => (p.X / width, p.Y / height)).ToArray()))
+            .ToArray(), focal35);
+        return this with { Dewarp = spec.IsUsable ? spec : null };
     }
 
     /// <summary>Ecken neu ordnen: oben links, oben rechts, unten rechts, unten links (nach Winkel um den Schwerpunkt).</summary>

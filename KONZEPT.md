@@ -185,7 +185,7 @@ CUPS (`lp`), unter Windows über den Windows-Druckdienst.
   Vorschau = Export. Korngröße bezogen auf die Ausgabegröße, damit es beim
   Verkleinern gleich aussieht.
 
-### L. Gewölbtes Blatt gerade ziehen (Wunsch vom 12.10.2026, noch nicht umgesetzt)
+### L. Gewölbtes Blatt gerade ziehen (Wunsch vom 12.10.2026, Schritt 1 – von Hand – in 0.5.54 beta, siehe Fehlergedächtnis #46)
 
 Fotografiertes Blatt oder Buch wölbt sich, gerade Linien werden zu Bögen. Recherche
 (Stand 10/2026): Die KI-Verfahren (UVDoc 2023, DocTr++, DocRes 2024, DocMatcher,

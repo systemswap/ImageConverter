@@ -1522,3 +1522,41 @@ Test oder Nachweis.
   Streifen = am Stück für echten Gauß und Boxen; Farbanteil 0/50/100 → Korrelation 1/0,5/0; Vorschau wie
   verkleinerter Export; Messen findet 40 %/1 px/50 % wieder, halbe Ausgabe schwächer, glattes Bild kein Korn; im
   Export nach dem Schärfen; Auge aus). Sichtprüfung am Grauverlauf (`~/.cache/imageconverter-build/werkzeuge/korn`).
+
+## 46. Gewölbtes Blatt gerade ziehen (Schritt 1: Linien von Hand)
+
+- **Neu in:** 0.5.54 beta (12.10.2026). Konzept und Recherche: `KONZEPT.md` §1 L. Schritt 2 (Vorschläge ohne Modell) und
+  3 (Vorschläge mit UVDoc) folgen; „Doppelseite trennen“ (§1 M) ist noch offen.
+- **Rechnen (`Core/Imaging/Dewarp.cs`, Daten `WarpLines.cs`):** Linien relativ zum Pixelbild, Richtung waagerecht /
+  senkrecht / Falz. (1) Blattmodell im Raum: Kamera (Brennweite aus EXIF `FocalLengthIn35mmFilm`, sonst 28 mm KB),
+  Blatt z = h(x) als natürlicher kubischer Spline (8 Abschnitte, Ränder 0; Doppelseite je Seite 6, am Falz verbunden,
+  dort Knick), Levenberg-Marquardt über Lage, Biegung, je Linie die Konstante und je Punkt die Stelle entlang der
+  Linie; Biegung entlang x und entlang y wird beides gerechnet, das Bessere gilt. Anfangslage: Homographie aus den
+  äußersten Linien mit bekannter Brennweite zerlegt (gibt schon ein Seitenverhältnis), sonst frontal. (2) Abwickeln
+  nach Bogenlänge; Vierteldrehung so, dass das Ergebnis wie das Pixelbild liegt (gedreht wird danach im Rezept);
+  Auflösung wie in der Blattmitte. (3) DIN: nur wenn je zwei waagerechte und senkrechte Linien das Blatt umranden,
+  ≤ 3 % neben 1 : √2 → eingerastet (Doppelseite: je Seite). (4) Gitter (160 Zellen) über das Ergebnis, Feinkorrektur
+  als glattes Verschiebungsfeld (kleinste Quadrate, CG), bis jeder Punkt auf seiner Geraden liegt. (5) Größtes
+  Rechteck aus Zellen, deren Ecken alle im Bild liegen. Zu wenig Linien oder Modell unplausibel: nur das Feld (eine
+  waagerechte Linie verschiebt ganze Spalten), Seitenverhältnis bleibt. Abbildung relativ, Zwischenspeicher je Linien
+  und Seitenverhältnis (Vorschau und volle Größe teilen sie). Pixel bikubisch (Catmull-Rom).
+- **Abgleich (DewarpTests):** Glättung 300 → 100 und Doppelseite 4 → 6 Abschnitte je Seite: Am Falz steigt das Papier
+  steil an (√d); vorher blieben nicht nachgezeichnete Zeilen der Doppelseite um 4–7 ‰ gebogen, jetzt ≤ 1,6 ‰.
+- **Rezept:** neue erste Stufe `GeometryStages.Dewarp` (`GeometryRecipe.Dewarp`), Reihenfolge Wölbung → Entzerren →
+  Gerade richten → Zuschnitt → Drehen/Spiegeln. Das Viereck des Entzerrens gilt jetzt relativ zum Bild **nach** der
+  Wölbung (`QuadInView`/`StraightenedInView` mit den angezeigten Stufen), `LevelView` und `StraightenView` enthalten
+  die Wölbung. `ToSource`/`ToResult` rechnen durch die Abbildung (Pipette, Pinsel). **Nicht tun:** `GeometryStages.All`
+  in Tests als „alle vorhandenen Stufen“ erwarten — `Present` enthält `Dewarp` nur mit Linien.
+- **Bedienung:** Symbol oben in der Vorschau (vierter Knopf), Ansicht `DewarpView` = Pixelbild nur gedreht/gespiegelt.
+  `CropView.WarpLines`: Klick setzt Punkt auf die aktive Linie (sonst neue), Enter/Doppelklick/N/„Neue Linie“ beendet
+  sie, Punkt ziehen mit Lupe, Klick auf eine Linie fügt ein, Rechtsklick wechselt die Richtung (sonst aus dem Verlauf
+  geraten), Entf / Umschalt+Entf, Pfeiltasten. Leiste unten mit Ergebnisgröße und Seitenverhältnis (im Hintergrund
+  gerechnet), „Gerade ziehen“ = ein Rückgängig-Schritt. Liste „Bearbeitungen“: Zeile „Gerade gezogen“ (`EditSteps.Dewarp`).
+- **Probelauf an den Testbildern** (`TestBilder/`, Linien genau auf Kanten und Mitte gesetzt): Einzelblatt flach,
+  Fehler 0,09 ‰, DIN eingerastet, 1546 × 2483; Doppelseite flach, Seite 1 : 1,46 (wahr 1,41 — 3,5 %, nicht eingerastet);
+  welliges Blatt: gesetzte Linien gerade, dazwischen Welle (mehr Linien setzen). Lösen ≈ 0,7 s, Rechnen ≈ 0,9 s bei
+  1800 × 2400. Das ganze Bild bleibt — unten bleibt viel Tisch stehen (zuschneiden mit dem Zuschnitt).
+- **Test/Nachweis:** `DewarpTests` (gewölbt: auch nicht gezeichnete Zeilen ≤ 1 ‰ gebogen; umrandet: DIN eingerastet,
+  1,2 auf ± 5 % gefunden; Doppelseite; wellig nur mit Gitter; eine Linie: nur sie, Größe bleibt; Rezept: Stufe zuerst,
+  Punkte hin und zurück < 0,5 px, ausschaltbar, Größe beim Anwenden). Die Bedienung in der Vorschau ist nicht
+  automatisch getestet (kein unsichtbares Testfenster unter Windows) — vom Benutzer zu prüfen.

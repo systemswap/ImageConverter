@@ -122,7 +122,8 @@ public partial class MainViewModel
     /// der Rundung danach transparent; das Bild bleibt rechteckig.
     /// </summary>
     /// <summary>Zuschneiden geht mit Auswahl — oder beim Entzerren mit einem brauchbaren Viereck.</summary>
-    public bool CanCropToSelection => HasCropSelection || (PerspectiveTool && IsPerspectiveValid);
+    public bool CanCropToSelection => HasCropSelection || (PerspectiveTool && IsPerspectiveValid)
+        || (DewarpTool && (HasDewarpLines || CurrentRecipe.HasDewarp));
 
     [RelayCommand(CanExecute = nameof(CanCropToSelection))]
     private async Task CropToSelection()
@@ -130,13 +131,20 @@ public partial class MainViewModel
         if (_history is not { } h) return;
         var (pw, ph) = PixelSize();
 
-        // Entzerren: Viereck in der Ansicht des Werkzeugs (Pixelbild, nur gedreht/gespiegelt) ins Rezept
+        // Gewölbtes Blatt: die Linien ins Rezept
+        if (DewarpTool && DewarpLines is { } lines)
+        {
+            await ApplyDewarpAsync(lines);
+            return;
+        }
+
+        // Entzerren: Viereck in der Ansicht des Werkzeugs (Bild nach der Wölbung, nur gedreht/gespiegelt) ins Rezept
         if (PerspectiveTool && PerspectiveQuad is { } quad)
         {
             var pts = AsTuples(quad);
             if (!PerspectiveGeometry.IsValid(pts)) return;
-            var next = h.Recipe.StraightenedInView(pts, pw, ph);
-            var (tw, th) = next.SizeFor(pw, ph, GeometryStages.Straighten);
+            var next = h.Recipe.StraightenedInView(pts, pw, ph, StagesShown(HiddenSteps));
+            var (tw, th) = next.SizeFor(pw, ph, GeometryStages.Straighten | (StagesShown(HiddenSteps) & GeometryStages.Dewarp));
             CloseToolsQuietly();
             await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, Tr.T("Entzerrt"), $"{tw} × {th} px", null),
                 s => s with { Hidden = s.Hidden & ~EditSteps.Straighten });
@@ -193,6 +201,7 @@ public partial class MainViewModel
         {
             RotationTool = false;
             PerspectiveTool = false;
+            DewarpTool = false;
         }
         finally
         {
@@ -221,6 +230,7 @@ public partial class MainViewModel
         if (value)
         {
             PerspectiveTool = false;              // immer nur ein Werkzeug
+            DewarpTool = false;
             SelectionTool = true;                 // ohne Rahmen kein Zuschnitt nach dem Drehen
             if (!_quietTools) _ = EnterRotationViewAsync();
         }
@@ -278,6 +288,7 @@ public partial class MainViewModel
         if (value)
         {
             RotationTool = false;
+            DewarpTool = false;
             CropSelection = null;
             if (!_quietTools) _ = EnterPerspectiveViewAsync();
         }
@@ -297,7 +308,7 @@ public partial class MainViewModel
         await ShowDocumentAsync();
         if (!PerspectiveTool) return;
         var (pw, ph) = PixelSize();
-        if (h.Recipe.QuadInView(pw, ph) is { } q) PerspectiveQuad = q.Select(p => new Point(p.X, p.Y)).ToArray();
+        if (h.Recipe.QuadInView(pw, ph, StagesShown(HiddenSteps)) is { } q) PerspectiveQuad = q.Select(p => new Point(p.X, p.Y)).ToArray();
         else ResetPerspectiveQuad();
     }
 
@@ -348,7 +359,7 @@ public partial class MainViewModel
     private async Task Orient(Func<GeometryRecipe, GeometryRecipe> change, ImageStep step)
     {
         if (_history is not { } h) return;
-        if (RotationTool || PerspectiveTool) CloseToolsQuietly();   // offenes Werkzeug verwerfen
+        if (RotationTool || PerspectiveTool || DewarpTool) CloseToolsQuietly();   // offenes Werkzeug verwerfen
         if (IsRotationPending) DiscardRotation();
         // Ist Drehen/Spiegeln ausgeschaltet, gilt erst einmal nur der neue Klick — sichtbar wird es auf jeden Fall
         var basis = (HiddenSteps & EditSteps.Orient) != 0 ? h.Recipe with { Turns = 0, Flip = false } : h.Recipe;
