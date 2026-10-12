@@ -54,7 +54,11 @@ public partial class MainViewModel
         double MatchGlobal = 0,             // Luminanz: Gesamt
         double MaskAmount = 0,              // Luminanzmaske: Stärke, Auslaufen ab, Verlauf
         double MaskEnd = 75,
-        double MaskCurve = 30);
+        double MaskCurve = 30,
+        double GrainAmount = 0,             // Körnung: Stärke, Korngröße, Rauheit, Farbanteil
+        double GrainSize = 40,
+        double GrainRoughness = 30,
+        double GrainColor = 0);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -112,6 +116,10 @@ public partial class MainViewModel
         [nameof(MaskAmount)] = "Maske Stärke",
         [nameof(MaskEnd)] = "Maske Auslaufen",
         [nameof(MaskCurve)] = "Maske Verlauf",
+        [nameof(GrainAmount)] = "Körnung",
+        [nameof(GrainSize)] = "Korngröße",
+        [nameof(GrainRoughness)] = "Rauheit",
+        [nameof(GrainColor)] = "Farbanteil",
         [nameof(Neutralize)] = "Ausgleichen",
         [nameof(Warmth)] = "Farbe",
         [nameof(SelectedMetadataMode)] = null,
@@ -248,7 +256,8 @@ public partial class MainViewModel
         OutputFolder, NamePattern,
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
-        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal, MaskAmount, MaskEnd, MaskCurve);
+        HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal, MaskAmount, MaskEnd, MaskCurve,
+        GrainAmount, GrainSize, GrainRoughness, GrainColor);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -316,6 +325,10 @@ public partial class MainViewModel
                 MaskAmount = s.MaskAmount;
                 MaskEnd = s.MaskEnd;
                 MaskCurve = s.MaskCurve;
+                GrainAmount = s.GrainAmount;
+                GrainSize = s.GrainSize;
+                GrainRoughness = s.GrainRoughness;
+                GrainColor = s.GrainColor;
                 Neutralize = s.Neutralize;
                 Warmth = s.Warmth;
                 SelectedMetadataMode = s.SelectedMetadataMode;

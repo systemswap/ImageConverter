@@ -86,20 +86,30 @@ public partial class MainViewModel
         return ImageExporter.RenderLook(image, look.Noise, look.ColorNoise, look.Adjust, look.SharpenAmount, look.SharpenSigma(width), plan);
     }
 
-    /// <summary>Look auf eine Vorschau (Pixelpuffer der Kette) rechnen und für die Anzeige runden (Hintergrund).</summary>
-    internal static byte[] RenderLookPreview(float[] bgra, int width, int height, Look? look, WorkPlan? plan = null)
+    /// <summary>Körnung für Vorschau und Export (gehört nicht zum Look: sie kommt nie vor der KI ins Bild).</summary>
+    internal GrainSettings? CurrentGrain() => EffectiveGrain;
+
+    /// <summary>
+    /// Look auf eine Vorschau (Pixelpuffer der Kette) rechnen und für die Anzeige runden (Hintergrund). Die Körnung
+    /// kommt danach, auch ohne Look — immer als Letztes.
+    /// </summary>
+    /// <param name="grainScale">Größe dieser Vorschau relativ zur Ausgabe.</param>
+    internal static byte[] RenderLookPreview(float[] bgra, int width, int height, Look? look, WorkPlan? plan = null,
+        GrainSettings? grain = null, double grainScale = 1)
     {
-        if (look is null || look.IsNone) return Pixels.ToBytes(bgra, dither: true);
+        var hasLook = look is { IsNone: false };
+        if (!hasLook && grain is null) return Pixels.ToBytes(bgra, dither: true);
 
         var pixels = bgra;
-        if (look.Noise > 0 || look.ColorNoise > 0)
+        if (hasLook && (look!.Noise > 0 || look.ColorNoise > 0))
             pixels = Denoiser.Apply(pixels, width, height, look.Noise, look.ColorNoise, (double)width / Math.Max(1, look.TargetWidth), plan);
-        if (!look.Adjust.IsNone) pixels = Adjust.Apply(pixels, width, height, look.Adjust, plan);
-        if (look.SharpenAmount > 0)
+        if (hasLook && !look!.Adjust.IsNone) pixels = Adjust.Apply(pixels, width, height, look.Adjust, plan);
+        if (hasLook && look!.SharpenAmount > 0)
         {
             plan?.Next();
             pixels = Sharpen.UnsharpMask(pixels, width, height, look.SharpenAmount, look.SharpenSigma(width));
         }
+        if (grain is not null) pixels = Grain.Apply(pixels, width, height, grain, Math.Min(1, grainScale));
 
         var result = Pixels.ToBytes(pixels, dither: true);
         PixelPool.Trim();

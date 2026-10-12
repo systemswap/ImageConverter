@@ -163,6 +163,97 @@ den Seiten rechnet der Core (plattformunabhängig, testbar). Daraus entsteht pro
 Bild in Druckauflösung bzw. ein PDF mit exakten physischen Maßen. Ausgabe unter Linux über
 CUPS (`lp`), unter Windows über den Windows-Druckdienst.
 
+### K. Körnung (Wunsch vom 12.10.2026, umgesetzt in 0.5.53 beta – siehe Fehlergedächtnis #45)
+
+- Eigene Gruppe **KÖRNUNG** als **letzte** Gruppe unter den Reglern (nach FARBE) —
+  die Gruppen stehen in der Reihenfolge, in der sie wirken. Unabhängig von und
+  zusätzlich zur Körnung in „Haut & Details“, nicht an die Luminanzmaske gebunden,
+  in „Bearbeitungen“ ausschaltbar.
+- Wird **immer zuletzt** gerechnet: nach Entrauschen und Schärfen, auch nach KI und
+  „Haut & Details“, egal welche Reihenfolge KI ↔ Einstellungen gewählt ist (sonst
+  glättet das eine das Korn wieder weg).
+- Regler: **Stärke**, **Korngröße** (fein … grob), **Rauheit** (gleichmäßig …
+  klumpig wie Film), **Farbanteil** (0 = reines Helligkeitskorn).
+- Verteilung wie bei Film: Mitteltöne am meisten, tiefes Schwarz und reines Weiß
+  fast keins (Stärke als Funktion der Helligkeit wie beim Kornprofil in
+  `FaceDetails`).
+- **„Aus dem Foto ermitteln“**: misst das Korn im Original (vor dem Entrauschen) und
+  stellt Stärke, Korngröße und Farbanteil ein; alle drei bleiben danach von Hand
+  verstellbar. Die vorhandene Messung (`FaceDetails.MeasureGrain`, nur Helligkeit)
+  wird dafür um das Farbkorn ergänzt.
+- Korn fest je Bildpixel (gleiches Muster bei jeder Rechnung): kein Flimmern,
+  Vorschau = Export. Korngröße bezogen auf die Ausgabegröße, damit es beim
+  Verkleinern gleich aussieht.
+
+### L. Gewölbtes Blatt gerade ziehen (Wunsch vom 12.10.2026, noch nicht umgesetzt)
+
+Fotografiertes Blatt oder Buch wölbt sich, gerade Linien werden zu Bögen. Recherche
+(Stand 10/2026): Die KI-Verfahren (UVDoc 2023, DocTr++, DocRes 2024, DocMatcher,
+ForCenNet, DvD 2025, Axis-Aligned Dewarping, BookNet 2026) arbeiten vollautomatisch,
+schneiden auf das Blatt zu und lassen sich nicht nachbessern; keines nimmt Vorgaben
+des Benutzers. Interaktiv gibt es nur Teile: Referenzwerkzeug Advanced (obere und untere
+Kurve), Referenzwerkzeug „Adaptive Weitwinkelkorrektur“ (Linien nachziehen, Gitter wird
+optimiert; Carroll/Agrawala/Agarwala 2009). Das echte Seitenverhältnis liefert nur ein
+Blattmodell im Raum (page_dewarp, Zucker 2016; Kim/Koo/Cho 2015; Kil u. a. 2017).
+Daher: eigenes Werkzeug, das beides verbindet.
+
+**Bedienung** — eigenes Symbol oben in der Vorschau (neben „Entzerren“), Lupe beim
+Ziehen wie dort.
+- Klick setzt einen Punkt auf die **aktive Linie**; **Enter** oder Doppelklick beendet
+  sie, der nächste Klick beginnt eine neue (dazu Knopf „Neue Linie“ in der Leiste
+  unten). Klick auf eine fertige Linie macht sie wieder aktiv, Klick auf ihren Verlauf
+  fügt dort einen Punkt ein. Pfeiltasten 1 px (Umschalt: 10 px), Entf löscht den
+  Punkt, Umschalt+Entf die Linie.
+- Jede Linie hat eine **Richtung**: *waagerecht* (Textzeile, Ober-/Unterkante),
+  *senkrecht* (Seitenkante, Spalte) oder *Falz* (Doppelseite). Wird aus dem Verlauf
+  geraten, per Rechtsklick umschaltbar; je Richtung eine Farbe. Blattränder sind
+  gewöhnliche Linien – geht also auch ohne sichtbaren Rand.
+- **„Linien vorschlagen“**: Vorschläge gestrichelt, zunächst angewählt; Klick wählt
+  einen ab (grau, bleibt sichtbar, wieder anwählbar), „Alle verwerfen“. Abgewählte
+  zählen nicht. Ein veränderter Vorschlag wird zur normalen Linie.
+- Leiste unten: Zurücksetzen · Neue Linie · Linien vorschlagen · „Gerade ziehen“.
+
+**Rechnung**
+1. **Blattmodell im Raum:** Kamera (Brennweite aus EXIF, sonst ≈ 28 mm KB), Lage des
+   Blatts, Blatt als in einer Richtung gebogene Fläche (abwickelbar, wie Papier),
+   Biegung als Kurve mit mehreren Stützpunkten. Doppelseite: zwei solche Flächen, am
+   Falz verbunden, dort mit Knick. Waagerechte Linien liegen auf dem Blatt bei
+   v = konst., senkrechte bei u = konst., der Falz bei u = 0. Gelöst mit
+   Levenberg-Marquardt (Abstand der Linienpunkte zur Projektion).
+2. **Feinkorrektur mit Gitter:** was das Modell nicht trifft (welliges Papier), wird
+   nachgezogen, bis jede Linie gerade ist; dazwischen möglichst unverzerrt.
+3. **Seitenverhältnis** aus dem abgewickelten Blatt. Liegt es **höchstens 3 %** neben
+   DIN (1 : √2, gilt für A4, A5, A6 … hoch und quer), wird DIN genommen.
+4. **Ganzes Bild bleibt erhalten:** die Verformung läuft außerhalb des Blatts weich
+   aus; danach wird auf das **größte volle Rechteck** zugeschnitten (keine leeren
+   Ecken).
+5. Nur **eine** Linie: nur sie wird gerade gezogen, Seitenverhältnis bleibt.
+6. **Eigene Stufe im Rezept** vor dem Entzerren:
+   Wölbung → Entzerren → Gerade richten → Zuschnitt → Drehen/Spiegeln. Ausschaltbar,
+   immer aus dem Original, Linien relativ gespeichert. Vorschau rechnet nach jedem
+   gezogenen Punkt auf einer verkleinerten Fassung neu.
+
+**Vorschläge** (später, s. Reihenfolge)
+- Ohne Download: Textzeilen (wie page_dewarp), Blattrand, Falz.
+- Mit **UVDoc** (MIT, ≈ 31 MB ONNX, nach `KI-Modelle/`): liefert ein Gitter, daraus
+  einige waagerechte und senkrechte Linien als Vorschläge; Doppelseite am Falz
+  geteilt, jede Hälfte einzeln (UVDoc kennt nur Einzelseiten). Eingabe nur
+  ≈ 712 × 488 – Näherung zum Nachbessern. Lizenz der Gewichte vor dem Einbau prüfen.
+
+**Reihenfolge der Umsetzung:** (1) Werkzeug von Hand mit Richtungen, Falz, Rechnung,
+Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
+
+### M. Doppelseite trennen (Wunsch vom 12.10.2026, noch nicht umgesetzt)
+
+- Eigenes Symbol oben in der Vorschau: setzt eine senkrechte **Trennlinie**, die sich
+  wie die Vorher/Nachher-Linie verschieben lässt (Vorschlag: am erkannten bzw.
+  gesetzten Falz, sonst in der Mitte).
+- Gespeichert wird wahlweise als **zwei Bilder** oder als **PDF mit zwei Seiten**
+  (PDF-Ausgabe wie beim Drucken).
+- Offen: Dateinamen der zwei Bilder (z. B. `-1`/`-2`), ob die Trennung als Stufe im
+  Rezept gilt (ausschaltbar) oder nur beim Speichern wirkt, PDF-Seitengröße (DIN aus
+  der Schätzung?).
+
 ---
 
 ## 2. Was ein einfacher Konverter noch braucht (von dir nicht genannt)

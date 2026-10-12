@@ -525,7 +525,8 @@ public partial class AiViewModel : ViewModelBase
                 var shaped = (geometry.Recipe.Present & geometry.Stages) != 0 || setup.Turns != 0 || setup.Flip;
                 // wie die normale Vorschau: ohne Look und Größenänderung das Bild selbst, sonst verkleinert; mit Ausrichten
                 // verkleinert im Format des Pixelbilds (gedreht/zugeschnitten wird danach)
-                var size = !shaped && look is not { IsNone: false } && _main.TargetIsImageSize
+                var (grain, targetWidth) = (_main.CurrentGrain(), _main.CurrentLook().TargetWidth);
+                var size = !shaped && look is not { IsNone: false } && grain is null && _main.TargetIsImageSize
                     ? new AiPreviewSize(run.Width, run.Height)
                     : shaped
                         ? AiPreviewSize.Fit(run.Width, run.Height, Math.Max(_main.PreviewSize().Width, _main.PreviewSize().Height))
@@ -550,9 +551,11 @@ public partial class AiViewModel : ViewModelBase
                         IsRenderingLook = true;
                     }
                     var (turns, flip) = (setup.Turns, setup.Flip);
+                    // Körnung immer obenauf — gleich, ob der Look davor ins Bild kam oder darüber liegt (Ausgabegröße: targetWidth)
                     shown = await Task.Run(() => map is not null
                         ? Render(MainViewModel.ShowWithGeometry(map.Map(blend, size), turns, flip, geometry.Recipe, geometry.Stages), null, null)
-                        : Render(MainViewModel.ShowWithGeometry(run.Preview(blend, size), turns, flip, geometry.Recipe, geometry.Stages), look, plan), cts.Token);
+                        : Render(MainViewModel.ShowWithGeometry(run.Preview(blend, size), turns, flip, geometry.Recipe, geometry.Stages), look, plan,
+                            grain, targetWidth), cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -598,8 +601,10 @@ public partial class AiViewModel : ViewModelBase
         }
     }
 
-    private static AiPreviewFrame Render(AiPixels frame, MainViewModel.Look? look, WorkPlan? plan) =>
-        new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look, plan), frame.Width, frame.Height);
+    private static AiPreviewFrame Render(AiPixels frame, MainViewModel.Look? look, WorkPlan? plan,
+        GrainSettings? grain = null, int targetWidth = 0) =>
+        new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look, plan,
+            grain, targetWidth > 0 ? (double)frame.Width / targetWidth : 1), frame.Width, frame.Height);
 
     /// <summary>Das Bild vor der KI in Vorschaugröße, ohne Einstellungen (für die Vorher-Seite).</summary>
     private static AiPreviewFrame Original(MagickImage image, AiPreviewSize size)

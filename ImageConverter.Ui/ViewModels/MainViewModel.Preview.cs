@@ -353,7 +353,8 @@ public partial class MainViewModel
     private sealed record PreviewJob(
         MagickImage Doc, int Width, int Height,
         ResampleFilter Filter, bool Gamma,
-        (double Luma, double Chroma) Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma, double Scale);
+        (double Luma, double Chroma) Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma, double Scale,
+        GrainSettings? Grain);
 
     private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
 
@@ -488,7 +489,8 @@ public partial class MainViewModel
         var sharpen = EffectiveSharpen;
         // „Maske zeigen“ gilt nur hier in der Vorschau (nicht im Export, nicht in der Größenschätzung)
         var adjust = CurrentAdjustments() is var a && ShowMask && Shows(EditSteps.LumMask) ? a with { MaskPreview = true } : CurrentAdjustments();
-        if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone) return null;
+        var grain = EffectiveGrain;
+        if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone && grain is null) return null;
 
         // Vorschau höchstens PreviewMaxEdge groß; der Schärferadius wird
         // mitskaliert, damit er relativ zum Ergebnis gleich wirkt.
@@ -497,7 +499,7 @@ public partial class MainViewModel
         var ph = Math.Max(1, (int)Math.Round(th * scale));
 
         return new PreviewJob(doc, pw, ph, SelectedFilter.Filter, GammaCorrect,
-            noise, adjust, sharpen, SharpenRadius * scale, scale);
+            noise, adjust, sharpen, SharpenRadius * scale, scale, grain);
     }
 
     /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>
@@ -575,8 +577,19 @@ public partial class MainViewModel
             ? Sharpen.UnsharpMask(adjusted, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
             : adjusted;
 
+        // 5) Körnung — immer zuletzt; in der verkleinerten Vorschau so, wie sie im verkleinerten Export aussähe
+        if (job.Grain is { } grain)
+        {
+            plan.Add(Tr.T("Körnung"), WorkPlan.GrainCost * job.Width * job.Height / 1e6);
+            plan.Next();
+            var grainy = Grain.Apply(final, job.Width, job.Height, grain, job.Scale);
+            if (!ReferenceEquals(final, adjusted)) PixelPool.Return(final);
+            final = grainy;
+        }
+
         // Einmal runden, mit Dither — erst hier wird aus 32 Bit die Anzeige in 8 Bit
         var bgra = Pixels.ToBytes(final, dither: true);
+        if (job.Grain is not null) PixelPool.Return(final);
         // Die Zwischenstände dieser Rechnung (Dunst-Durchläufe …) sollen nicht belegt bleiben
         PixelPool.Trim();
         return new PreviewResult(bgra, job.Width, job.Height);

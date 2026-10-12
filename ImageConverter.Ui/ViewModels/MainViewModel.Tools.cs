@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Imaging;
@@ -69,6 +70,92 @@ public partial class MainViewModel
     partial void OnMaskEndChanged(double value) => ToolChanged(nameof(MaskEndLabel));
     partial void OnMaskCurveChanged(double value) => ToolChanged(nameof(MaskCurveLabel));
     partial void OnShowMaskChanged(bool value) => RequestPreview();
+
+    // ------------------------------------------------------------ Körnung (eigene Gruppe, immer der letzte Schritt)
+
+    /// <summary>Körnung: Stärke 0–100 % (Streuung im Mittelton).</summary>
+    [ObservableProperty] public partial double GrainAmount { get; set; }
+
+    /// <summary>Körnung: Korngröße 0 (fein, Pixel für Pixel) … 100 (grob), in Pixeln der Ausgabe.</summary>
+    [ObservableProperty] public partial double GrainSize { get; set; } = GrainSettings.None.Size;
+
+    /// <summary>Körnung: Rauheit 0 (gleichmäßig) … 100 (klumpig wie Film).</summary>
+    [ObservableProperty] public partial double GrainRoughness { get; set; } = GrainSettings.None.Roughness;
+
+    /// <summary>Körnung: Farbanteil 0 (nur Helligkeit) … 100 %.</summary>
+    [ObservableProperty] public partial double GrainColor { get; set; }
+
+    /// <summary>„Aus dem Foto ermitteln“ läuft.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(MeasureGrainCommand))]
+    public partial bool IsMeasuringGrain { get; set; }
+
+    public string GrainAmountLabel => GrainAmount < 0.5 ? Tr.T("aus") : $"{Math.Round(GrainAmount):0} %";
+    public string GrainSizeLabel => $"{GrainSettings.SigmaFor(Math.Round(GrainSize)):0.0} px";
+    public string GrainRoughnessLabel => GrainRoughness < 0.5 ? Tr.T("gleichmäßig") : $"{Math.Round(GrainRoughness):0}";
+    public string GrainColorLabel => GrainColor < 0.5 ? Tr.T("aus") : $"{Math.Round(GrainColor):0} %";
+
+    partial void OnGrainAmountChanged(double value) => ToolChanged(nameof(GrainAmountLabel));
+    partial void OnGrainSizeChanged(double value) => ToolChanged(nameof(GrainSizeLabel));
+    partial void OnGrainRoughnessChanged(double value) => ToolChanged(nameof(GrainRoughnessLabel));
+    partial void OnGrainColorChanged(double value) => ToolChanged(nameof(GrainColorLabel));
+
+    /// <summary>Körnung für Vorschau und Export; null = aus (oder in der Liste ausgeschaltet).</summary>
+    private GrainSettings? EffectiveGrain => Shows(EditSteps.Grain) && Round(GrainAmount) >= 1
+        ? new GrainSettings(Round(GrainAmount), Round(GrainSize), Round(GrainRoughness), Round(GrainColor))
+        : null;
+
+    private bool CanMeasureGrain => !IsMeasuringGrain;
+
+    /// <summary>
+    /// Korn des Fotos messen und die Regler danach stellen — gemessen am Bild vor der KI und ohne Einstellungen (also
+    /// vor dem Entrauschen), umgerechnet auf die Ausgabegröße. Ein Rückgängig-Schritt; danach von Hand nachbessern.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanMeasureGrain))]
+    private async Task MeasureGrain()
+    {
+        if (_history is not { } h || IsEditing) return;
+        var photo = CurrentWithoutAi ?? h.Current;
+        var (tw, th) = EffectiveTarget();
+        var scale = Math.Sqrt((double)tw * th / Math.Max(1.0, (double)SourceWidth * SourceHeight));
+
+        IsMeasuringGrain = true;
+        ActivityText = Tr.T("Korn wird gemessen …");
+        ActivityProgress = -1;
+        try
+        {
+            var measured = await Task.Run(() =>
+            {
+                int w, ht;
+                lock (photo) (w, ht) = ((int)photo.Width, (int)photo.Height);
+                var px = Pixels.FromMagick(photo);
+                try { return Grain.Measure(px, w, ht, scale); }
+                finally { PixelPool.Return(px); }
+            });
+            if (measured is null || measured.IsNone)
+            {
+                StatusMessage = Tr.T("Im Foto ist kein Korn messbar – es ist schon ganz glatt.");
+                return;
+            }
+
+            CommitPendingSettings();   // ein eigener Rückgängig-Schritt
+            GrainAmount = measured.Amount;
+            GrainSize = measured.Size;
+            GrainRoughness = measured.Roughness;
+            GrainColor = measured.Color;
+            CommitPendingSettings();
+            StatusMessage = Tr.T("Korn aus dem Foto übernommen – Regler lassen sich nachbessern.");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = Tr.T("Korn messen fehlgeschlagen: {0}", ex.Message);
+        }
+        finally
+        {
+            IsMeasuringGrain = false;
+            ActivityText = null;
+        }
+    }
 
 
     /// <summary>Der Schwellwert wirkt nur beim Aufhellen.</summary>
@@ -185,6 +272,9 @@ public partial class MainViewModel
         MaskAmount = 0;
         MaskEnd = 75;
         MaskCurve = 30;
+        GrainAmount = GrainColor = 0;
+        GrainSize = GrainSettings.None.Size;
+        GrainRoughness = GrainSettings.None.Roughness;
         NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;

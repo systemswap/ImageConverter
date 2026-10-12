@@ -36,6 +36,7 @@ public static class PrintDocument
                 Width = Math.Max(1, (int)Math.Round(o.Width * p.Scale)),
                 Height = Math.Max(1, (int)Math.Round(o.Height * p.Scale)),
                 SharpenSigma = o.SharpenSigma * p.Scale,
+                GrainScale = o.GrainScale * p.Scale,   // Korn wie auf dem verkleinerten Export
             };
         }
 

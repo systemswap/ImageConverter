@@ -23,6 +23,7 @@ public sealed class WorkPlan(IProgress<WorkProgress>? sink, CancellationToken ca
     internal const double ToneMapCost = 0.15;
     internal const double ToolsCost = 0.03;
     internal const double SharpenCost = 0.03;
+    public const double GrainCost = 0.06;
     internal const double ColorCost = 0.02;
 
     private readonly List<(string Text, double Weight)> _steps = [];

@@ -33,6 +33,7 @@ public enum EditSteps
     CropStep = 16384,
     Orient = 32768,
     LumMask = 65536,
+    Grain = 131072,
 }
 
 /// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
@@ -570,6 +571,15 @@ public partial class MainViewModel
             AddIfAny(rows, EditSteps.Color, Tr.T("Farbe"), tint, (Tr.T("Dynamik"), Vibrance), (Tr.T("Sättigung"), Saturation));
             if (SharpenAmount > 0.01)
                 rows.Add(Row(EditSteps.Sharpen, Tr.T("Schärfe"), Tr.T("{0:0.00} · Radius {1:0.0}", SharpenAmount, SharpenRadius)));
+            // Körnung zuletzt, wie in der Kette
+            if (Math.Round(GrainAmount) >= 1)
+                rows.Add(Row(EditSteps.Grain, Tr.T("Körnung"), string.Join(" · ", new[]
+                {
+                    $"{Math.Round(GrainAmount):0} %",
+                    $"{GrainSettings.SigmaFor(Math.Round(GrainSize)):0.0} px",
+                    Math.Round(GrainRoughness) >= 1 ? $"{Tr.T("Rauheit")} {Math.Round(GrainRoughness):0}" : null,
+                    Math.Round(GrainColor) >= 1 ? $"{Tr.T("Farbe")} {Math.Round(GrainColor):0} %" : null,
+                }.Where(t => t is not null))));
         }
 
         EditRows.Clear();
@@ -662,6 +672,7 @@ public partial class MainViewModel
         if ((hidden & EditSteps.WhiteBalance) != 0) s = s with { WbNeutral = null, WbBlack = null, WbWhite = null };
         if ((hidden & EditSteps.LumMask) != 0) s = s with { MaskAmount = 0 };
         if ((hidden & EditSteps.Sharpen) != 0) s = s with { SharpenAmount = 0 };
+        if ((hidden & EditSteps.Grain) != 0) s = s with { GrainAmount = 0 };
         return s with { Hidden = EditSteps.None };
     }
 }

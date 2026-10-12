@@ -43,10 +43,12 @@ public sealed record ExportOptions(
     ColorMode Color,
     Adjustments? Adjustments = null,   // Kachel „Tools“; null = keine
     bool HighBitDepth = false,         // PNG/TIFF mit 16 Bit je Kanal (sonst 8 Bit mit Dither)
-    double ColorDenoise = 0);          // Farbrauschen 0…1 (Denoise = Helligkeitsrauschen)
+    double ColorDenoise = 0,           // Farbrauschen 0…1 (Denoise = Helligkeitsrauschen)
+    GrainSettings? Grain = null,       // Körnung — der letzte Schritt; null = keine
+    double GrainScale = 1);            // Größe der Rechnung relativ zur echten Ausgabe (verkleinerter Druck < 1)
 
 /// <summary>
-/// Die Export-Kette: Skalieren → Entrauschen → Tools (Licht, Farbe) → Schärfen → Farbprofil
+/// Die Export-Kette: Skalieren → Entrauschen → Tools (Licht, Farbe) → Schärfen → Körnung → Farbprofil
 /// → Metadaten → Kodieren.
 /// Dieselben Schritte wie die Vorschau, hier in voller Auflösung.
 /// </summary>
@@ -94,8 +96,8 @@ public static class ImageExporter
         var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
         if (!ReferenceEquals(start, source)) start.Dispose();
         var result = noiseFirst
-            ? RenderLook(resized, 0, 0, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan)
-            : RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan);
+            ? RenderLook(resized, 0, 0, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale)
+            : RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale);
         if (!ReferenceEquals(result, resized)) resized.Dispose();
 
         plan?.Next();
@@ -114,16 +116,19 @@ public static class ImageExporter
     }
 
     /// <summary>
-    /// Der Bildlook der Kette — Entrauschen → Tools (Licht, Farbe, Dunst) → Schärfen — ohne Skalieren,
+    /// Der Bildlook der Kette — Entrauschen → Tools (Licht, Farbe, Dunst) → Schärfen → Körnung — ohne Skalieren,
     /// Farbprofil und Metadaten. Liefert <paramref name="image"/> selbst, wenn nichts zu tun ist,
     /// sonst ein neues 16-Bit-Bild mit denselben Profilen; <paramref name="image"/> bleibt unverändert.
     /// </summary>
+    /// <param name="grain">Körnung; null, wenn der Look vor der KI ins Bild kommt — das Korn kommt immer zuletzt.</param>
+    /// <param name="grainScale">Größe dieses Bildes relativ zur Ausgabe.</param>
     public static MagickImage RenderLook(MagickImage image, double denoise, double colorDenoise, Adjustments? adjustments,
-        double sharpenAmount, double sharpenSigma, WorkPlan? plan = null)
+        double sharpenAmount, double sharpenSigma, WorkPlan? plan = null, GrainSettings? grain = null, double grainScale = 1)
     {
         var adjust = adjustments is { IsNone: false } a ? a : null;
         var noise = denoise > 0.01 || colorDenoise > 0.01;
-        if (!noise && adjust is null && sharpenAmount <= 0.01) return image;
+        var grainy = grain is { IsNone: false };
+        if (!noise && adjust is null && sharpenAmount <= 0.01 && !grainy) return image;
 
         // Alles im 32-Bit-Puffer wie die Vorschau, gelesen mit voller Tiefe (Q16) und als 16-Bit-Bild zurück —
         // gerundet wird erst beim Kodieren. Profile werden übernommen.
@@ -136,6 +141,11 @@ public static class ImageExporter
         {
             plan?.Next();
             pixels = Swap(pixels, Sharpen.UnsharpMask(pixels, w, h, sharpenAmount, sharpenSigma));
+        }
+        if (grainy)
+        {
+            plan?.Next();
+            pixels = Swap(pixels, Grain.Apply(pixels, w, h, grain, grainScale));
         }
         MagickImage processed;
         lock (image) processed = Pixels.ToMagick16(pixels, w, h, image.HasAlpha);
@@ -257,12 +267,13 @@ public static class ImageExporter
     /// </summary>
     /// <param name="megapixels">Größe des Bildes, auf dem gerechnet wird.</param>
     public static WorkPlan PlanLook(double megapixels, double denoise, double colorDenoise, Adjustments? adjustments, double sharpenAmount,
-        IProgress<WorkProgress>? progress, CancellationToken cancel = default)
+        IProgress<WorkProgress>? progress, CancellationToken cancel = default, GrainSettings? grain = null)
     {
         var plan = new WorkPlan(progress, cancel);
         if (denoise > 0.01 || colorDenoise > 0.01) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * megapixels);
         if (adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, megapixels);
         if (sharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * megapixels);
+        if (grain is { IsNone: false }) plan.Add(Tr.T("Körnung"), WorkPlan.GrainCost * megapixels);
         return plan;
     }
 
@@ -277,6 +288,7 @@ public static class ImageExporter
         if (noise && !noiseFirst) plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * mp);
         if (o.Adjustments is { IsNone: false } a) Adjust.PlanSteps(a, plan, mp);
         if (o.SharpenAmount > 0.01) plan.Add(Tr.T("Schärfen"), WorkPlan.SharpenCost * mp);
+        if (o.Grain is { IsNone: false }) plan.Add(Tr.T("Körnung"), WorkPlan.GrainCost * mp);
         plan.Add(Tr.T("Farbprofil und Metadaten"), WorkPlan.ColorCost * mp);
         plan.Add(Tr.T("Datei schreiben ({0})", Extension(o.Format).TrimStart('.').ToUpperInvariant()), EncodeCost(o) * mp);
         return plan;

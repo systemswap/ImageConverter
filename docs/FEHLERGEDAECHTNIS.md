@@ -1490,3 +1490,35 @@ Test oder Nachweis.
   ohne Ferne (#43) und Gruppe Luminanzmaske (#44) vom Benutzer als passend befunden. Tag `v0.5.52`, Sicherung
   `../ImageConverter-0.5.52-Sicherung.zip`; Windows-Stand in den vom Benutzer genannten Ordner übertragen
   (`KI-Modelle/` dort unverändert).
+
+## 45. Neue Gruppe „Körnung“ (Filmkorn über das fertige Bild)
+
+- **Neu in:** 0.5.53 beta (12.10.2026). Wunsch des Benutzers: Körnung wie bei „Haut & Details“, aber als eigene Gruppe
+  bei den Reglern, unabhängig davon und nicht an die Luminanzmaske gebunden; Knopf „Aus dem Foto ermitteln“, danach
+  von Hand nachbessern. Konzept: `KONZEPT.md` §1 K.
+- **Immer der letzte Schritt:** nach Entrauschen und Schärfen, auch nach KI und „Haut & Details“ — gleich, welche
+  Reihenfolge KI ↔ Einstellungen gewählt ist. Deshalb gehört das Korn **nicht** zum `Look` (der bei „Erst
+  Einstellungen, dann KI“ ins Bild gerechnet und danach auf null gesetzt wird): eigene Felder `ExportOptions.Grain`
+  / `GrainScale`, `RenderLook(…, grain)` (die KI ruft es ohne Korn), Stufe 5 der Vorschau, über dem offenen
+  KI-Ergebnis in `RenderLookPreview`. **Nicht tun:** das Korn in `Adjustments` oder `Look` packen — dann käme es vor
+  der KI ins Bild und das Modell glättet es weg.
+- **Rechnen (`Core/Imaging/Grain.cs`):** Gauß-gefiltertes weißes Rauschen fest je Bildpixel (Hash, 4 × gleichverteilt
+  statt Box-Muller), in Streifen zu 256 Zeilen mit Rand — gleiches Ergebnis wie am Stück, ohne Ebenen in voller
+  Bildgröße; Streuung analytisch auf 1 gebracht (Σk² des Kerns bzw. der drei Boxen von `Blur.Gauss`). Stärke im
+  Mittelton 0,12 · (Regler/100)², je Helligkeit √(4Y(1 − Y)) wie Film (Schwarz und Weiß nichts — auf weißem Papier
+  sieht man deshalb kaum Korn). Rauheit: gröbere Stufe (2,5 ×) dazu und großflächige Schwankung der Stärke
+  (6 ×, tanh). Farbanteil f: je Kanal √(1 − f) gemeinsames + √f eigenes Korn (Korrelation der Kanäle = 1 − f).
+  Korngröße 0,25 px · 2^(Regler/20) in Pixeln der Ausgabe.
+- **Vorschau und verkleinerter Druck:** Korn so, wie es nach dem Verkleinern des Exports aussähe (`Grain.AtScale`:
+  Verkleinern ≈ Gauß 0,28 / Maßstab, gefiltertes Rauschen ∝ 1/Sigma). Abgeglichen an Lanczos 3: Vorschau/Export
+  1 px 1,00, 2,8 px 0,92. Erst 0,42 angenommen — Vorschau 22 % zu schwach. Größenschätzung rechnet das Korn
+  bewusst **ohne** Abschwächung (die Proben sollen je Pixel so körnig sein wie die echte Datei).
+- **Ermitteln:** am Pixelbild vor der KI (`CurrentWithoutAi`), ohne Einstellungen (also vor dem Entrauschen), Mitte
+  höchstens 12 MP. Stärke/Größe aus `FaceDetails.MeasureGrain` (Kurve √(4Y(1 − Y)) per kleinsten Quadraten ans
+  Profil), Farbanteil aus der Korrelation der Kanäle im Hochpass der ruhigsten 20 % der Blöcke; auf die Ausgabegröße
+  umgerechnet; Rauheit 0 (nicht messbar). Ein Rückgängig-Schritt.
+- **Liste „Bearbeitungen“:** Zeile „Körnung“ als letzte (`EditSteps.Grain`), „Neu anwenden“ setzt die Stärke auf 0.
+- **Test/Nachweis:** `GrainTests` (aus = Puffer selbst; Mittelton = Stärke, 0,1 → 0,6, Schwarz 0; fest je Pixel;
+  Streifen = am Stück für echten Gauß und Boxen; Farbanteil 0/50/100 → Korrelation 1/0,5/0; Vorschau wie
+  verkleinerter Export; Messen findet 40 %/1 px/50 % wieder, halbe Ausgabe schwächer, glattes Bild kein Korn; im
+  Export nach dem Schärfen; Auge aus). Sichtprüfung am Grauverlauf (`~/.cache/imageconverter-build/werkzeuge/korn`).

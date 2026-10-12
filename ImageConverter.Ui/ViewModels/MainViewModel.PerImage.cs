@@ -175,7 +175,10 @@ public partial class MainViewModel
                 s.WbNeutral, s.WbBlack, s.WbWhite, Math.Round(s.MatchLimit), Math.Round(s.MatchTarget), Math.Round(s.MatchGlobal),
                 Math.Round(s.MaskAmount), Math.Round(s.MaskEnd), Math.Round(s.MaskCurve)), s.Hidden),
             s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format),
-            (s.Hidden & EditSteps.ColorNoise) == 0 && s.ColorNoiseReduction > 0.005 ? s.ColorNoiseReduction : 0);
+            (s.Hidden & EditSteps.ColorNoise) == 0 && s.ColorNoiseReduction > 0.005 ? s.ColorNoiseReduction : 0,
+            (s.Hidden & EditSteps.Grain) == 0 && Math.Round(s.GrainAmount) >= 1
+                ? new GrainSettings(Math.Round(s.GrainAmount), Math.Round(s.GrainSize), Math.Round(s.GrainRoughness), Math.Round(s.GrainColor))
+                : null);
     }
 
     // ------------------------------------------------- für das Export-Fenster

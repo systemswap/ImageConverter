@@ -643,7 +643,7 @@
 
                     <!-- ############################## Rubrik Tools — je Funktion ein Regler -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
-                        <!-- Gruppen in der Reihenfolge der Kette: Rauschen → Dunst → Gleiche Farbe (Weißabgleich) → Licht → Farbe -->
+                        <!-- Gruppen in der Reihenfolge der Kette: Rauschen → Dunst → Gleiche Farbe (Weißabgleich) → Luminanzmaske → Licht → Farbe → Körnung -->
                         <HeaderedContentControl Header="{l:T 'RAUSCHEN'}">
                             <StackPanel>
                                 <Grid Classes="row" ColumnDefinitions="88,*,Auto">
@@ -932,6 +932,40 @@
                                     </Panel>
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding TintHueLabel}" />
                                 </Grid>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <!-- Körnung: immer der letzte Schritt der Kette (nach Schärfen, KI und Haut & Details), deshalb die letzte
+                             Gruppe. Unabhängig von der Körnung bei „Haut & Details“. -->
+                        <HeaderedContentControl Header="{l:T 'KÖRNUNG'}">
+                            <StackPanel>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainAmount}"
+                                            ToolTip.Tip="{l:T 'Wie viel Korn über das fertige Bild kommt – wie bei Film in den Mitteltönen am meisten, in Schwarz und Weiß fast nichts. Kommt immer zuletzt, nach Schärfen und KI.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainAmountLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Korngröße'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainSize}"
+                                            ToolTip.Tip="{l:T 'Fein (Pixel für Pixel) bis grob. Gilt für die Ausgabegröße – beim Verkleinern sieht das Korn gleich aus.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainSizeLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Rauheit'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainRoughness}"
+                                            ToolTip.Tip="{l:T 'Gleichmäßig wie ein Sensor oder klumpig wie Film: mischt gröberes Korn dazu und lässt die Stärke großflächig schwanken.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainRoughnessLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Farbanteil'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainColor}"
+                                            ToolTip.Tip="{l:T 'Aus: reines Helligkeitskorn wie bei Schwarzweißfilm. Mehr: zusätzlich bunte Körnchen, jeder Farbkanal für sich.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainColorLabel}" />
+                                </Grid>
+                                <Button Classes="subtle" Margin="88,2,0,4" HorizontalAlignment="Left"
+                                        Content="{l:T 'Aus dem Foto ermitteln'}" Command="{Binding MeasureGrainCommand}"
+                                        ToolTip.Tip="{l:T 'Misst das Korn des Fotos (vor KI und Entrauschen) und stellt Stärke, Korngröße und Farbanteil so ein, dass es wieder so aussieht – sinnvoll nach „Rauschen“ oder KI. Danach lässt sich alles nachbessern; Rückgängig mit Strg+Z.'}" />
                             </StackPanel>
                         </HeaderedContentControl>
 

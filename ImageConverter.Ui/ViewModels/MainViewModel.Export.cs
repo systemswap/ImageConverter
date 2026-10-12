@@ -159,7 +159,8 @@ public partial class MainViewModel
         ColorByLabel.TryGetValue(SelectedColorMode ?? "", out var c) ? c : ColorMode.ConvertToSrgb,
         CurrentAdjustments(),
         HighBitDepth && HighBitDepthAvailable,
-        EffectiveColorNoise);
+        EffectiveColorNoise,
+        EffectiveGrain);
 
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()
