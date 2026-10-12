@@ -239,29 +239,74 @@ public static class Dewarp
 
     internal static DewarpMap? Solve(DewarpSpec spec, double aspect)
     {
-        var obs = spec.UsableLines.Select(l => new Obs(l.Kind, l.Points.Select(p => (p.X, p.Y * aspect)).ToArray())).ToList();
+        var (obs, cam) = Prepare(spec, aspect);
         if (obs.Count == 0) return null;
+        var best = BestFit(obs, cam);
+        return best is not null ? ModelMap(best, obs, cam, aspect) : FlatMap(obs, aspect);
+    }
+
+    private static (List<Obs> Obs, Camera Cam) Prepare(DewarpSpec spec, double aspect)
+    {
+        var obs = spec.UsableLines.Select(l => new Obs(l.Kind, l.Points.Select(p => (p.X, p.Y * aspect)).ToArray())).ToList();
         // Nur ein Falz: weitere Falzlinien zählen als senkrechte Linien
         var firstFold = obs.FindIndex(o => o.Kind == WarpLineKind.Fold);
         for (var i = 0; i < obs.Count; i++)
             if (obs[i].Kind == WarpLineKind.Fold && i != firstFold) obs[i] = obs[i] with { Kind = WarpLineKind.Vertical };
-
         var f = spec.Focal35 / 43.27 * Math.Sqrt(1 + aspect * aspect);   // Brennweite in Bildbreiten
-        var cam = new Camera(f, 0.5, aspect / 2);
+        return (obs, new Camera(f, 0.5, aspect / 2));
+    }
 
+    /// <summary>Blattmodell, Biegung entlang x und entlang y gerechnet, das Bessere; null = zu wenig Linien oder unplausibel.</summary>
+    private static Fit? BestFit(List<Obs> obs, Camera cam)
+    {
+        if (obs.Count < 2) return null;
+        var fold = obs.Any(o => o.Kind == WarpLineKind.Fold);
         Fit? best = null;
-        if (obs.Count >= 2)
+        foreach (var alongY in new[] { false, true })
         {
-            foreach (var alongY in new[] { false, true })
-            {
-                if (alongY && firstFold >= 0) continue;   // Falz: Biegung quer zum Falz
-                var fit = FitModel(obs, cam, alongY);
-                if (fit is not null && (best is null || fit.Cost < best.Cost)) best = fit;
-            }
-            if (best is not null && !best.Plausible) best = null;
+            if (alongY && fold) continue;   // Falz: Biegung quer zum Falz
+            var fit = FitModel(obs, cam, alongY);
+            if (fit is not null && (best is null || fit.Cost < best.Cost)) best = fit;
         }
+        return best is { Plausible: true } ? best : null;
+    }
 
-        return best is not null ? ModelMap(best, obs, cam, aspect) : FlatMap(obs, aspect);
+    /// <summary>
+    /// Welche Vorschläge passen nicht zu den übrigen Linien? Das Blattmodell wird mit allen angewählten Linien gerechnet; die
+    /// am schlechtesten passende Linie unter den <paramref name="candidates"/> fällt heraus, wenn sie deutlich schlechter ist
+    /// als der Rest (mehr als das 2,5-Fache des Medians der ersten Runde, mindestens 0,8 ‰ der Bildbreite) und das Modell ohne
+    /// sie trägt und mindestens 10 % besser passt — bis zu viermal. So verderben
+    /// eine falsch erkannte Kante oder eine verrutschte Zeile nicht das Ergebnis. Andere Linien (von Hand) bleiben immer.
+    /// </summary>
+    /// <returns>Für jede Linie aus <paramref name="spec"/>: behalten?</returns>
+    public static bool[] RejectOutliers(DewarpSpec spec, IReadOnlyList<bool> candidates, int width, int height)
+    {
+        var keep = Enumerable.Repeat(true, spec.Lines.Count).ToArray();
+        var aspect = (double)height / Math.Max(1, width);
+        Fit? FitOf(IEnumerable<int> lines)
+        {
+            var (obs, cam) = Prepare(spec with { Lines = lines.Select(i => spec.Lines[i]).ToArray() }, aspect);
+            return BestFit(obs, cam);
+        }
+        var active = Enumerable.Range(0, spec.Lines.Count).Where(i => spec.Lines[i].Points.Count >= 2).ToList();
+        var fit = FitOf(active);
+        // Maßstab: der Median der ersten Runde — eine schlechte Linie verbiegt das Modell, dann passen alle schlechter
+        var reference = fit is null ? 0 : fit.LineRms.OrderBy(v => v).ElementAt(fit.LineRms.Length / 2);
+        for (var round = 0; round < 4 && fit is not null && active.Count >= 4; round++)
+        {
+            var median = Math.Min(reference, fit.LineRms.OrderBy(v => v).ElementAt(fit.LineRms.Length / 2));
+            var worst = -1;
+            for (var k = 0; k < active.Count; k++)
+                if (candidates[active[k]] && (worst < 0 || fit.LineRms[k] > fit.LineRms[worst])) worst = k;
+            if (worst < 0 || fit.LineRms[worst] < Math.Max(0.8, 2.5 * median)) break;
+            // nur, wenn das Modell ohne die Linie trägt und insgesamt besser passt — sonst lag es nicht an ihr
+            var without = active.Where((_, k) => k != worst).ToList();
+            var next = FitOf(without);
+            if (next is null || next.Rms >= 0.9 * fit.Rms) break;
+            keep[active[worst]] = false;
+            (active, fit) = (without, next);
+        }
+        return keep;
     }
 
     // ------------------------------------------------------------ Kamera und Blatt
@@ -277,12 +322,15 @@ public static class Dewarp
     {
         private readonly (double A, double B, double[] H, double[] M)[] _pieces;
         private readonly double _tail;
+        private readonly Func<double, (double Z, double D)>? _extra;
 
-        public Profile(params (double A, double B, double[] H)[] pieces)
+        /// <param name="extra">Zusätzlich zum Spline (Doppelseite: am Falz steil ansteigend, wie √).</param>
+        public Profile(Func<double, (double Z, double D)>? extra, params (double A, double B, double[] H)[] pieces)
         {
             _pieces = pieces.Select(p => (p.A, p.B, p.H, SecondDerivatives(p.H, (p.B - p.A) / (p.H.Length - 1)))).ToArray();
             (Min, Max) = (_pieces[0].A, _pieces[^1].B);
             _tail = Math.Max(1e-3, 0.1 * (Max - Min));
+            _extra = extra;
         }
 
         public double Min { get; }
@@ -317,6 +365,11 @@ public static class Dewarp
             double c0 = p.H[i] / dx - p.M[i] * dx / 6, c1 = p.H[i + 1] / dx - p.M[i + 1] * dx / 6;
             var z = p.M[i] * l * l * l / (6 * dx) + p.M[i + 1] * r * r * r / (6 * dx) + c0 * l + c1 * r;
             var d = -p.M[i] * l * l / (2 * dx) + p.M[i + 1] * r * r / (2 * dx) - c0 + c1;
+            if (_extra is not null)
+            {
+                var (ez, ed) = _extra(a);
+                (z, d) = (z + ez, d + ed);
+            }
             return (z, d);
         }
 
@@ -352,6 +405,7 @@ public static class Dewarp
         public required double Cost;
         public required double Rms;                       // Tausendstel der Bildbreite
         public required double Span;                      // Ausdehnung der Punkte auf dem Blatt
+        public required double[] LineRms;                 // je Linie, Tausendstel der Bildbreite
 
         public bool Plausible
         {
@@ -388,18 +442,16 @@ public static class Dewarp
         double? foldX = foldIndex >= 0 ? page0[foldIndex].Average(p => p.X) : null;
         if (foldX is { } fx && (fx <= lo + 0.1 * span || fx >= hi - 0.1 * span)) foldX = null;   // Falz am Rand: kein Falz
 
-        // Unbekannte: Drehung (3), Verschiebung (3), Höhen, je Linie eine Konstante, je Punkt eine Stelle
+        // Unbekannte: Drehung (3), Verschiebung (3), Höhen, je Linie eine Konstante. Die Stelle jedes Punkts entlang seiner
+        // Linie ist keine Unbekannte des Lösers, sondern wird bei jeder Auswertung bestimmt (Variable Projection, Golub/Pereyra):
+        // die Stelle der Linie, deren Projektion dem Punkt am nächsten liegt. Der Löser sieht so rund 40 statt mehrere hundert
+        // Unbekannte — bei 20 vorgeschlagenen Linien Sekundenbruchteile statt halber Minuten.
         const int segments = 8, half = 6;   // Doppelseite: je Seite 6 Abschnitte (am Falz steil, abgeglichen in DewarpTests)
-        var nHeights = foldX is null ? segments - 1 : 2 * half - 1;   // Falz: links und rechts je 3, dazu die Höhe am Falz
+        var nHeights = foldX is null ? segments - 1 : 2 * half - 1;   // Falz: links und rechts je 5, dazu die Höhe am Falz
+        var nSteep = foldX is null ? 0 : 2;                           // Falz: je Seite ein steiler Anteil (√)
         var lineParam = new int[obs.Count];
-        var pointParam = new int[obs.Count][];
-        var n = 6 + nHeights;
-        for (var i = 0; i < obs.Count; i++)
-        {
-            lineParam[i] = obs[i].Kind == WarpLineKind.Fold ? -1 : n++;
-            pointParam[i] = new int[obs[i].Pts.Length];
-            for (var j = 0; j < obs[i].Pts.Length; j++) pointParam[i][j] = n++;
-        }
+        var n = 6 + nHeights + nSteep;
+        for (var i = 0; i < obs.Count; i++) lineParam[i] = obs[i].Kind == WarpLineKind.Fold ? -1 : n++;
 
         var theta = new double[n];
         var rv = RotationVector(r0);
@@ -407,19 +459,11 @@ public static class Dewarp
         (theta[3], theta[4], theta[5]) = (t0[0], t0[1], t0[2]);
         for (var i = 0; i < obs.Count; i++)
         {
-            var pts = page0[i];
-            switch (obs[i].Kind)
-            {
-                case WarpLineKind.Horizontal:
-                    theta[lineParam[i]] = pts.Average(p => p.Y);
-                    for (var j = 0; j < pts.Length; j++) theta[pointParam[i][j]] = pts[j].X;
-                    break;
-                default:
-                    if (lineParam[i] >= 0) theta[lineParam[i]] = pts.Average(p => p.X);
-                    for (var j = 0; j < pts.Length; j++) theta[pointParam[i][j]] = pts[j].Y;
-                    break;
-            }
+            if (lineParam[i] < 0) continue;
+            theta[lineParam[i]] = obs[i].Kind == WarpLineKind.Horizontal ? page0[i].Average(p => p.Y) : page0[i].Average(p => p.X);
         }
+        // Stelle entlang der Linie (waagerecht: x, sonst y); Startwerte aus der Anfangslage, nach jedem Schritt nachgeführt
+        var along = obs.Select((o, i) => page0[i].Select(p => o.Kind == WarpLineKind.Horizontal ? p.X : p.Y).ToArray()).ToArray();
 
         Profile ProfileOf(double[] th)
         {
@@ -427,39 +471,83 @@ public static class Dewarp
             {
                 var hs = new double[segments + 1];
                 for (var k = 1; k < segments; k++) hs[k] = th[6 + k - 1];
-                return new Profile((lo, hi, hs));
+                return new Profile(null, (lo, hi, hs));
             }
             var left = new double[half + 1];
             var right = new double[half + 1];
             for (var k = 1; k < half; k++) left[k] = th[6 + k - 1];
             left[half] = right[0] = th[6 + half - 1];
             for (var k = 1; k < half; k++) right[k] = th[6 + half + k - 1];
-            return new Profile((lo, fold, left), (fold, hi, right));
+            // Am Falz steigt das Papier fast senkrecht an (Bindung): g(u) = √u · (1 − u), u = Abstand vom Falz / Seitenbreite —
+            // am Falz und am Außenrand 0, am Falz unendlich steil. Ein Spline mit gleichen Abständen schafft das nicht.
+            double kl = th[6 + nHeights], kr = th[6 + nHeights + 1];
+            (double Z, double D) Steep(double x)
+            {
+                var (k, width, sign) = x < fold ? (kl, fold - lo, -1.0) : (kr, hi - fold, 1.0);
+                var u = Math.Clamp(Math.Abs(x - fold) / width, 1e-6, 1);
+                var root = Math.Sqrt(u);
+                return (k * root * (1 - u), k * ((1 - u) / (2 * root) - root) * sign / width);
+            }
+            return new Profile(Steep, (lo, fold, left), (fold, hi, right));
         }
 
-        (double X, double Y) PageOf(double[] th, int i, int j) => obs[i].Kind switch
+        (double X, double Y) PageAt(double[] th, int i, double u) => obs[i].Kind switch
         {
-            WarpLineKind.Horizontal => (th[pointParam[i][j]], th[lineParam[i]]),
-            WarpLineKind.Vertical => (th[lineParam[i]], th[pointParam[i][j]]),
-            _ => (foldX ?? th[lineParam[i]], th[pointParam[i][j]]),
+            WarpLineKind.Horizontal => (u, th[lineParam[i]]),
+            WarpLineKind.Vertical => (th[lineParam[i]], u),
+            _ => (foldX ?? 0, u),
         };
+
+        (double U, double V, bool Ok) ProjectAt(double[] th, double[,] rot, Profile prof, int i, double u)
+        {
+            var (x, y) = PageAt(th, i, u);
+            var z = prof.Eval(alongY ? y : x).Z;
+            return cam.Project(rot[0, 0] * x + rot[0, 1] * y + rot[0, 2] * z + th[3],
+                               rot[1, 0] * x + rot[1, 1] * y + rot[1, 2] * z + th[4],
+                               rot[2, 0] * x + rot[2, 1] * y + rot[2, 2] * z + th[5]);
+        }
+
+        // je Punkt die Stelle auf seiner Linie, deren Projektion am nächsten liegt (Gauß-Newton in einer Unbekannten)
+        double[][] Along(double[] th, double[,] rot, Profile prof)
+        {
+            var result = new double[obs.Count][];
+            for (var i = 0; i < obs.Count; i++)
+            {
+                result[i] = new double[obs[i].Pts.Length];
+                for (var j = 0; j < obs[i].Pts.Length; j++)
+                {
+                    var u = along[i][j];
+                    for (var it = 0; it < 8; it++)
+                    {
+                        var (pu, pv, ok) = ProjectAt(th, rot, prof, i, u);
+                        const double h = 1e-6;
+                        var (qu, qv, ok2) = ProjectAt(th, rot, prof, i, u + h);
+                        if (!ok || !ok2) break;
+                        double ju = (qu - pu) / h, jv = (qv - pv) / h, ex = pu - obs[i].Pts[j].X, ey = pv - obs[i].Pts[j].Y;
+                        var den = ju * ju + jv * jv;
+                        if (den < 1e-18) break;
+                        var step = Math.Clamp((ju * ex + jv * ey) / den, -0.1 * span, 0.1 * span);
+                        u -= step;
+                        if (Math.Abs(step) < 1e-10) break;
+                    }
+                    result[i][j] = u;
+                }
+            }
+            return result;
+        }
 
         var tz0 = t0[2];
         var dataCount = obs.Sum(o => o.Pts.Length) * 2;
-        double[] Residuals(double[] th)
+        double[] Evaluate(double[] th, out double[][] us)
         {
-            var res = new List<double>(dataCount + nHeights + 2);
+            var res = new List<double>(dataCount + nHeights + nSteep + 2);
             var rot = Rotation(th[0], th[1], th[2]);
             var prof = ProfileOf(th);
+            us = Along(th, rot, prof);
             for (var i = 0; i < obs.Count; i++)
             for (var j = 0; j < obs[i].Pts.Length; j++)
             {
-                var (x, y) = PageOf(th, i, j);
-                var z = prof.Eval(alongY ? y : x).Z;
-                var px = rot[0, 0] * x + rot[0, 1] * y + rot[0, 2] * z + th[3];
-                var py = rot[1, 0] * x + rot[1, 1] * y + rot[1, 2] * z + th[4];
-                var pz = rot[2, 0] * x + rot[2, 1] * y + rot[2, 2] * z + th[5];
-                var (u, v, ok) = cam.Project(px, py, pz);
+                var (u, v, ok) = ProjectAt(th, rot, prof, i, us[i][j]);
                 if (!ok) { res.Add(1e4); res.Add(1e4); continue; }
                 res.Add((u - obs[i].Pts[j].X) * Scale);
                 res.Add((v - obs[i].Pts[j].Y) * Scale);
@@ -467,20 +555,33 @@ public static class Dewarp
             // Biegung glatt (zweite Differenzen) und klein; Maßstab festhalten (Blattgröße ↔ Abstand)
             var hs = Enumerable.Range(0, nHeights).Select(k => th[6 + k]).ToArray();
             double[] all = [0, .. hs, 0];   // Ränder 0 (mit Falz: links, Falz, rechts in einer Reihe)
-            for (var k = 1; k < all.Length - 1; k++) res.Add(100 * (all[k - 1] - 2 * all[k] + all[k + 1]) / span);
+            for (var k = 1; k < all.Length - 1; k++)
+                if (foldX is null || k != half)   // am Falz darf das Papier knicken
+                    res.Add(100 * (all[k - 1] - 2 * all[k] + all[k + 1]) / span);
             foreach (var hk in hs) res.Add(2 * hk / span);
+            for (var k = 0; k < nSteep; k++) res.Add(2 * th[6 + nHeights + k] / span);
             res.Add(20 * (th[5] - tz0));
             return res.ToArray();
         }
+        double[] Residuals(double[] th) => Evaluate(th, out _);
 
-        var (solved, cost) = LevenbergMarquardt(Residuals, theta);
-        var final = Residuals(solved);
+        // nach jedem angenommenen Schritt: Stellen entlang der Linien als neue Startwerte
+        var (solved, cost) = LevenbergMarquardt(Residuals, theta, th => { Evaluate(th, out var us); along = us; });
+        var final = Evaluate(solved, out var alongFinal);
         double sum = 0;
         for (var k = 0; k < dataCount; k++) sum += final[k] * final[k];
+        // je Linie: mittlerer Abstand ihrer Punkte zur Projektion (Reihenfolge der Residuen wie in Evaluate)
+        var lineRms = new double[obs.Count];
+        for (int i = 0, k = 0; i < obs.Count; i++)
+        {
+            double s2 = 0;
+            for (var j = 0; j < obs[i].Pts.Length; j++, k += 2) s2 += final[k] * final[k] + final[k + 1] * final[k + 1];
+            lineRms[i] = Math.Sqrt(s2 / Math.Max(1, obs[i].Pts.Length));
+        }
 
         var page = new (double X, double Y)[obs.Count][];
         for (var i = 0; i < obs.Count; i++)
-            page[i] = Enumerable.Range(0, obs[i].Pts.Length).Select(j => PageOf(solved, i, j)).ToArray();
+            page[i] = alongFinal[i].Select(u => PageAt(solved, i, u)).ToArray();
         return new Fit
         {
             R = Rotation(solved[0], solved[1], solved[2]),
@@ -491,6 +592,7 @@ public static class Dewarp
             Page = page,
             Cost = cost,
             Rms = Math.Sqrt(sum / Math.Max(1, dataCount / 2)),
+            LineRms = lineRms,
             Span = span,
         };
     }
@@ -979,7 +1081,9 @@ public static class Dewarp
 
     // ------------------------------------------------------------ Levenberg-Marquardt
 
-    private static (double[] Theta, double Cost) LevenbergMarquardt(Func<double[], double[]> residuals, double[] theta)
+    /// <param name="accepted">Nach jedem angenommenen Schritt (z. B. Startwerte für innere Unbekannte nachführen).</param>
+    private static (double[] Theta, double Cost) LevenbergMarquardt(Func<double[], double[]> residuals, double[] theta,
+        Action<double[]>? accepted = null)
     {
         var n = theta.Length;
         var r = residuals(theta);
@@ -1040,6 +1144,12 @@ public static class Dewarp
                 {
                     var gain = (cost - cn) / Math.Max(1e-300, cost);
                     (theta, r, cost) = (next, rn, cn);
+                    if (accepted is not null)
+                    {
+                        accepted(theta);
+                        r = residuals(theta);   // mit den nachgeführten Startwerten (höchstens besser)
+                        cost = Math.Min(cost, Dot(r, r));
+                    }
                     mu = Math.Max(1e-12, mu / 3);
                     improved = true;
                     if (gain < 1e-10) return (theta, cost);

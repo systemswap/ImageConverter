@@ -1560,3 +1560,107 @@ Test oder Nachweis.
   1,2 auf ± 5 % gefunden; Doppelseite; wellig nur mit Gitter; eine Linie: nur sie, Größe bleibt; Rezept: Stufe zuerst,
   Punkte hin und zurück < 0,5 px, ausschaltbar, Größe beim Anwenden). Die Bedienung in der Vorschau ist nicht
   automatisch getestet (kein unsichtbares Testfenster unter Windows) — vom Benutzer zu prüfen.
+
+## 47. Gewölbtes Blatt: Linien vorschlagen (Schritt 2, ohne Modell)
+
+- **Neu in:** 0.5.55 beta (12.10.2026). Knopf „Linien vorschlagen“ im Werkzeug; Vorschläge gestrichelt, Klick wählt ab
+  (grau) oder wieder an, Ziehen an einem Punkt übernimmt den Vorschlag als normale Linie, „Vorschläge verwerfen“. Nur
+  angewählte Linien zählen (`WarpLineShape.Counts`); ins Rezept kommen sie als gewöhnliche Linien.
+- **Erkennen (`Core/Imaging/LineFinder.cs`, auf höchstens 1600 px verkleinert, ≈ 0,5–0,8 s):**
+  Textzeilen — dunkel gegen den örtlichen Hintergrund, Flecken als Buchstaben (Größe aus dem Median), Schreibrichtung
+  aus den Richtungen zum nächsten Nachbarn, Ketten von vorn nach hinten mit langsam drehender Richtung, Lücken (Spalten)
+  wieder zusammengesetzt; Grundlinie als **eine robuste glatte Kurve über die ganze Zeile** (Knoten alle 5
+  Buchstabenhöhen, zweite Differenzen, Unterlängen als Ausreißer in 5 Durchgängen). Auswahl: bis zu 8 Zeilen
+  gleichmäßig, bei einer Doppelseite je Seite 6. Blattrand — Otsu, außen = dunkel und mit dem Bildrand verbunden,
+  **Blattfläche geschlossen** (Quadrat ± 1/90 der Bildgröße), Moore-Umriss an den vier Ecken (im Rahmen der Schrift)
+  geteilt, je 9 Punkte auf den stärksten Sprung geschoben und durch eine robuste kubische Kurve geglättet; Kanten am
+  Fotorand fallen weg. Falz — schmales dunkles Tal im mittleren Drittel, in ≥ 6 von 9 Höhen an derselben Stelle.
+- **Falle 1 – Grundlinie mit Median je Fenster:** Die Schreibrichtung wird bei gebogenen Zeilen leicht schräg geschätzt
+  (≈ −4°); im gedrehten Rahmen steigt die Grundlinie im Fenster an, und wo sich Unterlängen häufen, kippt der Median auf
+  sie — 5–6 px daneben. Ausgleichsgerade je Fenster und Nachbar-Abgleich halfen nur teilweise; erst die glatte Kurve über
+  die ganze Zeile (gemessen ≤ 0,4 px) trifft überall.
+- **Falle 2 – Zickzack-Kante:** Dünne dunkle Rahmenlinien, die den Blattrand berühren, sind mit dem Untergrund verbunden;
+  die Blattfläche bekam tiefe Schlitze, der Umriss lief hinein. Ebenso trennte der Schatten am Falz eine Doppelseite in
+  zwei Blätter (nur die rechte Seite, kein Falz). Abhilfe: Schließen der Blattfläche; zusätzlich gilt eine Kante nur,
+  wenn ihr Umriss höchstens 30 % (+ 8 % Pixeltreppen) länger ist als die Verbindung.
+- **Grenze:** Ist der Blattrand selbst nicht gerade (Arbeitsblatt-Testblatt: handgezeichneter schwarzer Rahmen), passt das Modell
+  schlechter (3 ‰) — die Kante abwählen.
+- **Test/Nachweis:** `LineFinderTests` (künstliche Seite ohne Schriftart: gebogene Zeilen aus Kästchen mit Ober-/Unterlängen
+  ≤ 1 px auf der Grundlinie; vier Kanten ≤ 2 px; kein Falz auf einem Blatt; Falz einer Doppelseite ± 5 px; Blatt füllt
+  das Foto: keine Kanten). Sichtprüfung an `TestBilder/` (`~/.cache/imageconverter-build/werkzeuge/vorschlag`): Schulbuch-Blatt
+  8 Zeilen + 4 Kanten, Fehler 0,33 ‰, DIN; Doppelseiten 12 Zeilen + 4 Kanten + Falz, 0,3–0,7 ‰.
+
+## 48. Gewölbtes Blatt: Vorschläge genauer, senkrechte Linien, Fehlerbild gegen das Original
+
+- **Neu in:** 0.5.56 beta (12.10.2026). Wunsch des Benutzers: Linien liegen teils daneben, unten wellig (Schulbuch-Testblatt),
+  auch senkrechte Linien erkennen.
+- **Messen statt schätzen — Fehlerbild** (`~/.cache/imageconverter-build/werkzeuge/fehlerbild/Fehlerbild.cs`): Für die
+  Testbilder ist die wahre Form bekannt (Woelbung.cs). Ergebnis → Bild → Blatt (Umkehrung), ideal affin; Abweichung je
+  Stelle in Pixeln (Mittel, 95 %, max), dazu je Linie die Streuung quer zur wahren Linie und ein Wärmebild. **Nicht
+  tun:** Verbesserungen nach Augenschein beurteilen — erst das Fehlerbild zeigte, dass die Rechnung selbst stimmte
+  (exakte Linien: 0,3 px) und die Wellen von zwei falschen Vorschlägen kamen.
+- **Gefundene Ursachen und Abhilfe (Mittel / Max, automatisch):** Schulbuch-Blatt 1,5 / 9,0 → 0,4 / 3,6 px; Schulbuch-Doppelseite
+  14,3 / 55 → 2,0 / 11 px; Arbeitsblatt-Doppelseite 13,9 / 51 → 1,1 / 15 px; Arbeitsblatt-Blatt 9,2 / 44 → 2,0 / 22 px.
+  1. Fußzeile (kleine Schrift) sprang in die Nachbarzeile — Toleranzen der Kette jetzt in der Schriftgröße **der Zeile**.
+  2. Untere Kante an der eingerollten Ecke 5 px daneben — kubische Glättung zu steif: 15 Punkte, Kurve 5. Grades.
+  3. Doppelseite selbst mit exakten Linien 10 px daneben: Am Falz steigt das Papier wie √d an (Spline kann das nicht),
+     und die Glättung bestrafte den Knick am Falz. Jetzt je Seite ein Anteil √u · (1 − u), Falz aus der Glättung genommen.
+  4. Ober-/Unterkante der Doppelseite (knickt am Falz) bis 49 px daneben — am Falz geteilt, je Seite eine Kante.
+  5. Falsche Vorschläge (handgezeichneter Rand des Arbeitsblatt-Blatts, Würfelkanten als „senkrecht“, Aufgabennummern als
+     Textrand) — `Dewarp.RejectOutliers`: die am schlechtesten passende Linie fällt heraus, wenn sie über dem 2,5-Fachen
+     des Medians **der ersten Runde** liegt (mind. 0,8 ‰) und das Modell ohne sie trägt und ≥ 10 % besser passt; bis zu
+     viermal; nur Vorschläge, nie Linien von Hand. In der Oberfläche grau (abgewählt), wieder anwählbar.
+     **Falle:** Mit dem Median der laufenden Runde blieb die zweite schlechte Kante drin (sie verbiegt das Modell, alle
+     passen schlechter); ohne die Prüfung „trägt ohne sie“ wurde bei der Doppelseite eine richtige Kante abgewählt und
+     das Modell fiel aus.
+  6. Halber Pixel daneben beim Nachschärfen (Pixelmitte vs. -ecke verwechselt) — `LineFinderTests.Refine_…` fand es.
+- **Schneller:** Variable Projection (Golub/Pereyra) — die Stelle jedes Punkts entlang seiner Linie ist keine Unbekannte
+  des Lösers mehr, sondern wird je Auswertung bestimmt (nächster Punkt der projizierten Linie, Gauß-Newton, nach jedem
+  Schritt als Startwert nachgeführt). Prüfen von 22 Linien 28 s → 1,9 s.
+- **Neu erkannt:** gezeichnete Linien waagerecht und senkrecht (dünne Querstücke von Spalte zu Spalte verfolgt,
+  Kreuzungen überbrückt, Schräge und Kurzes verworfen) und Textränder (RANSAC über Zeilenanfänge/-enden, ≥ 5 Zeilen).
+  Nachschärfen im Original (`LineFinder.Refine`: Kanten auf den Sprung, Falz/gezeichnete Linien auf die dunkelste Stelle,
+  Unterpixel). Vorschau zeichnet Linien glatt (Catmull-Rom).
+- **Entfernen (Wunsch des Benutzers):** an der Linie unter der Maus (bzw. der aktiven/angefassten) ein × neben der Mitte —
+  Klick entfernt die ganze Linie, Vorschlag oder eigene; Entf auf einem Vorschlag entfernt ihn ganz; „Abgewählte entfernen“.
+- **Grenze:** Das wellige Testbild dehnt das Papier (nicht abwickelbar) — dort bleibt die Abweichung hoch, echtes Papier
+  kann das nicht; nicht danach abgleichen.
+- **Test/Nachweis:** `DewarpTests.Outliers_OnlyWrongSuggestionsAreDeselected`, `LineFinderTests.FindsDrawnLines_AlsoVertical`,
+  `LineFinderTests.Refine_PutsAnEdgeOnTheStepInFullResolution`; alle 356 Tests grün.
+
+## 49. Gewölbtes Blatt: Absturz beim Klick auf eine vorgeschlagene Linie (oder neben das ×)
+
+- **Entdeckt:** 0.5.56 beta (12.10.2026), vom Benutzer („über das × bricht die App ab“). **Behoben:** im selben Stand.
+- **Was:** `ArgumentOutOfRangeException` in `CropView.RenderWarpLines` (Ereignisanzeige, Quelle „.NET Runtime“, auch schon um
+  12:27 vor dem ×). Ein Klick auf den *Verlauf* eines Vorschlags (nicht auf einen Punkt) merkt sich die Linie mit Punkt −1
+  (`PressSuggestion(…, -1)`), der Ziehmodus läuft — die Lupe zeichnete `Points[-1]`. Beim × kam dazu: Es verschwand, sobald
+  die Maus die Linie Richtung × verließ (Hover nur auf der Linie), der Klick traf dann den Verlauf.
+- **Wie behoben:** Lupe und Pfeiltasten nur mit Punkt ≥ 0; das × bleibt auf dem Weg dorthin stehen (Hover hält, solange
+  die Maus höchstens 30 px vom × entfernt ist). **Nicht tun:** `_warpSel.Point` ohne Prüfung auf −1 als Index benutzen.
+- **Hinweis zur Fehlersuche unter Windows:** Abstürze stehen mit Stapel in der Ereignisanzeige
+  (`Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='.NET Runtime'}`).
+
+## 50. Lupe auch beim Zuschnitt, Fadenkreuz in Negativfarbe, Verschieben über den Rand, Zeichenmodus
+
+- **Neu in:** 0.5.56 beta (12.10.2026), Wünsche des Benutzers.
+- **Lupe beim Zuschnitt:** beim Aufziehen und beim Ziehen an Ecken/Kanten (Stelle: gezogene Ecke bzw. Punkt der gezogenen
+  Kante unter der Maus, `_dragImage`), Rahmen als Linie darin; nicht beim Frei drehen (Bild dort gedreht gezeichnet).
+- **Fadenkreuz:** alle Lupen laufen über `CropView.DrawLoupe` (eine Stelle für alle: Entzerren, Pipette, Linien, Zuschnitt).
+  Farbe = Negativ des Bildes darunter (`CrossColor`: Mittel 5 × 5 Pixel der Bitmap über `Bitmap.CopyPixels`), bei fast
+  mittlerem Grau Schwarz/Weiß; dünner Schatten darunter. Vorher weiß — auf weißem Papier unsichtbar.
+- **Verschieben über den Rand:** `ClampPan` lässt das Bild so weit, dass jede Stelle bis zur Mitte der Vorschau kommt, auch
+  eingepasst (Verschieben schaltet `_fitMode` aus; `UpdateGeometry` passt nur noch ein, wenn `_fitMode` an ist oder der
+  Maßstab unter „Einpassen“ liegt). Grund: Ränder eines knapp zugeschnittenen Blatts lagen unter der Werkzeugleiste.
+- **Gewölbtes Blatt, Bedienung neu:** Vorgabe „Ansehen“ — Ziehen verschiebt das Bild, Ziehen an einem Punkt den Punkt,
+  Klick (ohne Ziehen) auf eine Linie markiert sie bzw. wählt einen Vorschlag ab/an (`ReleaseWarpClick`). „Linien zeichnen“
+  ist ein Schalter (`CropView.DrawLines` ↔ `DewarpDrawing`, Taste N): Klick setzt Punkte, Enter/Doppelklick beginnt die
+  nächste Linie, Esc beendet den Modus. Entf auf einer markierten Linie entfernt sie ganz.
+- **Nachtrag (Wunsch):** Linie verlängern — eine angeklickte (markierte) Linie wird beim Einschalten von „Linien zeichnen“
+  die aktive; jeder Klick kommt an ihr **näheres Ende** (vorn oder hinten), ein Vorschlag wird dabei zur normalen Linie.
+  Im Zeichenmodus folgt die Lupe der Maus schon vor dem Klick, dazu gestrichelt das nächste Stück vom näheren Ende.
+- **Meilenstein 0.5.57 (12.10.2026):** Stand 0.5.56 beta — Körnung (#45), gewölbtes Blatt gerade ziehen von Hand (#46), Linien
+  vorschlagen samt senkrechten Linien, Abwählen unpassender Vorschläge und Nachschärfen (#47, #48), Absturz beim Klick auf
+  eine Linie behoben (#49), Lupe beim Zuschnitt, Fadenkreuz in Negativfarbe, Verschieben über den Rand, Zeichenmodus und
+  Verlängern (#50) — vom Benutzer als passend befunden. Tag `v0.5.57`; schlanke Sicherung auf Wunsch des Benutzers in
+  `published/ImageConverter-0.5.57-Sicherung.zip` (mit `.git` samt Hooks und der lokalen Anweisungsdatei; ohne `bin/`, `obj/`, `published/`,
+  `KI-Modelle/`, `TestBilder/`).

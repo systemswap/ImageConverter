@@ -1089,7 +1089,7 @@
                                     RotationAngle="{Binding RotationAngle}"
                                     Quad="{Binding PerspectiveQuad}"
                                     WarpLines="{Binding DewarpLines}"
-                                    EndLineToken="{Binding DewarpNewLineToken}"
+                                    DrawLines="{Binding DewarpDrawing}"
                                     PickActive="{Binding IsPicking}"
                                     PickCommand="{Binding PickAtCommand}"
                                     PickMarkers="{Binding WbMarkers}"
@@ -1228,13 +1228,24 @@
                                 IsVisible="{Binding DewarpTool}">
                             <StackPanel Spacing="6">
                                 <TextBlock Classes="hint" TextWrapping="Wrap" MaxWidth="640"
-                                           Text="{l:T 'Klick setzt einen Punkt, Enter oder Doppelklick beendet die Linie. Blau: waagerecht auf dem Blatt, orange: senkrecht, pink: Falz – Rechtsklick wechselt. Entf löscht den Punkt, Umschalt+Entf die Linie.'}" />
+                                           Text="{l:T 'Ziehen verschiebt das Bild, Ziehen an einem Punkt den Punkt. „Linien zeichnen“: jeder Klick setzt einen Punkt, Enter oder Doppelklick beginnt die nächste Linie, Esc beendet das Zeichnen; eine vorher angeklickte Linie wird dabei am näheren Ende verlängert. Blau: waagerecht auf dem Blatt, orange: senkrecht, pink: Falz – Rechtsklick wechselt. Klick auf eine Linie markiert sie, das × daneben entfernt sie; gestrichelt = Vorschlag, Klick wählt ab oder an.'}" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:T 'Gewölbtes Blatt'}" />
                                     <TextBlock VerticalAlignment="Center" MinWidth="200" MaxWidth="420" TextWrapping="Wrap" Text="{Binding DewarpInfo}" />
-                                    <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Neue Linie'}"
-                                            Command="{Binding NewDewarpLineCommand}"
-                                            ToolTip.Tip="{l:T 'Die aktive Linie beenden – der nächste Klick beginnt eine neue (auch mit Enter, Doppelklick oder N).'}" />
+                                    <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Linien vorschlagen'}"
+                                            Command="{Binding SuggestDewarpLinesCommand}"
+                                            ToolTip.Tip="{l:T 'Sucht Textzeilen, Blattkanten und den Falz und legt sie gestrichelt über das Bild. Ein Klick wählt einen Vorschlag ab oder wieder an; von Hand gesetzte Linien bleiben.'}" />
+                                    <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Vorschläge verwerfen'}"
+                                            IsVisible="{Binding HasDewarpSuggestions}"
+                                            Command="{Binding DiscardDewarpSuggestionsCommand}"
+                                            ToolTip.Tip="{l:T 'Alle Vorschläge entfernen – angewählte wie abgewählte. Von Hand gesetzte Linien bleiben.'}" />
+                                    <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Abgewählte entfernen'}"
+                                            IsVisible="{Binding HasDisabledDewarpLines}"
+                                            Command="{Binding RemoveDisabledDewarpLinesCommand}"
+                                            ToolTip.Tip="{l:T 'Alle grauen (abgewählten) Vorschläge entfernen; angewählte und von Hand gesetzte Linien bleiben.'}" />
+                                    <ToggleButton Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Linien zeichnen'}"
+                                            IsChecked="{Binding DewarpDrawing}"
+                                            ToolTip.Tip="{l:T 'Zeichnen: jeder Klick setzt einen Punkt, Enter oder Doppelklick beginnt die nächste Linie, Esc beendet das Zeichnen (auch mit N einschalten). Aus: Ziehen verschiebt das Bild, Ziehen an einem Punkt den Punkt.'}" />
                                     <Button Classes="subtle" VerticalAlignment="Center" Content="{l:T 'Zurücksetzen'}"
                                             Command="{Binding ResetDewarpLinesCommand}"
                                             ToolTip.Tip="{l:T 'Alle Linien entfernen. Übernommen wird erst mit „Gerade ziehen“.'}" />

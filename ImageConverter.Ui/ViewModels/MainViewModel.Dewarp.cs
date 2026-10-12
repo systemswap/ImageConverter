@@ -23,13 +23,19 @@ public partial class MainViewModel
     [NotifyPropertyChangedFor(nameof(CanCropToSelection))]
     public partial IReadOnlyList<WarpLineShape>? DewarpLines { get; set; }
 
-    /// <summary>Wechselt bei „Neue Linie“: die Vorschau beendet die aktive Linie.</summary>
-    [ObservableProperty] public partial object? DewarpNewLineToken { get; set; }
+    /// <summary>Zeichenmodus: jeder Klick setzt einen Punkt (Esc beendet); aus: Ziehen verschiebt das Bild.</summary>
+    [ObservableProperty] public partial bool DewarpDrawing { get; set; }
 
     /// <summary>Unten in der Leiste: was herauskommt (Größe, Seitenverhältnis) oder was noch fehlt.</summary>
     [ObservableProperty] public partial string DewarpInfo { get; set; } = "";
 
-    private bool HasDewarpLines => DewarpLines?.Any(l => l.Points.Count >= 2) == true;
+    private bool HasDewarpLines => DewarpLines?.Any(l => l.Counts) == true;
+
+    /// <summary>Es liegen Vorschläge da (für „Vorschläge verwerfen“).</summary>
+    public bool HasDewarpSuggestions => DewarpLines?.Any(l => l.Suggested) == true;
+
+    /// <summary>Es gibt abgewählte (graue) Linien — für „Abgewählte entfernen“.</summary>
+    public bool HasDisabledDewarpLines => DewarpLines?.Any(l => !l.Enabled) == true;
 
     partial void OnDewarpToolChanged(bool value)
     {
@@ -42,6 +48,7 @@ public partial class MainViewModel
         }
         else
         {
+            DewarpDrawing = false;
             DewarpLines = null;
             if (!_quietTools) _ = ShowDocumentAsync();   // zurück zum fertigen Bild
         }
@@ -64,6 +71,8 @@ public partial class MainViewModel
     partial void OnDewarpLinesChanged(IReadOnlyList<WarpLineShape>? value)
     {
         if (value is null && DewarpTool) DewarpTool = false;   // Esc in der Vorschau
+        OnPropertyChanged(nameof(HasDewarpSuggestions));
+        OnPropertyChanged(nameof(HasDisabledDewarpLines));
         CropToSelectionCommand.NotifyCanExecuteChanged();
         _ = UpdateDewarpInfoAsync();
     }
@@ -75,9 +84,122 @@ public partial class MainViewModel
         if (DewarpTool) DewarpLines = [];
     }
 
-    /// <summary>Die aktive Linie beenden — der nächste Klick beginnt eine neue (auch mit Enter oder Doppelklick).</summary>
+    /// <summary>Linien werden gerade gesucht.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SuggestDewarpLinesCommand))]
+    public partial bool IsSuggestingLines { get; set; }
+
+    private bool CanSuggestLines => !IsSuggestingLines;
+
+    /// <summary>
+    /// Linien vorschlagen (Textzeilen, Blattrand, Falz — <see cref="LineFinder"/>), gestrichelt und angewählt; frühere
+    /// Vorschläge werden ersetzt, von Hand gesetzte Linien bleiben.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSuggestLines))]
+    private async Task SuggestDewarpLines()
+    {
+        if (!DewarpTool) return;
+        IsSuggestingLines = true;
+        ActivityText = Tr.T("Linien werden gesucht …");
+        ActivityProgress = -1;
+        try
+        {
+            if (await Task.Run(() => ShownDocument) is not { } doc) return;
+            var found = await Task.Run(() => FindLines(doc));
+            if (!DewarpTool || DewarpLines is not { } current) return;
+            var suggested = found.Select(f => new WarpLineShape(f.Kind, f.Points.Select(p => new Point(p.X, p.Y)).ToArray(),
+                KindChosen: true, Suggested: true)).ToList();
+            var lines = current.Where(l => !l.Suggested).Concat(suggested).ToList();
+
+            // Prüfen: Vorschläge, die nicht zu den übrigen Linien passen (falsch erkannte Kante, verrutschte Zeile), abwählen —
+            // sie bleiben grau sichtbar und lassen sich wieder anwählen
+            ActivityText = Tr.T("Linien werden geprüft …");
+            var counted = lines.Where(l => l.Counts).ToList();
+            var off = 0;
+            if (DewarpedRecipe(counted) is { Dewarp: { } spec })
+            {
+                var (pw, ph) = PixelSize();
+                var keep = await Task.Run(() => Dewarp.RejectOutliers(spec, counted.Select(l => l.Suggested).ToArray(), pw, ph));
+                if (!DewarpTool) return;
+                for (var k = 0; k < counted.Count && k < keep.Length; k++)
+                {
+                    if (keep[k]) continue;
+                    lines[lines.IndexOf(counted[k])] = counted[k] with { Enabled = false };
+                    off++;
+                }
+            }
+            DewarpLines = lines;
+
+            var count = (FoundLineSource s) => found.Count(f => f.Source == s);
+            StatusMessage = found.Count == 0
+                ? Tr.T("Keine Linien gefunden – bitte von Hand setzen.")
+                : Tr.T("Vorgeschlagen: {0} Textzeilen, {1} Blattkanten, {2} gezeichnete Linien, {3} Textränder, {4} Falz – ein Klick auf eine gestrichelte Linie wählt sie ab oder an.",
+                      count(FoundLineSource.Text), count(FoundLineSource.Edge), count(FoundLineSource.Ruled), count(FoundLineSource.Margin), count(FoundLineSource.Fold))
+                  + (off == 0 ? "" : " " + (off == 1
+                      ? Tr.T("1 Vorschlag passt nicht zu den übrigen und ist abgewählt (grau).")
+                      : Tr.T("{0} Vorschläge passen nicht zu den übrigen und sind abgewählt (grau).", off)));
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = Tr.T("Linien suchen fehlgeschlagen: {0}", ex.Message);
+        }
+        finally
+        {
+            IsSuggestingLines = false;
+            ActivityText = null;
+        }
+    }
+
+    /// <summary>Linien im angezeigten Bild suchen (verkleinert auf <see cref="LineFinder.WorkEdge"/>), in Pixeln der Ansicht.</summary>
+    private static IReadOnlyList<FoundLine> FindLines(ImageMagick.MagickImage doc)
+    {
+        int w, h;
+        lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
+        var scale = Math.Min(1.0, LineFinder.WorkEdge / (double)Math.Max(w, h));
+        int sw = Math.Max(1, (int)Math.Round(w * scale)), sh = Math.Max(1, (int)Math.Round(h * scale));
+        using var small = ImageOps.Resize(doc, sw, sh, ResampleFilter.Mitchell, gammaCorrect: false);
+        var px = ImageOps.ToDisplayPixels(small);
+        try
+        {
+            double fx = (double)w / sw, fy = (double)h / sh;
+            var found = LineFinder.Find(px, sw, sh)
+                .Select(l => l with { Points = l.Points.Select(p => (p.X * fx, p.Y * fy)).ToArray() })
+                .ToArray();
+            if (scale >= 0.999) return found;
+
+            // im Original nachschärfen (Kanten, Falz, gezeichnete Linien) — auf der verkleinerten Fassung liegt ein Punkt
+            // sonst bis zu einigen Pixeln daneben
+            float[] gray;
+            using (var g = ImageOps.CloneOf(doc))
+            {
+                g.Grayscale(ImageMagick.PixelIntensityMethod.Rec709Luma);
+                using var pixels = g.GetPixelsUnsafe();
+                var values = pixels.ToShortArray(0, 0, (uint)w, (uint)h, "R")
+                             ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+                gray = new float[values.Length];
+                for (var i = 0; i < values.Length; i++) gray[i] = values[i] / 65535f;
+            }
+            return LineFinder.Refine(found, gray, w, h, scale);
+        }
+        finally
+        {
+            PixelPool.Return(px);
+        }
+    }
+
+    /// <summary>Alle abgewählten (grauen) Linien entfernen.</summary>
     [RelayCommand]
-    private void NewDewarpLine() => DewarpNewLineToken = new object();
+    private void RemoveDisabledDewarpLines()
+    {
+        if (DewarpLines is { } lines) DewarpLines = lines.Where(l => l.Enabled).ToArray();
+    }
+
+    /// <summary>Alle Vorschläge weg (angewählte wie abgewählte); von Hand gesetzte Linien bleiben.</summary>
+    [RelayCommand]
+    private void DiscardDewarpSuggestions()
+    {
+        if (DewarpLines is { } lines) DewarpLines = lines.Where(l => !l.Suggested).ToArray();
+    }
 
     /// <summary>Rezept mit den Linien der Ansicht (Hilfe für Anzeige und Übernehmen).</summary>
     private GeometryRecipe? DewarpedRecipe(IReadOnlyList<WarpLineShape> lines)
@@ -85,7 +207,7 @@ public partial class MainViewModel
         if (_history is not { } h) return null;
         var (pw, ph) = PixelSize();
         return h.Recipe.DewarpedInView(
-            lines.Select(l => (l.Kind, (IReadOnlyList<(double X, double Y)>)l.Points.Select(p => (p.X, p.Y)).ToArray())),
+            lines.Where(l => l.Counts).Select(l => (l.Kind, (IReadOnlyList<(double X, double Y)>)l.Points.Select(p => (p.X, p.Y)).ToArray())),
             pw, ph, Dewarp.Focal35Of(h.Current));
     }
 
@@ -100,7 +222,7 @@ public partial class MainViewModel
             DewarpInfo = "";
             return;
         }
-        var count = lines.Count(l => l.Points.Count >= 2);
+        var count = lines.Count(l => l.Counts);
         if (count == 0)
         {
             DewarpInfo = Tr.T("Punkte auf eine Linie setzen, die in Wirklichkeit gerade ist – Textzeile, Blattkante, Falz.");
@@ -138,7 +260,7 @@ public partial class MainViewModel
     {
         if (_history is not { } h || DewarpedRecipe(lines) is not { } next) return;
         var (pw, ph) = PixelSize();
-        var count = lines.Count(l => l.Points.Count >= 2);
+        var count = lines.Count(l => l.Counts);
         string label, detail;
         if (next.HasDewarp)
         {

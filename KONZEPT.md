@@ -185,7 +185,7 @@ CUPS (`lp`), unter Windows über den Windows-Druckdienst.
   Vorschau = Export. Korngröße bezogen auf die Ausgabegröße, damit es beim
   Verkleinern gleich aussieht.
 
-### L. Gewölbtes Blatt gerade ziehen (Wunsch vom 12.10.2026, Schritt 1 – von Hand – in 0.5.54 beta, siehe Fehlergedächtnis #46)
+### L. Gewölbtes Blatt gerade ziehen (Wunsch vom 12.10.2026, Schritt 1 – von Hand – in 0.5.54 beta, Schritt 2 – Vorschläge ohne Modell – in 0.5.55 beta, genauer und mit senkrechten Linien in 0.5.56 beta, siehe Fehlergedächtnis #46–#48)
 
 Fotografiertes Blatt oder Buch wölbt sich, gerade Linien werden zu Bögen. Recherche
 (Stand 10/2026): Die KI-Verfahren (UVDoc 2023, DocTr++, DocRes 2024, DocMatcher,
@@ -199,19 +199,24 @@ Daher: eigenes Werkzeug, das beides verbindet.
 
 **Bedienung** — eigenes Symbol oben in der Vorschau (neben „Entzerren“), Lupe beim
 Ziehen wie dort.
-- Klick setzt einen Punkt auf die **aktive Linie**; **Enter** oder Doppelklick beendet
-  sie, der nächste Klick beginnt eine neue (dazu Knopf „Neue Linie“ in der Leiste
-  unten). Klick auf eine fertige Linie macht sie wieder aktiv, Klick auf ihren Verlauf
-  fügt dort einen Punkt ein. Pfeiltasten 1 px (Umschalt: 10 px), Entf löscht den
-  Punkt, Umschalt+Entf die Linie.
+- **Ansehen (Vorgabe):** Ziehen verschiebt das Bild (auch eingepasst, bis jede Stelle zur
+  Mitte kommt — Ränder unter der Leiste bleiben erreichbar), Ziehen an einem **Punkt**
+  verschiebt den Punkt. Klick auf eine Linie markiert sie, das **×** daneben entfernt sie.
+- **„Linien zeichnen“** (Schalter, auch Taste N): jeder Klick setzt einen Punkt auf die
+  **aktive Linie**; **Enter** oder Doppelklick beginnt die nächste, **Esc** beendet das
+  Zeichnen. Klick auf den Verlauf einer Linie fügt dort einen Punkt ein. Pfeiltasten 1 px
+  (Umschalt: 10 px), Entf löscht den Punkt, Umschalt+Entf (bzw. Entf auf markierter Linie)
+  die Linie.
 - Jede Linie hat eine **Richtung**: *waagerecht* (Textzeile, Ober-/Unterkante),
   *senkrecht* (Seitenkante, Spalte) oder *Falz* (Doppelseite). Wird aus dem Verlauf
   geraten, per Rechtsklick umschaltbar; je Richtung eine Farbe. Blattränder sind
   gewöhnliche Linien – geht also auch ohne sichtbaren Rand.
 - **„Linien vorschlagen“**: Vorschläge gestrichelt, zunächst angewählt; Klick wählt
-  einen ab (grau, bleibt sichtbar, wieder anwählbar), „Alle verwerfen“. Abgewählte
+  einen ab (grau, bleibt sichtbar, wieder anwählbar), „Vorschläge verwerfen“, „Abgewählte
+  entfernen“; was nicht zum Blattmodell passt, ist gleich abgewählt. Abgewählte
   zählen nicht. Ein veränderter Vorschlag wird zur normalen Linie.
-- Leiste unten: Zurücksetzen · Neue Linie · Linien vorschlagen · „Gerade ziehen“.
+- Leiste unten: Linien vorschlagen · Vorschläge verwerfen · Abgewählte entfernen ·
+  Linien zeichnen · Zurücksetzen · „Gerade ziehen“.
 
 **Rechnung**
 1. **Blattmodell im Raum:** Kamera (Brennweite aus EXIF, sonst ≈ 28 mm KB), Lage des

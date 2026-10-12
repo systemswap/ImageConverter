@@ -227,6 +227,31 @@ public class DewarpTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Outliers_OnlyWrongSuggestionsAreDeselected()
+    {
+        var sheet = new Sheet();
+        // eine „Kante“, die in der Mitte 30 px nach oben ausbeult — so erkennt man manchmal einen unregelmäßigen Rand
+        var bumped = new WarpLine(WarpLineKind.Horizontal, Enumerable.Range(0, 9).Select(i =>
+        {
+            var (x, y) = sheet.Image(0.03 + 0.94 * i / 8.0, 0.95 * sheet.Aspect);
+            return (x, y - 30.0 / H * Math.Sin(Math.PI * i / 8.0));
+        }).ToArray());
+        WarpLine[] lines =
+        [
+            Horizontal(sheet, 0.1, 9), Horizontal(sheet, 0.3, 9), Horizontal(sheet, 0.5, 9), Horizontal(sheet, 0.7, 9),
+            Vertical(sheet, 0.05, 6), Vertical(sheet, 0.95, 6), bumped,
+        ];
+        var spec = new DewarpSpec(lines, sheet.Focal35);
+
+        var keep = Dewarp.RejectOutliers(spec, lines.Select(_ => true).ToArray(), W, H);
+        Assert.Equal([true, true, true, true, true, true, false], keep);
+
+        // von Hand gesetzt (kein Vorschlag): bleibt, auch wenn sie nicht passt
+        var manual = Dewarp.RejectOutliers(spec, lines.Select((_, i) => i < 6).ToArray(), W, H);
+        Assert.All(manual, Assert.True);
+    }
+
+    [Fact]
     public void Result_IsTheInverseOfSource()
     {
         var sheet = new Sheet();
