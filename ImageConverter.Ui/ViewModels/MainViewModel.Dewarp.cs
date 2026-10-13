@@ -265,7 +265,8 @@ public partial class MainViewModel
     [NotifyCanExecuteChangedFor(nameof(StraightenWithAiCommand))]
     public partial bool IsStraighteningWithAi { get; set; }
 
-    private bool CanStraightenWithAi => HasImage && !IsStraighteningWithAi;
+    // nicht an HasImage koppeln: der Befehl erführe nichts davon und bliebe gesperrt; ohne Bild ist das Symbol ohnehin unsichtbar
+    private bool CanStraightenWithAi => !IsStraighteningWithAi;
 
     /// <summary>
     /// „KI begradigen“: SyntheticDoc rechnet aus dem Bild (nur gedreht/gespiegelt, verkleinert auf 1600 px) das Gitter, damit
