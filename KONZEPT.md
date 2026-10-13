@@ -203,22 +203,24 @@ Daher: eigenes Werkzeug, das beides verbindet.
 Ziehen wie dort.
 - **Ansehen (Vorgabe):** Ziehen verschiebt das Bild (auch eingepasst, bis jede Stelle zur
   Mitte kommt — Ränder unter der Leiste bleiben erreichbar), Ziehen an einem **Punkt**
-  verschiebt den Punkt. Klick auf eine Linie markiert sie, das **×** daneben entfernt sie.
-- **„Linien zeichnen“** (Schalter, auch Taste N): jeder Klick setzt einen Punkt auf die
-  **aktive Linie**; **Enter** oder Doppelklick beginnt die nächste, **Esc** beendet das
-  Zeichnen. Klick auf den Verlauf einer Linie fügt dort einen Punkt ein. Pfeiltasten 1 px
-  (Umschalt: 10 px), Entf löscht den Punkt, Umschalt+Entf (bzw. Entf auf markierter Linie)
-  die Linie.
+  verschiebt den Punkt. **Klick auf eine Linie** (oder einen ihrer Punkte) schaltet das
+  Zeichnen ein, die Linie wächst am näheren Ende weiter; das **×** daneben entfernt sie.
+- **„Zeichnen“** (Schalter, auch Taste N): beginnt immer eine neue Linie; jeder Klick setzt
+  einen Punkt auf die **aktive Linie**; **Enter** oder Doppelklick beginnt die nächste,
+  **Esc** beendet das Zeichnen und hebt die Markierung auf. Esc verlässt das Werkzeug nie
+  (0.5.68) — verlassen nur über das Symbol oben, sonst wären die Linien weg. Klick auf den
+  Verlauf einer Linie fügt dort einen Punkt ein. Pfeiltasten 1 px (Umschalt: 10 px), Entf
+  löscht den Punkt, Umschalt+Entf (bzw. Entf auf markierter Linie) die Linie.
 - Jede Linie hat eine **Richtung**: *waagerecht* (Textzeile, Ober-/Unterkante),
   *senkrecht* (Seitenkante, Spalte) oder *Falz* (Doppelseite). Wird aus dem Verlauf
   geraten, per Rechtsklick umschaltbar; je Richtung eine Farbe. Blattränder sind
   gewöhnliche Linien – geht also auch ohne sichtbaren Rand.
-- **„Linien vorschlagen“**: Vorschläge gestrichelt, zunächst angewählt; Klick wählt
-  einen ab (grau, bleibt sichtbar, wieder anwählbar), „Vorschläge verwerfen“, „Abgewählte
-  entfernen“; was nicht zum Blattmodell passt, ist gleich abgewählt. Abgewählte
-  zählen nicht. Ein veränderter Vorschlag wird zur normalen Linie.
-- Leiste unten: Linien vorschlagen · Vorschläge verwerfen · Abgewählte entfernen ·
-  Linien zeichnen · Zurücksetzen · „Gerade ziehen“.
+- **„Vorschlagen“**: Vorschläge gestrichelt; jede Änderung (Punkt ziehen, weiterzeichnen,
+  Richtung, Pfeiltasten) macht einen zur eigenen Linie. Erneutes Vorschlagen ersetzt nur
+  unberührte Vorschläge, eigene Linien bleiben, und was auf einer eigenen Linie liegt,
+  wird nicht noch einmal vorgeschlagen. Was nicht zum Blattmodell passt, wird gleich
+  weggelassen (kein Abwählen mehr, seit 0.5.68).
+- Leiste unten: Vorschlagen · Vorschläge weg · Zeichnen · Zurücksetzen · „Gerade ziehen“.
 
 **Rechnung**
 1. **Blattmodell im Raum:** Kamera (Brennweite aus EXIF, sonst ≈ 28 mm KB), Lage des

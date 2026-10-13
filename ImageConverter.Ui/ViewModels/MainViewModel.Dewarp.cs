@@ -36,9 +36,6 @@ public partial class MainViewModel
     /// <summary>Es liegen Vorschläge da (für „Vorschläge verwerfen“).</summary>
     public bool HasDewarpSuggestions => DewarpLines?.Any(l => l.Suggested) == true;
 
-    /// <summary>Es gibt abgewählte (graue) Linien — für „Abgewählte entfernen“.</summary>
-    public bool HasDisabledDewarpLines => DewarpLines?.Any(l => !l.Enabled) == true;
-
     partial void OnDewarpToolChanged(bool value)
     {
         if (value)
@@ -74,7 +71,6 @@ public partial class MainViewModel
     {
         if (value is null && DewarpTool) DewarpTool = false;   // Esc in der Vorschau
         OnPropertyChanged(nameof(HasDewarpSuggestions));
-        OnPropertyChanged(nameof(HasDisabledDewarpLines));
         CropToSelectionCommand.NotifyCanExecuteChanged();
         _ = UpdateDewarpInfoAsync();
     }
@@ -94,8 +90,10 @@ public partial class MainViewModel
     private bool CanSuggestLines => !IsSuggestingLines;
 
     /// <summary>
-    /// Linien vorschlagen (Textzeilen, Blattrand, Falz — <see cref="LineFinder"/>), gestrichelt und angewählt; frühere
-    /// Vorschläge werden ersetzt, von Hand gesetzte Linien bleiben.
+    /// Linien vorschlagen (Textzeilen, Blattrand, Falz — <see cref="LineFinder"/>), gestrichelt; frühere, unberührte
+    /// Vorschläge werden ersetzt. Eigene Linien bleiben (auch übernommene, also geänderte Vorschläge), und was dicht an
+    /// einer von ihnen liegt, wird nicht noch einmal vorgeschlagen. Vorschläge, die nicht zu den übrigen passen, kommen gar
+    /// nicht erst dazu.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanSuggestLines))]
     private async Task SuggestDewarpLines()
@@ -109,37 +107,47 @@ public partial class MainViewModel
             if (await Task.Run(() => ShownDocument) is not { } doc) return;
             var found = await Task.Run(() => FindLines(doc));
             if (!DewarpTool || DewarpLines is not { } current) return;
-            var suggested = found.Select(f => new WarpLineShape(f.Kind, f.Points.Select(p => new Point(p.X, p.Y)).ToArray(),
-                KindChosen: true, Suggested: true)).ToList();
-            var lines = current.Where(l => !l.Suggested).Concat(suggested).ToList();
+            var own = current.Where(l => !l.Suggested).ToList();
+            var (pw, ph) = PixelSize();
+            // „dicht an einer eigenen Linie“: 0,6 % der langen Bildseite, mindestens 6 px
+            var tolerance = Math.Max(6, 0.006 * Math.Max(pw, ph));
+            var suggested = found
+                .Select(f => (f.Source, Line: new WarpLineShape(f.Kind, f.Points.Select(p => new Point(p.X, p.Y)).ToArray(),
+                    KindChosen: true, Suggested: true)))
+                .Where(s => !own.Any(o => o.Overlaps(s.Line, tolerance)))   // auch mit anderer Richtung: dieselbe Stelle, dieselbe Linie
+                .ToList();
+            var twins = found.Count - suggested.Count;
 
-            // Prüfen: Vorschläge, die nicht zu den übrigen Linien passen (falsch erkannte Kante, verrutschte Zeile), abwählen —
-            // sie bleiben grau sichtbar und lassen sich wieder anwählen
+            // Prüfen: Vorschläge, die nicht zu den übrigen Linien passen (falsch erkannte Kante, verrutschte Zeile), weglassen
             ActivityText = Tr.T("Linien werden geprüft …");
+            var lines = own.Concat(suggested.Select(s => s.Line)).ToList();
             var counted = lines.Where(l => l.Counts).ToList();
-            var off = 0;
+            var dropped = new HashSet<WarpLineShape>(ReferenceEqualityComparer.Instance);
             if (DewarpedRecipe(counted) is { Dewarp: { } spec })
             {
-                var (pw, ph) = PixelSize();
                 var keep = await Task.Run(() => Dewarp.RejectOutliers(spec, counted.Select(l => l.Suggested).ToArray(), pw, ph));
                 if (!DewarpTool) return;
                 for (var k = 0; k < counted.Count && k < keep.Length; k++)
-                {
-                    if (keep[k]) continue;
-                    lines[lines.IndexOf(counted[k])] = counted[k] with { Enabled = false };
-                    off++;
-                }
+                    if (!keep[k] && counted[k].Suggested) dropped.Add(counted[k]);
             }
-            DewarpLines = lines;
+            if (DewarpLines is not { } now) return;
+            // was in der Zwischenzeit von Hand dazukam, bleibt; nur die alten, unberührten Vorschläge gehen
+            DewarpLines = now.Where(l => !l.Suggested)
+                .Concat(suggested.Select(s => s.Line).Where(l => !dropped.Contains(l)))
+                .ToArray();
 
-            var count = (FoundLineSource s) => found.Count(f => f.Source == s);
+            var kept = suggested.Where(s => !dropped.Contains(s.Line)).ToList();
+            var count = (FoundLineSource s) => kept.Count(f => f.Source == s);
             StatusMessage = found.Count == 0
                 ? Tr.T("Keine Linien gefunden – bitte von Hand setzen.")
-                : Tr.T("Vorgeschlagen: {0} Textzeilen, {1} Blattkanten, {2} gezeichnete Linien, {3} Flächenkanten, {4} Textränder, {5} Falz – ein Klick auf eine gestrichelte Linie wählt sie ab oder an.",
+                : Tr.T("Vorgeschlagen: {0} Textzeilen, {1} Blattkanten, {2} gezeichnete Linien, {3} Flächenkanten, {4} Textränder, {5} Falz – Klick auf eine Linie zeichnet an ihr weiter, das × entfernt sie.",
                       count(FoundLineSource.Text), count(FoundLineSource.Edge), count(FoundLineSource.Ruled), count(FoundLineSource.Box), count(FoundLineSource.Margin), count(FoundLineSource.Fold))
-                  + (off == 0 ? "" : " " + (off == 1
-                      ? Tr.T("1 Vorschlag passt nicht zu den übrigen und ist abgewählt (grau).")
-                      : Tr.T("{0} Vorschläge passen nicht zu den übrigen und sind abgewählt (grau).", off)));
+                  + (dropped.Count == 0 ? "" : " " + (dropped.Count == 1
+                      ? Tr.T("1 Vorschlag passte nicht zu den übrigen und wurde weggelassen.")
+                      : Tr.T("{0} Vorschläge passten nicht zu den übrigen und wurden weggelassen.", dropped.Count)))
+                  + (twins == 0 ? "" : " " + (twins == 1
+                      ? Tr.T("1 Vorschlag lag auf einer eigenen Linie und wurde weggelassen.")
+                      : Tr.T("{0} Vorschläge lagen auf eigenen Linien und wurden weggelassen.", twins)));
         }
         catch (Exception ex)
         {
@@ -189,14 +197,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Alle abgewählten (grauen) Linien entfernen.</summary>
-    [RelayCommand]
-    private void RemoveDisabledDewarpLines()
-    {
-        if (DewarpLines is { } lines) DewarpLines = lines.Where(l => l.Enabled).ToArray();
-    }
-
-    /// <summary>Alle Vorschläge weg (angewählte wie abgewählte); von Hand gesetzte Linien bleiben.</summary>
+    /// <summary>Alle unberührten Vorschläge weg; eigene und geänderte Linien bleiben.</summary>
     [RelayCommand]
     private void DiscardDewarpSuggestions()
     {
@@ -231,7 +232,9 @@ public partial class MainViewModel
             return;
         }
 
-        using var cts = _dewarpInfoCts = new CancellationTokenSource();
+        // Nicht mit „using“: der nächste Aufruf bricht _dewarpInfoCts ab — war es schon entsorgt, warf Cancel(), und die
+        // Zeile blieb ab der zweiten Änderung auf dem ersten Stand stehen. Ohne Zeitgeber braucht es kein Dispose.
+        var cts = _dewarpInfoCts = new CancellationTokenSource();
         var (pw, ph) = PixelSize();
         try
         {
@@ -243,6 +246,10 @@ public partial class MainViewModel
         catch (OperationCanceledException)
         {
             // neuere Linien kommen gleich
+        }
+        finally
+        {
+            if (ReferenceEquals(_dewarpInfoCts, cts)) _dewarpInfoCts = null;
         }
     }
 

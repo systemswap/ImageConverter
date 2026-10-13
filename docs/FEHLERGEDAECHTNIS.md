@@ -1828,3 +1828,27 @@ Test oder Nachweis.
   kommt der Tooltip erst wieder beim nächsten Element (Avalonia startet die Wartezeit nur beim Hineinfahren).
 - **Geprüft** am Fenster (Bildschirmfotos): Darüberfahren öffnet, gedrückt ziehen über zwei Regler öffnet keinen,
   danach öffnet der nächste Regler normal.
+
+## 58. Gewölbtes Blatt: Linie blieb nach Esc aktiv, Esc warf aus dem Werkzeug, Abwählen statt Weiterzeichnen; Infozeile blieb stehen (0.5.68 beta)
+
+- **Fehlerbilder (Benutzer):** Nach Esc blieb die zuletzt gezeichnete Linie markiert, und „Zeichnen“ machte an ihr weiter
+  (Ursache: Esc beendete nur das Zeichnen, `_warpSel` blieb, und das Einschalten machte eine markierte Linie zur aktiven —
+  das Verlängern aus #50). Mehrmals Esc verließ das Werkzeug (`WarpLines = null`) — alle Linien weg. Ein Klick auf einen
+  Vorschlag wählte ihn ab (grau), statt etwas Nützliches zu tun; „Vorschlagen“ verwarf angepasste Vorschläge, die nur per
+  Rechtsklick oder Pfeiltasten geändert waren.
+- **Neu:** Esc beendet das Zeichnen und hebt die Markierung auf, verlässt das Werkzeug nie (nur das Symbol oben). „Zeichnen“
+  (Knopf, N) beginnt immer eine neue Linie. Klick auf eine Linie oder einen Punkt ohne Ziehen (`BeginDrawingOn`) schaltet
+  das Zeichnen ein und lässt sie am näheren Ende weiterwachsen; Ziehen erst ab 3 px (`WarpDragThreshold`). Kein
+  `Enabled` mehr in `WarpLineShape` — kein Grau, Knopf „Graue weg“ entfallen. `ChangeWarpLine` macht jeden geänderten
+  Vorschlag zur eigenen Linie (Punkte oder Richtung). „Vorschlagen“: unpassende Vorschläge (`Dewarp.RejectOutliers`)
+  werden weggelassen statt abgewählt; Vorschläge, die auf einer eigenen Linie liegen (`WarpLineShape.Overlaps`, 60 % der
+  Punkte innerhalb max(6 px, 0,6 % der langen Seite), unabhängig von der Richtung), kommen nicht noch einmal.
+- **Nebenbei gefunden:** Die Infozeile („2 Linien · Ergebnis …“) blieb ab der zweiten Änderung stehen:
+  `using var cts = _dewarpInfoCts = new …` entsorgte das Signal, der nächste Aufruf rief `Cancel()` darauf auf → Ausnahme
+  im Hintergrund (fire-and-forget), die Zeile wurde nie mehr neu. **Nicht tun:** ein Feld-CTS mit `using` anlegen, das
+  von außen abgebrochen wird — ohne Dispose oder nach Gebrauch auf null setzen (wie `AiViewModel._previewCts`).
+- **Meldung unten:** stand in einem waagerechten StackPanel (unendlich Platz, kein Umbruch) und lief unter „Ziel“ und die
+  Knöpfe — jetzt Grid mit Umbruch, höchstens drei Zeilen, ganzer Text als Tooltip.
+- **Geprüft** am Fenster: zwei Linien, Esc, neue Linie getrennt; 4× Esc, Werkzeug bleibt; Klick auf Linie/Vorschlag
+  zeichnet weiter, Vorschlag wird durchgezogen; Rechtsklick-geänderter Vorschlag bleibt, „2 Vorschläge lagen auf eigenen
+  Linien“. `WarpLineShapeTests`.

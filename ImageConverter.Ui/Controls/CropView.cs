@@ -490,9 +490,15 @@ public sealed class CropView : Control
         }
         else if (change.Property == DrawLinesProperty)
         {
-            // Zeichnen an: eine markierte Linie wird die aktive (weitere Punkte verlängern sie); aus: aktive Linie fertig
-            if (!DrawLines) EndActiveLine();
-            else if (WarpLines is { } wl && _warpSel.Line >= 0 && _warpSel.Line < wl.Count) _activeLine = _warpSel.Line;
+            // Zeichnen an (Knopf, N): immer eine neue Linie — weiterzeichnen an einer Linie geht per Klick auf sie
+            // (BeginDrawingOn). Aus (Esc, Knopf): aktive Linie fertig und keine mehr markiert, sonst ginge es beim
+            // nächsten Einschalten an ihr weiter.
+            if (!DrawLines)
+            {
+                EndActiveLine();
+                _warpSel = (-1, -1);
+            }
+            else _activeLine = -1;
             _drawHover = null;
             InvalidateVisual();
         }
@@ -1094,14 +1100,12 @@ public sealed class CropView : Control
 
             case DragMode.WarpPoint when WarpLines is { } wl && _warpSel.Line >= 0 && _warpSel.Line < wl.Count:
             {
-                if (_pendingToggle >= 0)
+                if (!_warpMoved)
                 {
-                    // Vorschlag: erst ab ein paar Pixeln Bewegung ziehen — und nur an einem Punkt
-                    if (_warpSel.Point < 0 || Point.Distance(p, _pressScreen) < 4) break;
-                    ChangeWarpLine(_pendingToggle, l => l.Adopted());
-                    _activeLine = _pendingToggle;
-                    _pendingToggle = -1;
-                    wl = WarpLines!;
+                    // erst ab ein paar Pixeln Bewegung ziehen: ein Klick auf einen Punkt verschiebt ihn nicht (und macht
+                    // einen Vorschlag nicht zur eigenen Linie), er zeichnet an der Linie weiter
+                    if (_warpSel.Point < 0 || Point.Distance(p, _pressScreen) < WarpDragThreshold) break;
+                    _warpMoved = true;
                 }
                 var line = wl[_warpSel.Line];
                 if (_warpSel.Point < 0 || _warpSel.Point >= line.Points.Count) break;
@@ -1163,11 +1167,8 @@ public sealed class CropView : Control
 
         if (_mode == DragMode.Pan && LinesMode) ReleaseWarpClick(e.GetPosition(this));
 
-        if (_mode == DragMode.WarpPoint && _pendingToggle >= 0)
-        {
-            ChangeWarpLine(_pendingToggle, l => l with { Enabled = !l.Enabled });   // Klick: Vorschlag an/aus
-            _pendingToggle = -1;
-        }
+        // Klick auf einen Punkt ohne Ziehen (nicht beim Zeichnen): an dieser Linie weiterzeichnen
+        if (_mode == DragMode.WarpPoint && !_warpMoved && !DrawLines && _warpSel.Line >= 0) BeginDrawingOn(_warpSel.Line);
 
         var wasEdit = _mode is not (DragMode.Pan or DragMode.Split);
         _mode = DragMode.None;
@@ -1629,9 +1630,6 @@ public sealed class CropView : Control
     private static readonly IBrush[] WarpFills = WarpColors.Select(c => (IBrush)new ImmutableSolidColorBrush(c)).ToArray();
     private static readonly IPen[] WarpSuggestedPens = WarpColors
         .Select(c => (IPen)new ImmutablePen(new ImmutableSolidColorBrush(c), 2, new ImmutableDashStyle([4, 3], 0))).ToArray();
-    private static readonly IPen WarpOffPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0xB0, 0xB4, 0xB4, 0xB4)), 1.5,
-        new ImmutableDashStyle([2, 4], 0));
-    private static readonly IBrush WarpOffFill = new ImmutableSolidColorBrush(Color.FromArgb(0xB0, 0xB4, 0xB4, 0xB4));
 
     private (int Line, int Point)? HitWarpPoint(Point screen)
     {
@@ -1673,7 +1671,12 @@ public sealed class CropView : Control
     {
         if (WarpLines is not { } lines || index < 0 || index >= lines.Count) return;
         var next = lines.ToArray();
-        next[index] = change(next[index]);
+        var old = next[index];
+        var changed = change(old);
+        // jede Änderung an einem Vorschlag (Punkt, Richtung) macht ihn zur eigenen Linie — „Vorschlagen“ lässt ihn dann stehen
+        if (old.Suggested && changed.Suggested && (changed.Kind != old.Kind || !changed.Points.SequenceEqual(old.Points)))
+            changed = changed.Adopted();
+        next[index] = changed;
         WarpLines = next;
     }
 
@@ -1746,9 +1749,10 @@ public sealed class CropView : Control
 
     /// <summary>
     /// Linker Klick im Werkzeug. Ansehen (Vorgabe): Ziehen an einem Punkt verschiebt den Punkt, sonst verschiebt Ziehen das
-    /// Bild; ein Klick ohne Ziehen auf eine Linie wählt einen Vorschlag ab oder an bzw. markiert die Linie (× entfernt sie).
-    /// Zeichnen (<see cref="DrawLines"/>): jeder Klick setzt einen Punkt auf die aktive Linie (oder beginnt eine), ein Klick
-    /// auf eine Linie fügt dort einen Punkt ein, Doppelklick oder Enter beendet die Linie.
+    /// Bild; ein Klick ohne Ziehen auf eine Linie (oder einen ihrer Punkte) schaltet das Zeichnen ein, und die Linie wächst
+    /// am näheren Ende weiter (das × an ihr entfernt sie). Zeichnen (<see cref="DrawLines"/>): jeder Klick setzt einen Punkt
+    /// auf die aktive Linie (oder beginnt eine), ein Klick auf eine Linie fügt dort einen Punkt ein und macht sie zur aktiven,
+    /// Doppelklick oder Enter beendet die Linie.
     /// </summary>
     private void PressWarp(PointerPressedEventArgs e, Point p)
     {
@@ -1766,8 +1770,7 @@ public sealed class CropView : Control
 
         if (HitWarpPoint(p) is { } hp)
         {
-            if (WarpLines![hp.Line].Suggested) PressSuggestion(e, p, hp.Line, hp.Point);
-            else StartWarpDrag(e, hp.Line, hp.Point);
+            StartWarpDrag(e, hp.Line, hp.Point);
             return;
         }
 
@@ -1781,12 +1784,7 @@ public sealed class CropView : Control
 
         if (HitWarpSegment(p) is { } hs)
         {
-            if (WarpLines![hs.Line].Suggested)
-            {
-                _lineClick = hs.Line;   // Vorschlag: an/aus beim Loslassen
-                StartWarpPan(e, p);
-                return;
-            }
+            // Punkt einfügen (ein Vorschlag wird dabei zur eigenen Linie), die Linie wird die aktive
             var line = WarpLines![hs.Line];
             var pts = line.Points.ToList();
             pts.Insert(hs.Segment + 1, ClampToImage(ToImage(p)));
@@ -1834,7 +1832,7 @@ public sealed class CropView : Control
         e.Pointer.Capture(this);
     }
 
-    /// <summary>Losgelassen ohne zu verschieben: Klick auf eine Linie (Vorschlag an/aus, sonst markieren) oder daneben (Markierung weg).</summary>
+    /// <summary>Losgelassen ohne zu verschieben: Klick auf eine Linie (dort weiterzeichnen) oder daneben (Markierung weg).</summary>
     private void ReleaseWarpClick(Point p)
     {
         var line = _lineClick;
@@ -1846,27 +1844,26 @@ public sealed class CropView : Control
             InvalidateVisual();
             return;
         }
-        if (lines[line].Suggested) ChangeWarpLine(line, l => l with { Enabled = !l.Enabled });
-        _warpSel = (line, -1);   // markiert: das × bleibt an ihr
-        InvalidateVisual();
+        BeginDrawingOn(line);
     }
 
-    // Vorschlag angeklickt: beim Loslassen ohne Bewegung an/aus, beim Ziehen eines Punkts wird er zur normalen Linie
-    private int _pendingToggle = -1;
-
-    private void PressSuggestion(PointerPressedEventArgs e, Point p, int line, int point)
+    /// <summary>Zeichnen einschalten und an dieser Linie weitermachen (jeder Klick kommt an ihr näheres Ende).</summary>
+    private void BeginDrawingOn(int line)
     {
-        _mode = DragMode.WarpPoint;
-        _warpSel = (line, point);
-        _pendingToggle = line;
-        _pressScreen = p;
-        e.Pointer.Capture(this);
+        _warpSel = (line, -1);   // markiert: das × bleibt an ihr
+        DrawLines = true;
+        _activeLine = line;
         InvalidateVisual();
     }
+
+    // Erst ab so vielen Bildschirmpixeln Bewegung wird ein Punkt gezogen — darunter ist es ein Klick
+    private const double WarpDragThreshold = 3;
+    private bool _warpMoved;
 
     private void StartWarpDrag(PointerPressedEventArgs e, int line, int point)
     {
         _mode = DragMode.WarpPoint;
+        _warpMoved = false;
         _warpSel = (line, point);
         if (DrawLines) _activeLine = line;   // beim Zeichnen wächst die angefasste Linie weiter
         e.Pointer.Capture(this);
@@ -1898,10 +1895,11 @@ public sealed class CropView : Control
                 e.Handled = true;
                 return;
             case Key.Escape:
-                if (DrawLines) DrawLines = false;          // Zeichnen beenden (die aktive Linie ist fertig)
+                // Zeichnen beenden (Linie fertig, Markierung weg), sonst nur die Markierung weg. Das Werkzeug verlässt Esc
+                // nie — mehrmals gedrückt wären sonst alle Linien weg; verlassen nur über das Symbol oben.
+                if (DrawLines) DrawLines = false;
                 else if (_activeLine >= 0) EndActiveLine();
                 else if (_warpSel.Line >= 0) { _warpSel = (-1, -1); InvalidateVisual(); }
-                else WarpLines = null;                     // Werkzeug aus — nichts übernommen
                 e.Handled = true;
                 return;
             case Key.N:
@@ -1976,14 +1974,14 @@ public sealed class CropView : Control
                     c.EndFigure(false);
                 }
                 context.DrawGeometry(null, QuadShadowPen, g);
-                context.DrawGeometry(null, !line.Enabled ? WarpOffPen : line.Suggested ? WarpSuggestedPens[kind] : active ? WarpActivePens[kind] : WarpPens[kind], g);
+                context.DrawGeometry(null, line.Suggested ? WarpSuggestedPens[kind] : active ? WarpActivePens[kind] : WarpPens[kind], g);
             }
             for (var j = 0; j < pts.Length; j++)
             {
                 var selected = _warpSel == (i, j);
-                // Vorschläge: kleine Punkte; abgewählt grau
+                // Vorschläge: kleine Punkte
                 var r = selected ? 6 : line.Suggested ? 3 : 4.5;
-                var fill = !line.Enabled ? WarpOffFill : active ? HandleFill : WarpFills[kind];
+                var fill = active ? HandleFill : WarpFills[kind];
                 context.DrawEllipse(fill, HandlePen, pts[j], r, r);
                 if (selected) context.DrawEllipse(null, WarpPens[kind], pts[j], r + 2, r + 2);
             }
