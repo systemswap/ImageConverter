@@ -1885,3 +1885,11 @@ Test oder Nachweis.
 - **Nicht tun:** das Setzen an `RequestPreview` hängen — die läuft auch beim Laden, Zoomen usw.; dann käme der Haken nach
   dem Herausnehmen ohne Zutun zurück. Nur an echte Änderungen von Einstellungen.
 - **Test:** `HighBitDepthTests`. Standardformat seit 0.5.70 PNG (vorher WebP).
+
+- **Meilenstein 0.5.72 (13.10.2026):** Stand 0.5.71 beta — Linienfindung (#51), „KI begradigen“ mit SyntheticDoc ohne
+  Python, Schatten entfernen, Update-Prüfung (#52–#55), Start mit ReadyToRun (#54), Dunst nur noch neu, wenn nötig, und
+  Größenschätzung mit Zwischenspeicher, Korn bis 0,1 px und „Härte“ (#56), Tooltips nur ohne gedrückte Maustaste (#57),
+  Gewölbtes Blatt: Esc, Weiterzeichnen, kein Abwählen, Justieren nach „Gerade ziehen“ (#58, #59), Standardformat PNG,
+  16 Bit automatisch bei kräftiger Bearbeitung (#60) — vom Benutzer als Meilenstein bestimmt. Tag `v0.5.72`; schlanke
+  Sicherung `../ImageConverter-0.5.72-Sicherung.zip` (Kopie in `published/`), mit `.git` samt Hooks, der lokalen Anweisungsdatei und
+  `KI-Modelle/syntheticdoc/` (Checkpoint, ARCSim), ohne ONNX-Dateien, `TestBilder/`, `bin/`, `obj/`, `published/`.
