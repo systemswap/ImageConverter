@@ -1767,3 +1767,15 @@ Test oder Nachweis.
   5,6 s je Bild in voller Auflösung → Nachtrainieren mit 20 000 Beispielen × 5 Epochen ≈ 6,5 Tage; auf einer
   NVIDIA-GPU geschätzt Stunden. Zum Trainieren braucht es nur flache Originale; die Verformung wird simuliert (ARCSim,
   nur nicht-kommerziell — für die private App in Ordnung), die Rückabbildung fällt dabei ab. Echte Fotos taugen nur zum Prüfen.
+
+## 54. Start dauerte 3 s und mehr — ReadyToRun; SyntheticDoc fehlte im KI-Tab (0.5.63 beta)
+
+- **Gemessen** (13.10.2026, zweite Instanz bis zum Fenster mit Titel): aus `published` in OneDrive 2,9–3,6 s, lokal
+  2,3 s; der **erste** Start nach jedem Bau 6–13 s (Windows prüft die neue Datei, je größer, desto länger). Im Code
+  nichts Schweres beim Start — die Zeit ging in das Entpacken der komprimierten Einzeldatei und das Übersetzen (JIT).
+- **Varianten** (lokal, warm): heute 2,3 s / 51 MB · ohne Kompression 2,1 s / 109 MB · **ReadyToRun komprimiert
+  1,2 s / 70 MB** · ReadyToRun ohne Kompression 0,9 s / 161 MB (erster Start 12,8 s). Genommen: `PublishReadyToRun`
+  in `ImageConverter.Desktop.csproj` (Release, gilt auch für `publish.sh`). Danach aus `published` 1,0–1,3 s.
+- **KI-Tab:** `AiViewModel.ModelGroups` kannte die Art `Dewarp` nicht — SyntheticDoc war nicht zu sehen und nicht zu
+  laden, obwohl die Fehlermeldung von „KI begradigen“ dorthin verweist. Neue Gruppe „BEGRADIGEN“. Bei einer neuen
+  `AiModelKind` immer auch eine Gruppe anlegen.

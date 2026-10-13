@@ -20,6 +20,10 @@
         <PublishSingleFile>true</PublishSingleFile>
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
         <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+        <!-- ReadyToRun: der Code wird beim Bauen übersetzt statt bei jedem Start (gemessen 13.10.2026: Start 2,3 s → 1,2 s,
+             Datei 51 → 70 MB; ohne Kompression wären es 0,9 s, aber 161 MB und ein viel langsamerer erster Start nach dem Bau,
+             weil Windows die größere Datei prüft) -->
+        <PublishReadyToRun>true</PublishReadyToRun>
         <InvariantGlobalization>false</InvariantGlobalization>
         <DebugType>none</DebugType>
         <!-- PublishTrimmed vorerst aus: der ViewLocator nutzt Reflection.

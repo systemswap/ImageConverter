@@ -45,6 +45,7 @@ public partial class AiViewModel : ViewModelBase
             Group("GESICHTER", "Unscharfe oder beschädigte Gesichter wiederherstellen – in der Rubrik „KI“.", AiModelKind.Face),
             Group("GESICHTSERKENNUNG", "Hilfsmodelle für die Gesichtsmodelle: finden Gesichter und ihre Bereiche. Werden mit jedem Gesichtsmodell automatisch geladen.", AiModelKind.Helper),
             Group("ENTFERNEN", "Wasserzeichen, Schrift oder Störendes übermalen und füllen lassen – in der Rubrik „Entfernen“.", AiModelKind.Inpaint),
+            Group("BEGRADIGEN", "Fotografierte, gewölbte oder zerknitterte Blätter mit einem Klick gerade ziehen – Symbol „KI begradigen“ in der Vorschau.", AiModelKind.Dewarp),
         ];
 
         SizeOptions = ["Größe behalten", "Doppelte Größe (2×)", "Vierfache Größe (4×)"];
