@@ -20,7 +20,7 @@ public class NewImagesTests
         vm.SharpenRadius = 2.5;
         vm.NoiseReduction = 0.5;
         vm.CornerRadius = 12;
-        vm.SelectedFormat = "PNG";
+        vm.SelectedFormat = "JPEG";
         vm.Quality = 50;
         vm.Dpi = 300;
         vm.TargetWidth = 1200;
@@ -41,7 +41,7 @@ public class NewImagesTests
         Assert.Equal(expected with { Calc = null! }, actual with { Calc = null! });
         Assert.Equal(0, vm.Dehaze);
         Assert.Equal(Adjustments.None.DehazePasses, vm.DehazePasses);
-        Assert.Equal("WebP", vm.SelectedFormat);
+        Assert.Equal("PNG", vm.SelectedFormat);
         Assert.Equal(82, vm.Quality);
         Assert.False(vm.ApplyToAll);   // neue Bilder: Einstellungen je Bild — eine Änderung überschreibt nie unbemerkt die anderen
         Assert.True(vm.SelectionTool);

@@ -44,12 +44,12 @@ public class SettingsUndoTests
     {
         // Strg+Z noch während des Zeitfensters: die offene Änderung zählt sofort
         var vm = Create();
-        vm.SelectedFormat = "PNG";
+        vm.SelectedFormat = "JPEG";
         Assert.True(vm.CanUndo);
 
         await vm.UndoCommand.ExecuteAsync(null);
 
-        Assert.Equal("WebP", vm.SelectedFormat);
+        Assert.Equal("PNG", vm.SelectedFormat);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class SettingsUndoTests
     public async Task UndoSteps_GoBackInOrder()
     {
         var vm = Create();
-        vm.SelectedFormat = "PNG";
+        vm.SelectedFormat = "JPEG";
         vm.CommitPendingSettings();
         vm.Dpi = 300;
         vm.CommitPendingSettings();
@@ -88,10 +88,10 @@ public class SettingsUndoTests
 
         await vm.UndoCommand.ExecuteAsync(null);
         Assert.Equal(72, vm.Dpi);
-        Assert.Equal("PNG", vm.SelectedFormat);
+        Assert.Equal("JPEG", vm.SelectedFormat);
 
         await vm.UndoCommand.ExecuteAsync(null);
-        Assert.Equal("WebP", vm.SelectedFormat);
+        Assert.Equal("PNG", vm.SelectedFormat);
     }
 
     [Fact]
@@ -191,14 +191,14 @@ public class SettingsUndoTests
     public async Task Choices_AreEachTheirOwnStep()
     {
         var vm = Create();
-        vm.SelectedFormat = "PNG";
         vm.SelectedFormat = "JPEG";
+        vm.SelectedFormat = "TIFF";
         vm.CommitPendingSettings();
 
         await vm.UndoCommand.ExecuteAsync(null);
-        Assert.Equal("PNG", vm.SelectedFormat);
+        Assert.Equal("JPEG", vm.SelectedFormat);
         await vm.UndoCommand.ExecuteAsync(null);
-        Assert.Equal("WebP", vm.SelectedFormat);
+        Assert.Equal("PNG", vm.SelectedFormat);
     }
 
     [Fact]

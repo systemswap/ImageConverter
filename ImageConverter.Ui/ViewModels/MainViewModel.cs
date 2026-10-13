@@ -28,7 +28,7 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Formats = ["WebP", "PNG", "JPEG", "AVIF", "JPEG XL", "TIFF", "BMP", "ICO"];
-        SelectedFormat = "WebP";
+        SelectedFormat = "PNG";   // Vorgabe (Wunsch vom 13.10.2026; vorher WebP)
 
         Filters = FilterOption.All;
         SelectedFilter = Filters[0];
