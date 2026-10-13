@@ -1867,3 +1867,21 @@ Test oder Nachweis.
   erst `DewarpShowsResult = true`, dann `DewarpLines = null`, sonst schließt `OnDewarpLinesChanged` das Werkzeug.
 - **Geprüft** am Fenster: Vorschlagen → Gerade ziehen (Ergebnis, „Justieren“, Punkt) → Justieren (Original mit den
   Linien) → Symbol verlässt → Symbol öffnet direkt beim Justieren → Stift in „Bearbeitungen“ ebenso.
+
+## 60. 16 Bit je Kanal: wirkte scheinbar nicht; jetzt Empfehlung und automatisch an (0.5.71 beta)
+
+- **Frage des Benutzers:** Der Haken änderte die Dateigröße nicht. Gemessen (PNG, `Bild(2).jpg`): unbearbeitet 0,86 MB
+  mit und ohne — der PNG-Kodierer speichert 8-Bit-Inhalt ohne Rechnung verlustfrei mit 8 Bit, die 16 Bit trügen nichts.
+  Helligkeit +10: 1,22 → 2,37 MB, verkleinert 70 %: 0,61 → 1,96 MB; die Schätzung traf jedes Mal die echte Datei.
+  Quellen mit mehr als 8 Bit werden ohnehin immer mit 16 Bit gespeichert.
+- **Wunsch:** automatisch an, wenn es Treppen beim Weiterbearbeiten vermeidet. In der Datei selbst verhindert schon das
+  Dither beim Runden auf 8 Bit sichtbare Stufen; es geht um kräftig gespreizte Tonwerte. Regel `Adjustments.SpreadsTones`:
+  Dunst ≥ 20, |Kontrast|, |Tiefen|, |Lichter| ≥ 25, |Helligkeit| ≥ 30, Luminanz/Maske ≥ 20, |Luminanz Gesamt| ≥ 25.
+- **Verhalten:** Nach jeder Änderung einer Einstellung über der Schwelle setzt die App den Haken (`OnSettingChanged` →
+  `TickHighBitDepthIfRecommended`), auch wenn er von Hand heraus war — Wunsch: lieber an als vergessen; herausnehmen geht
+  jederzeit. Fällt die Empfehlung weg, nimmt sie nur einen selbst gesetzten wieder heraus. Still (`SuppressHistory`):
+  Rückgängig des Reglers nimmt den Haken mit. Daneben orange „empfohlen“ (`RecommendBrush`), Tooltip um „etwa doppelt
+  so groß“ und „wirkt nur bei Rechnung“ erweitert.
+- **Nicht tun:** das Setzen an `RequestPreview` hängen — die läuft auch beim Laden, Zoomen usw.; dann käme der Haken nach
+  dem Herausnehmen ohne Zutun zurück. Nur an echte Änderungen von Einstellungen.
+- **Test:** `HighBitDepthTests`. Standardformat seit 0.5.70 PNG (vorher WebP).

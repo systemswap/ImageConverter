@@ -274,9 +274,16 @@
                             <CheckBox IsChecked="{Binding Lossless}" IsVisible="{Binding LosslessAvailable}"
                                       Content="{l:T 'Verlustfrei'}" FontSize="12"
                                       ToolTip.Tip="{l:T 'Jedes Pixel bleibt exakt erhalten. Ideal für Grafiken, Screenshots und Buttons — bei Fotos deutlich größer.'}" />
-                            <CheckBox IsChecked="{Binding HighBitDepth}" IsVisible="{Binding HighBitDepthAvailable}"
-                                      Content="{l:T '16 Bit je Kanal'}" FontSize="12"
-                                      ToolTip.Tip="{l:T 'Speichert mit 65 536 statt 256 Stufen je Farbe — für die Weiterbearbeitung in anderen Programmen, ohne Stufen in Verläufen. Doppelt so große Datei. Bilder, die schon 16 Bit haben, bleiben es auch ohne Haken.'}" />
+                            <!-- 16 Bit: bei kräftiger Tonwert-Bearbeitung setzt die App den Haken selbst und zeigt „empfohlen“ -->
+                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HighBitDepthAvailable}">
+                                <CheckBox IsChecked="{Binding HighBitDepth}" VerticalAlignment="Center"
+                                          Content="{l:T '16 Bit je Kanal'}" FontSize="12"
+                                          ToolTip.Tip="{l:T 'Speichert mit 65 536 statt 256 Stufen je Farbe — gegen Treppen in Verläufen, wenn das Bild später weiterbearbeitet wird. Die Datei wird dadurch etwa doppelt so groß. Wirkt nur, wenn am Bild gerechnet wurde (Größe, Regler, Entzerren): ein unbearbeitetes 8-Bit-Foto bleibt gleich groß. Bei kräftiger Tonwert-Bearbeitung (Dunst, Kontrast, Tiefen/Lichter, Helligkeit, Luminanz) setzt die App den Haken nach jeder solchen Änderung selbst – „empfohlen“; herausnehmen geht jederzeit. Bilder, die schon 16 Bit haben, bleiben es auch ohne Haken.'}" />
+                                <TextBlock VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource RecommendBrush}"
+                                           Text="{l:T 'empfohlen'}" IsVisible="{Binding HighBitDepthRecommended}"
+                                           ToolTip.Tip="{l:T 'Kräftige Tonwert-Bearbeitung: mit 16 Bit bleiben weiche Verläufe auch beim Weiterbearbeiten ohne Treppen. Die Datei wird etwa doppelt so groß.'}" />
+                            </StackPanel>
                             <TextBlock Classes="hint" IsVisible="{Binding !QualityApplies}" Margin="0,0,0,2"
                                        Text="{l:T 'Dieses Format speichert immer verlustfrei.'}" />
 

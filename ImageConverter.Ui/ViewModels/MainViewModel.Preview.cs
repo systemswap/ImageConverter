@@ -388,6 +388,7 @@ public partial class MainViewModel
     private void RequestPreview()
     {
         RequestEstimate();   // Größe, Schärfe, Rauschen … ändern auch die Dateigröße
+        UpdateHighBitDepthRecommendation();   // Empfehlung 16 Bit folgt den Reglern (und setzt den Haken selbst)
         if (_renderRunning)
         {
             _renderDirty = true;

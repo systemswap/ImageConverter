@@ -18,6 +18,7 @@
             <Color x:Key="AccentHoverColor">#2560D8</Color>
             <Color x:Key="AccentSoftColor">#E8F0FE</Color>
             <Color x:Key="GoodColor">#1F8A4C</Color>
+            <Color x:Key="RecommendColor">#C2610C</Color>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -33,6 +34,7 @@
             <Color x:Key="AccentHoverColor">#5F99FF</Color>
             <Color x:Key="AccentSoftColor">#1E2A3F</Color>
             <Color x:Key="GoodColor">#49C17C</Color>
+            <Color x:Key="RecommendColor">#F59E42</Color>
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
@@ -50,6 +52,7 @@
     <SolidColorBrush x:Key="AccentHoverBrush"   Color="{DynamicResource AccentHoverColor}" />
     <SolidColorBrush x:Key="AccentSoftBrush"    Color="{DynamicResource AccentSoftColor}" />
     <SolidColorBrush x:Key="GoodBrush"          Color="{DynamicResource GoodColor}" />
+    <SolidColorBrush x:Key="RecommendBrush"     Color="{DynamicResource RecommendColor}" />
 
     <!-- Maße -->
     <CornerRadius x:Key="RadiusCard">8</CornerRadius>

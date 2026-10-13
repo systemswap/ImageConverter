@@ -40,7 +40,7 @@ public partial class MainViewModel
     // -------------------------------------------------------------- Format
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowTransparencyWarning), nameof(QualityApplies), nameof(LosslessAvailable), nameof(HighBitDepthAvailable))]
+    [NotifyPropertyChangedFor(nameof(ShowTransparencyWarning), nameof(QualityApplies), nameof(LosslessAvailable), nameof(HighBitDepthAvailable), nameof(HighBitDepthRecommended))]
     public partial string SelectedFormat { get; set; }
 
     [ObservableProperty] public partial double Quality { get; set; } = 82;
@@ -55,7 +55,11 @@ public partial class MainViewModel
     /// <summary>Nur WebP, AVIF und JPEG XL können wahlweise verlustfrei.</summary>
     public bool LosslessAvailable => CurrentFormat is OutputFormat.WebP or OutputFormat.Avif or OutputFormat.JpegXl;
 
-    partial void OnSelectedFormatChanged(string value) => RequestEstimate();
+    partial void OnSelectedFormatChanged(string value)
+    {
+        RequestEstimate();
+        UpdateHighBitDepthRecommendation();
+    }
     partial void OnQualityChanged(double value) => RequestEstimate();
     partial void OnLosslessChanged(bool value) => RequestEstimate();
 
@@ -64,7 +68,62 @@ public partial class MainViewModel
 
     public bool HighBitDepthAvailable => ImageExporter.SupportsHighBitDepth(CurrentFormat);
 
-    partial void OnHighBitDepthChanged(bool value) => RequestEstimate();
+    /// <summary>
+    /// „empfohlen“ neben dem Haken: kräftige Tonwert-Bearbeitung (<see cref="Adjustments.SpreadsTones"/>) — 16 Bit halten die
+    /// Verläufe ohne Stufen, die Datei wird etwa doppelt so groß. Nachgeführt bei jeder Änderung (<see cref="RequestPreview"/>).
+    /// </summary>
+    public bool HighBitDepthRecommended => HighBitDepthAvailable && CurrentAdjustments().SpreadsTones;
+
+    // Automatik: Haken selbst gesetzt (dann nimmt die App ihn auch selbst wieder heraus) und letzter Stand der Empfehlung
+    private bool _highBitDepthByApp;
+    private bool _highBitDepthWasRecommended;
+    private bool _settingHighBitDepth;
+
+    /// <summary>
+    /// Empfehlung nachführen (bei jeder Vorschau). Fällt sie weg, nimmt die App einen selbst gesetzten Haken wieder heraus —
+    /// sonst würde die Datei ohne Nutzen doppelt so groß; einen von Hand gesetzten lässt sie stehen. Beim Wiederherstellen
+    /// eines Stands (Rückgängig, anderes Bild) gilt der gespeicherte Haken, nichts wird umgestellt.
+    /// </summary>
+    private void UpdateHighBitDepthRecommendation()
+    {
+        OnPropertyChanged(nameof(HighBitDepthRecommended));
+        var now = HighBitDepthRecommended;
+        var was = _highBitDepthWasRecommended;
+        _highBitDepthWasRecommended = now;
+        if (_suppressHistory > 0) return;
+        if (was && !now && HighBitDepth && _highBitDepthByApp) SetHighBitDepthByApp(false);
+    }
+
+    /// <summary>
+    /// Nach jeder Änderung einer Einstellung durch den Benutzer: liegt sie über der Schwelle, setzt die App den Haken — auch
+    /// wenn er vorher von Hand herausgenommen war (Wunsch: lieber einmal zu viel an als vergessen). Herausnehmen geht
+    /// jederzeit. Still, ohne eigenen Rückgängig-Schritt: Rückgängig des auslösenden Reglers nimmt ihn mit.
+    /// </summary>
+    private void TickHighBitDepthIfRecommended(string changed)
+    {
+        if (changed == nameof(HighBitDepth) || HighBitDepth || !HighBitDepthRecommended) return;
+        SetHighBitDepthByApp(true);
+    }
+
+    private void SetHighBitDepthByApp(bool value)
+    {
+        _settingHighBitDepth = true;
+        try
+        {
+            using (SuppressHistory()) HighBitDepth = value;
+        }
+        finally
+        {
+            _settingHighBitDepth = false;
+        }
+        _highBitDepthByApp = value;
+    }
+
+    partial void OnHighBitDepthChanged(bool value)
+    {
+        if (!_settingHighBitDepth && _suppressHistory == 0) _highBitDepthByApp = false;   // von Hand: bleibt so
+        RequestEstimate();
+    }
 
     // ------------------------------------------------- Metadaten und Farbe
 

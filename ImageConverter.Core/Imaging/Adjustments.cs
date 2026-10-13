@@ -107,6 +107,15 @@ public sealed record Adjustments(
     /// <summary>Wirkt die Luminanzmaske (oder wird sie gezeigt)?</summary>
     public bool HasLumMask => Normalized is { } n && (n.MaskAmount > 0 || n.MaskPreview);
 
+    /// <summary>
+    /// Kräftige Tonwert-Bearbeitung, die weiche Verläufe spreizt — dann lohnen 16 Bit je Kanal (Empfehlung beim Speichern):
+    /// Dunst ab 20, Kontrast, Tiefen oder Lichter ab ±25, Helligkeit ab ±30, Luminanz oder Luminanzmaske ab 20, Luminanz
+    /// „Gesamt“ ab ±25. Darunter reicht 8 Bit mit Dither — die Datei bliebe halb so groß.
+    /// </summary>
+    public bool SpreadsTones => Normalized is var n
+        && (n.Dehaze >= 20 || Math.Abs(n.Contrast) >= 25 || Math.Abs(n.Shadows) >= 25 || Math.Abs(n.Highlights) >= 25
+            || Math.Abs(n.Brightness) >= 30 || n.MatchLuminance >= 20 || n.MaskAmount >= 20 || Math.Abs(n.MatchGlobal) >= 25);
+
     /// <summary>Wird ein Weißabgleich gerechnet?</summary>
     public bool HasWhiteBalance => WhiteBalance.IsActive(WbNeutral, WbBlack, WbWhite);
 }

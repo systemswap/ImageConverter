@@ -162,6 +162,7 @@ public partial class MainViewModel
     private void OnSettingChanged(string name)
     {
         if (_suppressHistory > 0 || _settled is null) return;
+        TickHighBitDepthIfRecommended(name);   // 16 Bit bei kräftiger Tonwert-Bearbeitung (still, gehört zu diesem Schritt)
 
         var first = _turnBaseline is null;
         _turnBaseline ??= _settled;
