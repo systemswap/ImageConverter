@@ -3,11 +3,11 @@ using System.Text.Json;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Dauerhafte Einstellungen des Benutzers (bisher nur die Sprache) in
+/// Dauerhafte Einstellungen des Benutzers (Sprache; bei „KI begradigen“, ob Schatten herausgerechnet werden) in
 /// ~/.local/share/ImageConverter/settings.json bzw. %LOCALAPPDATA%\ImageConverter\settings.json.
 /// Fehlt die Datei oder ist sie kaputt, gelten die Voreinstellungen.
 /// </summary>
-public sealed record AppSettings(string? Language = null)
+public sealed record AppSettings(string? Language = null, bool AiRemoveShadows = true)
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

@@ -1779,3 +1779,20 @@ Test oder Nachweis.
 - **KI-Tab:** `AiViewModel.ModelGroups` kannte die Art `Dewarp` nicht — SyntheticDoc war nicht zu sehen und nicht zu
   laden, obwohl die Fehlermeldung von „KI begradigen“ dorthin verweist. Neue Gruppe „BEGRADIGEN“. Bei einer neuen
   `AiModelKind` immer auch eine Gruppe anlegen.
+
+## 55. KI begradigen: Schatten entfernen; Feld „Gewölbtes Blatt“ im kleinen Fenster abgeschnitten (0.5.64 beta)
+
+- **Schatten (Wunsch):** SyntheticDoc sagt eine Schattenkarte voraus, die App nutzte sie nicht. Jetzt rechnet der
+  genaue Lauf sie mit (zweite Datei `syntheticdoc-schatten.onnx`, +0,55 s), sie kommt gerade gezogen (256 × 360 × RGB,
+  `DewarpShading`) ins Rezept und wird in `DewarpMap.Render` herausgerechnet wie bei den Autoren (÷ Licht · Stärke +
+  1 − Stärke, Stärke = min(1, 0,4 / Helligkeit)). Rechtsklick auf das KI-Symbol → „Schatten entfernen“, gemerkt in
+  `AppSettings.AiRemoveShadows`; Umschalten ohne neuen KI-Lauf. Einzelheiten: `docs/KI-BEGRADIGEN.md`.
+- **Falle:** `OnnxSessions.Get` schloss beim Öffnen einer Datei alle anderen großen Modelle — die zwei Dateien von
+  SyntheticDoc hätten sich bei jedem Lauf gegenseitig geschlossen und neu geladen. Jetzt merkt es sich je Pfad das
+  Modell und schließt nur andere Modelle.
+- **Feld „Gewölbtes Blatt“:** eine feste Zeile mit sechs Knöpfen, Infotext (mindestens 200 px) und der Bedienhilfe
+  darüber — über 1000 px breit, in kleinen Fenstern rechts abgeschnitten. Jetzt höchstens 560 px: Bedienhilfe hinter
+  „?“, kurze Beschriftungen („Vorschlagen“, „Zeichnen“, „Graue weg“ …), kleine Knöpfe (`Button.compact`) in einem
+  `WrapPanel`, das umbricht; seitlich 58 px frei für das Symbol „Bearbeitungen“. Geprüft bei kleinster Fenstergröße.
+- **Werkzeug-Falle (PowerShell):** Variablen unterscheiden keine Groß-/Kleinschreibung — `$h` (Fenster) überschrieb
+  den Parameter `$H` (Höhe) im Bildschirmfoto-Skript.

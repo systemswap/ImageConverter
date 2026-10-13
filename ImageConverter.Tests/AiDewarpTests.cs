@@ -1,4 +1,6 @@
+using ImageConverter.Core.Ai;
 using ImageConverter.Core.Imaging;
+using ImageMagick;
 
 namespace ImageConverter.Tests;
 
@@ -68,5 +70,53 @@ public class AiDewarpTests
         Check(0.5, 0.5);
         Check(0, 0);
         Check(1, 0.25);
+    }
+
+    /// <summary>Schattenkarte 3 × 2: links halbes Licht, rechts volles (je R, G, B gleich).</summary>
+    private static DewarpShading HalfLitLeft(double strength, bool on = true) =>
+        new(3, 2, [0.5f, 0.5f, 0.5f, 0.75f, 0.75f, 0.75f, 1, 1, 1, 0.5f, 0.5f, 0.5f, 0.75f, 0.75f, 0.75f, 1, 1, 1], strength, on);
+
+    [Fact]
+    public void Shading_IsDividedOut_WhenSwitchedOn()
+    {
+        using var grey = new MagickImage(new MagickColor("#808080"), 40, 20);   // 50 % auf allen Kanälen
+        var grid = Affine(5, 4, 0, 1, 0, 1, relW: 1, relH: 0.5, aspect: null);
+
+        double Left(MagickImage img) => AiEnhancer.ReadPixels(img, "RGB")[(10 * 40 + 1) * 3] / 65535.0;
+        double Right(MagickImage img) => AiEnhancer.ReadPixels(img, "RGB")[(10 * 40 + 38) * 3] / 65535.0;
+
+        // eingeschaltet, volle Stärke: links ÷ Licht (am Rand gut 0,5) → fast weiß, rechts ÷ 1 → bleibt
+        var lightLeft = HalfLitLeft(1).Sample(1.5 / 40, 10.5 / 20).R;
+        using (var on = Dewarp.MapFor(new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(1) }), 40, 20)!.Render(grey))
+        {
+            Assert.Equal(Math.Min(1, 128 / 255.0 / lightLeft), Left(on), 2);
+            Assert.InRange(Right(on), 0.49, 0.52);
+        }
+        // halbe Stärke (helles Foto): Teiler 0,5 · 0,5 + 0,5 = 0,75
+        using (var half = Dewarp.MapFor(new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(0.5) }), 40, 20)!.Render(grey))
+            Assert.Equal(128 / 255.0 / (lightLeft * 0.5 + 0.5), Left(half), 2);
+        // ausgeschaltet: wie ohne Karte, aber ein anderes Rezept (Zwischenspeicher)
+        var offSpec = new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(1, on: false) });
+        Assert.NotEqual(new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(1) }), offSpec);
+        Assert.Null(Dewarp.MapFor(offSpec, 40, 20)!.Shading);
+        using var off = Dewarp.MapFor(offSpec, 40, 20)!.Render(grey);
+        Assert.InRange(Left(off), 0.49, 0.52);
+    }
+
+    [Fact]
+    public void Shading_TurnsWithTheGrid()
+    {
+        // wie oben eine Vierteldrehung: die Karte liegt über dem Ergebnis und muss genauso umgeordnet werden wie das Gitter
+        var recipe = new GeometryRecipe(Turns: 1);
+        var view = Affine(5, 4, 0.1, 0.8, 0.2, 0.6, relW: 0.8, relH: 1.0, aspect: 1.25) with { Shading = HalfLitLeft(1) };
+        var grid = recipe.AiDewarpedInView(view, 1000, 600, 28).Dewarp!.Grid!;
+        var turned = grid.Shading!;
+        Assert.Equal((2, 3), (turned.Width, turned.Height));
+        Assert.True(turned.On);
+        foreach (var (us, vs) in new[] { (0.0, 0.0), (1.0, 0.0), (0.5, 0.5), (0.0, 1.0), (1.0, 1.0) })
+        {
+            var (uv, vv) = GeometryRecipe.OrientPoint(us, vs, (1, 1), 1, false);
+            Assert.Equal(view.Shading!.Sample(uv, vv).R, turned.Sample(us, vs).R, 4);
+        }
     }
 }

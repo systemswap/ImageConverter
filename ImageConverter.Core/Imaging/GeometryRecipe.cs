@@ -458,7 +458,22 @@ public sealed record GeometryRecipe(
             (sx[b * nx + a], sy[b * nx + a]) = ((float)(px / width), (float)(py / height));
         }
         var aspect = viewGrid.PageAspect is { } pa ? (odd ? 1 / pa : pa) : (double?)null;
-        var grid = new DewarpGrid(nx, ny, sx, sy, ws / width, hs / width, aspect, viewGrid.Din);
+        // Schattenkarte liegt über dem Ergebnis wie das Gitter: genauso umordnen
+        DewarpShading? shading = null;
+        if (viewGrid.Shading is { } vs)
+        {
+            var (tw, th) = odd ? (vs.Height, vs.Width) : (vs.Width, vs.Height);
+            var rgb = new float[tw * th * 3];
+            for (var b = 0; b < th; b++)
+            for (var a = 0; a < tw; a++)
+            {
+                var (u, v) = OrientPoint(a / (double)Math.Max(1, tw - 1), b / (double)Math.Max(1, th - 1), (1, 1), NormalTurns, Flip);
+                var k = (b * tw + a) * 3;
+                (rgb[k], rgb[k + 1], rgb[k + 2]) = vs.Sample(u, v);
+            }
+            shading = vs with { Width = tw, Height = th, Rgb = rgb };
+        }
+        var grid = new DewarpGrid(nx, ny, sx, sy, ws / width, hs / width, aspect, viewGrid.Din, shading);
         return this with { Dewarp = new DewarpSpec([], focal35, Grid: grid) };
     }
 

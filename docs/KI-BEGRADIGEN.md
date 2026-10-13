@@ -28,16 +28,34 @@ Alles, was nur SyntheticDoc betrifft, liegt in `ImageConverter.Core/Ai/Synthetic
 | `TorchCheckpoint.cs` | Liest PyTorch-Checkpoints (Zip mit Pickle und rohen Speichern) ohne Python. Ein schmaler Unpickler: führt nichts aus, unbekannte Klassen werden zu Platzhaltern. |
 | `OnnxGraph.cs` | Schreibt ONNX-Modelle (Protobuf, nur die nötigen Felder, ohne Abhängigkeit). |
 | `SyntheticDocNet.cs` | Baut das Netz aus `extern/SyntheticDoc/training/model.py` nach (UVDocNet + Schatten-Decoder), BatchNorm in die Faltungen gerechnet, Eingabegröße offen. Ausgänge `bm_map` (1 × 2 × 121 × 177, −1 … 1, align_corners = True) und auf Wunsch `shadow_map`. |
-| `SyntheticDocModel.cs` | Checkpoint → `syntheticdoc.onnx` daneben, beim ersten Gebrauch (gut 1 s) und neu, sobald der Checkpoint jünger ist. |
-| `SyntheticDocDewarp.cs` | Zwei Läufe: grob auf 720 × 512 (nur um das Blatt zu finden), dann genau auf 1440 × 1024 auf dem Blattausschnitt + 4 % (so wurde trainiert). Daraus das Gitter, Seitenverhältnis über unser Blattmodell mit den Gitterlinien (DIN-Einrasten). |
+| `SyntheticDocModel.cs` | Checkpoint → `syntheticdoc.onnx` (nur Gitter) und `syntheticdoc-schatten.onnx` (mit Schattenkarte) daneben, beim ersten Gebrauch (gut 2 s) und neu, sobald der Checkpoint jünger ist. |
+| `SyntheticDocDewarp.cs` | Zwei Läufe: grob auf 720 × 512 ohne Schatten (nur um das Blatt zu finden), dann genau auf 1440 × 1024 auf dem Blattausschnitt + 4 % (so wurde trainiert), mit Schattenkarte. Daraus das Gitter, Seitenverhältnis über unser Blattmodell mit den Gitterlinien (DIN-Einrasten), und die Schattenkarte gerade gezogen (256 × 360, `DewarpShading`). |
 
 Geprüft: Die C#-Umwandlung weicht von einem Export mit PyTorch höchstens um 5 · 10⁻⁷ ab. Rechenzeit auf
 dem Entwicklungsrechner (Notebook-Prozessor, CPU): grober Lauf 0,3 s, genauer 0,6 s, mit Bildaufbereitung
-insgesamt 1,2–1,4 s je Bild. Den Schatten-Zweig rechnet ONNX Runtime immer mit, auch wenn man nur das
-Gitter abfragt (verdoppelt die Zeit) — deshalb baut die App die Datei ohne ihn.
+insgesamt 1,2–1,4 s je Bild ohne Schatten, 1,8–1,9 s mit. Den Schatten-Zweig rechnet ONNX Runtime immer
+mit, auch wenn man nur das Gitter abfragt (verdoppelt die Zeit) — deshalb zwei Dateien: der grobe Lauf nimmt
+die ohne. `OnnxSessions` hält beide offen (Dateien desselben Modells schließen sich nicht gegenseitig).
 
 Im Rezept ist die KI-Begradigung dieselbe Stufe wie „Gewölbtes Blatt“ (`DewarpSpec.Grid` statt Linien,
-`GeometryRecipe.AiDewarpedInView` dreht das Gitter der Ansicht ins Pixelbild zurück).
+`GeometryRecipe.AiDewarpedInView` dreht das Gitter der Ansicht ins Pixelbild zurück, die Schattenkarte mit).
+
+### Schatten entfernen
+
+Das Netz sagt neben dem Gitter eine **Schattenkarte** voraus: wie viel Licht jede Stelle des Blatts bekam
+(Knitter, Falten, Hand- und Handyschatten, ungleichmäßige Lampe). Die App rechnet sie wie die Autoren
+(`training/inference.py`) heraus: Farbwert ÷ (Licht · Stärke + 1 − Stärke), Teiler mindestens 0,1; Stärke
+= min(1, 0,4 / mittlere Helligkeit des Ausschnitts), helle Fotos also schwächer, damit nichts ausbrennt.
+
+- Die Karte wird immer mitgerechnet (+0,55 s) und gerade gezogen im Rezept gespeichert (256 × 360 × RGB,
+  `DewarpShading` in `DewarpGrid`); herausgerechnet wird beim Rendern in `DewarpMap.Render`.
+- Ein- und ausschalten: **Rechtsklick auf das KI-Symbol → „Schatten entfernen“**. Die Wahl merkt sich die App
+  (`AppSettings.AiRemoveShadows`, voreingestellt an); ist die KI-Begradigung schon im Bild, schaltet der Klick
+  sie ohne neuen KI-Lauf um (ein Schritt, Strg+Z).
+- Gemessen: künstliches Blatt, rechte Hälfte mit 60 % Licht → Karte links 0,94, rechts 0,62; Papier rechts
+  von 0,57 auf 0,83 aufgehellt (`SyntheticDocTests`). Echte Fotos (63_2, 54_2, 58_2, Arbeitsblatt): Papier
+  gleichmäßig hell, Knitterschatten deutlich schwächer, graue Kästen bleiben grau; Vergleich ohne | mit in
+  `TestBilder/Merge/schatten/` (nicht im Git). Ein leichter Farbstich des Lichts wird mit entfernt.
 
 ### Was SyntheticDoc kann und was nicht
 
@@ -84,8 +102,8 @@ Alle Werkzeuge liegen in `extern/SyntheticDoc/`; die englischen READMEs dort bes
    `python train.py --config configs/eigen.yaml --init-weights model/highres_121x177.ckpt`
    (`--init-weights` ist unsere Ergänzung: nur die Gewichte als Start). Fortsetzen nach Abbruch: `--resume auto`.
 6. **In die App**: den neuen Checkpoint (`checkpoints/<name>/last.ckpt`) als
-   `KI-Modelle/syntheticdoc/highres_121x177.ckpt` ablegen (den alten vorher wegsichern). Die App baut die
-   ONNX-Datei beim nächsten Klick neu, weil der Checkpoint jünger ist. Zum Prüfen ohne App:
+   `KI-Modelle/syntheticdoc/highres_121x177.ckpt` ablegen (den alten vorher wegsichern). Die App baut beide
+   ONNX-Dateien beim nächsten Klick neu, weil der Checkpoint jünger ist. Zum Prüfen ohne App:
    `tools/SyntheticDocUmwandeln.cs` (Aufruf im Kopf der Datei; wandelt um und macht einen Probelauf).
 
 ### Wie lange dauert das?
@@ -122,15 +140,18 @@ verkleinern.
 2. `ImageConverter.Core/Ai/AiModels.cs`: Eintrag `SyntheticDoc` und seine Erwähnung in `All`
    (dazu nach Wunsch `AiModelKind.Dewarp`).
 3. `ImageConverter.Ui/ViewModels/MainViewModel.Dewarp.cs`: den Abschnitt „KI begradigen (SyntheticDoc)“
-   (`AiStraightenActive`, `IsStraighteningWithAi`, `StraightenWithAi`).
+   (`AiStraightenActive`, `IsStraighteningWithAi`, `AiRemoveShadows`, `SwitchAiShadowsAsync`, `StraightenWithAi`).
 4. `ImageConverter.Ui/ViewModels/MainViewModel.Edits.cs`: in der Bearbeitungsliste die Zweige für
-   `spec.Grid` („KI begradigt“) und `OnPropertyChanged(nameof(AiStraightenActive))`.
-5. `ImageConverter.Ui/Views/MainView.axaml`: den Rahmen um die zwei Symbole und das Symbol „KI begradigen“.
-6. `ImageConverter.Core/Localization/English.cs`: die Texte zu SyntheticDoc und „KI begradig…“
+   `spec.Grid` („KI begradigt“, „Schatten entfernt“) und `OnPropertyChanged(nameof(AiStraightenActive))`.
+5. `ImageConverter.Ui/Views/MainView.axaml`: den Rahmen um die zwei Symbole und das Symbol „KI begradigen“
+   samt Rechtsklickmenü.
+6. `ImageConverter.Core/Localization/English.cs`: die Texte zu SyntheticDoc, „KI begradig…“ und „Schatten …“
    (`LocalizationTests` meldet, was übrig ist).
+7. `ImageConverter.Core/Platform/AppSettings.cs`: `AiRemoveShadows` (darf auch bleiben).
 
-Allgemein und ohne SyntheticDoc harmlos (darf bleiben): `DewarpGrid`, `DewarpSpec.Grid`, `DewarpMap.Ai`,
-`GeometryRecipe.AiDewarpedInView` samt `AiDewarpTests`, `AiModelItem.ShowDownload` ohne Adresse.
+Allgemein und ohne SyntheticDoc harmlos (darf bleiben): `DewarpGrid`, `DewarpShading`, `DewarpSpec.Grid`,
+`DewarpMap.Ai` und `.Shading`, `GeometryRecipe.AiDewarpedInView` samt `AiDewarpTests`, `AiModelItem.ShowDownload`
+ohne Adresse, `OnnxSessions.Run` mit Ausgabenamen und das Offenhalten mehrerer Dateien eines Modells.
 
 ## Messungen (12./13.10.2026)
 

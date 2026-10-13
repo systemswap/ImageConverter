@@ -30,6 +30,9 @@ public sealed class DewarpMap
     /// <summary>Gitter aus einem KI-Modell (<c>SyntheticDocDewarp</c>), kein Blattmodell im Raum.</summary>
     public bool Ai { get; internal init; }
 
+    /// <summary>Schatten, die beim Rendern herausgerechnet werden (KI-Begradigung, eingeschaltet); sonst null.</summary>
+    public DewarpShading? Shading { get; internal init; }
+
     /// <summary>Doppelseite (mit Falz).</summary>
     public bool DoublePage { get; internal init; }
 
@@ -50,7 +53,8 @@ public sealed class DewarpMap
 
     /// <summary>
     /// Das Pixelbild gerade gezogen (neues Bild mit denselben Profilen; die Quelle bleibt). Je Ergebnispixel die Stelle im
-    /// Pixelbild aus dem Gitter, dort bikubisch (Catmull-Rom) gelesen.
+    /// Pixelbild aus dem Gitter, dort bikubisch (Catmull-Rom) gelesen. Mit <see cref="Shading"/> wird danach das Licht
+    /// herausgerechnet (Farbwert durch Licht, auf den Werten wie gespeichert — so rechnen auch die Autoren von SyntheticDoc).
     /// </summary>
     public MagickImage Render(MagickImage source)
     {
@@ -60,13 +64,21 @@ public sealed class DewarpMap
         var (ow, oh) = SizeFor(sw);
         var src = Pixels.FromMagick(source);
         var dst = PixelPool.Rent(ow * oh * 4);
+        var shading = Shading;
         Parallel.For(0, oh, y =>
         {
             var v = (y + 0.5) / oh;
             for (var x = 0; x < ow; x++)
             {
-                var (rx, ry) = Source((x + 0.5) / ow, v);
-                SampleCubic(src, sw, sh, rx * sw - 0.5, ry * sh - 0.5, dst, (y * ow + x) * 4);
+                var u = (x + 0.5) / ow;
+                var (rx, ry) = Source(u, v);
+                var o = (y * ow + x) * 4;
+                SampleCubic(src, sw, sh, rx * sw - 0.5, ry * sh - 0.5, dst, o);
+                if (shading is null) continue;
+                var (gr, gg, gb) = shading.Gain(u, v);
+                dst[o] = Math.Min(1f, dst[o] * gb);           // B, G, R, A
+                dst[o + 1] = Math.Min(1f, dst[o + 1] * gg);
+                dst[o + 2] = Math.Min(1f, dst[o + 2] * gr);
             }
         });
         PixelPool.Return(src);
@@ -243,7 +255,10 @@ public static class Dewarp
     internal static DewarpMap? Solve(DewarpSpec spec, double aspect)
     {
         if (spec.Grid is { } g)
-            return new DewarpMap(g.Nx, g.Ny, g.Sx, g.Sy, g.RelWidth, g.RelHeight) { Modelled = true, Ai = true, PageAspect = g.PageAspect, Din = g.Din };
+            return new DewarpMap(g.Nx, g.Ny, g.Sx, g.Sy, g.RelWidth, g.RelHeight)
+            {
+                Modelled = true, Ai = true, PageAspect = g.PageAspect, Din = g.Din, Shading = g.Shading is { On: true } s ? s : null,
+            };
         var (obs, cam) = Prepare(spec, aspect);
         if (obs.Count == 0) return null;
         if (spec.GridOnly) return FlatMap(obs, aspect);

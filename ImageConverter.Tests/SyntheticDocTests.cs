@@ -1,4 +1,7 @@
+using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.SyntheticDoc;
+using ImageConverter.Core.Imaging;
+using ImageMagick;
 using Microsoft.ML.OnnxRuntime;
 using Xunit.Abstractions;
 
@@ -117,5 +120,76 @@ public class SyntheticDocTests(ITestOutputHelper output)
         Assert.All(bm, v => Assert.InRange(v, -1f, 1f));
         // das Gitter läuft von links nach rechts: x-Werte der ersten Spalte kleiner als die der letzten
         Assert.True(bm[60 * 177] < bm[60 * 177 + 176]);
+    }
+
+    private static string? RealCheckpoint() => new[]
+    {
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageConverter", "KI-Modelle", "syntheticdoc", "highres_121x177.ckpt"),
+        Path.Combine(AppContext.BaseDirectory, "KI-Modelle", "syntheticdoc", "highres_121x177.ckpt"),
+    }.FirstOrDefault(File.Exists);
+
+    /// <summary>
+    /// Ganzer Lauf mit Schattenkarte: ein weißes Blatt mit Textzeilen auf dunklem Grund, die rechte Hälfte des Fotos im
+    /// Schatten (60 % Licht, weicher Übergang). Die Karte muss rechts dunkler sein als links, und das Ergebnis mit
+    /// „Schatten entfernen“ rechts heller als ohne.
+    /// </summary>
+    [Fact]
+    public void RealModel_FindsTheShadow_AndRenderLightensIt()
+    {
+        if (RealCheckpoint() is not { } path)
+        {
+            output.WriteLine("Checkpoint highres_121x177.ckpt nicht vorhanden – Schattenkarte nicht geprüft.");
+            return;
+        }
+        const int w = 900, h = 1200;
+        var px = new byte[w * h * 3];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var page = x is >= 120 and < 780 && y is >= 100 and < 1100;
+            var ink = page && y >= 180 && y < 1020 && (y - 180) % 40 < 8 && x >= 170 && x < 730;
+            double v = !page ? 0.25 : ink ? 0.1 : 0.95;
+            var light = 1 - 0.4 / (1 + Math.Exp(-(x - 450) / 25.0));   // links 1, rechts 0,6
+            var k = (y * w + x) * 3;
+            px[k] = px[k + 1] = px[k + 2] = (byte)Math.Round(255 * v * light);
+        }
+        using var photo = new MagickImage();
+        photo.ReadPixels(px, new PixelReadSettings(w, h, StorageType.Char, "RGB"));
+
+        var ckpt = TorchCheckpoint.Load(path);
+        using var grid = new InferenceSession(SyntheticDocNet.ToOnnx(ckpt, shadow: false));
+        using var shadow = new InferenceSession(SyntheticDocNet.ToOnnx(ckpt, shadow: true));
+        var result = SyntheticDocDewarp.Run(grid, shadow, photo, 28, removeShadows: true, CancellationToken.None);
+        var shading = Assert.IsType<DewarpShading>(result.Shading);
+        Assert.True(shading.On);
+        Assert.InRange(shading.Strength, 0.01, 1);
+
+        double Mean(double u0, double u1)
+        {
+            double s = 0;
+            var n = 0;
+            for (var v = 0.2; v <= 0.8; v += 0.05)
+            for (var u = u0; u <= u1; u += 0.02, n++) s += shading.Sample(u, v).G;
+            return s / n;
+        }
+        double left = Mean(0.05, 0.3), right = Mean(0.7, 0.95);
+        output.WriteLine($"Licht links {left:0.000}, rechts {right:0.000}, Stärke {shading.Strength:0.00}");
+        Assert.True(right < left - 0.1, $"Schatten rechts nicht erkannt: links {left:0.000}, rechts {right:0.000}");
+
+        // Rendern: rechts auf dem Papier mit Schattenentfernung heller als ohne
+        double PaperRight(DewarpGrid g)
+        {
+            using var img = Dewarp.MapFor(new DewarpSpec([], Grid: g), w, h)!.Render(photo);
+            var rgb = AiEnhancer.ReadPixels(img, "RGB");
+            int iw = (int)img.Width, ih = (int)img.Height;
+            var values = new List<double>();
+            for (var y = ih / 5; y < 4 * ih / 5; y++)
+            for (var x = 3 * iw / 4; x < 9 * iw / 10; x++) values.Add(rgb[(y * iw + x) * 3 + 1] / 65535.0);
+            values.Sort();
+            return values[(int)(values.Count * 0.9)];   // Papier, nicht Tinte
+        }
+        double with = PaperRight(result), without = PaperRight(result with { Shading = shading with { On = false } });
+        output.WriteLine($"Papier rechts: ohne {without:0.000}, mit Schattenentfernung {with:0.000}");
+        Assert.True(with > without + 0.05);
     }
 }

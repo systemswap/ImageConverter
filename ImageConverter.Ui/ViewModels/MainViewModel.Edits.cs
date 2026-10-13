@@ -528,6 +528,7 @@ public partial class MainViewModel
                     $"{fw} × {fh} px",
                 };
                 if (map?.Din == true) parts.Add("DIN");
+                if (spec.Grid?.Shading is { On: true }) parts.Add(Tr.T("Schatten entfernt"));
                 rows.Add(Row(EditSteps.Dewarp, spec.Grid is not null ? Tr.T("KI begradigt") : Tr.T("Gerade gezogen"), string.Join(" · ", parts)));
             }
             if (recipe.HasStraighten)

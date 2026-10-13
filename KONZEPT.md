@@ -249,8 +249,10 @@ Ziehen wie dort.
   Knittern, Bons in der Hand, Büchern; bei glatten Arbeitsblättern ist das Linienverfahren
   10- bis 30-mal genauer. Seitenverhältnis aus unserem Blattmodell über die Gitterlinien
   (DIN-Einrasten), ersatzweise Bogenlängen. Die App lädt den Original-Checkpoint und baut
-  die ONNX-Datei selbst (C#, ohne Python); Training und Datenerzeugung liegen in
+  die ONNX-Dateien selbst (C#, ohne Python); Training und Datenerzeugung liegen in
   `extern/SyntheticDoc/`, Anleitung und Entfernen-Liste in `docs/KI-BEGRADIGEN.md`.
+  **Schatten entfernen** (0.5.64, voreingestellt an, Rechtsklick auf das Symbol): die
+  Schattenkarte des Modells wird beim Rendern herausgerechnet; die App merkt sich die Wahl.
 - Mit **UVDoc** (MIT, ≈ 31 MB ONNX, nach `KI-Modelle/`): liefert ein Gitter, daraus
   einige waagerechte und senkrechte Linien als Vorschläge; Doppelseite am Falz
   geteilt, jede Hälfte einzeln (UVDoc kennt nur Einzelseiten). Eingabe nur

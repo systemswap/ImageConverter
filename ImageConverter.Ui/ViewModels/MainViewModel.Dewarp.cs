@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Controls;
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Imaging;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.ViewModels;
 
@@ -226,7 +227,7 @@ public partial class MainViewModel
         var count = lines.Count(l => l.Counts);
         if (count == 0)
         {
-            DewarpInfo = Tr.T("Punkte auf eine Linie setzen, die in Wirklichkeit gerade ist – Textzeile, Blattkante, Falz.");
+            DewarpInfo = Tr.T("Linien vorschlagen lassen oder Punkte auf eine Linie setzen, die eigentlich gerade ist.");
             return;
         }
 
@@ -269,6 +270,26 @@ public partial class MainViewModel
     private bool CanStraightenWithAi => !IsStraighteningWithAi;
 
     /// <summary>
+    /// „Schatten entfernen“ (Rechtsklick auf das KI-Symbol): die Schattenkarte von SyntheticDoc beim Rendern herausrechnen.
+    /// Die App merkt sich die Wahl; ist die KI-Begradigung schon im Bild, wird sie gleich umgeschaltet (ein Schritt, Strg+Z).
+    /// </summary>
+    [ObservableProperty] public partial bool AiRemoveShadows { get; set; } = AppSettings.Load().AiRemoveShadows;
+
+    partial void OnAiRemoveShadowsChanged(bool value)
+    {
+        (AppSettings.Load() with { AiRemoveShadows = value }).Save();
+        _ = SwitchAiShadowsAsync(value);
+    }
+
+    private async Task SwitchAiShadowsAsync(bool on)
+    {
+        if (_history is not { } h || h.Recipe.Dewarp is not { Grid: { Shading: { } shading } grid } spec || shading.On == on) return;
+        var next = h.Recipe with { Dewarp = spec with { Grid = grid with { Shading = shading with { On = on } } } };
+        await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, on ? Tr.T("Schatten entfernt") : Tr.T("Schatten wieder drin"),
+            Tr.T("KI begradigt"), null), s => s with { Hidden = s.Hidden & ~EditSteps.Dewarp });
+    }
+
+    /// <summary>
     /// „KI begradigen“: SyntheticDoc rechnet aus dem Bild (nur gedreht/gespiegelt, verkleinert auf 1600 px) das Gitter, damit
     /// wird das Blatt gerade gezogen — ein Schritt, Strg+Z macht ihn rückgängig; Linien des Werkzeugs „Gewölbtes Blatt“
     /// werden ersetzt. Ist die KI-Begradigung schon drin, nimmt der Klick sie wieder heraus.
@@ -304,9 +325,11 @@ public partial class MainViewModel
             var grid = await Task.Run(() =>
             {
                 if (CurrentPath is not { } path || DocumentFor(path, h, HiddenSteps, GeometryRecipe.DewarpView) is not { } doc) return null;
-                var onnx = Core.Ai.SyntheticDoc.SyntheticDocModel.OnnxFor(checkpoint, fallback);
-                var session = Ai.Sessions.Get(model, onnx);
-                return Core.Ai.SyntheticDoc.SyntheticDocDewarp.Run(session, doc, focal, CancellationToken.None);
+                var (gridOnnx, shadowOnnx) = Core.Ai.SyntheticDoc.SyntheticDocModel.OnnxFor(checkpoint, fallback);
+                var session = Ai.Sessions.Get(model, gridOnnx);
+                var shadowSession = Ai.Sessions.Get(model, shadowOnnx);
+                // Schattenkarte immer mitrechnen (0,6 s): dann schaltet „Schatten entfernen“ ohne neuen Lauf um
+                return Core.Ai.SyntheticDoc.SyntheticDocDewarp.Run(session, shadowSession, doc, focal, AiRemoveShadows, CancellationToken.None);
             });
             if (grid is null) return;
             var (pw, ph) = PixelSize();
@@ -315,6 +338,7 @@ public partial class MainViewModel
             var detail = $"{fw} × {fh} px";
             if (grid.PageAspect is { } a)
                 detail += " · " + (grid.Din ? Tr.T("Seite 1 : {0:0.00} (DIN)", Math.Max(a, 1 / a)) : Tr.T("Seite 1 : {0:0.00}", Math.Max(a, 1 / a)));
+            if (grid.Shading is { On: true }) detail += " · " + Tr.T("Schatten entfernt");
             await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, Tr.T("KI begradigt"), detail, null),
                 s => s with { Hidden = s.Hidden & ~EditSteps.Dewarp });
         }

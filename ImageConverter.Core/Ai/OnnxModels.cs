@@ -10,6 +10,7 @@ namespace ImageConverter.Core.Ai;
 public sealed class OnnxSessions : IDisposable
 {
     private readonly Dictionary<string, InferenceSession> _open = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _modelOf = new(StringComparer.Ordinal);   // Pfad → Modell-Id
     private readonly Lock _lock = new();
 
     public InferenceSession Get(AiModel model, string path)
@@ -20,11 +21,12 @@ public sealed class OnnxSessions : IDisposable
 
             if (!StaysOpen(model.Kind))
             {
-                // anderes großes Modell schließen
-                foreach (var (key, other) in _open.Where(p => !IsHelper(p.Key)).ToList())
+                // anderes großes Modell schließen; Dateien desselben Modells (SyntheticDoc: mit und ohne Schatten) bleiben
+                foreach (var (key, other) in _open.Where(p => !IsHelper(p.Key) && _modelOf.GetValueOrDefault(p.Key) != model.Id).ToList())
                 {
                     other.Dispose();
                     _open.Remove(key);
+                    _modelOf.Remove(key);
                 }
             }
 
@@ -32,6 +34,7 @@ public sealed class OnnxSessions : IDisposable
             using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
             session = new InferenceSession(path, options);
             _open[path] = session;
+            _modelOf[path] = model.Id;
             return session;
         }
     }
@@ -62,6 +65,7 @@ public sealed class OnnxSessions : IDisposable
         {
             foreach (var s in _open.Values) s.Dispose();
             _open.Clear();
+            _modelOf.Clear();
         }
     }
 
@@ -79,6 +83,24 @@ public sealed class OnnxSessions : IDisposable
             using var outputs = session.Run(runOptions, names, names.Select(n => inputs[n]).ToArray(),
                 [session.OutputNames[0]]);
             return outputs[0].GetTensorDataAsSpan<float>().ToArray();
+        }
+        catch (OnnxRuntimeException) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
+        }
+    }
+
+    /// <summary>Wie <see cref="Run"/>, aber die genannten Ausgaben (SyntheticDoc: Gitter und Schattenkarte).</summary>
+    internal static float[][] Run(InferenceSession session, IReadOnlyDictionary<string, OrtValue> inputs, IReadOnlyList<string> outputNames,
+        CancellationToken ct)
+    {
+        using var runOptions = new RunOptions();
+        using var registration = ct.Register(() => runOptions.Terminate = true);
+        try
+        {
+            var names = inputs.Keys.ToArray();
+            using var outputs = session.Run(runOptions, names, names.Select(n => inputs[n]).ToArray(), outputNames);
+            return outputs.Select(o => o.GetTensorDataAsSpan<float>().ToArray()).ToArray();
         }
         catch (OnnxRuntimeException) when (ct.IsCancellationRequested)
         {

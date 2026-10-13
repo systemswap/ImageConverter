@@ -3,8 +3,8 @@
 // Aufruf (Bauausgabe außerhalb des Projekts, sonst entstehen bin/ und obj/ in ImageConverter.Core):
 //   dotnet run tools/SyntheticDocUmwandeln.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <checkpoint.ckpt> [ausgabe.onnx] [--schatten]
-// Ohne Ausgabe: syntheticdoc.onnx neben den Checkpoint (wie die App). --schatten baut die Schattenkarte mit ein
-// (die App braucht sie nicht; sie verdoppelt die Rechenzeit).
+// Ohne Ausgabe: syntheticdoc.onnx neben den Checkpoint, mit --schatten syntheticdoc-schatten.onnx (Schattenkarte
+// dazu, doppelte Rechenzeit) — die App baut beide selbst.
 using ImageConverter.Core.Ai.SyntheticDoc;
 using Microsoft.ML.OnnxRuntime;
 
@@ -15,7 +15,8 @@ if (files.Length == 0)
     return 1;
 }
 var shadow = args.Contains("--schatten");
-var target = files.Length > 1 ? files[1] : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(files[0]))!, SyntheticDocModel.OnnxFile);
+var target = files.Length > 1 ? files[1]
+    : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(files[0]))!, shadow ? SyntheticDocModel.ShadowOnnxFile : SyntheticDocModel.OnnxFile);
 
 var clock = System.Diagnostics.Stopwatch.StartNew();
 var ckpt = TorchCheckpoint.Load(files[0]);

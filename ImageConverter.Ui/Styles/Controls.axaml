@@ -129,6 +129,17 @@
         <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentBrush}" />
     </Style>
 
+    <!-- Kleine Knöpfe für schwebende Felder in der Vorschau („Gewölbtes Blatt“); nach .subtle/.primary, damit sie gewinnen -->
+    <Style Selector="Button.compact, ToggleButton.compact">
+        <Setter Property="Padding" Value="9,4" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.primary.compact">
+        <Setter Property="Padding" Value="14,5" />
+    </Style>
+
     <!-- Quadratische Icon-Buttons fuer die Zoom-/Dreh-Leiste -->
     <Style Selector="Button.icon">
         <Setter Property="Background" Value="Transparent" />
