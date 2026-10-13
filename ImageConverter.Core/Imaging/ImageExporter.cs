@@ -83,8 +83,11 @@ public static class ImageExporter
         format is not (OutputFormat.Jpeg or OutputFormat.Bmp);
 
     /// <summary>Wendet die Bildkette an. Die Quelle bleibt unverändert.</summary>
-    public static MagickImage Render(MagickImage source, ExportOptions o, WorkPlan? plan = null)
+    /// <param name="cache">Zwischenstände für wiederholte Läufe am selben Bild (Größenschätzung) — gleiches Ergebnis, nur
+    /// ab der ersten geänderten Stufe gerechnet.</param>
+    public static MagickImage Render(MagickImage source, ExportOptions o, WorkPlan? plan = null, LookCache? cache = null)
     {
+        if (cache is not null) return RenderCached(source, o, plan, cache);
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
 
@@ -99,6 +102,94 @@ public static class ImageExporter
             ? RenderLook(resized, 0, 0, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale)
             : RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale);
         if (!ReferenceEquals(result, resized)) resized.Dispose();
+
+        plan?.Next();
+        ApplyColor(result, o.Color);
+        ApplyMetadata(result, o.Metadata);
+        result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
+        result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return result;
+    }
+
+    /// <summary>
+    /// <see cref="Render(MagickImage, ExportOptions, WorkPlan?, LookCache?)"/> mit Zwischenständen — dieselben Schritte in
+    /// derselben Reihenfolge (sonst schätzte die Größe ein anderes Bild), aber Skalieren + Entrauschen, Dunst,
+    /// Tiefen/Lichter und Licht und Farbe kommen aus <paramref name="cache"/>, wenn sich ihre Einstellungen nicht geändert
+    /// haben. Die gespeicherten Puffer gehören dem Speicher und gehen nie in den Pool.
+    /// </summary>
+    private static MagickImage RenderCached(MagickImage source, ExportOptions o, WorkPlan? plan, LookCache cache)
+    {
+        cache.BeginRun();
+        uint sourceDepth;
+        lock (source) sourceDepth = source.Depth;
+        var key = new LookCache.InputKey(new LookCache.SourceRef(source), o.Width, o.Height, o.Filter, o.GammaCorrect,
+            o.Denoise, o.ColorDenoise);
+        var input = cache.GetInput(key, () =>
+        {
+            var noiseFirst = NoiseFirst(source, o);
+            var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : source;
+            plan?.Next();
+            var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
+            if (!ReferenceEquals(start, source)) start.Dispose();
+            try
+            {
+                var px = Pixels.FromMagick(resized);
+                var noise = !noiseFirst && (o.Denoise > 0.01 || o.ColorDenoise > 0.01);
+                if (noise)
+                {
+                    int rw, rh;
+                    lock (resized) (rw, rh) = ((int)resized.Width, (int)resized.Height);
+                    px = Swap(px, Denoiser.Apply(px, rw, rh, o.Denoise, o.ColorDenoise, 1, plan));
+                }
+                return new LookCache.Input(resized, px, noise);
+            }
+            catch
+            {
+                resized.Dispose();   // abgebrochen: nichts kommt in den Speicher
+                throw;
+            }
+        });
+
+        var image = input.Resized;
+        int w, h;
+        lock (image) (w, h) = ((int)image.Width, (int)image.Height);
+        var adjust = o.Adjustments is { IsNone: false } a ? a : null;
+        var grainy = o.Grain is { IsNone: false };
+        MagickImage result;
+        if (!input.Processed && adjust is null && o.SharpenAmount <= 0.01 && !grainy)
+        {
+            result = ImageOps.CloneOf(image);   // wie RenderLook: nichts zu tun, das skalierte Bild selbst
+        }
+        else
+        {
+            var looked = input.Pixels;
+            if (adjust is not null)
+            {
+                looked = cache.GetAdjusted(key, adjust, () =>
+                {
+                    var dehazed = cache.GetDehazed(key, adjust.DehazeKey, () => Adjust.Dehazed(input.Pixels, w, h, adjust, plan));
+                    var prepared = cache.GetPrepared(key, adjust.PrepareKey, () => Adjust.Finish(dehazed, w, h, adjust, plan));
+                    return Adjust.Apply(prepared, w, h, adjust, plan);
+                });
+            }
+            var work = looked;
+            if (o.SharpenAmount > 0.01)
+            {
+                plan?.Next();
+                work = Sharpen.UnsharpMask(work, w, h, o.SharpenAmount, o.SharpenSigma);
+            }
+            if (grainy)
+            {
+                plan?.Next();
+                var grained = Grain.Apply(work, w, h, o.Grain, o.GrainScale);
+                if (!ReferenceEquals(work, looked) && !ReferenceEquals(work, grained)) PixelPool.Return(work);
+                work = grained;
+            }
+            lock (image) result = Pixels.ToMagick16(work, w, h, image.HasAlpha);
+            if (!ReferenceEquals(work, looked)) PixelPool.Return(work);
+            CopyProfiles(image, result);
+            lock (image) result.Density = image.Density;
+        }
 
         plan?.Next();
         ApplyColor(result, o.Color);

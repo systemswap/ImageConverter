@@ -230,6 +230,9 @@ public partial class MainViewModel
     private const int EstimateBaseEdge = 2048;
     private MagickImage? _estimateBase;
     private (MagickImage Doc, ResampleFilter Filter, bool Gamma)? _estimateBaseKey;
+    // Zwischenstände der Proben (Dunst, Tiefen/Lichter, Licht und Farbe): Schärfen, Körnung, Qualität, Format rechnen
+    // sonst bei jeder Änderung den ganzen Dunst zweimal neu. Gilt für _estimateBase, wird mit ihr verworfen.
+    private readonly LookCache _estimateCache = new();
 
     [ObservableProperty] public partial string EstimatedSize { get; set; } = "—";
     [ObservableProperty] public partial string SavingsText { get; set; } = "Größe nach dem Export";
@@ -269,6 +272,7 @@ public partial class MainViewModel
                 // die wird nur neu erstellt, wenn sich Bild, Filter oder Gamma ändern.
                 if (_estimateBase is null || _estimateBaseKey != baseKey)
                 {
+                    _estimateCache.Clear();
                     _estimateBase?.Dispose();
                     var s = Math.Min(1.0, (double)EstimateBaseEdge / Math.Max((int)doc.Width, (int)doc.Height));
                     _estimateBase = ImageOps.Resize(doc,
@@ -278,7 +282,7 @@ public partial class MainViewModel
                 }
 
                 ct.ThrowIfCancellationRequested();
-                return SizeEstimator.EstimateSize(_estimateBase, options, EstimateMaxEdge, ct);
+                return SizeEstimator.EstimateSize(_estimateBase, options, EstimateMaxEdge, ct, _estimateCache);
             }, ct);
 
             var bytes = estimate.Bytes;

@@ -1796,3 +1796,23 @@ Test oder Nachweis.
   `WrapPanel`, das umbricht; seitlich 58 px frei für das Symbol „Bearbeitungen“. Geprüft bei kleinster Fenstergröße.
 - **Werkzeug-Falle (PowerShell):** Variablen unterscheiden keine Groß-/Kleinschreibung — `$h` (Fenster) überschrieb
   den Parameter `$H` (Höhe) im Bildschirmfoto-Skript.
+
+## 56. Dunst rechnete bei Tiefen/Lichtern und in der Größenschätzung neu; Korn feiner als ein Pixel, Härte (0.5.66 beta)
+
+- **Frage des Benutzers:** Muss der Dunst neu gerechnet werden, wenn sich nur Spätere in der Kette ändern? Licht und
+  Farbe, Schärfen, Körnung nutzten den Zwischenstand schon. Aber: Tiefen/Lichter (nach dem Dunst) steckten im selben
+  Schlüssel (`PrepareKey`) — jeder Zug an Tiefen oder Lichtern rechnete alle Dunst-Durchläufe neu, ebenso „Maske
+  zeigen“ und die Luminanz-Schwelle (Bereichskarten). Und die Größenschätzung rechnete nach **jeder** Änderung (auch
+  Qualität, Format, Schärfen, Körnung) die ganze Kette zweimal ohne Zwischenspeicher, Abbruch erst zwischen den Proben.
+- **Lösung:** `Adjust.Prepare` = `Dehazed` (Weißabgleich + Dunst, Schlüssel `Adjustments.DehazeKey`) → `Finish`
+  (Tiefen/Lichter, Bereichskarten). Vorschau: eigene Stufe `_dehazedCache`. Schätzung: `LookCache` (skaliert +
+  entrauscht → Dunst → Tiefen/Lichter → Licht und Farbe; Schärfen und Körnung jedes Mal), über
+  `ImageExporter.Render(…, cache)`, dasselbe Ergebnis wie ohne (`LookCacheTests` vergleicht Pixel und Stufenzahl);
+  ein `WorkPlan` nur mit dem Abbruch bricht jetzt auch zwischen den Dunst-Durchläufen ab.
+- **Korn 0,1 px (Wunsch):** Bis 0,3 px wurde das Korn gar nicht weichgezeichnet — 0,25 px war schon weißes Rauschen
+  (jedes Pixel für sich), ein längerer Regler allein hätte nichts geändert. Feiner als ein Pixel heißt deshalb: weißes
+  Rauschen minus ein Teil seiner Gauß-Fassung (1 px), Anteil 0 bei 0,25 px bis 1 bei 0,1 px, Streuung analytisch auf 1
+  (1 − 2a·g₀² + a²·(Σg²)²) — grobe Häufungen fallen weg, Nachbarn laufen gegeneinander. Regler −27 … 100
+  (`GrainSettings.MinSize`), Anzeige unter 1 px mit zwei Stellen (0,25 statt „0,3“). Messen bleibt bei ≥ 0,25 px.
+- **Härte (Wunsch):** tanh(k · Korn), k = 4 · Härte/100, Streuung zurück auf 1 — aus weichen Gauß-Tupfen werden scharf
+  begrenzte Körner. Auf feines, grobes und Farbkorn, nicht auf die Klumpen. 0 = wie bisher.

@@ -177,7 +177,8 @@ public partial class MainViewModel
             s.HighBitDepth && ImageExporter.SupportsHighBitDepth(format),
             (s.Hidden & EditSteps.ColorNoise) == 0 && s.ColorNoiseReduction > 0.005 ? s.ColorNoiseReduction : 0,
             (s.Hidden & EditSteps.Grain) == 0 && Math.Round(s.GrainAmount) >= 1
-                ? new GrainSettings(Math.Round(s.GrainAmount), Math.Round(s.GrainSize), Math.Round(s.GrainRoughness), Math.Round(s.GrainColor))
+                ? new GrainSettings(Math.Round(s.GrainAmount), Math.Round(s.GrainSize), Math.Round(s.GrainRoughness), Math.Round(s.GrainColor),
+                    Math.Round(s.GrainHardness))
                 : null);
     }
 

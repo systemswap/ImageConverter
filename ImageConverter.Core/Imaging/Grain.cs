@@ -9,7 +9,8 @@ namespace ImageConverter.Core.Imaging;
 /// <param name="Size">Korngröße 0–100 (fein … grob), in Pixeln der Ausgabe — siehe <see cref="SigmaFor"/>.</param>
 /// <param name="Roughness">Rauheit 0 (gleichmäßig) … 100 (klumpig wie Film).</param>
 /// <param name="Color">Farbanteil 0 (reines Helligkeitskorn) … 100 % (jeder Kanal für sich).</param>
-public sealed record GrainSettings(double Amount, double Size = 40, double Roughness = 30, double Color = 0)
+/// <param name="Hardness">Härte 0 (weiche Tupfen, wie der Gauß sie gibt) … 100 (scharf begrenzte Körner, körniger) — siehe <see cref="Grain.Harden"/>.</param>
+public sealed record GrainSettings(double Amount, double Size = 40, double Roughness = 30, double Color = 0, double Hardness = 0)
 {
     public static readonly GrainSettings None = new(0);
 
@@ -24,8 +25,21 @@ public sealed record GrainSettings(double Amount, double Size = 40, double Rough
     /// <summary>Korngröße als Gauß-Sigma in Pixeln der Ausgabe.</summary>
     public double Sigma => SigmaFor(Size);
 
-    /// <summary>Regler 0…100 → Sigma: 0 = 0,25 px (Pixel für Pixel), je 20 doppelt so groß, 100 = 8 px.</summary>
-    public static double SigmaFor(double size) => 0.25 * Math.Pow(2, Math.Clamp(size, 0, 100) / 20);
+    /// <summary>Kleinster Reglerstand: 0,1 px (feiner als ein Pixel, siehe <see cref="Grain.Field"/>).</summary>
+    public const double MinSize = -27;
+
+    /// <summary>Feinstes Korn in Pixeln der Ausgabe.</summary>
+    public const double FinestSigma = 0.1;
+
+    /// <summary>Ab hier hat jedes Pixel sein eigenes Korn (weißes Rauschen); darunter wird es noch feiner.</summary>
+    public const double PixelSigma = 0.25;
+
+    /// <summary>
+    /// Regler → Sigma: 0 = 0,25 px (Pixel für Pixel), je 20 doppelt so groß, 100 = 8 px; unter 0 bis
+    /// <see cref="MinSize"/> = 0,1 px (feiner als ein Pixel).
+    /// </summary>
+    public static double SigmaFor(double size) =>
+        Math.Max(FinestSigma, PixelSigma * Math.Pow(2, Math.Clamp(size, MinSize, 100) / 20));
 
     /// <summary>Umkehrung von <see cref="SigmaFor"/>.</summary>
     public static double SizeFor(double sigma) => sigma <= 0.25 ? 0 : Math.Clamp(20 * Math.Log2(sigma / 0.25), 0, 100);
@@ -79,6 +93,7 @@ public static class Grain
         var rough = Math.Clamp(grain.Roughness / 100, 0, 1);
         var color = Math.Clamp(grain.Color / 100, 0, 1);
         var fineSigma = grain.Sigma;
+        var hard = Hardening.For(grain.Hardness);
 
         // Stufen in Pixeln dieses Bildes, mit der Abschwächung durchs Verkleinern
         var (fine, fineAmp) = AtScale(fineSigma, scale);
@@ -95,15 +110,15 @@ public static class Grain
         for (var y0 = 0; y0 < height; y0 += StripRows)
         {
             var rows = Math.Min(StripRows, height - y0);
-            var lumaFine = Field(y0, width, rows, fine, seed: 11);
-            var lumaCoarse = rough > 0 ? Field(y0, width, rows, coarse, seed: 12) : null;
+            var lumaFine = Harden(Field(y0, width, rows, fine, seed: 11), hard);
+            var lumaCoarse = rough > 0 ? Harden(Field(y0, width, rows, coarse, seed: 12), hard) : null;
             var clumps = rough > 0 ? Field(y0, width, rows, clump, seed: 13) : null;
             float[]? r = null, g = null, b = null;
             if (color > 0)
             {
-                b = Field(y0, width, rows, fine, seed: 21);
-                g = Field(y0, width, rows, fine, seed: 22);
-                r = Field(y0, width, rows, fine, seed: 23);
+                b = Harden(Field(y0, width, rows, fine, seed: 21), hard);
+                g = Harden(Field(y0, width, rows, fine, seed: 22), hard);
+                r = Harden(Field(y0, width, rows, fine, seed: 23), hard);
             }
 
             Parallel.For(0, rows, row =>
@@ -140,6 +155,33 @@ public static class Grain
         return result;
     }
 
+    /// <summary>
+    /// Härte als Kennlinie: k = 4 · Härte/100, Korn → tanh(k · Korn), Streuung zurück auf 1. Bei 0 bleibt alles, wie es
+    /// war; je größer k, desto flacher die Kuppen und steiler die Ränder der Körner — aus weichen Gauß-Tupfen werden
+    /// scharf begrenzte Körner, bei 100 fast nur noch hell oder dunkel.
+    /// </summary>
+    internal readonly record struct Hardening(float K, float Gain)
+    {
+        public static Hardening For(double hardness)
+        {
+            var k = 4 * Math.Clamp(hardness / 100, 0, 1);
+            return k < 1e-3 ? default : new Hardening((float)k, (float)(1 / Math.Sqrt(TanhSquaredMean(k))));
+        }
+    }
+
+    /// <summary>Korn (Streuung 1) an Ort und Stelle härten; ohne Härte unverändert.</summary>
+    internal static float[] Harden(float[] field, Hardening hard)
+    {
+        if (hard.K <= 0) return field;
+        var (k, gain) = (hard.K, hard.Gain);
+        Parallel.For(0, (field.Length + 4095) / 4096, block =>
+        {
+            var end = Math.Min(field.Length, (block + 1) * 4096);
+            for (var i = block * 4096; i < end; i++) field[i] = MathF.Tanh(k * field[i]) * gain;
+        });
+        return field;
+    }
+
     /// <summary>Stärke je Helligkeit wie bei Film: Mitteltöne 1, zu Schwarz und Weiß hin auslaufend.</summary>
     internal static float Weight(float lum)
     {
@@ -169,7 +211,8 @@ public static class Grain
     internal static float[] Field(int y0, int width, int rows, double sigma, int seed)
     {
         var blur = sigma >= 0.3;
-        var pad = blur ? (int)Math.Ceiling(3.5 * sigma) + 2 : 0;
+        var finer = FinerShare(sigma);   // unter 0,25 px: Anteil Hochpass
+        var pad = blur ? (int)Math.Ceiling(3.5 * sigma) + 2 : finer > 0 ? (int)Math.Ceiling(3.5 * FinerBlur) + 2 : 0;
         int pw = width + 2 * pad, ph = rows + 2 * pad;
         var field = PixelPool.Rent(pw * ph);
         Parallel.For(0, ph, row =>
@@ -179,7 +222,24 @@ public static class Grain
         });
 
         var result = PixelPool.Rent(width * rows);
-        if (!blur)
+        if (finer > 0)
+        {
+            // Feiner als ein Pixel: weißes Rauschen minus ein Teil seiner weichgezeichneten Fassung — die groben Anteile
+            // (zufällige Häufungen über mehrere Pixel, die wie Flecken wirken) fallen weg, Nachbarn laufen leicht
+            // gegeneinander, wie bei Korn, das kleiner ist als ein Pixel. Streuung analytisch zurück auf 1.
+            var low = PixelPool.Rent(pw * ph);
+            Array.Copy(field, low, pw * ph);
+            Blur.Gauss(low, pw, ph, FinerBlur);
+            var a = (float)finer;
+            var gain = (float)(1 / Math.Sqrt(FinerEnergy(finer)));
+            Parallel.For(0, rows, row =>
+            {
+                var from = (row + pad) * pw + pad;
+                for (var x = 0; x < width; x++) result[row * width + x] = (field[from + x] - a * low[from + x]) * gain;
+            });
+            PixelPool.Return(low);
+        }
+        else if (!blur)
         {
             Array.Copy(field, result, width * rows);
         }
@@ -201,7 +261,30 @@ public static class Grain
     /// Streuung von weißem Rauschen (Streuung 1) nach <see cref="Blur.Gauss"/> mit diesem Sigma: Σk² des 1-D-Kerns,
     /// für zwei Richtungen einmal (Varianz (Σk²)², Streuung Σk²). Mit demselben Kern bzw. denselben Boxen wie dort.
     /// </summary>
-    internal static double KernelEnergy(double sigma)
+    internal static double KernelEnergy(double sigma) => Kernel1D(sigma).Sum(v => v * v);
+
+    /// <summary>Weichzeichnen für das Korn unter einem Pixel: was davon abgezogen wird, sind Häufungen über etwa 1 px.</summary>
+    private const double FinerBlur = 1.0;
+
+    /// <summary>Anteil des Hochpasses: 0 bei 0,25 px (weißes Rauschen), 1 bei 0,1 px.</summary>
+    internal static double FinerShare(double sigma) =>
+        sigma >= GrainSettings.PixelSigma ? 0
+            : Math.Clamp((GrainSettings.PixelSigma - sigma) / (GrainSettings.PixelSigma - GrainSettings.FinestSigma), 0, 1);
+
+    /// <summary>
+    /// Varianz von n − a·G(n) für weißes Rauschen n (Varianz 1) und den 2-D-Gauß G = g ⊗ g von <see cref="Blur.Gauss"/>:
+    /// Σ(δ − aG)² = 1 − 2a·G(0, 0) + a²·ΣG², mit G(0, 0) = g₀² und ΣG² = (Σg²)².
+    /// </summary>
+    internal static double FinerEnergy(double a)
+    {
+        var g = Kernel1D(FinerBlur);
+        var g0 = g[g.Length / 2];
+        var g2 = g.Sum(v => v * v);
+        return 1 - 2 * a * g0 * g0 + a * a * g2 * g2;
+    }
+
+    /// <summary>Der 1-D-Kern von <see cref="Blur.Gauss"/> mit diesem Sigma — derselbe Kern bzw. dieselben Boxen wie dort.</summary>
+    private static double[] Kernel1D(double sigma)
     {
         double[] kernel;
         if (sigma < Blur.ExactGaussBelow)
@@ -221,7 +304,7 @@ public static class Grain
                 kernel = next;
             }
         }
-        return kernel.Sum(v => v * v);
+        return kernel;
     }
 
     /// <summary>
@@ -245,14 +328,15 @@ public static class Grain
         return v;
     }
 
-    private static double TanhSquaredMean()
+    /// <summary>E[tanh(k·Z)²] für Z ~ N(0, 1).</summary>
+    private static double TanhSquaredMean(double k = 1)
     {
-        // ∫ tanh(z)² φ(z) dz, Trapez über ±8
+        // ∫ tanh(k·z)² φ(z) dz, Trapez über ±8
         double sum = 0;
         const double step = 0.001;
         for (var z = -8.0; z <= 8; z += step)
         {
-            var t = Math.Tanh(z);
+            var t = Math.Tanh(k * z);
             sum += t * t * Math.Exp(-z * z / 2);
         }
         return sum * step / Math.Sqrt(2 * Math.PI);
@@ -303,7 +387,8 @@ public static class Grain
             Math.Round(GrainSettings.AmountFor(channelStd * amp)),
             Math.Round(GrainSettings.SizeFor(sigma)),
             0,
-            Math.Round(color * 100));
+            Math.Round(color * 100),
+            0);   // Härte lässt sich nicht messen: weich wie bisher
     }
 
     /// <summary>RGB verschachtelt (für <see cref="FaceDetails.MeasureGrain"/>), höchstens <see cref="MeasureMaxPixels"/> aus der Mitte.</summary>

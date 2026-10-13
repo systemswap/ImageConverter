@@ -94,6 +94,12 @@ public sealed record Adjustments(
         MatchLimit = NeedsRegions ? 0 : 100,
     };
 
+    /// <summary>
+    /// Nur die Teile, von denen <see cref="Adjust.Dehazed"/> abhängt (Weißabgleich und Dunst) — Schlüssel der teuersten
+    /// Stufe: Tiefen/Lichter und die Bereichskarten kommen danach und brauchen den Dunst nicht neu.
+    /// </summary>
+    public Adjustments DehazeKey => PrepareKey with { Shadows = 0, Highlights = 0, MatchLimit = 100 };
+
     /// <summary>Braucht Luminanz die Bereichskarten (<see cref="LuminanceRegions"/>)?</summary>
     public bool NeedsRegions => Normalized is var n
         && ((n.MatchLuminance > 0 && (n.MatchLimit < 100 || n.MatchTarget > 0)) || n.MaskAmount > 0 || n.MaskPreview);
@@ -149,10 +155,11 @@ public static class Adjust
     /// in den Fortschritt ein — in derselben Reihenfolge, in der sie dort beginnen.
     /// </summary>
     /// <param name="megapixels">Bildgröße, für den geschätzten Aufwand.</param>
-    public static void PlanSteps(Adjustments a, WorkPlan plan, double megapixels)
+    /// <param name="withDehaze">false: der Dunst liegt schon fertig vor (Zwischenspeicher), nur der Rest wird gerechnet.</param>
+    public static void PlanSteps(Adjustments a, WorkPlan plan, double megapixels, bool withDehaze = true)
     {
         if (a.IsNone) return;
-        var dehaze = Math.Clamp(a.Dehaze / 100, -1, 3);
+        var dehaze = withDehaze ? Math.Clamp(a.Dehaze / 100, -1, 3) : 0;
         if (dehaze < 0)
             plan.Add(Tr.T("Dunst hinzufügen"), WorkPlan.DehazePassCost * megapixels);
         else if (dehaze > 0)
@@ -174,9 +181,28 @@ public static class Adjust
     /// <summary>
     /// Der teure Teil — Dunst entfernen und Tiefen/Lichter über den Local Laplacian Filter.
     /// Hängt nur von Bild, Dunst, Tiefen und Lichtern ab; die Vorschau merkt sich das
-    /// Ergebnis, damit die übrigen Regler flüssig bleiben.
+    /// Ergebnis, damit die übrigen Regler flüssig bleiben. Zwei Stufen: <see cref="Dehazed"/>, dann <see cref="Finish"/>.
     /// </summary>
-    public static Prepared Prepare(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null)
+    public static Prepared Prepare(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null) =>
+        Finish(Dehazed(px, width, height, a, plan), width, height, a, plan);
+
+    /// <summary>
+    /// Zweite Stufe von <see cref="Prepare"/>: Tiefen/Lichter und die Bereichskarten auf dem Ergebnis von
+    /// <see cref="Dehazed"/>. Hängt vom Dunst nur über dieses Bild ab — wer es aufhebt (Vorschau, Größenschätzung),
+    /// rechnet beim Ziehen an Tiefen oder Lichtern nur noch diese Stufe.
+    /// </summary>
+    public static Prepared Finish(float[] dehazed, int width, int height, Adjustments a, WorkPlan? plan = null)
+    {
+        if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
+        return new Prepared(dehazed, ToneMap(dehazed, width, height, a),
+            a.NeedsRegions ? LuminanceRegions.Compute(dehazed, width, height) : null);
+    }
+
+    /// <summary>
+    /// Erste Stufe von <see cref="Prepare"/>: Weißabgleich und Dunst — der teuerste Teil, hängt nur von
+    /// <see cref="Adjustments.DehazeKey"/> ab. Ohne beides <paramref name="px"/> selbst, sonst ein neuer Puffer.
+    /// </summary>
+    public static float[] Dehazed(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = px;
@@ -247,9 +273,7 @@ public static class Adjust
             }
             source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
         }
-        if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
-        return new Prepared(source, ToneMap(source, width, height, a),
-            a.NeedsRegions ? LuminanceRegions.Compute(source, width, height) : null);
+        return source;
     }
 
     /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>

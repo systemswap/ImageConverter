@@ -76,7 +76,7 @@ public partial class MainViewModel
     /// <summary>Körnung: Stärke 0–100 % (Streuung im Mittelton).</summary>
     [ObservableProperty] public partial double GrainAmount { get; set; }
 
-    /// <summary>Körnung: Korngröße 0 (fein, Pixel für Pixel) … 100 (grob), in Pixeln der Ausgabe.</summary>
+    /// <summary>Körnung: Korngröße −27 (0,1 px, feiner als ein Pixel) … 0 (Pixel für Pixel) … 100 (grob), in Pixeln der Ausgabe.</summary>
     [ObservableProperty] public partial double GrainSize { get; set; } = GrainSettings.None.Size;
 
     /// <summary>Körnung: Rauheit 0 (gleichmäßig) … 100 (klumpig wie Film).</summary>
@@ -85,24 +85,33 @@ public partial class MainViewModel
     /// <summary>Körnung: Farbanteil 0 (nur Helligkeit) … 100 %.</summary>
     [ObservableProperty] public partial double GrainColor { get; set; }
 
+    /// <summary>Körnung: Härte 0 (weiche Tupfen, wie bisher) … 100 (scharf begrenzte Körner, körniger).</summary>
+    [ObservableProperty] public partial double GrainHardness { get; set; }
+
     /// <summary>„Aus dem Foto ermitteln“ läuft.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(MeasureGrainCommand))]
     public partial bool IsMeasuringGrain { get; set; }
 
     public string GrainAmountLabel => GrainAmount < 0.5 ? Tr.T("aus") : $"{Math.Round(GrainAmount):0} %";
-    public string GrainSizeLabel => $"{GrainSettings.SigmaFor(Math.Round(GrainSize)):0.0} px";
+    public string GrainSizeLabel => GrainSizeText(GrainSize);
+
+    /// <summary>Korngröße in Pixeln, unter 1 px mit zwei Stellen (0,25 px ist Pixel für Pixel, 0,1 px noch feiner).</summary>
+    internal static string GrainSizeText(double size) =>
+        GrainSettings.SigmaFor(Math.Round(size)) is var s && s < 1 ? $"{s:0.0#} px" : $"{s:0.0} px";
     public string GrainRoughnessLabel => GrainRoughness < 0.5 ? Tr.T("gleichmäßig") : $"{Math.Round(GrainRoughness):0}";
     public string GrainColorLabel => GrainColor < 0.5 ? Tr.T("aus") : $"{Math.Round(GrainColor):0} %";
+    public string GrainHardnessLabel => GrainHardness < 0.5 ? Tr.T("weich") : $"{Math.Round(GrainHardness):0}";
 
     partial void OnGrainAmountChanged(double value) => ToolChanged(nameof(GrainAmountLabel));
     partial void OnGrainSizeChanged(double value) => ToolChanged(nameof(GrainSizeLabel));
     partial void OnGrainRoughnessChanged(double value) => ToolChanged(nameof(GrainRoughnessLabel));
     partial void OnGrainColorChanged(double value) => ToolChanged(nameof(GrainColorLabel));
+    partial void OnGrainHardnessChanged(double value) => ToolChanged(nameof(GrainHardnessLabel));
 
     /// <summary>Körnung für Vorschau und Export; null = aus (oder in der Liste ausgeschaltet).</summary>
     private GrainSettings? EffectiveGrain => Shows(EditSteps.Grain) && Round(GrainAmount) >= 1
-        ? new GrainSettings(Round(GrainAmount), Round(GrainSize), Round(GrainRoughness), Round(GrainColor))
+        ? new GrainSettings(Round(GrainAmount), Round(GrainSize), Round(GrainRoughness), Round(GrainColor), Round(GrainHardness))
         : null;
 
     private bool CanMeasureGrain => !IsMeasuringGrain;
@@ -143,6 +152,7 @@ public partial class MainViewModel
             GrainSize = measured.Size;
             GrainRoughness = measured.Roughness;
             GrainColor = measured.Color;
+            GrainHardness = measured.Hardness;
             CommitPendingSettings();
             StatusMessage = Tr.T("Korn aus dem Foto übernommen – Regler lassen sich nachbessern.");
         }
@@ -275,6 +285,7 @@ public partial class MainViewModel
         GrainAmount = GrainColor = 0;
         GrainSize = GrainSettings.None.Size;
         GrainRoughness = GrainSettings.None.Roughness;
+        GrainHardness = 0;
         NoiseReduction = ColorNoiseReduction = 0;   // Rauschen steht seit 0.5.26 auch in den Tools
         SelectedTint = TintLabels[0].Label;
         TintHue = Adjustments.SepiaHue;

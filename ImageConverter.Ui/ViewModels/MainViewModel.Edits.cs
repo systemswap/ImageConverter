@@ -593,9 +593,10 @@ public partial class MainViewModel
                 rows.Add(Row(EditSteps.Grain, Tr.T("Körnung"), string.Join(" · ", new[]
                 {
                     $"{Math.Round(GrainAmount):0} %",
-                    $"{GrainSettings.SigmaFor(Math.Round(GrainSize)):0.0} px",
+                    GrainSizeText(GrainSize),
                     Math.Round(GrainRoughness) >= 1 ? $"{Tr.T("Rauheit")} {Math.Round(GrainRoughness):0}" : null,
                     Math.Round(GrainColor) >= 1 ? $"{Tr.T("Farbe")} {Math.Round(GrainColor):0} %" : null,
+                    Math.Round(GrainHardness) >= 1 ? $"{Tr.T("Härte")} {Math.Round(GrainHardness):0}" : null,
                 }.Where(t => t is not null))));
         }
 

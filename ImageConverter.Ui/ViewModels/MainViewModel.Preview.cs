@@ -372,7 +372,10 @@ public partial class MainViewModel
     private const int PreparedCacheSize = 3;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, float[] Pixels)> _denoisedCache = [];
-    // Dunst + Tiefen/Lichter gesondert: der teure Teil, hängt nur von diesen drei Reglern ab
+    // Weißabgleich + Dunst gesondert: der teuerste Teil, hängt nur von DehazeKey ab — Tiefen/Lichter und die
+    // Bereichskarten kommen danach und rechnen ihn nicht neu
+    private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments DehazeKey, float[] Pixels)> _dehazedCache = [];
+    // Dunst + Tiefen/Lichter (+ Bereichskarten): hängt nur von PrepareKey ab, die übrigen Regler bleiben flüssig
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments Adjust, float[] Pixels)> _adjustedCache = [];
 
@@ -462,6 +465,7 @@ public partial class MainViewModel
         // Auch eine laufende Größenschätzung liest das Bild noch
         _estimateCts?.Cancel();
         try { await _estimateTask; } catch { /* abgebrochen */ }
+        _estimateCache.Clear();
         _estimateBase?.Dispose();
         _estimateBase = null;
         _estimateBaseKey = null;
@@ -476,6 +480,7 @@ public partial class MainViewModel
         _denoisedCache.Clear();
         _adjustedCache.Clear();
         _tonedCache.Clear();
+        _dehazedCache.Clear();
     }
 
     /// <summary>Momentaufnahme der Einstellungen (UI-Thread). null = Original zeigen.</summary>
@@ -559,8 +564,16 @@ public partial class MainViewModel
                 var prepared = Cached(_tonedCache, e => e.Key == key && e.Noise == job.Noise && e.PrepareKey == prepareKey)?.Prepared;
                 if (prepared is null)
                 {
-                    Adjust.PlanSteps(j, plan, (double)job.Width * job.Height / 1e6);   // Dunst je Durchlauf … und Licht und Farbe
-                    prepared = Adjust.Prepare(denoised, job.Width, job.Height, j, plan);
+                    var dehazeKey = j.DehazeKey;
+                    var dehazed = Cached(_dehazedCache, e => e.Key == key && e.Noise == job.Noise && e.DehazeKey == dehazeKey)?.Pixels;
+                    // Dunst je Durchlauf (nur wenn nicht schon gerechnet) … Tiefen/Lichter … Licht und Farbe
+                    Adjust.PlanSteps(j, plan, (double)job.Width * job.Height / 1e6, withDehaze: dehazed is null);
+                    if (dehazed is null)
+                    {
+                        dehazed = Adjust.Dehazed(denoised, job.Width, job.Height, j, plan);
+                        AddCached(_dehazedCache, (key, job.Noise, dehazeKey, dehazed), null, PixelCacheSize);
+                    }
+                    prepared = Adjust.Finish(dehazed, job.Width, job.Height, j, plan);
                     AddCached(_tonedCache, (key, job.Noise, prepareKey, prepared), null, PreparedCacheSize);
                 }
                 else

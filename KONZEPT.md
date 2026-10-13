@@ -172,8 +172,10 @@ CUPS (`lp`), unter Windows über den Windows-Druckdienst.
 - Wird **immer zuletzt** gerechnet: nach Entrauschen und Schärfen, auch nach KI und
   „Haut & Details“, egal welche Reihenfolge KI ↔ Einstellungen gewählt ist (sonst
   glättet das eine das Korn wieder weg).
-- Regler: **Stärke**, **Korngröße** (fein … grob), **Rauheit** (gleichmäßig …
-  klumpig wie Film), **Farbanteil** (0 = reines Helligkeitskorn).
+- Regler: **Stärke**, **Korngröße** (0,1 px … grob; ab 0,25 px Pixel für Pixel, darunter
+  feiner als ein Pixel: ohne grobe Häufungen, 0.5.66), **Rauheit** (gleichmäßig …
+  klumpig wie Film), **Farbanteil** (0 = reines Helligkeitskorn), **Härte** (weiche
+  Tupfen … scharf begrenzte Körner, körniger bei gleicher Stärke; 0.5.66).
 - Verteilung wie bei Film: Mitteltöne am meisten, tiefes Schwarz und reines Weiß
   fast keins (Stärke als Funktion der Helligkeit wie beim Kornprofil in
   `FaceDetails`).

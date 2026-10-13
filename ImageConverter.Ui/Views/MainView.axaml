@@ -947,8 +947,8 @@
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="88,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Korngröße'}" />
-                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainSize}"
-                                            ToolTip.Tip="{l:T 'Fein (Pixel für Pixel) bis grob. Gilt für die Ausgabegröße – beim Verkleinern sieht das Korn gleich aus.'}" />
+                                    <Slider Grid.Column="1" Minimum="-27" Maximum="100" Value="{Binding GrainSize}"
+                                            ToolTip.Tip="{l:T 'Von 0,1 px (feiner als ein Pixel: ohne grobe Häufungen) über 0,25 px (Pixel für Pixel) bis grob. Gilt für die Ausgabegröße – beim Verkleinern sieht das Korn gleich aus.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainSizeLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="88,*,Auto">
@@ -962,6 +962,12 @@
                                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainColor}"
                                             ToolTip.Tip="{l:T 'Aus: reines Helligkeitskorn wie bei Schwarzweißfilm. Mehr: zusätzlich bunte Körnchen, jeder Farbkanal für sich.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainColorLabel}" />
+                                </Grid>
+                                <Grid Classes="row" ColumnDefinitions="88,*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Härte'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding GrainHardness}"
+                                            ToolTip.Tip="{l:T 'Weich: Körner als sanfte Tupfen. Mehr: scharf begrenzte Körner mit steilen Rändern – das Bild wirkt körniger, bei gleicher Stärke und Größe.'}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding GrainHardnessLabel}" />
                                 </Grid>
                                 <Button Classes="subtle" Margin="88,2,0,4" HorizontalAlignment="Left"
                                         Content="{l:T 'Aus dem Foto ermitteln'}" Command="{Binding MeasureGrainCommand}"

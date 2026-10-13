@@ -72,6 +72,8 @@ public class GrainTests
     [Theory]
     [InlineData(1.0)]   // echter Gauß
     [InlineData(6.0)]   // Boxfilter
+    [InlineData(0.1)]   // feiner als ein Pixel (Hochpass)
+    [InlineData(0.17)]  // halb Hochpass
     public void Strips_GiveTheSameFieldAsOnePiece(double sigma)
     {
         const int w = 180;
@@ -193,5 +195,70 @@ public class GrainTests
         Assert.Null(MainViewModel.OptionsFor(s).Grain);
         Assert.Equal(35, vm.GrainAmount);                              // Regler behält seinen Wert
         Assert.Equal(0, MainViewModel.WithoutHidden(s, s.Hidden).GrainAmount);   // „Neu anwenden“ setzt ihn auf null
+    }
+
+    /// <summary>Korrelation benachbarter Werte (waagerecht) und Streuung von 4 × 4-Mitteln — grobe Häufungen.</summary>
+    private static (double Neighbour, double Blocks) Texture(float[] f, int w, int h)
+    {
+        double sab = 0, saa = 0;
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x + 1 < w; x++)
+        {
+            double a = f[y * w + x], b = f[y * w + x + 1];
+            sab += a * b;
+            saa += a * a;
+        }
+        double blocks = 0;
+        var n = 0;
+        for (var y = 0; y + 4 <= h; y += 4)
+        for (var x = 0; x + 4 <= w; x += 4, n++)
+        {
+            double m = 0;
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++) m += f[(y + j) * w + x + i];
+            blocks += (m / 16) * (m / 16);
+        }
+        return (sab / saa, Math.Sqrt(blocks / n));
+    }
+
+    [Fact]
+    public void FinerThanAPixel_DropsTheCoarseClusters_AtTheSameStrength()
+    {
+        Assert.Equal(0.1, GrainSettings.SigmaFor(GrainSettings.MinSize), 6);
+        Assert.Equal(0.25, GrainSettings.SigmaFor(0), 6);
+        Assert.Equal("0,1 px", MainViewModel.GrainSizeText(GrainSettings.MinSize).Replace('.', ','));
+        Assert.Equal("0,25 px", MainViewModel.GrainSizeText(0).Replace('.', ','));
+
+        const int w = 256, h = 256;
+        var pixel = Grain.Field(0, w, h, 0.25, seed: 3);
+        var finer = Grain.Field(0, w, h, 0.1, seed: 3);
+        var (nPixel, bPixel) = Texture(pixel, w, h);
+        var (nFiner, bFiner) = Texture(finer, w, h);
+        // weißes Rauschen: Nachbarn unabhängig, 4 × 4-Mittel streuen 1/4; feiner: Nachbarn gegenläufig, Häufungen weg
+        Assert.InRange(nPixel, -0.03, 0.03);
+        Assert.InRange(bPixel, 0.22, 0.28);
+        Assert.True(nFiner < -0.15, $"Nachbarn {nFiner:0.000}");
+        Assert.True(bFiner < 0.6 * bPixel, $"Häufungen {bFiner:0.000} gegen {bPixel:0.000}");
+        // gleiche Streuung: die Stärke bleibt
+        Assert.InRange(Math.Sqrt(finer.Sum(v => (double)v * v) / finer.Length), 0.95, 1.05);
+    }
+
+    [Fact]
+    public void Hardness_GivesCrispGrains_AtTheSameStrength()
+    {
+        const int w = 256, h = 256;
+        var soft = Grain.Field(0, w, h, 2.0, seed: 4);
+        var hard = Grain.Harden(Grain.Field(0, w, h, 2.0, seed: 4), Grain.Hardening.For(100));
+        double Std(float[] f) => Math.Sqrt(f.Sum(v => (double)v * v) / f.Length);
+        double MeanAbs(float[] f) => f.Average(v => Math.Abs((double)v));
+        Assert.InRange(Std(hard), 0.95, 1.05);
+        // weich: wie ein Gauß (E|Z| = 0,80); hart: fast nur hell oder dunkel (gegen 1)
+        Assert.InRange(MeanAbs(soft), 0.76, 0.84);
+        Assert.True(MeanAbs(hard) > 0.92, $"E|Korn| {MeanAbs(hard):0.000}");
+        // Härte 0: unverändert, auch über Apply
+        Assert.Same(soft, Grain.Harden(soft, Grain.Hardening.For(0)));
+        var px = Flat(64, 48, 0.5f);
+        Assert.Equal(Grain.Apply(px, 64, 48, new GrainSettings(50, 40, 20, 30)), Grain.Apply(px, 64, 48, new GrainSettings(50, 40, 20, 30, 0)));
+        Assert.NotEqual(Grain.Apply(px, 64, 48, new GrainSettings(50)), Grain.Apply(px, 64, 48, new GrainSettings(50, Hardness: 60)));
     }
 }
