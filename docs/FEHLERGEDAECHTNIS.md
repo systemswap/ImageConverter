@@ -1735,3 +1735,35 @@ Test oder Nachweis.
 - **Messung** (`werkzeuge/ki/Ki.cs`, echter Fehler gegen den Generator): Arbeitsblätter 13–18 px (Linienverfahren 0,4–2 px),
   Doppelseiten 31 px; echte Fotos: Bon in der Hand und zerknittertes Faltblatt sichtbar besser als das Linienverfahren,
   Fotobuch brauchbar. 1,6–1,8 s je Bild auf der CPU.
+
+## 53. SyntheticDoc ohne Python: Checkpoint → ONNX in C#, Download vom Autor, schneller, Training im Projekt (0.5.61 beta)
+
+- **Neu in:** 0.5.61 beta (13.10.2026), Wunsch des Benutzers: das Bauen der ONNX-Datei in unseren Quellcode, kein
+  Hosting, unabhängig vom Original-Repository, selbst trainieren können, leicht wieder entfernbar. Beschreibung, Ablauf
+  des Trainings und **Entfernen-Liste**: `docs/KI-BEGRADIGEN.md`.
+- **Umwandler** (`ImageConverter.Core/Ai/SyntheticDoc/`): `TorchCheckpoint` (Zip + Pickle-Protokoll 2 — der Checkpoint
+  nutzt nur OrderedDict, `_rebuild_tensor_v2`, Float-/LongStorage; Tensoren über Schritte zusammenhängend gelesen),
+  `OnnxGraph` (Protobuf von Hand: ModelProto, Graph, Knoten, Initialisierer; ir 8, Opset 17), `SyntheticDocNet`
+  (Netz nach `model.py`, BatchNorm gefaltet, gespiegeltes Polster als `Pad`+`Conv`, `Resize` linear `half_pixel` wie
+  `align_corners=False`). Gegen den PyTorch-Export: größte Abweichung 4,8 · 10⁻⁷. **Falle:** die Methode hieß erst
+  `Convert` und verdeckte `System.Convert` (CS0119) — heißt jetzt `ToOnnx`.
+- **Falle Rechenzeit:** ONNX Runtime rechnet alle Knoten, auch wenn nur `bm_map` abgefragt wird — mit Schatten-Zweig
+  1,2 s statt 0,6 s. Die App baut ohne (`shadow: false`); `tools/SyntheticDocUmwandeln.cs --schatten` baut mit.
+- **Download:** Katalog lädt jetzt den Original-Checkpoint (`igl.ethz.ch/projects/SyntheticDoc/highres_121x177.ckpt`,
+  97 MB, SHA-256 a9b69148…a91d, `MainFile` = der Checkpoint); `SyntheticDocModel.OnnxFor` baut `syntheticdoc.onnx`
+  daneben beim ersten Gebrauch und neu, wenn der Checkpoint jünger ist (eigenes Training: Datei ersetzen). Die frühere
+  Python-ONNX-Datei (feste Größe 1440 × 1024, `syntheticdoc_121x177.onnx`) wird nicht mehr benutzt — mit offener
+  Größe braucht es einen neuen Dateinamen, sonst hätte die App die alte Datei mit fester Größe weiterbenutzt.
+- **Schneller:** erster Lauf auf 720 × 512 (0,3 s, nur um das Blatt zu finden), zweiter auf 1440 × 1024 auf dem
+  Ausschnitt; Ausschnitte und Verkleinern über Magick (`ResampleFilter.Bilinear` = Dreieck mit Vorfilter) aus dem
+  vollen Bild statt der 1600-px-Fassung. 1,2–1,4 s je Bild statt 3,5–5 s.
+- **Gemessen und verworfen:** Rand 2 % (wie im Training) statt 4 %, dritter Lauf, gespiegelt mitteln: ±1–3 px. Kombination
+  „KI, dann unsere Linien im Ergebnis“: nur Gitter ±0,5 px, mit Blattmodell Schulbuch wellig 19,7 → 11,8, aber Schulbuch gewölbt
+  13,2 → 16,2 und Arbeitsblatt-Doppelseite kaputt (192 px). Andere Modelle: D2Dewarp hat Gewichte (CC BY-NC-ND), aber DocUNet
+  MS-SSIM 0,50 < SyntheticDoc 0,558; AADD weiter ohne Gewichte.
+- **Training im Projekt:** `extern/SyntheticDoc/` (MIT, ohne `media/`), eigene Ergänzungen mit „ImageConverter:“
+  gekennzeichnet (`IMAGECONVERTER.md`): `train.py --init-weights` (nur Gewichte als Start) und `--accelerator`,
+  `generation/pack_shards.py` (gerenderte Beispiele → Zip-Pakete). Trainingsschritt auf dem Entwicklungsrechner (CPU):
+  5,6 s je Bild in voller Auflösung → Nachtrainieren mit 20 000 Beispielen × 5 Epochen ≈ 6,5 Tage; auf einer
+  NVIDIA-GPU geschätzt Stunden. Zum Trainieren braucht es nur flache Originale; die Verformung wird simuliert (ARCSim,
+  nur nicht-kommerziell — für die private App in Ordnung), die Rückabbildung fällt dabei ab. Echte Fotos taugen nur zum Prüfen.

@@ -27,7 +27,7 @@ public sealed class DewarpMap
     /// <summary>Mit Blattmodell im Raum gerechnet (sonst nur die Linien gerade gezogen, Seitenverhältnis wie vorher).</summary>
     public bool Modelled { get; internal init; }
 
-    /// <summary>Gitter aus einem KI-Modell (<c>AiDewarp</c>), kein Blattmodell im Raum.</summary>
+    /// <summary>Gitter aus einem KI-Modell (<c>SyntheticDocDewarp</c>), kein Blattmodell im Raum.</summary>
     public bool Ai { get; internal init; }
 
     /// <summary>Doppelseite (mit Falz).</summary>

@@ -30,7 +30,7 @@ public sealed record WarpLine(WarpLineKind Kind, IReadOnlyList<(double X, double
 }
 
 /// <summary>
-/// Fertiges Gitter einer Begradigung (KI, <c>AiDewarp</c>): für ein Raster von <paramref name="Nx"/> × <paramref name="Ny"/>
+/// Fertiges Gitter einer Begradigung (KI, <c>SyntheticDocDewarp</c>): für ein Raster von <paramref name="Nx"/> × <paramref name="Ny"/>
 /// Stellen des Ergebnisses die Stelle im Pixelbild (relativ: x / Breite, y / Höhe), dazu die Größe des Ergebnisses in
 /// Breiten des Pixelbilds und das geschätzte Seitenverhältnis (Höhe / Breite, null = unbekannt). Unabhängig von der
 /// Bildgröße, deshalb Teil des Rezepts.

@@ -285,15 +285,17 @@ public partial class MainViewModel
             return;
         }
         var model = AiModelCatalog.SyntheticDoc;
-        if (Ai.Store.PathOf(model) is not { } modelPath)
+        if (Ai.Store.PathOf(model) is not { } checkpoint)
         {
-            ErrorMessage = Tr.T("Das Modell „{0}“ fehlt: die Datei {1} nach {2} legen.", model.Name, model.MainFile,
-                System.IO.Path.Combine(Ai.Store.DownloadFolder, model.Id));
+            ErrorMessage = Tr.T("Das Modell „{0}“ fehlt – im Tab KI herunterladen.", model.Name);
             OnPropertyChanged(nameof(AiStraightenActive));
             return;
         }
         IsStraighteningWithAi = true;
-        ActivityText = Tr.T("KI begradigt …");
+        var fallback = System.IO.Path.Combine(Ai.Store.DownloadFolder, model.Id);
+        ActivityText = Core.Ai.SyntheticDoc.SyntheticDocModel.NeedsBuild(checkpoint, fallback)
+            ? Tr.T("KI-Modell wird vorbereitet …")
+            : Tr.T("KI begradigt …");
         ActivityProgress = -1;
         try
         {
@@ -302,21 +304,9 @@ public partial class MainViewModel
             var grid = await Task.Run(() =>
             {
                 if (CurrentPath is not { } path || DocumentFor(path, h, HiddenSteps, GeometryRecipe.DewarpView) is not { } doc) return null;
-                int w, ht;
-                lock (doc) (w, ht) = ((int)doc.Width, (int)doc.Height);
-                var scale = Math.Min(1.0, LineFinder.WorkEdge / (double)Math.Max(w, ht));
-                int sw = Math.Max(1, (int)Math.Round(w * scale)), sh = Math.Max(1, (int)Math.Round(ht * scale));
-                using var small = ImageOps.Resize(doc, sw, sh, ResampleFilter.Mitchell, gammaCorrect: false);
-                var px = ImageOps.ToDisplayPixels(small);
-                try
-                {
-                    var session = Ai.Sessions.Get(model, modelPath);
-                    return Core.Ai.AiDewarp.Run(session, px, sw, sh, focal, CancellationToken.None);
-                }
-                finally
-                {
-                    PixelPool.Return(px);
-                }
+                var onnx = Core.Ai.SyntheticDoc.SyntheticDocModel.OnnxFor(checkpoint, fallback);
+                var session = Ai.Sessions.Get(model, onnx);
+                return Core.Ai.SyntheticDoc.SyntheticDocDewarp.Run(session, doc, focal, CancellationToken.None);
             });
             if (grid is null) return;
             var (pw, ph) = PixelSize();

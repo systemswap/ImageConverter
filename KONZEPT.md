@@ -248,7 +248,9 @@ Ziehen wie dort.
   „Gewölbtes Blatt“, ersetzt dessen Linien), ein zweiter Klick nimmt sie heraus. Stark bei
   Knittern, Bons in der Hand, Büchern; bei glatten Arbeitsblättern ist das Linienverfahren
   10- bis 30-mal genauer. Seitenverhältnis aus unserem Blattmodell über die Gitterlinien
-  (DIN-Einrasten), ersatzweise Bogenlängen. ONNX muss selbst gebaut und gehostet werden.
+  (DIN-Einrasten), ersatzweise Bogenlängen. Die App lädt den Original-Checkpoint und baut
+  die ONNX-Datei selbst (C#, ohne Python); Training und Datenerzeugung liegen in
+  `extern/SyntheticDoc/`, Anleitung und Entfernen-Liste in `docs/KI-BEGRADIGEN.md`.
 - Mit **UVDoc** (MIT, ≈ 31 MB ONNX, nach `KI-Modelle/`): liefert ein Gitter, daraus
   einige waagerechte und senkrechte Linien als Vorschläge; Doppelseite am Falz
   geteilt, jede Hälfte einzeln (UVDoc kennt nur Einzelseiten). Eingabe nur

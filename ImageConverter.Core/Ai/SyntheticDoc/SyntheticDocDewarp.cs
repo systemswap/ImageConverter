@@ -1,27 +1,28 @@
 using ImageConverter.Core.Imaging;
+using ImageMagick;
 using Microsoft.ML.OnnxRuntime;
 
-namespace ImageConverter.Core.Ai;
+namespace ImageConverter.Core.Ai.SyntheticDoc;
 
 /// <summary>
 /// „KI begradigen“ mit SyntheticDoc: das Modell sagt für ein fotografiertes Blatt die Rückabbildung voraus — ein Gitter von
-/// 121 × 177 Stellen des flachen Blatts, je mit der Stelle im Foto. Zwei Läufe: erst das ganze Bild, dann der Ausschnitt um
-/// das gefundene Blatt (+ 4 % je Seite), so sieht das Modell das Blatt groß. Das Seitenverhältnis kennt das Modell nicht:
-/// es kommt aus unserem Blattmodell, dem Gitterzeilen und -spalten als Linien dienen (mit DIN-Einrasten), ersatzweise aus den
-/// Bogenlängen des Gitters.
+/// 121 × 177 Stellen des flachen Blatts, je mit der Stelle im Foto. Zwei Läufe: ein grober auf einem Viertel der Pixel
+/// (720 × 512), nur um das Blatt zu finden, dann der genaue (1440 × 1024, so wurde trainiert) auf dem Ausschnitt um das Blatt
+/// (+ 4 % je Seite) — trainiert wurde nur auf solchen Ausschnitten. Das Seitenverhältnis kennt das Modell nicht: es kommt aus
+/// unserem Blattmodell, dem Gitterzeilen und -spalten als Linien dienen (mit DIN-Einrasten), ersatzweise aus den Bogenlängen.
 /// </summary>
-public static class AiDewarp
+public static class SyntheticDocDewarp
 {
     public const int InputWidth = 1024, InputHeight = 1440, GridWidth = 177, GridHeight = 121;
 
-    /// <summary>
-    /// Gitter für das Bild <paramref name="bgra"/> (B, G, R, A, 0 … 1; am besten höchstens etwa 1600 px) — relativ zur
-    /// Bildgröße, also für jede Größe desselben Bildes gültig.
-    /// </summary>
-    public static DewarpGrid Run(InferenceSession session, float[] bgra, int w, int h, double focal35, CancellationToken ct)
+    /// <summary>Gitter für das Bild (in der Ansicht, volle Auflösung) — relativ, also für jede Größe des Bildes gültig.</summary>
+    public static DewarpGrid Run(InferenceSession session, MagickImage doc, double focal35, CancellationToken ct)
     {
-        var first = Predict(session, bgra, w, h, 0, 0, w, h, ct);
-        // Blatt eingrenzen: Umriss des Gitters, 4 % Rand — nur, wenn das Blatt nicht ohnehin das Bild füllt
+        int w, h;
+        lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
+        var first = Predict(session, doc, 0, 0, w, h, InputWidth / 2, InputHeight / 2, ct);
+
+        // Blatt eingrenzen: Umriss des Gitters, 4 % Rand
         double bx0 = double.MaxValue, by0 = double.MaxValue, bx1 = double.MinValue, by1 = double.MinValue;
         for (var j = 0; j < GridHeight; j++)
         for (var i = 0; i < GridWidth; i++)
@@ -31,51 +32,52 @@ public static class AiDewarp
             (bx0, bx1, by0, by1) = (Math.Min(bx0, x), Math.Max(bx1, x), Math.Min(by0, y), Math.Max(by1, y));
         }
         double mx = 0.04 * (bx1 - bx0), my = 0.04 * (by1 - by0);
-        (bx0, by0) = (Math.Max(0, Math.Floor(bx0 - mx)), Math.Max(0, Math.Floor(by0 - my)));
-        (bx1, by1) = (Math.Min(w, Math.Ceiling(bx1 + mx)), Math.Min(h, Math.Ceiling(by1 + my)));
-        var grid = bx1 - bx0 >= 0.3 * w && by1 - by0 >= 0.3 * h && (bx1 - bx0 < 0.98 * w || by1 - by0 < 0.98 * h)
-            ? Predict(session, bgra, w, h, bx0, by0, bx1, by1, ct)
-            : first;
+        int x0 = (int)Math.Max(0, Math.Floor(bx0 - mx)), y0 = (int)Math.Max(0, Math.Floor(by0 - my));
+        int x1 = (int)Math.Min(w, Math.Ceiling(bx1 + mx)), y1 = (int)Math.Min(h, Math.Ceiling(by1 + my));
+        if (x1 - x0 < 0.2 * w || y1 - y0 < 0.2 * h) (x0, y0, x1, y1) = (0, 0, w, h);   // nichts Brauchbares gefunden: ganzes Bild
+        var grid = Predict(session, doc, x0, y0, x1, y1, InputWidth, InputHeight, ct);
         return ToGrid(grid, w, h, focal35);
     }
 
-    /// <summary>Ausschnitt (x0, y0 – x1, y1) des Bildes → Modell → Gitter als Stellen im Bild (Pixelkanten: 0 und w sind die Ränder).</summary>
-    private static (double X, double Y)[,] Predict(InferenceSession session, float[] px, int w, int h,
-        double x0, double y0, double x1, double y1, CancellationToken ct)
+    /// <summary>Ausschnitt des Bildes → Modell (Eingabe inW × inH) → Gitter als Stellen im Bild (Pixelkanten: 0 und w sind die Ränder).</summary>
+    private static (double X, double Y)[,] Predict(InferenceSession session, MagickImage doc,
+        int x0, int y0, int x1, int y1, int inW, int inH, CancellationToken ct)
     {
-        var t = new float[3 * InputHeight * InputWidth];
-        Parallel.For(0, InputHeight, j =>
+        // Ausschnitt, verkleinert mit Dreiecksfilter (wie das Verkleinern mit Vorfilter beim Training)
+        using var crop = ImageOps.CloneOf(doc);
+        crop.Crop(new MagickGeometry(x0, y0, (uint)(x1 - x0), (uint)(y1 - y0)));
+        crop.ResetPage();
+        using var small = ImageOps.Resize(crop, inW, inH, ResampleFilter.Bilinear, gammaCorrect: false);
+        var px = ImageOps.ToDisplayPixels(small);   // B, G, R, A, 0 … 1
+        var t = new float[3 * inH * inW];
+        try
         {
-            int ya = Math.Clamp((int)Math.Floor(y0 + j * (y1 - y0) / InputHeight), 0, h - 1);
-            int yb = Math.Clamp((int)Math.Ceiling(y0 + (j + 1) * (y1 - y0) / InputHeight), ya + 1, h);
-            for (var i = 0; i < InputWidth; i++)
+            Parallel.For(0, inH, j =>
             {
-                int xa = Math.Clamp((int)Math.Floor(x0 + i * (x1 - x0) / InputWidth), 0, w - 1);
-                int xb = Math.Clamp((int)Math.Ceiling(x0 + (i + 1) * (x1 - x0) / InputWidth), xa + 1, w);
-                double r = 0, g = 0, b = 0;
-                for (var y = ya; y < yb; y++)
-                for (var x = xa; x < xb; x++)
+                for (var i = 0; i < inW; i++)
                 {
-                    var k = (y * w + x) * 4;
-                    b += px[k]; g += px[k + 1]; r += px[k + 2];
+                    var k = (j * inW + i) * 4;
+                    t[j * inW + i] = px[k + 2] * 2 - 1;                     // R, auf −1 … 1
+                    t[(inH + j) * inW + i] = px[k + 1] * 2 - 1;             // G
+                    t[(2 * inH + j) * inW + i] = px[k] * 2 - 1;             // B
                 }
-                // Mittel über die Fläche des Zielpixels (wie das Verkleinern mit Vorfilter beim Training), RGB, auf −1 … 1
-                var n = (double)(yb - ya) * (xb - xa);
-                t[j * InputWidth + i] = (float)(r / n * 2 - 1);
-                t[(InputHeight + j) * InputWidth + i] = (float)(g / n * 2 - 1);
-                t[(2 * InputHeight + j) * InputWidth + i] = (float)(b / n * 2 - 1);
-            }
-        });
+            });
+        }
+        finally
+        {
+            PixelPool.Return(px);
+        }
         ct.ThrowIfCancellationRequested();
-        using var value = OrtValue.CreateTensorValueFromMemory(t, [1, 3, InputHeight, InputWidth]);
+        using var value = OrtValue.CreateTensorValueFromMemory(t, [1, 3, inH, inW]);
         var bm = OnnxSessions.Run(session, new Dictionary<string, OrtValue> { [session.InputMetadata.Keys.First()] = value }, ct);
         var grid = new (double X, double Y)[GridHeight, GridWidth];
+        double cw = x1 - x0, ch = y1 - y0;
         for (var j = 0; j < GridHeight; j++)
         for (var i = 0; i < GridWidth; i++)
         {
             double vx = bm[j * GridWidth + i], vy = bm[GridHeight * GridWidth + j * GridWidth + i];
             // wie beim Modell angewendet (align_corners = True): ±1 sind die Mitten der äußersten Pixel des Ausschnitts
-            grid[j, i] = (x0 + 0.5 + (vx + 1) / 2 * (x1 - x0 - 1), y0 + 0.5 + (vy + 1) / 2 * (y1 - y0 - 1));
+            grid[j, i] = (x0 + 0.5 + (vx + 1) / 2 * (cw - 1), y0 + 0.5 + (vy + 1) / 2 * (ch - 1));
         }
         return grid;
     }

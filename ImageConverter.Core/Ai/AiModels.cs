@@ -227,25 +227,26 @@ public static class AiModelCatalog
 
     /// <summary>
     /// SyntheticDoc (Nachfolger von UVDoc): sagt für ein fotografiertes Blatt die Rückabbildung als Gitter 121 × 177 voraus.
-    /// Beim Autor gibt es nur den PyTorch-Checkpoint; die ONNX-Datei entsteht mit einem eigenen Skript daraus (Fehlergedächtnis
-    /// #52) und muss selbst gehostet werden — bis dahin ohne Download-Adresse: die Datei von Hand nach
-    /// <c>KI-Modelle/syntheticdoc/</c> legen.
+    /// Geladen wird der Original-Checkpoint der Autoren (PyTorch, ETH Zürich); die ONNX-Datei baut die App daraus beim ersten
+    /// Gebrauch selbst (<c>SyntheticDoc.SyntheticDocModel</c>, ohne Python). Ein selbst trainierter Checkpoint unter demselben
+    /// Namen ersetzt ihn (docs/KI-BEGRADIGEN.md).
     /// </summary>
     public static AiModel SyntheticDoc { get; } = new(
         "syntheticdoc",
         "SyntheticDoc",
         "Gewölbtes Blatt mit KI begradigen – Bons, Bücher, zerknitterte Blätter",
         "SyntheticDoc: begradigt ein fotografiertes Blatt mit einem Klick, ohne Linien. Stark bei Knittern, Bons in der " +
-        "Hand und Büchern; bei glatten Arbeitsblättern ist „Gewölbtes Blatt“ mit Linien genauer.",
+        "Hand und Büchern; bei glatten Arbeitsblättern ist „Gewölbtes Blatt“ mit Linien genauer. Wird beim ersten Gebrauch " +
+        "für die App umgewandelt.",
         AiModelKind.Dewarp,
-        "",
-        31_595_647,
-        "e76e338b7629456bf72ad58d275b02c14312c806b9ad46ae19d3c7c3c4100220",
+        "https://igl.ethz.ch/projects/SyntheticDoc/highres_121x177.ckpt",
+        101_733_025,
+        "a9b69148fb3a8bf309757106f489df17a339a03f298f59d882f5ff51ba65a91d",
         IsZip: false,
-        MainFile: "syntheticdoc_121x177.onnx",
+        MainFile: "highres_121x177.ckpt",
         License: "MIT",
         NonCommercial: false,
-        Origin: "Tanguy Magne u. a. (SyntheticDoc, ETH Zürich), ONNX-Export des Checkpoints highres_121x177");
+        Origin: "Daniel Woortmann, Tanguy Magne, Olga Sorkine-Hornung (SyntheticDoc, ECCV 2026, ETH Zürich)");
 
     public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, FaceDetector, FaceParser];
 
