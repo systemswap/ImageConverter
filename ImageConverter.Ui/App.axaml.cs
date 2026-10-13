@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using ImageConverter.ViewModels;
 using ImageConverter.Views;
@@ -23,6 +25,7 @@ public partial class App : Application
         TooltipAbove<Border>();
         TooltipAbove<Panel>();
         TooltipAbove<Image>();
+        TooltipsOnlyWhenIdle();
         AvaloniaXamlLoader.Load(this);
 #if DEBUG
         this.AttachDeveloperTools();
@@ -33,6 +36,51 @@ public partial class App : Application
     {
         ToolTip.PlacementProperty.OverrideDefaultValue<T>(PlacementMode.Top);
         ToolTip.VerticalOffsetProperty.OverrideDefaultValue<T>(-6);   // kleiner Abstand nach oben
+    }
+
+    // Tooltip, der gerade offen ist, und ob eine Maustaste gedrückt ist (nur UI-Thread)
+    private static Control? _openTip;
+    private static bool _buttonDown;
+
+    /// <summary>
+    /// Tooltips nur, wenn keine Maustaste gedrückt ist, und immer nur einer: Wer einen Regler mit gedrückter Taste zog und
+    /// dabei über den nächsten rutschte, hatte beide Tooltips offen. Ein Druck auf eine Maustaste schließt den offenen,
+    /// solange sie gedrückt ist, geht keiner auf; öffnet ein neuer, schließt der alte. Für alle Fenster auf einmal.
+    /// </summary>
+    private static void TooltipsOnlyWhenIdle()
+    {
+        InputElement.PointerPressedEvent.AddClassHandler<TopLevel>((_, _) =>
+        {
+            _buttonDown = true;
+            CloseOpenTip();
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        InputElement.PointerReleasedEvent.AddClassHandler<TopLevel>((top, e) =>
+        {
+            var p = e.GetCurrentPoint(top).Properties;
+            _buttonDown = p.IsLeftButtonPressed || p.IsRightButtonPressed || p.IsMiddleButtonPressed;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        ToolTip.ToolTipOpeningEvent.AddClassHandler<Control>((control, e) =>
+        {
+            if (_buttonDown)
+            {
+                e.Cancel = true;
+                return;
+            }
+            if (!ReferenceEquals(_openTip, control)) CloseOpenTip();
+            _openTip = control;
+        }, handledEventsToo: true);
+        ToolTip.ToolTipClosingEvent.AddClassHandler(typeof(Control), (sender, _) =>
+        {
+            if (ReferenceEquals(_openTip, sender)) _openTip = null;
+        }, RoutingStrategies.Direct | RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private static void CloseOpenTip()
+    {
+        if (_openTip is not { } open) return;
+        _openTip = null;
+        ToolTip.SetIsOpen(open, false);
     }
 
     public override void OnFrameworkInitializationCompleted()

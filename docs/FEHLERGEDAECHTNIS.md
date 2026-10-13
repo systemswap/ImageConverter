@@ -1816,3 +1816,15 @@ Test oder Nachweis.
   (`GrainSettings.MinSize`), Anzeige unter 1 px mit zwei Stellen (0,25 statt „0,3“). Messen bleibt bei ≥ 0,25 px.
 - **Härte (Wunsch):** tanh(k · Korn), k = 4 · Härte/100, Streuung zurück auf 1 — aus weichen Gauß-Tupfen werden scharf
   begrenzte Körner. Auf feines, grobes und Farbkorn, nicht auf die Klumpen. 0 = wie bisher.
+
+## 57. Mehrere Tooltips gleichzeitig offen beim Ziehen eines Reglers (0.5.67 beta)
+
+- **Fehlerbild (Benutzer):** Regler mit gedrückter linker Taste ziehen und dabei nach unten auf den nächsten rutschen —
+  beide Tooltips offen. Avalonia öffnet Tooltips auch bei gedrückter Taste und schließt den alten nicht, solange der
+  Regler den Zeiger festhält.
+- **Lösung (`App.TooltipsOnlyWhenIdle`, für alle Fenster):** Klassen-Handler auf `TopLevel` (Tunnel, auch behandelte
+  Ereignisse) merken, ob eine Maustaste gedrückt ist; ein Druck schließt den offenen Tooltip. `ToolTip.ToolTipOpening`
+  wird bei gedrückter Taste abgebrochen, öffnet einer, schließt der vorige — höchstens einer offen. Nach dem Loslassen
+  kommt der Tooltip erst wieder beim nächsten Element (Avalonia startet die Wartezeit nur beim Hineinfahren).
+- **Geprüft** am Fenster (Bildschirmfotos): Darüberfahren öffnet, gedrückt ziehen über zwei Regler öffnet keinen,
+  danach öffnet der nächste Regler normal.
