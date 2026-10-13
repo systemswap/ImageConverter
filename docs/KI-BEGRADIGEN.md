@@ -14,7 +14,7 @@ Alles ohne Python: die App lädt den Original-Checkpoint der Autoren und baut di
 | Netz, Training, Datenerzeugung | SyntheticDoc (Woortmann, Magne, Sorkine-Hornung, ECCV 2026, ETH Zürich), Kopie in `extern/SyntheticDoc/` | MIT |
 | Gewichte `highres_121x177.ckpt` (97 MB) | `https://igl.ethz.ch/projects/SyntheticDoc/highres_121x177.ckpt`, SHA-256 `a9b69148…a91d` | ohne eigene Angabe, wie das Repository MIT |
 | Datensatz (1 Mio. Beispiele) und Assets | ETH Research Collection, Links in `extern/SyntheticDoc/README.md` | siehe dort |
-| Papiersimulation ARCSim 0.2.1 (nur zum Erzeugen eigener Daten) | Berkeley, nicht mitgeliefert | **nur nicht-kommerziell** — für den privaten Gebrauch dieser App in Ordnung |
+| Papiersimulation ARCSim 0.2.1 (nur zum Erzeugen eigener Daten) | Berkeley, `arcsim-0.2.1.tar.gz` (14,8 MB, SHA-256 `053239c4…a26e`); eine Kopie liegt in `KI-Modelle/syntheticdoc/` und damit in jeder Sicherung, nicht im Git | **nur nicht-kommerziell**, Lizenztext im Archiv — für den privaten Gebrauch dieser App in Ordnung |
 
 Die zweite Fassung der Autoren (`original_31x45.ckpt`, Gitter 31 × 45, Eingabe 720 × 512) ist in unseren
 Messungen durchweg schlechter und wird nicht genutzt; der Umwandler kann sie aber auch.
@@ -66,7 +66,8 @@ nur zum Prüfen.
 
 Alle Werkzeuge liegen in `extern/SyntheticDoc/`; die englischen READMEs dort beschreiben jeden Schritt genau.
 
-1. **Papier simulieren** (`generation/simulation/`, ARCSim kompilieren — Anleitung im README):
+1. **Papier simulieren** (`generation/simulation/`, ARCSim kompilieren — Anleitung im README; statt `wget` das
+   Archiv aus `KI-Modelle/syntheticdoc/arcsim-0.2.1.tar.gz` nehmen, falls die Berkeley-Seite fehlt):
    `python generate_configs.py --config-type fall_on_many --num 2000` und `python simulate.py --scenario
    fall_on_many --ids …` — sechs Szenarien (ziehen, auf Kugel/Zylinder/Dach/viele Kugeln fallen, falten).
    Oder die fertigen Meshes der Autoren aus den Assets nehmen.
@@ -149,3 +150,21 @@ etwas schwächer. Vergleichsbilder in `TestBilder/Merge/schwer-*.jpg` (nicht im 
 Andere Modelle (Stand 13.10.2026): UVDoc und Flattener getestet (schwächer), DvD (AGPL, ~800 MB, nur
 PyTorch) und D2Dewarp (CC BY-NC-ND, DocUNet MS-SSIM 0,50 — schlechter als SyntheticDoc mit 0,558) nicht,
 AADD noch ohne Gewichte.
+
+## Was für ein Training von außen kommt
+
+Im Projekt (`extern/SyntheticDoc/`) liegt der ganze Code: Papiersimulation, Rendern, Rückabbildung, Packen,
+Training — und das Training lernt Gitter **und** Schattenkarte zusammen (`shadow.png` beim Rendern), eigene
+Daten taugen also auch fürs Schatten-Entfernen. Von außen kommen:
+
+| Was | Woher | Aufgehoben |
+|---|---|---|
+| Checkpoint `highres_121x177.ckpt` | ETH (Katalog der App) | `KI-Modelle/syntheticdoc/`, Sicherung |
+| ARCSim 0.2.1 | Berkeley | `KI-Modelle/syntheticdoc/`, Sicherung |
+| Blender 4.5 LTS | blender.org (Programm) | — |
+| Assets der Autoren: Meshes, Seiten, Hintergründe | ETH Research Collection, DOI 10.3929/ethz-c-000804058 | — (Größe noch nicht geprüft) |
+| Datensatz SyntheticDoc (1 Mio. Beispiele) | ETH Research Collection, DOI 10.3929/ethz-c-000801994 | — (sehr groß) |
+
+Ohne die Assets: Meshes selbst simulieren (Schritt 1), eigene Seiten als Dokumente, Hintergründe als freie
+PBR-Materialien (z. B. ambientCG, CC0) in `generation/rendering/backgrounds/` — je Material ein Ordner mit
+den Karten (Farbe, Rauheit, Normalen …).
