@@ -1234,9 +1234,14 @@
                                       Margin="196,12,12,12"
                                       IsVisible="{Binding HasImage}"
                                       IsChecked="{Binding DewarpTool}"
-                                      ToolTip.Tip="{l:T 'Gewölbtes Blatt gerade ziehen: Punkte auf Linien setzen, die in Wirklichkeit gerade sind – Textzeilen, Blattkanten, Tabellenlinien, bei Büchern der Falz. Daraus wird das Blatt geglättet und das Seitenverhältnis berechnet; das ganze Bild bleibt. Beim Ziehen hilft eine Lupe.'}">
+                                      ToolTip.Tip="{l:T 'Gewölbtes Blatt gerade ziehen: Punkte auf Linien setzen, die in Wirklichkeit gerade sind – Textzeilen, Blattkanten, Tabellenlinien, bei Büchern der Falz. Daraus wird das Blatt geglättet und das Seitenverhältnis berechnet; das ganze Bild bleibt. Beim Ziehen hilft eine Lupe. Ein Punkt am Symbol: Linien sind schon verwendet – ein Klick öffnet sie zum Justieren.'}">
                             <Path Data="M 4,5 Q 12,8 20,5 L 20,19 Q 12,22 4,19 Z M 7,12 Q 12,14.5 17,12 M 7,11.2 L 7,12.8 M 12,12.6 L 12,14.2 M 17,11.2 L 17,12.8" />
                         </ToggleButton>
+
+                        <!-- Punkt am Symbol: im Bild steckt eine Begradigung mit Linien — ein Klick öffnet sie zum Justieren -->
+                        <Ellipse HorizontalAlignment="Left" VerticalAlignment="Top" Margin="223,13,0,0" Width="9" Height="9"
+                                 Fill="{DynamicResource AccentBrush}" Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="1.5"
+                                 IsHitTestVisible="False" IsVisible="{Binding HasAppliedDewarpLines}" />
 
                         <!-- KI begradigen: SyntheticDoc rechnet das Blatt mit einem Klick gerade, ohne Linien. Symbol: dasselbe
                              Blatt mit einem Funken (eigenes). Gedrückt, solange die KI-Begradigung im Rezept ist; ein zweiter
@@ -1264,7 +1269,18 @@
                                 Background="{DynamicResource SurfaceBrush}"
                                 BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                                 IsVisible="{Binding DewarpTool}">
-                            <StackPanel Spacing="4">
+                            <Panel>
+                            <!-- nach „Gerade ziehen“: das Ergebnis, „Justieren“ holt Original und Linien zurück -->
+                            <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding DewarpShowsResult}">
+                                <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center" Margin="2,0,8,0"
+                                           Text="{l:T 'Gewölbtes Blatt'}" />
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap"
+                                           Text="{Binding DewarpResultInfo}" />
+                                <Button Grid.Column="2" Classes="primary compact" Margin="8,0,0,0"
+                                        Content="{l:T 'Justieren'}" Command="{Binding AdjustDewarpCommand}"
+                                        ToolTip.Tip="{l:T 'Wieder das Original mit den verwendeten Linien zeigen – nacharbeiten und noch einmal gerade ziehen (ersetzt die bisherige Begradigung). Verlassen über das Symbol oben.'}" />
+                            </Grid>
+                            <StackPanel Spacing="4" IsVisible="{Binding !DewarpShowsResult}">
                                 <Grid ColumnDefinitions="Auto,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center" Margin="2,0,8,0"
                                                Text="{l:T 'Gewölbtes Blatt'}" />
@@ -1294,6 +1310,7 @@
                                             ToolTip.Tip="{l:T 'Zieht das Blatt gerade und schneidet auf das größte volle Rechteck zu – ein Schritt, Strg+Z macht ihn rückgängig. Auch mit Enter (ohne aktive Linie).'}" />
                                 </WrapPanel>
                             </StackPanel>
+                            </Panel>
                         </Border>
 
                         <!-- Ladeanzeige -->
@@ -1325,7 +1342,7 @@
                                 <ItemsControl ItemsSource="{Binding EditRows}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:EditRow">
-                                            <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
                                                 <!-- Auge: offen = fließt in Nachher und Export ein. Lucide eye / eye-off (ISC). -->
                                                 <ToggleButton Grid.Column="0" Classes="eye" VerticalAlignment="Center"
                                                               IsChecked="{Binding Shown}" IsEnabled="{Binding CanHide}"
@@ -1342,6 +1359,16 @@
                                                     <TextBlock Classes="hint" FontSize="11" Text="{Binding Detail}"
                                                                TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
+                                                <!-- Stift: die Bearbeitung wieder öffnen (Gewölbtes Blatt: Linien justieren). Lucide pencil (ISC). -->
+                                                <Button Grid.Column="2" Classes="icon" Width="26" Height="26" Margin="6,0,0,0"
+                                                        VerticalAlignment="Center" IsVisible="{Binding CanEdit}"
+                                                        Command="{Binding Edit}"
+                                                        ToolTip.Tip="{l:T 'Bearbeiten: die verwendeten Linien wieder öffnen und justieren'}">
+                                                    <Path Data="M 17,3 A 2.85,2.83 0 1 1 21,7 L 7.5,20.5 L 2,22 L 3.5,16.5 Z M 15,5 L 19,9"
+                                                          Width="14" Height="14" Stretch="Uniform" StrokeThickness="2"
+                                                          StrokeLineCap="Round" StrokeJoin="Round"
+                                                          Stroke="{DynamicResource TextBrush}" />
+                                                </Button>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

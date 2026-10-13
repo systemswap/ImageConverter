@@ -1852,3 +1852,18 @@ Test oder Nachweis.
 - **Geprüft** am Fenster: zwei Linien, Esc, neue Linie getrennt; 4× Esc, Werkzeug bleibt; Klick auf Linie/Vorschlag
   zeichnet weiter, Vorschlag wird durchgezogen; Rechtsklick-geänderter Vorschlag bleibt, „2 Vorschläge lagen auf eigenen
   Linien“. `WarpLineShapeTests`.
+
+## 59. Gewölbtes Blatt: nach „Gerade ziehen“ justieren statt Rückgängig (0.5.69 beta)
+
+- **Wunsch des Benutzers:** die verwendeten Linien nach dem Geradeziehen nacharbeiten können — nicht über Rückgängig
+  (das bleibt ein gewöhnlicher Schritt), sondern im Werkzeug.
+- **Umsetzung:** `ApplyDewarpAsync` schließt das Werkzeug nicht mehr: `DewarpShowsResult` = Ergebnis zeigen
+  (`ToolView` = alle Stufen), unten Info (`DescribeDewarp`) und „Justieren“ (`AdjustDewarpCommand` → Original mit den
+  Linien aus dem Rezept, `EnterDewarpViewAsync`). Das Symbol öffnet immer beim Justieren (`OnDewarpToolChanged` setzt
+  `DewarpShowsResult` zurück), ein Punkt am Symbol (`HasAppliedDewarpLines`, nur Linien, nicht KI) zeigt, dass Linien im
+  Bild stecken; Stift an der Zeile „Gerade gezogen“ in „Bearbeitungen“ (`EditRow.Edit` = `EditDewarpLinesCommand`).
+- **Falle:** `CommitRecipeAsync` → `ShowCurrentAsync` → `ApplySourceSize` schließt das Werkzeug („die Linien gelten nur
+  für den Stand davor“) — beim eigenen Übernehmen per `_keepDewarpTool` übersprungen. Reihenfolge beim Umschalten:
+  erst `DewarpShowsResult = true`, dann `DewarpLines = null`, sonst schließt `OnDewarpLinesChanged` das Werkzeug.
+- **Geprüft** am Fenster: Vorschlagen → Gerade ziehen (Ergebnis, „Justieren“, Punkt) → Justieren (Original mit den
+  Linien) → Symbol verlässt → Symbol öffnet direkt beim Justieren → Stift in „Bearbeitungen“ ebenso.

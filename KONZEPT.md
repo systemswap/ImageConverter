@@ -221,6 +221,12 @@ Ziehen wie dort.
   wird nicht noch einmal vorgeschlagen. Was nicht zum Blattmodell passt, wird gleich
   weggelassen (kein Abwählen mehr, seit 0.5.68).
 - Leiste unten: Vorschlagen · Vorschläge weg · Zeichnen · Zurücksetzen · „Gerade ziehen“.
+- **Nach „Gerade ziehen“** (0.5.69) bleibt das Werkzeug offen und zeigt das Ergebnis, unten Größe,
+  Seitenverhältnis und **„Justieren“** — wieder das Original mit den verwendeten Linien. Das Symbol
+  oben öffnet bei schon gerade gezogenem Bild direkt beim Justieren (ein **Punkt am Symbol** zeigt
+  das an), ebenso der **Stift** an der Zeile „Gerade gezogen“ in „Bearbeitungen“. Rückgängig bleibt
+  ein gewöhnlicher Schritt. Verwendete Linien kommen als eigene zurück; „Vorschlagen“ ergänzt nur,
+  was nicht schon auf ihnen liegt.
 
 **Rechnung**
 1. **Blattmodell im Raum:** Kamera (Brennweite aus EXIF, sonst ≈ 28 mm KB), Lage des

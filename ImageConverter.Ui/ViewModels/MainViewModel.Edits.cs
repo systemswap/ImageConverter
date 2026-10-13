@@ -52,6 +52,11 @@ public partial class EditRow(MainViewModel owner, EditSteps step, string name, s
 
     public string? Note { get; } = note;
 
+    /// <summary>Stift neben der Zeile: die Bearbeitung wieder öffnen (Gewölbtes Blatt: die verwendeten Linien justieren).</summary>
+    public CommunityToolkit.Mvvm.Input.IRelayCommand? Edit { get; init; }
+
+    public bool CanEdit => Edit is not null;
+
     /// <summary>Auge offen: wirkt in „Nachher“ und im Export.</summary>
     public bool Shown
     {
@@ -336,7 +341,7 @@ public partial class MainViewModel
     /// <summary>Stufen, die ein offenes Werkzeug zeigt: Frei drehen ohne Drehung/Zuschnitt, Entzerren ohne alles bis auf Drehen/Spiegeln.</summary>
     private GeometryStages ToolView =>
         RotationTool ? GeometryRecipe.LevelView : PerspectiveTool ? GeometryRecipe.StraightenView
-        : DewarpTool ? GeometryRecipe.DewarpView : GeometryStages.All;
+        : DewarpTool && !DewarpShowsResult ? GeometryRecipe.DewarpView : GeometryStages.All;
 
     /// <summary>Das gerade angezeigte Bild — mit oder ohne KI …, mit den eingeschalteten Stufen, beim Werkzeug in dessen Ansicht.</summary>
     private MagickImage? ShownDocument =>
@@ -529,7 +534,8 @@ public partial class MainViewModel
                 };
                 if (map?.Din == true) parts.Add("DIN");
                 if (spec.Grid?.Shading is { On: true }) parts.Add(Tr.T("Schatten entfernt"));
-                rows.Add(Row(EditSteps.Dewarp, spec.Grid is not null ? Tr.T("KI begradigt") : Tr.T("Gerade gezogen"), string.Join(" · ", parts)));
+                rows.Add(new EditRow(this, EditSteps.Dewarp, spec.Grid is not null ? Tr.T("KI begradigt") : Tr.T("Gerade gezogen"),
+                    string.Join(" · ", parts), true, null) { Edit = spec.Grid is null ? EditDewarpLinesCommand : null });
             }
             if (recipe.HasStraighten)
             {
@@ -604,6 +610,7 @@ public partial class MainViewModel
         foreach (var row in rows) EditRows.Add(row);
         OnPropertyChanged(nameof(HasEditRows));
         OnPropertyChanged(nameof(AiStraightenActive));   // Symbol „KI begradigen“ folgt dem Rezept (auch nach Rückgängig)
+        OnPropertyChanged(nameof(HasAppliedDewarpLines));   // Punkt am Symbol „Gewölbtes Blatt“ ebenso
         ApplySelectionCommand.NotifyCanExecuteChanged();
     }
 

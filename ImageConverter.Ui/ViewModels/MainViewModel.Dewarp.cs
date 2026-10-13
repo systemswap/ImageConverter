@@ -38,6 +38,7 @@ public partial class MainViewModel
 
     partial void OnDewarpToolChanged(bool value)
     {
+        DewarpShowsResult = false;              // öffnet immer beim Justieren (Original mit Linien)
         if (value)
         {
             RotationTool = false;               // immer nur ein Werkzeug
@@ -69,7 +70,7 @@ public partial class MainViewModel
 
     partial void OnDewarpLinesChanged(IReadOnlyList<WarpLineShape>? value)
     {
-        if (value is null && DewarpTool) DewarpTool = false;   // Esc in der Vorschau
+        if (value is null && DewarpTool && !DewarpShowsResult) DewarpTool = false;   // Linien weg von außen: Werkzeug zu
         OnPropertyChanged(nameof(HasDewarpSuggestions));
         CropToSelectionCommand.NotifyCanExecuteChanged();
         _ = UpdateDewarpInfoAsync();
@@ -361,25 +362,76 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>„Gerade ziehen“: die Linien ins Rezept — ein Schritt, Strg+Z macht ihn rückgängig.</summary>
+    /// <summary>
+    /// „Gerade ziehen“: die Linien ins Rezept — ein Schritt, Strg+Z macht ihn rückgängig. Das Werkzeug bleibt offen und zeigt
+    /// das Ergebnis (<see cref="DewarpShowsResult"/>); „Justieren“ holt Original und Linien zurück, verlassen über das Symbol.
+    /// </summary>
     private async Task ApplyDewarpAsync(IReadOnlyList<WarpLineShape> lines)
     {
         if (_history is not { } h || DewarpedRecipe(lines) is not { } next) return;
         var (pw, ph) = PixelSize();
         var count = lines.Count(l => l.Counts);
-        string label, detail;
+        string label, detail, info;
         if (next.HasDewarp)
         {
             var (w, ht) = await Task.Run(() => next.FlatSize(pw, ph));
+            var map = await Task.Run(() => next.DewarpMapFor(pw, ph));
             (label, detail) = (Tr.T("Gerade gezogen"), $"{(count == 1 ? Tr.T("1 Linie") : Tr.T("{0} Linien", count))} · {w} × {ht} px");
+            info = DescribeDewarp(map, count, pw);
         }
         else
         {
-            if (!h.Recipe.HasDewarp) { CloseToolsQuietly(); await ShowDocumentAsync(); return; }   // nichts zu tun
+            if (!h.Recipe.HasDewarp) return;   // nichts zu tun: weiter justieren
             (label, detail) = (Tr.T("Gerade ziehen entfernt"), Tr.T("keine Linien"));
+            info = Tr.T("Keine Linien – das Blatt ist nicht mehr gerade gezogen.");
         }
-        CloseToolsQuietly();
-        await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, label, detail, null),
-            s => s with { Hidden = s.Hidden & ~EditSteps.Dewarp });
+
+        // Ergebnis zeigen, Werkzeug offen lassen: erst umschalten, dann die Linien weg (sonst schlösse das das Werkzeug)
+        DewarpDrawing = false;
+        DewarpShowsResult = true;
+        DewarpResultInfo = info;
+        DewarpLines = null;
+        _keepDewarpTool = true;   // der neue Stand setzt die Größen zurück und schlösse dabei das Werkzeug
+        try
+        {
+            await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, label, detail, null),
+                s => s with { Hidden = s.Hidden & ~EditSteps.Dewarp });
+        }
+        finally
+        {
+            _keepDewarpTool = false;
+        }
+    }
+
+    // ------------------------------------------------------------ Ergebnis zeigen, justieren
+
+    /// <summary>Werkzeug offen, aber nach „Gerade ziehen“: die Vorschau zeigt das Ergebnis, unten „Justieren“.</summary>
+    [ObservableProperty] public partial bool DewarpShowsResult { get; set; }
+
+    /// <summary>Unten im Ergebnis: Linien, Größe, Seitenverhältnis.</summary>
+    [ObservableProperty] public partial string DewarpResultInfo { get; set; } = "";
+
+    // während „Gerade ziehen“ übernimmt: das Werkzeug bleibt offen (ApplySourceSize schlösse es sonst)
+    private bool _keepDewarpTool;
+
+    /// <summary>„Justieren“: wieder das Original mit den verwendeten Linien — nacharbeiten und noch einmal gerade ziehen.</summary>
+    [RelayCommand]
+    private async Task AdjustDewarp()
+    {
+        if (!DewarpTool) return;
+        DewarpShowsResult = false;
+        await EnterDewarpViewAsync();
+    }
+
+    /// <summary>Im Bild steckt eine Begradigung mit Linien (Punkt am Symbol, Stift in „Bearbeitungen“).</summary>
+    public bool HasAppliedDewarpLines => CurrentRecipe.Dewarp is { Grid: null, Lines.Count: > 0 };
+
+    /// <summary>Stift in der Liste „Bearbeitungen“: das Werkzeug mit den verwendeten Linien öffnen.</summary>
+    [RelayCommand]
+    private void EditDewarpLines()
+    {
+        if (!DewarpTool) DewarpTool = true;   // öffnet direkt beim Justieren
+        else if (DewarpShowsResult) _ = AdjustDewarp();
+        ShowEditList = false;
     }
 }
