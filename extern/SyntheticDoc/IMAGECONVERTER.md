@@ -14,3 +14,6 @@ weiterhin bei der ETH Zürich (Links in `README.md` und `DATASET.md`).
   dieser Schritt).
 
 Wie die App das Modell nutzt und wie man nachtrainiert: `docs/KI-BEGRADIGEN.md` im Projekt.
+
+**Stand des Originals:** `ORIGINAL.sha256` enthält die Prüfsummen des Originals (ohne `media/`) zum Zeitpunkt
+der Kopie. `tools/SyntheticDocUpdate.sh` vergleicht das heutige Original damit und bewertet, was sich geändert hat.

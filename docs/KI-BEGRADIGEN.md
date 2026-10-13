@@ -133,6 +133,45 @@ in Minuten, und jedes Mesh wird für vier Beispiele genutzt. Speicher: in voller
 Bild im Stapel — die Vorgabe `batch_size: 16` braucht eine GPU mit 24 GB, bei weniger den Stapel
 verkleinern.
 
+## Updates des Originals
+
+Unsere Kopie in `extern/SyntheticDoc/` ändert sich nicht von selbst. Ob es beim Original etwas Neues gibt, zeigt
+
+    tools/SyntheticDocUpdate.sh
+
+(Linux oder Git Bash; ändert nichts). Es lädt das Repository von GitHub, vergleicht es mit dem Stand unserer
+Kopie (`extern/SyntheticDoc/ORIGINAL.sha256`, Prüfsummen des Originals vom 12.10.2026, also ohne unsere
+Ergänzungen), prüft Größe und Datum der Gewichte bei der ETH und sucht im README nach neuen Checkpoint-Namen.
+Rückgabe 0 = nichts Neues. Stand 13.10.2026: nichts Neues (letzter Commit 9.9., nur ein Link im README;
+Gewichte vom 6.8.).
+
+**Bewerten**, je nachdem, was sich geändert hat:
+
+| Geändert | Brauchen wir es? |
+|---|---|
+| README, `generation/`, `training/` außer den drei unten | Für die App nicht. Nur übernehmen, wenn wir selbst trainieren (Dateien kopieren, `train.py` mit unseren „ImageConverter:“-Stellen zusammenführen). |
+| `training/inference.py`, `unwarp.py` | Vorverarbeitung oder Schattenformel: mit `SyntheticDocDewarp.cs` und `DewarpShading` vergleichen; übernehmen, wenn es bei den Testbildern besser aussieht. |
+| `training/model.py` | Nur zusammen mit neuen Gewichten wichtig: `SyntheticDocNet.cs` nachziehen, dann muss `SyntheticDocTests` (echter Checkpoint) wieder grün sein. Mit den alten Gewichten bleibt alles, wie es ist. |
+| **Gewichte** (Größe/Datum anders oder neuer Name im README) | Der eigentliche Fall — siehe unten. |
+
+**Neue Gewichte prüfen:**
+
+1. In einen eigenen Ordner laden, nicht über unseren Checkpoint. Lizenz nachsehen (bisher MIT).
+2. Vergleichen, links alt, rechts neu:
+
+       dotnet run tools/SyntheticDocVergleich.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner außerhalb> -- \
+           KI-Modelle/syntheticdoc/highres_121x177.ckpt <neu.ckpt> <ausgabe> <bilder …>
+
+   Bilder: die schwierigen DocUNet-Fotos 63_2, 58_2, 60_1, 54_2, dazu einige weitere aus `Downloads/crop/crop`
+   und die Generator-Bilder `TestBilder/*-schraeg.jpg`. Das Werkzeug meldet je Bild, wie weit die Gitter
+   auseinanderliegen. Unter 2 px ändert sich praktisch nichts, dann lohnt der Wechsel nicht.
+3. Ansehen: Sind Textzeilen und Blattkanten im neuen Ergebnis gerader, Ränder vollständiger, Schatten besser
+   entfernt? Übernehmen nur, wenn die schwierigen Fotos klar besser werden und kein anderes schlechter.
+4. Übernehmen: Checkpoint nach `KI-Modelle/syntheticdoc/` (die App baut die ONNX-Dateien selbst neu),
+   Größe und SHA-256 in `AiModelCatalog.SyntheticDoc` und in `tools/SyntheticDocUpdate.sh` eintragen, bei
+   neuem Code `tools/SyntheticDocUpdate.sh --stand-merken` und die Dateien nach `extern/SyntheticDoc/` kopieren.
+   Ein anderes Gitter als 121 × 177 braucht Anpassungen in `SyntheticDocDewarp` (das Werkzeug lehnt es ab).
+
 ## SyntheticDoc wieder entfernen
 
 1. Ordner löschen: `ImageConverter.Core/Ai/SyntheticDoc/`, `extern/SyntheticDoc/`,
