@@ -141,6 +141,7 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(DpiTip));
         OnPropertyChanged(nameof(ScaleTwiceText));
         OnPropertyChanged(nameof(ScaleFourText));
+        OnPropertyChanged(nameof(ScaleSixteenText));
         OnPropertyChanged(nameof(ResetScaleTip));
         OnPropertyChanged(nameof(FieldWidth));
         OnPropertyChanged(nameof(FieldHeight));
@@ -251,7 +252,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Maße auf das <paramref name="factor"/>-Fache des Bildes (Menü der Formate: 2×, 4×).</summary>
+    /// <summary>Maße auf das <paramref name="factor"/>-Fache des Bildes (Menü der Formate: 2×, 4×, 16×).</summary>
     [RelayCommand]
     private void ApplyScaleFactor(string factor)
     {
@@ -281,6 +282,7 @@ public partial class MainViewModel
     /// <summary>Einträge im Menü der Formate: „2×  ·  1000 × 600 px“.</summary>
     public string ScaleTwiceText => Tr.T("{0}×  ·  {1} × {2} px", 2, SourceWidth * 2, SourceHeight * 2);
     public string ScaleFourText => Tr.T("{0}×  ·  {1} × {2} px", 4, SourceWidth * 4, SourceHeight * 4);
+    public string ScaleSixteenText => Tr.T("{0}×  ·  {1} × {2} px", 16, SourceWidth * 16, SourceHeight * 16);   // KI: zwei Durchgänge
 
     /// <summary>Tooltip von „Zurücksetzen“ mit der Originalgröße.</summary>
     public string ResetScaleTip => Tr.T("Skalierung zurücksetzen: wieder die Größe des Bildes ({0} × {1} px).", SourceWidth, SourceHeight);
