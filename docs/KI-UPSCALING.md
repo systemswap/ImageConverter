@@ -84,6 +84,35 @@ sichtbaren Kachelnähte.
 **Halbe Genauigkeit:** Die Gewichte von SD 2.1 kommen als fp16 (halb so groß); gerechnet wird in fp32. Gemessen gegen
 die fp32-Gewichte: im Mittel 0,03 von 255 Stufen Unterschied, höchstens 3 — nicht zu sehen.
 
+## Mehr als 4×: zwei Durchgänge
+
+Die Modelle vergrößern je Durchgang 4×. Ist das Ziel größer (z. B. Ausschnitt 300 px → 4000 px, 13,3×), fragt die App
+vor dem Rechnen und beim Speichern, jeweils mit Dauer und Uhrzeit:
+
+- **Zwei KI-Durchgänge** (vorgewählt): Ergebnis ×4 mit Treue/Details zusammensetzen, auf ein Viertel des Ziels verkleinern
+  (höchstens ×4 des Bildes), noch einmal ×4 — landet genau beim Ziel. Über 16× macht der Filter den Rest.
+- **Ein KI-Durchgang:** ×4, den Rest vergrößert der Filter (wie bis 0.5.86).
+
+Die Wahl gehört zum Stand des Bildes (`UpscaleTwice`, Rückgängig, Speichern mehrerer Bilder); die Zeile „Größe“ der
+Bearbeitungen zeigt „· 2 Durchgänge“. Planung in `Upscalers.Plan`, Rechnung in `ComputePlanned`; der Fortschritt läuft über
+beide („Durchgang 1 von 2“), Kacheln erscheinen im zweiten.
+
+**Gemessen** (Panorama-Ausschnitt 4000 × 2400 auf 300 × 180 verkleinert, wieder auf 4000 × 2400, Grafikkarte; Messplatz
+`werkzeug/dreizehn.sh`, `dreizehn4.sh`, `dreizehn_auswertung.py`):
+
+| Weg | x4v3 | UltraSharpV2 | PiSA-SR | Bild |
+|---|---|---|---|---|
+| 1 KI ×4, dann Lanczos | 2 s | 43 s | 36 s | weich |
+| 2 erst Lanczos auf 1000, dann KI ×4 | 10 s | 4,4 min | 6,2 min | am schlechtesten: verwaschen, UltraSharpV2 mit Milchglas-Muster |
+| 3 KI ×4 zweimal (1200 → 4800), dann ↓ | 13 s | 7,8 min | 9,4 min | am schärfsten |
+| 4 KI ×4, ↓ auf 1000, KI ×4 (**eingebaut**) | – | ≈ 5 min | ≈ 7 min | wie Weg 3 |
+
+Feinstruktur (Streuung des Hochpasses, echtes Bild 0,0104): Lanczos 0,0018, UltraSharpV2 Weg 1 0,0020 / Weg 3 0,0068 /
+Weg 4 0,0066, PiSA-SR Weg 1 0,0026 / Weg 3 0,0123 / Weg 4 0,0129. Die PSNR zum echten Bild liegt bei allen um 26–29 dB
+und bevorzugt weiche Bilder — bei ×13 ist ohnehin das meiste erfunden: PiSA-SR zeichnet glaubhafte Fiederblätter, aber
+nicht an denselben Stellen wie im Foto. Die Zeiten von Weg 4 sind aus der Eingangsgröße geschätzt (der Lauf lief neben
+anderen Rechnungen).
+
 ## Werkzeuge
 
 - `tools/PiSaSrUmwandeln.cs <quellordner> <zielordner> [--pruefen <ref>] [--nur-text] [--ohne-text]`: umwandeln wie die

@@ -208,6 +208,29 @@ public class UpscaleTests
         Assert.True(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300) > Upscalers.Estimate(UpscaleMethod.Medium, 500, 300));
     }
 
+    /// <summary>
+    /// Über 4× zwei Durchgänge: das Zwischenbild wird auf ein Viertel des Ziels gebracht (höchstens ×4), damit der zweite
+    /// Durchgang genau beim Ziel landet; bis 4× oder abgewählt bleibt es bei einem. Die Zeit zählt beide Durchgänge.
+    /// </summary>
+    [Fact]
+    public void Plan_TwoPassesOnlyBeyondFour_BaseIsQuarterOfTarget()
+    {
+        Assert.Equal(new UpscalePlan(2, 1000, 600), Upscalers.Plan(300, 180, 4000, 2400, twice: true));
+        Assert.Equal(new UpscalePlan(1, 300, 180), Upscalers.Plan(300, 180, 4000, 2400, twice: false));
+        Assert.Equal(new UpscalePlan(1, 300, 180), Upscalers.Plan(300, 180, 1200, 720, twice: true));
+        Assert.Equal(new UpscalePlan(2, 1200, 720), Upscalers.Plan(300, 180, 6000, 3600, twice: true));   // über 16×: Basis höchstens ×4
+        Assert.Equal(new UpscalePlan(2, 301, 180), Upscalers.Plan(300, 180, 1201, 720, twice: true));     // nur knapp darüber
+        Assert.True(Upscalers.BeyondOnePass(300, 180, 1201, 720));
+        Assert.False(Upscalers.BeyondOnePass(300, 180, 1200, 720));
+
+        var plan = Upscalers.Plan(300, 180, 4000, 2400, twice: true);
+        var both = Upscalers.Estimate(UpscaleMethod.Medium, 300, 180, plan);
+        Assert.Equal(Upscalers.Estimate(UpscaleMethod.Medium, 300, 180) + Upscalers.Estimate(UpscaleMethod.Medium, 1000, 600), both);
+        // Ausschnitt: beide Durchgänge im selben Verhältnis kleiner
+        var part = Upscalers.Estimate(UpscaleMethod.Medium, 300, 180, plan, 150, 90);
+        Assert.InRange(part.TotalSeconds, both.TotalSeconds / 4 * 0.98, both.TotalSeconds / 4 * 1.02);
+    }
+
     [Fact]
     public void OnnxGraph_HalfPrecisionWeights_RunAndStayClose()
     {

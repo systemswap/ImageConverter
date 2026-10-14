@@ -1994,3 +1994,14 @@ Test oder Nachweis.
   fand auch Gesichter außerhalb. Jetzt nur Gesichter, deren Mitte im angezeigten Bild liegt (`VisibleFaces`: Mitte über
   Drehen zurück ins Pixelbild, mit dem Rezept ins angezeigte Bild). Geprüft am selben Foto: „1 Gesicht gefunden“, Ergebnis
   klarer als vorher, kein Absturz.
+
+## 68. Über 4× nur ein KI-Durchgang (0.5.87 beta)
+
+- **Frage des Benutzers:** Ausschnitt 300 px auf 4000 px — die KI rechnete nur ×4, die restlichen 3,3× machte Lanczos,
+  das Ergebnis war weich. Gewünscht: Meldung mit voraussichtlicher Dauer.
+- **Test (docs/KI-UPSCALING.md):** erst Lanczos, dann KI ist am schlechtesten (die KI hält die Unschärfe für gewollt);
+  zweimal KI am schärfsten. Eingebaut: zwei Durchgänge, das Zwischenbild vorher auf ein Viertel des Ziels verkleinert
+  (genauso scharf, schneller).
+- **Fallstricke:** Das Ergebnis gehört jetzt auch zur Zielgröße (Basis des zweiten Durchgangs steht im `UpscaleKey`) —
+  andere Maße heißt neu rechnen. Die Prüfansicht misst an der Basis des letzten Durchgangs, nicht am Bild (`ToBase` für
+  den Ausschnitt). Lange Antworten der Rückfrage wurden abgeschnitten — `ChoiceWindow` bricht jetzt um.

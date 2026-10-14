@@ -16,6 +16,9 @@ public enum UpscaleMethod
     Generative,
 }
 
+/// <summary>Durchgänge (1 oder 2) und Größe des Bildes, das der letzte Durchgang ×4 vergrößert.</summary>
+public readonly record struct UpscalePlan(int Passes, int BaseWidth, int BaseHeight);
+
 public static class Upscalers
 {
     /// <summary>Das Modell zum Verfahren (null = Filter).</summary>
@@ -50,6 +53,32 @@ public static class Upscalers
     public static TimeSpan Estimate(UpscaleMethod method, int width, int height) =>
         method == UpscaleMethod.Filter ? TimeSpan.Zero
             : TimeSpan.FromSeconds(SecondsPerMegapixel[(method, OnGpu)] * width * (double)height / 1e6);
+
+    /// <summary>
+    /// Wie gerechnet wird: ein KI-Durchgang (×4, den Rest macht der Filter) oder — über 4× und wenn gewünscht — zwei. Beim
+    /// zweiten wird das Zwischenbild ×4 erst auf ein Viertel des Ziels verkleinert (höchstens ×4 des Bildes), so landet der
+    /// zweite Durchgang genau beim Ziel und rechnet nicht mehr als nötig. Basis = das Bild, das der letzte Durchgang vergrößert.
+    /// </summary>
+    public static UpscalePlan Plan(int width, int height, int targetWidth, int targetHeight, bool twice)
+    {
+        if (!twice || (targetWidth <= 4 * width && targetHeight <= 4 * height)) return new UpscalePlan(1, width, height);
+        return new UpscalePlan(2, Math.Clamp((targetWidth + 3) / 4, width, 4 * width), Math.Clamp((targetHeight + 3) / 4, height, 4 * height));
+    }
+
+    /// <summary>Mehr als 4× (in einer Kante) — dann ist ein zweiter Durchgang möglich.</summary>
+    public static bool BeyondOnePass(int width, int height, int targetWidth, int targetHeight) =>
+        targetWidth > 4 * width || targetHeight > 4 * height;
+
+    /// <summary>Geschätzte Zeit nach Plan für das Bild (<paramref name="width"/> × <paramref name="height"/>) oder einen Ausschnitt davon.</summary>
+    public static TimeSpan Estimate(UpscaleMethod method, int width, int height, UpscalePlan plan, int partWidth = 0, int partHeight = 0)
+    {
+        if (partWidth <= 0 || partHeight <= 0) (partWidth, partHeight) = (width, height);
+        var t = Estimate(method, partWidth, partHeight);
+        if (plan.Passes == 2)
+            t += Estimate(method, (int)Math.Round(partWidth * (double)plan.BaseWidth / width),
+                (int)Math.Round(partHeight * (double)plan.BaseHeight / height));
+        return t;
+    }
 
     /// <summary>Gemessene Zeit eines Laufs merken (verfeinert die Schätzung; kleine Läufe zählen weniger).</summary>
     public static void Measured(UpscaleMethod method, int width, int height, TimeSpan elapsed)

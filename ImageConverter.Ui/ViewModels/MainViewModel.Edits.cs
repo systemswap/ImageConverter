@@ -561,7 +561,8 @@ public partial class MainViewModel
             }
             if (TargetWidth != SourceWidth || TargetHeight != SourceHeight)
                 rows.Add(Row(EditSteps.Resize, Tr.T("Größe"),     // mit Verfahren: man sieht, was gerechnet hat
-                    $"{TargetWidth} × {TargetHeight} px · {(AiScalingActive ? SelectedUpscaler.Name : SelectedFilter.Name)}"));
+                    $"{TargetWidth} × {TargetHeight} px · {(AiScalingActive ? SelectedUpscaler.Name : SelectedFilter.Name)}"
+                    + (UpscaleTwoPasses ? " · " + Tr.T("2 Durchgänge") : "")));
             if (NoiseReduction > 0.005)
                 rows.Add(Row(EditSteps.Denoise, Tr.T("Rauschen"), $"{NoiseReduction * 100:0} %"));
             if (ColorNoiseReduction > 0.005)

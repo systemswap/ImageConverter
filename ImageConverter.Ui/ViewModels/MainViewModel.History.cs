@@ -63,7 +63,8 @@ public partial class MainViewModel
         double GrainHardness = 0,
         UpscaleMethod Upscaler = UpscaleMethod.Filter,   // Upscaling: Verfahren, Treue, Details
         double UpscaleFidelity = 1,
-        double UpscaleDetails = 1);
+        double UpscaleDetails = 1,
+        bool UpscaleTwice = true);                       // über 4×: zwei KI-Durchgänge
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -134,6 +135,7 @@ public partial class MainViewModel
         [nameof(SelectedUpscaler)] = null,
         [nameof(UpscaleFidelity)] = "Treue",
         [nameof(UpscaleDetails)] = "Details",
+        [nameof(UpscaleTwice)] = null,
     };
 
     /// <summary>
@@ -266,7 +268,7 @@ public partial class MainViewModel
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
         HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal, MaskAmount, MaskEnd, MaskCurve,
         GrainAmount, GrainSize, GrainRoughness, GrainColor, GrainHardness,
-        SelectedUpscaler.Method, UpscaleFidelity, UpscaleDetails);
+        SelectedUpscaler.Method, UpscaleFidelity, UpscaleDetails, UpscaleTwice);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -347,6 +349,7 @@ public partial class MainViewModel
                 SelectedUpscaler = UpscaleOption.Of(s.Upscaler);
                 UpscaleFidelity = s.UpscaleFidelity;
                 UpscaleDetails = s.UpscaleDetails;
+                UpscaleTwice = s.UpscaleTwice;
             }
             finally
             {

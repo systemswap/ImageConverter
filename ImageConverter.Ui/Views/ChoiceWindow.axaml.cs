@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 using ImageConverter.ViewModels;
 
 namespace ImageConverter.Views;
@@ -29,7 +30,8 @@ public partial class ChoiceWindow : Window
             var index = i;
             var button = new Button
             {
-                Content = request.Choices[i],
+                // Lange Antworten (Dauer, Uhrzeit) umbrechen statt abschneiden
+                Content = new TextBlock { Text = request.Choices[i], TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center },
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
             };

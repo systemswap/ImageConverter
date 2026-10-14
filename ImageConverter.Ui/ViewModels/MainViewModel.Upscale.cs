@@ -50,6 +50,12 @@ public partial class MainViewModel
     public partial double UpscaleDetails { get; set; } = 1;
 
     /// <summary>
+    /// Über 4×: zwei KI-Durchgänge (auch die feinen Details kommen von der KI) statt einem, nach dem der Filter den Rest
+    /// vergrößert. Gewählt in der Rückfrage vor dem Rechnen.
+    /// </summary>
+    [ObservableProperty] public partial bool UpscaleTwice { get; set; } = true;
+
+    /// <summary>
     /// Während des Upscalings ist alles andere gesperrt (Einstellungen, Werkzeuge, Rückgängig, Bildwechsel, Speichern) — das
     /// Ergebnis gehört zu genau diesem Stand. Frei bleiben Zoom, Verschieben, Vorher/Nachher und Abbrechen.
     /// </summary>
@@ -175,8 +181,20 @@ public partial class MainViewModel
 
     /// <summary>„Skalieren“, bei KI mit der geschätzten Zeit.</summary>
     public string ScaleButtonText => AiScalingActive && MatchingUpscale() is null
-        ? Tr.T("Skalieren (≈ {0})", Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight)))
+        ? Tr.T("Skalieren (≈ {0})", Upscalers.Format(CurrentEstimate()))
         : Tr.T("Skalieren");
+
+    /// <summary>Plan zum jetzigen Stand: ein oder zwei Durchgänge, Basis des letzten.</summary>
+    private UpscalePlan CurrentPlan()
+    {
+        var (tw, th) = EffectiveTarget();
+        return Upscalers.Plan(SourceWidth, SourceHeight, tw, th, UpscaleTwice);
+    }
+
+    private TimeSpan CurrentEstimate() => Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight, CurrentPlan());
+
+    /// <summary>KI rechnet in zwei Durchgängen (Zeile „Größe“ der Bearbeitungen).</summary>
+    public bool UpscaleTwoPasses => AiScalingActive && CurrentPlan().Passes == 2;
     public string UpscaleFidelityLabel => $"{UpscaleFidelity * 100:0} %";
     public string UpscaleDetailsLabel => $"{UpscaleDetails * 100:0} %";
 
@@ -250,17 +268,21 @@ public partial class MainViewModel
 
     // ------------------------------------------------------------ Ergebnis
 
-    /// <summary>Wofür ein Ergebnis gilt: Pixelbild (mit/ohne Ausgeblendetes), Ausrichten, Verfahren.</summary>
-    private sealed record UpscaleKey(string Path, MagickImage Pixels, GeometryRecipe Recipe, GeometryStages Stages, UpscaleMethod Method)
+    /// <summary>Wofür ein Ergebnis gilt: Pixelbild (mit/ohne Ausgeblendetes), Ausrichten, Verfahren, Durchgänge.</summary>
+    private sealed record UpscaleKey(string Path, MagickImage Pixels, GeometryRecipe Recipe, GeometryStages Stages, UpscaleMethod Method,
+        UpscalePlan Plan)
     {
         public bool Equals(UpscaleKey? o) => o is not null && Path == o.Path && ReferenceEquals(Pixels, o.Pixels) && Recipe == o.Recipe
-                                             && Stages == o.Stages && Method == o.Method;
+                                             && Stages == o.Stages && Method == o.Method && Plan == o.Plan;
 
         public override int GetHashCode() => HashCode.Combine(Path, RuntimeHelpers.GetHashCode(Pixels), Stages, Method);
     }
 
-    /// <summary>Das letzte Ergebnis: ganzes Bild oder nur ein Ausschnitt (Region in Bildpixeln).</summary>
-    private sealed record UpscaleEntry(UpscaleKey Key, SourceRect? Region, UpscaleResult Result, TimeSpan Took);
+    /// <summary>
+    /// Das letzte Ergebnis: ganzes Bild oder nur ein Ausschnitt (Region in Bildpixeln, BaseRegion in Pixeln der Basis des
+    /// letzten Durchgangs — bei einem Durchgang dieselbe).
+    /// </summary>
+    private sealed record UpscaleEntry(UpscaleKey Key, SourceRect? Region, SourceRect? BaseRegion, UpscaleResult Result, TimeSpan Took);
 
     private UpscaleEntry? _upscale;
     private (UpscaleResult Result, double Fidelity, double Details, MagickImage Image)? _upscaledImage;
@@ -270,7 +292,7 @@ public partial class MainViewModel
     private UpscaleKey? CurrentUpscaleKey()
     {
         if (_history is not { } h || CurrentPath is not { } path) return null;
-        return new UpscaleKey(path, PixelsFor(path, h, HiddenSteps), h.Recipe, StagesShown(HiddenSteps), SelectedUpscaler.Method);
+        return new UpscaleKey(path, PixelsFor(path, h, HiddenSteps), h.Recipe, StagesShown(HiddenSteps), SelectedUpscaler.Method, CurrentPlan());
     }
 
     /// <summary>Wird gerade vergrößert (Zielgröße größer als das Bild)?</summary>
@@ -399,6 +421,13 @@ public partial class MainViewModel
         RequestPreview();
     }
 
+    partial void OnUpscaleTwiceChanged(bool value)
+    {
+        OnPropertyChanged(nameof(UpscaleTwoPasses));
+        UpdateUpscaleStatus();
+        RequestPreview();
+    }
+
     partial void OnUpscaleFidelityChanged(double value) => UpscaleSlidersChanged();
     partial void OnUpscaleDetailsChanged(double value) => UpscaleSlidersChanged();
 
@@ -432,7 +461,7 @@ public partial class MainViewModel
         }
         if (!AiScalingActive) { UpscaleStatus = inspect; return; }
         if (UpscaleModelMissing) { UpscaleStatus = Tr.T("Modell nicht geladen."); return; }
-        var estimate = Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight));
+        var estimate = Upscalers.Format(CurrentEstimate());
         if (MatchingUpscale() is { } e)
         {
             UpscaleStatus = Tr.T("Berechnet ({0}) — Vorschau und Speichern verwenden es.", Upscalers.Format(e.Took))
@@ -454,8 +483,8 @@ public partial class MainViewModel
     private bool CanUpscale => HasImage && !IsUpscaling && HasSizeChange && (!AiScalingActive || !UpscaleModelMissing);
 
     /// <summary>
-    /// „Skalieren“: mit einem Filter in Sekunden, mit einem KI-Scaler (nach Rückfrage bei langer Dauer) in Minuten. Danach
-    /// zeigt die Vorschau das Ergebnis in voller Größe — zum Hineinzoomen und für Vorher/Nachher.
+    /// „Skalieren“: mit einem Filter in Sekunden, mit einem KI-Scaler in Minuten — über 4× oder bei langer Dauer nach
+    /// Rückfrage. Danach zeigt die Vorschau das Ergebnis in voller Größe — zum Hineinzoomen und für Vorher/Nachher.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanUpscale))]
     private async Task Upscale()
@@ -465,40 +494,83 @@ public partial class MainViewModel
             await ScaleWithFilterAsync();
             return;
         }
-        if (await Task.Run(() => (ResultDocument, CurrentUpscaleKey())) is not ({ } doc, { } key)) return;
+        if (await Task.Run(() => ResultDocument) is not { } doc) return;
         int w, h;
         lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
+        if (await ShowReadyUpscaleAsync(doc)) return;
 
-        // Schon gerechnet (ganzes Bild): nur zeigen
-        if (MatchingUpscale() is not null)
-        {
-            await PrepareInspectAsync(doc, null);
-            UpscaleInspect = true;
-            ShowInspectBitmaps();
-            await RedrawInspectAsync();
-            return;
-        }
-
-        // Lange Rechnung: fragen — ganzes Bild oder nur der sichtbare Ausschnitt
-        SourceRect? region = null;
-        var whole = Upscalers.Estimate(key.Method, w, h);
-        if (whole > TimeSpan.FromSeconds(45) && ChoiceRequested is { } ask)
-        {
-            var visible = VisibleRegion(w, h);
-            var choices = new List<string> { Tr.T("Ganzes Bild berechnen (≈ {0})", Upscalers.FormatWithEnd(whole, DateTime.Now)) };
-            if (visible is { } v)
-                choices.Add(Tr.T("Nur den sichtbaren Ausschnitt ({0} × {1} px, ≈ {2})", v.Width, v.Height,
-                    Upscalers.FormatWithEnd(Upscalers.Estimate(key.Method, v.Width, v.Height), DateTime.Now)));
-            choices.Add(Tr.T("Abbrechen"));
-            var answer = await ask(new ChoiceRequest(Tr.T("Upscaling dauert länger"),
-                Tr.T("„{0}“ braucht für dieses Bild ({1} × {2} px) auf diesem Rechner etwa {3}. Zum Ausprobieren reicht der Ausschnitt, den du gerade siehst — zoome dazu vorher hinein.",
-                    SelectedUpscaler.Name, w, h, Upscalers.Format(whole)),
-                choices, visible is null ? 0 : 1));
-            if (answer < 0 || answer == choices.Count - 1) return;
-            if (answer == 1 && visible is { } r) region = r;
-        }
-        await RunUpscaleAsync(doc, key, region);
+        if (await AskUpscaleAsync(w, h) is not { } choice) return;
+        UpscaleTwice = choice.Twice;
+        if (await ShowReadyUpscaleAsync(doc)) return;   // mit der anderen Wahl schon gerechnet
+        if (await Task.Run(CurrentUpscaleKey) is not { } key) return;
+        await RunUpscaleAsync(doc, key, choice.Region);
     }
+
+    /// <summary>Schon gerechnet (ganzes Bild): nur zeigen.</summary>
+    private async Task<bool> ShowReadyUpscaleAsync(MagickImage doc)
+    {
+        if (MatchingUpscale() is not { } ready) return false;
+        await PrepareInspectAsync(doc, ready.Key.Plan, null);
+        UpscaleInspect = true;
+        ShowInspectBitmaps();
+        await RedrawInspectAsync();
+        return true;
+    }
+
+    /// <summary>Ab dieser Dauer wird vorher gefragt (ganzes Bild oder nur der sichtbare Ausschnitt).</summary>
+    private static readonly TimeSpan LongUpscale = TimeSpan.FromSeconds(45);
+
+    /// <summary>
+    /// Rückfrage vor dem Rechnen, jeweils mit Dauer und Uhrzeit: über 4× ein oder zwei Durchgänge, bei langer Dauer ganzes
+    /// Bild oder nur der sichtbare Ausschnitt. Kurz und höchstens 4×: keine Frage, die jetzige Wahl. null = abgebrochen.
+    /// </summary>
+    private async Task<(bool Twice, SourceRect? Region)?> AskUpscaleAsync(int w, int h)
+    {
+        var method = SelectedUpscaler.Method;
+        var (tw, th) = EffectiveTarget();
+        var beyond = Upscalers.BeyondOnePass(w, h, tw, th);
+        var visible = VisibleRegion(w, h);
+        var options = new List<(string Text, bool Twice, SourceRect? Region)>();
+        var isLong = false;
+        foreach (var twice in beyond ? [true, false] : new[] { UpscaleTwice })
+        {
+            var plan = Upscalers.Plan(w, h, tw, th, twice);
+            var whole = Upscalers.Estimate(method, w, h, plan);
+            var wholeText = Upscalers.FormatWithEnd(whole, DateTime.Now);
+            var label = twice ? Tr.T("Zwei KI-Durchgänge") : Tr.T("Ein KI-Durchgang, den Rest macht der Filter");
+            options.Add((beyond ? Tr.T("{0} — ganzes Bild (≈ {1})", label, wholeText) : Tr.T("Ganzes Bild berechnen (≈ {0})", wholeText),
+                twice, null));
+            if (whole <= LongUpscale) continue;
+            isLong = true;
+            if (visible is not { } v) continue;
+            var part = Upscalers.FormatWithEnd(Upscalers.Estimate(method, w, h, plan, v.Width, v.Height), DateTime.Now);
+            options.Add((beyond ? Tr.T("{0} — nur der sichtbare Ausschnitt ({1} × {2} px, ≈ {3})", label, v.Width, v.Height, part)
+                : Tr.T("Nur den sichtbaren Ausschnitt ({0} × {1} px, ≈ {2})", v.Width, v.Height, part), twice, v));
+        }
+        if ((!beyond && !isLong) || ChoiceRequested is not { } ask) return (UpscaleTwice, null);
+
+        // Vorgewählt: die bisherige Wahl, bei langer Dauer der Ausschnitt
+        var preferred = options.FindIndex(o => o.Twice == UpscaleTwice && o.Region is not null);
+        if (preferred < 0) preferred = options.FindIndex(o => o.Twice == UpscaleTwice);
+        var trial = options.Any(o => o.Region is not null)
+            ? "\n\n" + Tr.T("Zum Ausprobieren reicht der Ausschnitt, den du gerade siehst — zoome dazu vorher hinein.")
+            : "";
+        var choices = options.Select(o => o.Text).Append(Tr.T("Abbrechen")).ToList();
+        var request = beyond
+            ? new ChoiceRequest(Tr.T("Mehr als 4× vergrößern"), BeyondText(w, h, tw, th) + trial, choices, preferred)
+            : new ChoiceRequest(Tr.T("Upscaling dauert länger"),
+                Tr.T("„{0}“ braucht für dieses Bild ({1} × {2} px) auf diesem Rechner etwa {3}.", SelectedUpscaler.Name, w, h,
+                    Upscalers.Format(Upscalers.Estimate(method, w, h, Upscalers.Plan(w, h, tw, th, UpscaleTwice)))) + trial,
+                choices, preferred);
+        var answer = await ask(request);
+        if (answer < 0 || answer >= options.Count) return null;
+        return (options[answer].Twice, options[answer].Region);
+    }
+
+    /// <summary>Über 4×: was ein und zwei Durchgänge bedeuten.</summary>
+    private string BeyondText(int w, int h, int tw, int th) =>
+        Tr.T("Das Ziel ({0} × {1} px) ist {2:0.#}× so groß wie das Bild ({3} × {4} px); „{5}“ vergrößert je Durchgang 4×. Zwei Durchgänge: auch die feinen Details kommen von der KI — deutlich schärfer, sie erfindet aber mehr dazu. Ein Durchgang: den Rest vergrößert der Filter — weicher.",
+            tw, th, Math.Max(tw / (double)w, th / (double)h), w, h, SelectedUpscaler.Name);
 
     [RelayCommand(CanExecute = nameof(IsUpscaling))]
     private void CancelUpscale() => _upscaleCts?.Cancel();
@@ -518,7 +590,7 @@ public partial class MainViewModel
     private async Task<bool> RunUpscaleAsync(MagickImage doc, UpscaleKey key, SourceRect? region)
     {
         if (SelectedUpscaler.Model is null) return false;
-        var method = key.Method;
+        var (method, plan) = (key.Method, key.Plan);
         var cts = _upscaleCts = new CancellationTokenSource();
         IsUpscaling = true;
         ErrorMessage = null;
@@ -526,27 +598,39 @@ public partial class MainViewModel
         var preparing = false;
         int dw, dh;
         lock (doc) (dw, dh) = ((int)doc.Width, (int)doc.Height);
-        var expected = region is { } part ? Upscalers.Estimate(key.Method, part.Width, part.Height) : Upscalers.Estimate(key.Method, dw, dh);
+        var (pw, ph) = region is { } part ? (part.Width, part.Height) : (dw, dh);
+        var expected = Upscalers.Estimate(method, dw, dh, plan, pw, ph);
+        // Der Fortschritt läuft über beide Durchgänge: Anteil des ersten an der Zeit
+        var share = plan.Passes == 2 && expected > TimeSpan.Zero ? Upscalers.Estimate(method, pw, ph) / expected : 1;
+        var pass = 1;
         void Report(double f)
         {
             var remaining = RemainingText(clock.Elapsed, f, expected);
             ActivityText = preparing
                 ? Tr.T("Upscaling · KI-Modell wird vorbereitet (einmalig) … {0:0} %", f * 100)
-                : Ai.Sessions.OnGpu
-                    ? Tr.T("Upscaling auf der Grafikkarte · {0:0} %{1}", f * 100, remaining)
-                    : Tr.T("Upscaling auf der CPU · {0:0} %{1}", f * 100, remaining);
+                : plan.Passes == 2
+                    ? Ai.Sessions.OnGpu
+                        ? Tr.T("Upscaling auf der Grafikkarte · Durchgang {0} von 2 · {1:0} %{2}", pass, f * 100, remaining)
+                        : Tr.T("Upscaling auf der CPU · Durchgang {0} von 2 · {1:0} %{2}", pass, f * 100, remaining)
+                    : Ai.Sessions.OnGpu
+                        ? Tr.T("Upscaling auf der Grafikkarte · {0:0} %{1}", f * 100, remaining)
+                        : Tr.T("Upscaling auf der CPU · {0:0} %{1}", f * 100, remaining);
             ActivityProgress = f * 100;
             if (!preparing) UpscaleStatus = Tr.T("Wird berechnet …") + remaining;
         }
-        var progress = new Progress<double>(Report);
+        var firstProgress = new Progress<double>(f => Report(preparing ? f : f * share));
+        var secondProgress = new Progress<double>(f =>
+        {
+            pass = 2;
+            Report(share + f * (1 - share));
+        });
         ActivityCancel = CancelUpscaleCommand;
         Report(0);
 
-        // Prüfansicht vorbereiten: Vorher = Filter, Nachher füllt sich mit fertigen Kacheln
-        int w, h;
-        lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
-        var (f0, d0) = (UpscaleFidelity, UpscaleDetails);
-        await PrepareInspectAsync(doc, region);
+        // Prüfansicht vorbereiten: Vorher = Filter, Nachher füllt sich mit fertigen Kacheln (des letzten Durchgangs)
+        var baseRegion = region is { } rg ? ToBase(rg, dw, dh, plan) : (SourceRect?)null;
+        var (f0, d0, gamma) = (UpscaleFidelity, UpscaleDetails, GammaCorrect);
+        await PrepareInspectAsync(doc, plan, baseRegion);
         UpscaleInspect = true;
         var view = _inspect;
 
@@ -559,22 +643,22 @@ public partial class MainViewModel
                 void Done(UpscaleResult res, SourceRect rect)
                 {
                     if (view is null) return;
-                    var (ox, oy) = region is { } rr ? (rr.X, rr.Y) : (0, 0);
+                    var (ox, oy) = baseRegion is { } br ? (br.X, br.Y) : (0, 0);
                     BlitTile(view, res, rect, ox, oy, f0, d0, live: true);
                 }
 
-                return ComputeUpscale(source, method, progress, prepare =>
-                {
-                    preparing = prepare;
-                    if (prepare) Dispatcher.UIThread.Post(() => Report(0));
-                    else clock.Restart();
-                }, cts.Token, Done);
+                return ComputePlanned(source, method, plan.Passes, baseRegion?.Width ?? plan.BaseWidth, baseRegion?.Height ?? plan.BaseHeight,
+                    f0, d0, gamma, firstProgress, secondProgress, prepare =>
+                    {
+                        preparing = prepare;
+                        if (prepare) Dispatcher.UIThread.Post(() => Report(0));
+                        else clock.Restart();
+                    }, cts.Token, Done);
             }, cts.Token);
 
             var took = clock.Elapsed;
             Ai.RefreshGpuStatus();
-            Upscalers.Measured(method, result.SourceWidth, result.SourceHeight, took);
-            _upscale = new UpscaleEntry(key, region, result, took);
+            _upscale = new UpscaleEntry(key, region, baseRegion, result, took);
             _upscaledImage = null;
             if (region is null)
             {
@@ -607,6 +691,51 @@ public partial class MainViewModel
             ActivityCancel = null;
             UpdateUpscaleStatus();
             RequestPreview();
+        }
+    }
+
+    /// <summary>Ausschnitt (Bildpixel) in Pixeln der Basis des letzten Durchgangs.</summary>
+    private static SourceRect ToBase(SourceRect r, int w, int h, UpscalePlan plan)
+    {
+        if (plan.Passes == 1) return r;
+        double sx = plan.BaseWidth / (double)w, sy = plan.BaseHeight / (double)h;
+        int x0 = (int)Math.Round(r.X * sx), y0 = (int)Math.Round(r.Y * sy);
+        int x1 = Math.Clamp((int)Math.Round((r.X + r.Width) * sx), x0 + 1, plan.BaseWidth);
+        int y1 = Math.Clamp((int)Math.Round((r.Y + r.Height) * sy), y0 + 1, plan.BaseHeight);
+        return new SourceRect(x0, y0, x1 - x0, y1 - y0);
+    }
+
+    /// <summary>
+    /// Nach Plan rechnen (im Rechen-Thread). Ein Durchgang: wie <see cref="ComputeUpscale"/>. Zwei: das Ergebnis des ersten
+    /// mit Treue und Details zusammensetzen, auf die Basis (<paramref name="baseWidth"/> × <paramref name="baseHeight"/>)
+    /// verkleinern und noch einmal ×4 rechnen. Fertige Kacheln meldet nur der letzte Durchgang; die Zeit je Durchgang
+    /// verfeinert die Schätzung.
+    /// </summary>
+    private UpscaleResult ComputePlanned(MagickImage source, UpscaleMethod method, int passes, int baseWidth, int baseHeight,
+        double fidelity, double details, bool gamma, IProgress<double> first, IProgress<double> second, Action<bool>? preparing,
+        CancellationToken ct, Action<UpscaleResult, SourceRect>? done = null)
+    {
+        var clock = Stopwatch.StartNew();
+        void Prepare(bool start)
+        {
+            preparing?.Invoke(start);
+            if (!start) clock.Restart();
+        }
+        int w, h;
+        lock (source) (w, h) = ((int)source.Width, (int)source.Height);
+        var result = ComputeUpscale(source, method, first, Prepare, ct, passes == 1 ? done : null);
+        Upscalers.Measured(method, w, h, clock.Elapsed);
+        if (passes == 1) return result;
+
+        MagickImage middle;
+        using (var composed = result.Compose(fidelity, details, ct))
+            middle = ImageOps.Resize(composed, baseWidth, baseHeight, FilterOption.Lanczos.Filter, gamma);
+        using (middle)
+        {
+            clock.Restart();
+            var last = ComputeUpscale(middle, method, second, Prepare, ct, done);
+            Upscalers.Measured(method, baseWidth, baseHeight, clock.Elapsed);
+            return last;
         }
     }
 
@@ -686,11 +815,13 @@ public partial class MainViewModel
         return m;
     }
 
-    /// <summary>Vorher (Filter) und Nachher (zunächst blass der Filter) in Anzeigegröße anlegen.</summary>
-    private async Task PrepareInspectAsync(MagickImage doc, SourceRect? region)
+    /// <summary>
+    /// Vorher (Filter) und Nachher (zunächst blass der Filter) in Anzeigegröße anlegen — gemessen an der Basis des letzten
+    /// Durchgangs (bei einem Durchgang das Bild selbst); <paramref name="region"/> in Pixeln dieser Basis.
+    /// </summary>
+    private async Task PrepareInspectAsync(MagickImage doc, UpscalePlan plan, SourceRect? region)
     {
-        int w, h;
-        lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
+        var (w, h) = (plan.BaseWidth, plan.BaseHeight);
         var m = InspectFactor(w, h);
         var (filter, gamma) = (SelectedFilter.Filter, GammaCorrect);
         var before = await Task.Run(() =>
@@ -786,7 +917,7 @@ public partial class MainViewModel
         }
         if (_inspect is not { Factor: > 0 } view || MatchingUpscale(wholeOnly: false) is not { } e) return;
         var (f, d) = (UpscaleFidelity, UpscaleDetails);
-        var (ox, oy) = e.Region is { } r ? (r.X, r.Y) : (0, 0);
+        var (ox, oy) = e.BaseRegion is { } r ? (r.X, r.Y) : (0, 0);
         try
         {
             await Task.Run(() =>
@@ -865,12 +996,29 @@ public partial class MainViewModel
         if (MatchingUpscale() is not null) return (false, await UpscaledForExportAsync());
         if (UpscaleModelMissing || ChoiceRequested is not { } ask) return (false, null);
 
-        var estimate = Upscalers.FormatWithEnd(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight), DateTime.Now);
-        var answer = await ask(new ChoiceRequest(Tr.T("Upscaling noch nicht berechnet"),
-            Tr.T("Für dieses Bild ist „{0}“ gewählt, aber noch nicht berechnet. Das dauert etwa {1}.", SelectedUpscaler.Name, estimate),
-            [Tr.T("Jetzt berechnen und speichern (≈ {0})", estimate), Tr.T("Ohne KI speichern (nur Filter)"), Tr.T("Abbrechen")]));
-        if (answer == 1) return (false, null);
-        if (answer != 0) return (true, null);
+        // Über 4×: ein oder zwei Durchgänge zur Wahl, jeweils mit Dauer
+        var (w, h) = (SourceWidth, SourceHeight);
+        var (tw, th) = EffectiveTarget();
+        var beyond = Upscalers.BeyondOnePass(w, h, tw, th);
+        string Estimate(bool twice) =>
+            Upscalers.FormatWithEnd(Upscalers.Estimate(SelectedUpscaler.Method, w, h, Upscalers.Plan(w, h, tw, th, twice)), DateTime.Now);
+        var choices = beyond
+            ? new List<string>
+            {
+                Tr.T("Zwei KI-Durchgänge berechnen und speichern (≈ {0})", Estimate(true)),
+                Tr.T("Ein KI-Durchgang berechnen und speichern (≈ {0})", Estimate(false)),
+            }
+            : [Tr.T("Jetzt berechnen und speichern (≈ {0})", Estimate(UpscaleTwice))];
+        var filterOnly = choices.Count;
+        choices.Add(Tr.T("Ohne KI speichern (nur Filter)"));
+        choices.Add(Tr.T("Abbrechen"));
+        var message = beyond
+            ? Tr.T("Für dieses Bild ist „{0}“ gewählt, aber noch nicht berechnet.", SelectedUpscaler.Name) + "\n\n" + BeyondText(w, h, tw, th)
+            : Tr.T("Für dieses Bild ist „{0}“ gewählt, aber noch nicht berechnet. Das dauert etwa {1}.", SelectedUpscaler.Name, Estimate(UpscaleTwice));
+        var answer = await ask(new ChoiceRequest(Tr.T("Upscaling noch nicht berechnet"), message, choices, beyond && !UpscaleTwice ? 1 : 0));
+        if (answer == filterOnly) return (false, null);
+        if (answer < 0 || answer > filterOnly) return (true, null);
+        if (beyond) UpscaleTwice = answer == 0;
         if (await Task.Run(() => (ResultDocument, CurrentUpscaleKey())) is not ({ } doc, { } key)) return (true, null);
         if (!await RunUpscaleAsync(doc, key, null)) return (true, null);
         return (false, await UpscaledForExportAsync());
@@ -883,8 +1031,9 @@ public partial class MainViewModel
     {
         if (s.Upscaler == UpscaleMethod.Filter || (o.Width <= width && o.Height <= height)) return null;
         if (Upscalers.ModelOf(s.Upscaler) is not { } m || !UpscaleModelInstalled(m)) return null;   // ohne Modell: Filter
-        if (path == CurrentPath && SelectedUpscaler.Method == s.Upscaler && MatchingUpscale() is not null) return null;
-        return Upscalers.Estimate(s.Upscaler, width, height);
+        if (path == CurrentPath && SelectedUpscaler.Method == s.Upscaler && UpscaleTwice == s.UpscaleTwice && MatchingUpscale() is not null)
+            return null;
+        return Upscalers.Estimate(s.Upscaler, width, height, Upscalers.Plan(width, height, o.Width, o.Height, s.UpscaleTwice));
     }
 
     /// <summary>
@@ -897,18 +1046,25 @@ public partial class MainViewModel
         int w, h;
         lock (image) (w, h) = ((int)image.Width, (int)image.Height);
         if (s.Upscaler == UpscaleMethod.Filter || (o.Width <= w && o.Height <= h)) return null;
-        if (path == CurrentPath && SelectedUpscaler.Method == s.Upscaler && MatchingUpscale() is not null
+        if (path == CurrentPath && SelectedUpscaler.Method == s.Upscaler && UpscaleTwice == s.UpscaleTwice && MatchingUpscale() is not null
             && await UpscaledForExportAsync() is { } ready)
             return (ready, false);
         if (Upscalers.ModelOf(s.Upscaler) is not { } m || !UpscaleModelInstalled(m)) return null;
 
+        var plan = Upscalers.Plan(w, h, o.Width, o.Height, s.UpscaleTwice);
+        var expected = Upscalers.Estimate(s.Upscaler, w, h, plan);
+        var share = plan.Passes == 2 && expected > TimeSpan.Zero ? Upscalers.Estimate(s.Upscaler, w, h) / expected : 1;
         var clock = Stopwatch.StartNew();
-        var step = new Progress<double>(f => progress?.Report(new WorkProgress(f,
-            Tr.T("Upscaling (KI) · {0:0} %{1}", f * 100, RemainingText(clock.Elapsed, f, Upscalers.Estimate(s.Upscaler, w, h))))));
+        Progress<double> Step(double from, double span) => new(f =>
+        {
+            var all = from + f * span;
+            progress?.Report(new WorkProgress(all, Tr.T("Upscaling (KI) · {0:0} %{1}", all * 100, RemainingText(clock.Elapsed, all, expected))));
+        });
+        var (first, second) = (Step(0, share), Step(share, 1 - share));
         var composed = await Task.Run(() =>
         {
-            var result = ComputeUpscale(image, s.Upscaler, step, prepare => { if (!prepare) clock.Restart(); }, ct);
-            Upscalers.Measured(s.Upscaler, w, h, clock.Elapsed);
+            var result = ComputePlanned(image, s.Upscaler, plan.Passes, plan.BaseWidth, plan.BaseHeight, s.UpscaleFidelity, s.UpscaleDetails,
+                s.GammaCorrect, first, second, prepare => { if (!prepare) clock.Restart(); }, ct);
             return result.Compose(s.UpscaleFidelity, s.UpscaleDetails, ct);
         }, ct);
         return (composed, true);
