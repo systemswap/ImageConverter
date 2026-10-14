@@ -89,17 +89,13 @@ public class SizeUnitTests
     }
 
     [Fact]
-    public void Mm_WithMetadataOnly_PixelsStay_DpiFollows()
+    public void Pixel_ChangingDpi_KeepsPixels_ChangesPrintSize()
     {
-        var vm = new MainViewModel { DpiMetadataOnly = true };
-        vm.SelectedSizeUnit = "mm";
+        var vm = new MainViewModel();                // 4000 × 3000 px bei 72 DPI
+        vm.Dpi = 400;                                // Einheit Pixel: nur die Druckgröße ändert sich
 
-        vm.FieldWidth = 200m;                        // 4000 px auf 200 mm
-
-        Assert.Equal(4000, vm.TargetWidth);          // Pixel unverändert
-        Assert.Equal(508, vm.Dpi);                   // 4000 / (200 / 25,4)
-        Assert.Equal(200m, vm.FieldWidth);
-        Assert.Equal(150m, vm.FieldHeight);          // folgt den Pixeln (4:3)
+        Assert.Equal((4000, 3000), (vm.TargetWidth, vm.TargetHeight));
+        Assert.Equal("Druckgröße 25,4 × 19,1 cm", vm.PrintSize.Replace('.', ','));
     }
 
     [Fact]

@@ -48,19 +48,20 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
     read-only.
 - Bei entsperrter Kette: freie Verzerrung, beide Felder unabhängig. Zusätzlich Modi
   *Fit* (einpassen, Rand) und *Fill/Cover* (füllen, beschneiden).
-- **Nicht vergrößern**-Schalter (Standard an) — verhindert versehentliches Upscaling.
-- **Resampling-Filter** (Dropdown, Standard Lanczos3):
-  Nearest, Bilinear, Bicubic, Catmull-Rom, Mitchell, **Lanczos3**, Spline/B-Spline,
-  Box/Area (gut fürs Verkleinern).
+- ~~**Nicht vergrößern**-Schalter~~ — entfallen in 0.5.77 beta: vergrößert wird, wenn die Maße es sagen.
+- **Verfahren** (Dropdown, Standard Lanczos3, seit 0.5.77 beta je nach Richtung):
+  beim Verkleinern Lanczos3, Bicubic, Catmull-Rom, Mitchell, Spline, Bilinear, Box/Area, Nearest;
+  beim Vergrößern dieselben ohne Bilinear und Box, darunter die KI-Scaler (§1 N).
 - Skalierung in **Linear-Light** rechnen (gamma-korrekt) — sichtbar bessere Ergebnisse,
   als Option „Gamma-korrekt skalieren".
 
 ### C. Auflösung & DPI
 
 - Pixelmaße (= eigentliche Auflösung) und **DPI/PPI** getrennt bedienbar.
-- Zwei Modi, explizit im UI unterschieden:
-  1. **Nur Metadaten ändern** — DPI-Tag umschreiben, Pixel bleiben (ändert Druckgröße).
-  2. **Neu berechnen** — physische Zielgröße (mm/inch) × DPI ⇒ neue Pixelmaße.
+- Zwei Modi — seit 0.5.77 beta über die **Einheit** statt eigener Schalter:
+  1. Einheit **Pixel**: nur Metadaten — DPI-Tag umschreiben, Pixel bleiben (ändert Druckgröße).
+  2. Einheit **mm**: neu berechnen — physische Zielgröße × DPI ⇒ neue Pixelmaße.
+- In der Gruppe „Größe“ (eigene Gruppe „Auflösung & DPI“ entfallen), nur das Zahlenfeld, Erklärung im Tooltip.
 - Anzeige der resultierenden Druckgröße in cm/inch live mitlaufen lassen.
 
 ### D. Zuschneiden (Referenzwerkzeug-artige Auswahl) — Kernfeature
@@ -400,6 +401,12 @@ Ausschnitt), Prüfansicht in voller Auflösung mit fertigen Kacheln schon währe
 (Filter ↔ KI), Rückfrage beim Speichern (auch für mehrere Bilder), Modelle im Download-Manager. PiSA-SR ohne Python:
 Nachbau in C#, gegen PyTorch geprüft. Noch nicht: Grafikkarte (DirectML/ROCm), Speicherprüfung vor dem Rechnen, das
 2×/4× im KI-Tab bleibt vorerst daneben bestehen.
+
+**Neu gestaltet (0.5.77 beta, Wunsch vom 14.10.2026):** eine Gruppe „Größe“ — Einheit + Formate, Maße mit Kette, DPI (nur
+das Feld; die Einheit entscheidet: Pixel → nur Druckgröße, mm → Pixel), Liste „Verfahren“ (je nach Richtung; Filter oben,
+unter „KI-Scaler“ die KI), Gamma, Treue/Details (nur KI), Knopf „Skalieren“ für jedes Verfahren (Ergebnis in voller Größe in
+der Vorschau), Druckgröße. Weggefallen: Gruppen „Upscaling“ und „Auflösung & DPI“, Filter-Liste, DPI-Regler und -Knöpfe,
+„Nicht vergrößern“ (vergrößert wird, wenn die Maße es sagen), Prüfansicht als Schalter, Größe im KI-Tab.
 
 **Offen:** ×2-Modelle (weniger Zeit bei kleinem Faktor)? „Upscaling“ auch ohne Vergrößerung als
 „Details schärfen“ (Supersampling wie „Größe behalten“ der KI)? Gesichter zusätzlich mit dem

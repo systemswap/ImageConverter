@@ -68,6 +68,87 @@ public partial class MainViewModel
     public event Func<ChoiceRequest, Task<int>>? ChoiceRequested;
 
     public bool UsesAiUpscaler => SelectedUpscaler.Method != UpscaleMethod.Filter;
+
+    /// <summary>KI-Scaler gewählt und es wird vergrößert — nur dann rechnet die KI (Treue, Details, Zeit).</summary>
+    public bool AiScalingActive => UsesAiUpscaler && UpscaleEnlarges();
+
+    /// <summary>Ziel größer als das Bild (in einer der Kanten).</summary>
+    public bool IsEnlarging => UpscaleEnlarges();
+
+    /// <summary>Ziel anders als das Bild — sonst gibt es nichts zu skalieren.</summary>
+    public bool HasSizeChange
+    {
+        get
+        {
+            var (w, h) = EffectiveTarget();
+            return w != SourceWidth || h != SourceHeight;
+        }
+    }
+
+    /// <summary>Einträge der Liste „Verfahren“ — fest; je nach Richtung blendet <see cref="SyncScaleChoices"/> aus.</summary>
+    public IReadOnlyList<ScaleChoice> ScaleChoices => _scaleChoices ??= CreateScaleChoices();
+
+    private IReadOnlyList<ScaleChoice>? _scaleChoices;
+
+    private IReadOnlyList<ScaleChoice> CreateScaleChoices()
+    {
+        var list = ScaleChoice.CreateList();
+        foreach (var c in list) c.IsOffered = c.OfferedFor(_wasEnlarging);
+        return list;
+    }
+
+    /// <summary>Gewählter Eintrag — Filter und KI-Scaler sind getrennt gespeichert (die KI-Wahl bleibt beim Verkleinern erhalten).</summary>
+    public ScaleChoice? SelectedScaleChoice
+    {
+        get
+        {
+            var list = ScaleChoices;
+            if (IsEnlarging && UsesAiUpscaler && list.FirstOrDefault(c => c.Ai == SelectedUpscaler) is { } ai) return ai;
+            return list.FirstOrDefault(c => c.Filter == SelectedFilter && c.IsOffered) ?? list.First(c => c.Filter == FilterOption.Lanczos);
+        }
+        set
+        {
+            if (value is null || value.IsHeader)
+            {
+                Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(SelectedScaleChoice)));   // Überschrift: nicht wählbar
+                return;
+            }
+            if (value.Ai is { } ai) SelectedUpscaler = ai;
+            else
+            {
+                SelectedFilter = value.Filter!;
+                if (IsEnlarging) SelectedUpscaler = UpscaleOption.Of(UpscaleMethod.Filter);
+            }
+        }
+    }
+
+    private bool _wasEnlarging;
+
+    /// <summary>
+    /// Nach jeder Größenänderung: Richtung gewechselt → andere Liste; ein Filter, der in der neuen Richtung nicht
+    /// angeboten wird (Box beim Vergrößern …), wird zu Lanczos.
+    /// </summary>
+    private void SyncScaleChoices()
+    {
+        var up = IsEnlarging;
+        if (up && !SelectedFilter.Up || !up && !SelectedFilter.Down) SelectedFilter = FilterOption.Lanczos;
+        if (up != _wasEnlarging)
+        {
+            _wasEnlarging = up;
+            foreach (var c in ScaleChoices) c.IsOffered = c.OfferedFor(up);
+        }
+        OnPropertyChanged(nameof(SelectedScaleChoice));
+        OnPropertyChanged(nameof(IsEnlarging));
+        OnPropertyChanged(nameof(HasSizeChange));
+        OnPropertyChanged(nameof(AiScalingActive));
+        OnPropertyChanged(nameof(ScaleButtonText));
+        UpscaleCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>„Skalieren“, bei KI mit der geschätzten Zeit.</summary>
+    public string ScaleButtonText => AiScalingActive && MatchingUpscale() is null
+        ? Tr.T("Skalieren (≈ {0})", Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight)))
+        : Tr.T("Skalieren");
     public string UpscaleFidelityLabel => $"{UpscaleFidelity * 100:0} %";
     public string UpscaleDetailsLabel => $"{UpscaleDetails * 100:0} %";
 
@@ -225,6 +306,11 @@ public partial class MainViewModel
     /// <summary>Hält Upscaling-Status und -Ansicht beim Bild: Wechsel, Bearbeiten, Größe.</summary>
     private void OnUpscaleRelevantChange(object? sender, PropertyChangedEventArgs e)
     {
+        // Jede andere Einstellung (Licht, Farbe, Größe, Verfahren …): wieder die normale Vorschau mit allem
+        if (UpscaleInspect && !IsUpscaling && e.PropertyName is { } name && TrackedSettings.ContainsKey(name)
+            && name is not (nameof(UpscaleFidelity) or nameof(UpscaleDetails)))
+            UpscaleInspect = false;
+
         switch (e.PropertyName)
         {
             case nameof(CurrentFileName):
@@ -237,7 +323,8 @@ public partial class MainViewModel
             case nameof(HasImage):
                 UpscaleCommand.NotifyCanExecuteChanged();
                 break;
-            case nameof(TargetWidth) or nameof(TargetHeight) or nameof(DoNotEnlarge) or nameof(HiddenSteps) or nameof(SourceWidth):
+            case nameof(TargetWidth) or nameof(TargetHeight) or nameof(HiddenSteps) or nameof(SourceWidth) or nameof(SourceHeight):
+                SyncScaleChoices();
                 UpdateUpscaleStatus();
                 break;
         }
@@ -270,8 +357,16 @@ public partial class MainViewModel
     {
         WatchUpscaleItems();
         UpdateUpscaleStatus();
+        OnPropertyChanged(nameof(SelectedScaleChoice));
+        OnPropertyChanged(nameof(AiScalingActive));
+        OnPropertyChanged(nameof(ScaleButtonText));
         UpscaleCommand.NotifyCanExecuteChanged();
-        if (value.Method == UpscaleMethod.Filter) UpscaleInspect = false;
+        RequestPreview();
+    }
+
+    partial void OnSelectedFilterChanged(FilterOption value)
+    {
+        OnPropertyChanged(nameof(SelectedScaleChoice));
         RequestPreview();
     }
 
@@ -280,34 +375,33 @@ public partial class MainViewModel
 
     private void UpscaleSlidersChanged()
     {
-        if (_upscale is null) return;
+        if (_upscale is null || _inspect is { Factor: 0 }) return;
         if (UpscaleInspect && !IsUpscaling) RedrawInspectLater();
         RequestPreview();
     }
 
     partial void OnUpscaleInspectChanged(bool value)
     {
-        if (value) _ = ShowInspectAsync();
-        else if (!IsUpscaling) ClearInspect();
+        if (!value && !IsUpscaling) ClearInspect();
+        UpdateUpscaleStatus();
     }
 
     /// <summary>Statuszeile der Gruppe.</summary>
     private void UpdateUpscaleStatus()
     {
-        if (!UsesAiUpscaler) { UpscaleStatus = null; return; }
+        OnPropertyChanged(nameof(ScaleButtonText));
         if (IsUpscaling) return;   // die Rechnung schreibt selbst
+        var inspect = UpscaleInspect
+            ? Tr.T("Die Vorschau zeigt das Ergebnis in voller Größe, nur skaliert — Licht, Farbe und Schärfe kommen zurück, sobald du etwas anderes einstellst.")
+            : null;
+        if (!HasSizeChange) { UpscaleStatus = Tr.T("Keine Größenänderung."); return; }
+        if (!AiScalingActive) { UpscaleStatus = inspect; return; }
         if (UpscaleModelMissing) { UpscaleStatus = Tr.T("Modell nicht geladen."); return; }
         var estimate = Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight));
-        if (!UpscaleEnlarges())
-        {
-            UpscaleStatus = DoNotEnlarge && (TargetWidth > SourceWidth || TargetHeight > SourceHeight)
-                ? Tr.T("Wirkt nur beim Vergrößern — „Nicht vergrößern“ ist an.")
-                : Tr.T("Wirkt nur beim Vergrößern — die Zielgröße ist nicht größer als das Bild.");
-            return;
-        }
         if (MatchingUpscale() is { } e)
         {
-            UpscaleStatus = Tr.T("Berechnet ({0}) — Vorschau und Speichern verwenden es.", Upscalers.Format(e.Took));
+            UpscaleStatus = Tr.T("Berechnet ({0}) — Vorschau und Speichern verwenden es.", Upscalers.Format(e.Took))
+                            + (inspect is null ? "" : "\n" + inspect);
             return;
         }
         if (MatchingUpscale(wholeOnly: false) is not null)
@@ -322,14 +416,33 @@ public partial class MainViewModel
 
     // ------------------------------------------------------------ Rechnen
 
-    private bool CanUpscale => UsesAiUpscaler && HasImage && !IsUpscaling && !UpscaleModelMissing;
+    private bool CanUpscale => HasImage && !IsUpscaling && HasSizeChange && (!AiScalingActive || !UpscaleModelMissing);
 
+    /// <summary>
+    /// „Skalieren“: mit einem Filter in Sekunden, mit einem KI-Scaler (nach Rückfrage bei langer Dauer) in Minuten. Danach
+    /// zeigt die Vorschau das Ergebnis in voller Größe — zum Hineinzoomen und für Vorher/Nachher.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanUpscale))]
     private async Task Upscale()
     {
+        if (!AiScalingActive)
+        {
+            await ScaleWithFilterAsync();
+            return;
+        }
         if (await Task.Run(() => (ResultDocument, CurrentUpscaleKey())) is not ({ } doc, { } key)) return;
         int w, h;
         lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
+
+        // Schon gerechnet (ganzes Bild): nur zeigen
+        if (MatchingUpscale() is not null)
+        {
+            await PrepareInspectAsync(doc, null);
+            UpscaleInspect = true;
+            ShowInspectBitmaps();
+            await RedrawInspectAsync();
+            return;
+        }
 
         // Lange Rechnung: fragen — ganzes Bild oder nur der sichtbare Ausschnitt
         SourceRect? region = null;
@@ -495,7 +608,9 @@ public partial class MainViewModel
     // ------------------------------------------------------------ Prüfansicht
 
     /// <summary>Anzeige in <c>Factor</c>-facher Größe des Bildes (1, 2 oder 4 — so viel, wie die Zielgröße braucht).</summary>
-    private sealed record InspectView(WriteableBitmap After, Bitmap Before, int Factor, int Width, int Height);
+    /// <param name="Factor">Anzeige je Bildpixel (KI: 1, 2 oder 4); 0 beim Filter (Bitmap in Zielgröße).</param>
+    /// <param name="OwnsBefore">false: Vorher gehört der Anzeige (Zwischenspeicher), nicht freigeben.</param>
+    private sealed record InspectView(WriteableBitmap After, Bitmap Before, int Factor, int Width, int Height, bool OwnsBefore = true);
 
     private InspectView? _inspect;
 
@@ -552,22 +667,46 @@ public partial class MainViewModel
             if (ReferenceEquals(OverrideBitmap, v.After)) OverrideBitmap = null;
             if (ReferenceEquals(OverrideBeforeBitmap, v.Before)) OverrideBeforeBitmap = null;
             v.After.Dispose();
-            v.Before.Dispose();
+            if (v.OwnsBefore) v.Before.Dispose();
         }
         _inspect = null;
     }
 
-    /// <summary>Prüfansicht einschalten: vorhandenes Ergebnis zeigen (sonst den Filter, bis gerechnet wird).</summary>
-    private async Task ShowInspectAsync()
+    /// <summary>
+    /// Skalieren mit dem gewählten Filter, in voller Zielgröße (höchstens rund 64 Megapixel in der Anzeige). Vorher ist das
+    /// Bild selbst — die Ansicht legt beide auf dieselbe Fläche.
+    /// </summary>
+    private async Task ScaleWithFilterAsync()
     {
-        if (IsUpscaling) { ShowInspectBitmaps(); return; }
-        if (MatchingUpscale(wholeOnly: false) is not { } e || await Task.Run(() => ResultDocument) is not { } doc)
+        if (await Task.Run(() => ResultDocument) is not { } doc) return;
+        var (tw, th) = EffectiveTarget();
+        var k = Math.Min(1.0, Math.Sqrt(64_000_000.0 / ((long)tw * th)));
+        int dw = Math.Max(1, (int)Math.Round(tw * k)), dh = Math.Max(1, (int)Math.Round(th * k));
+        var (filter, gamma) = (SelectedFilter.Filter, GammaCorrect);
+        ActivityText = Tr.T("Skalieren …");
+        ActivityProgress = -1;
+        try
         {
-            UpscaleInspect = false;
-            return;
+            var bgra = await Task.Run(() =>
+            {
+                using var scaled = ImageOps.Resize(doc, dw, dh, filter, gamma);
+                return ImageOps.ToDisplayBgra(scaled);
+            });
+            var before = await DisplayBitmapForAsync(doc);
+            ClearInspect();
+            _inspect = new InspectView((WriteableBitmap)BitmapOps.FromBgra(bgra, dw, dh), before, 0, (int)doc.Width, (int)doc.Height, OwnsBefore: false);
+            UpscaleInspect = true;
+            ShowInspectBitmaps();
         }
-        await PrepareInspectAsync(doc, e.Region);
-        await RedrawInspectAsync();
+        catch (Exception ex)
+        {
+            ErrorMessage = Tr.T("Skalieren fehlgeschlagen: {0}", ex.Message);
+        }
+        finally
+        {
+            ActivityText = null;
+            ActivityProgress = -1;
+        }
     }
 
     private CancellationTokenSource? _redrawCts;
@@ -583,7 +722,7 @@ public partial class MainViewModel
         {
             try { await Task.Delay(delay, cts.Token); } catch (OperationCanceledException) { return; }
         }
-        if (_inspect is not { } view || MatchingUpscale(wholeOnly: false) is not { } e) return;
+        if (_inspect is not { Factor: > 0 } view || MatchingUpscale(wholeOnly: false) is not { } e) return;
         var (f, d) = (UpscaleFidelity, UpscaleDetails);
         var (ox, oy) = e.Region is { } r ? (r.X, r.Y) : (0, 0);
         try

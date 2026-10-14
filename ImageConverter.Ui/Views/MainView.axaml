@@ -391,10 +391,10 @@
                                 <ComboBox Classes="tr" Grid.Column="1"
                                           ItemsSource="{Binding SizeUnits}"
                                           SelectedItem="{Binding SelectedSizeUnit}"
-                                          ToolTip.Tip="{l:T 'Pixel: Bildgröße in Pixeln. mm: Druckgröße in Millimetern — die Pixel ergeben sich aus der DPI (unten bei Auflösung).'}" />
+                                          ToolTip.Tip="{l:T 'Pixel: Bildgröße in Pixeln. mm: Druckgröße in Millimetern — die Pixel ergeben sich aus der DPI. Die Einheit entscheidet auch, was eine neue DPI ändert: bei Pixel nur die Druckgröße, bei mm die Pixel.'}" />
                                 <!-- Standardformat: genau über der Kette, gleich groß. Symbol: Blatt mit Eselsohr (eigenes). -->
                                 <Button Grid.Column="2" Classes="paper" Margin="8,0,0,0"
-                                        ToolTip.Tip="{l:T 'Standardformat wählen (A4, A5, Fotoabzüge …): Das Bild wird in Millimetern darauf gebracht – Hoch- oder Querformat wie das Bild, bei geschlossener Kette ganz hinein mit gleichem Seitenverhältnis. Die DPI bleibt (für den Druck 300 einstellen); bei „Nur Metadaten ändern“ ändert sich statt der Pixel die DPI.'}">
+                                        ToolTip.Tip="{l:T 'Standardformat wählen (A4, A5, Fotoabzüge …): Das Bild wird in Millimetern darauf gebracht – Hoch- oder Querformat wie das Bild, bei geschlossener Kette ganz hinein mit gleichem Seitenverhältnis. Die DPI bleibt (für den Druck 300 einstellen), die Pixel folgen.'}">
                                     <Path Data="M 7,3 L 14,3 L 18,7 L 18,21 L 7,21 Z M 14,3 L 14,7 L 18,7 M 9.5,12 L 15.5,12 M 9.5,15.5 L 15.5,15.5" />
                                     <Button.Flyout>
                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -480,76 +480,59 @@
                                        IsVisible="{Binding HasPixelEquivalent}"
                                        Text="{Binding PixelEquivalent}" />
 
-                            <!-- Hinweis, wenn das Ziel größer ist als das Original -->
-                            <TextBlock Classes="hint" Margin="76,-4,0,10"
-                                       IsVisible="{Binding HasUpscaleHint}"
-                                       Text="{Binding UpscaleHint}" />
-
-                            <!-- Filter: jeder Eintrag erklärt sich im Tooltip -->
-                            <Grid Classes="row" ColumnDefinitions="76,*">
-                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Filter'}" />
-                                <ComboBox Grid.Column="1"
-                                          ItemsSource="{Binding Filters}"
-                                          SelectedItem="{Binding SelectedFilter}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="m:FilterOption">
-                                            <Border Background="Transparent">
-                                                <ToolTip.Tip>
-                                                    <StackPanel MaxWidth="290" Spacing="6">
-                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                        <TextBlock Text="{l:TItem Path=Description}" TextWrapping="Wrap" />
-                                                        <TextBlock TextWrapping="Wrap" FontWeight="SemiBold">
-                                                            <Run Text="{l:T 'Gut für:'}" />
-                                                            <Run Text="{l:TItem Path=BestFor}" />
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </ToolTip.Tip>
-                                                <TextBlock Text="{Binding Name}" />
-                                            </Border>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                            <!-- DPI: bei Pixel ändert sie nur die Druckgröße, bei mm die Pixel (Einheit entscheidet) -->
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="DPI" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding Dpi}"
+                                               Minimum="1" Maximum="2400"
+                                               ToolTip.Tip="{Binding DpiTip}" />
+                                <TextBlock Grid.Column="2" Classes="label" Text="ppi" Margin="7,0,0,0" />
                             </Grid>
 
-                            <TextBlock Classes="hint" Margin="76,-4,0,10"
-                                       Text="{l:TItem Path=SelectedFilter.BestFor}" />
-
-                            <StackPanel Spacing="6">
-                                <CheckBox IsChecked="{Binding DoNotEnlarge}"
-                                          Content="{l:T 'Nicht vergrößern'}" FontSize="12"
-                                          ToolTip.Tip="{l:T 'Kleine Bilder werden nie größer gerechnet — Vergrößern erfindet keine Details, es macht nur unscharf.'}" />
-                                <CheckBox IsChecked="{Binding GammaCorrect}"
-                                          Content="{l:T 'Gamma-korrekt skalieren'}" FontSize="12"
-                                          ToolTip.Tip="{l:T 'Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus.'}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </HeaderedContentControl>
-
-                    <!-- ============================== Upscaling: beim Vergrößern entstehen die Pixel aus einer KI -->
-                    <HeaderedContentControl Header="{l:T 'UPSCALING'}">
-                        <StackPanel>
+                            <!-- Verfahren: oben die schnellen Filter, unter der Linie die KI-Scaler (nur beim Vergrößern) -->
                             <Grid Classes="row" ColumnDefinitions="76,*">
                                 <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Verfahren'}" />
                                 <ComboBox Grid.Column="1"
-                                          ItemsSource="{Binding UpscaleOptions}"
-                                          SelectedItem="{Binding SelectedUpscaler}">
+                                          ItemsSource="{Binding ScaleChoices}"
+                                          SelectedItem="{Binding SelectedScaleChoice}"
+                                          IsEnabled="{Binding HasSizeChange}" ToolTip.ShowOnDisabled="True"
+                                          ToolTip.Tip="{l:T 'Womit die Pixel beim Skalieren entstehen. Die Liste richtet sich nach der Richtung: beim Verkleinern nur Filter, die dafür taugen; beim Vergrößern oben die Filter (sofort), unten die KI-Scaler (Sekunden bis Stunden). Gerechnet wird immer in einem Schritt aus dem Bild selbst.'}">
+                                    <ComboBox.Styles>
+                                        <Style Selector="ComboBoxItem">
+                                            <Setter Property="IsEnabled" Value="{Binding IsSelectable, x:DataType=m:ScaleChoice}" />
+                                            <Setter Property="IsVisible" Value="{Binding IsOffered, x:DataType=m:ScaleChoice}" />
+                                        </Style>
+                                    </ComboBox.Styles>
                                     <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="m:UpscaleOption">
-                                            <Border Background="Transparent">
-                                                <ToolTip.Tip>
-                                                    <TextBlock MaxWidth="290" TextWrapping="Wrap" Text="{Binding Description}" />
-                                                </ToolTip.Tip>
-                                                <TextBlock Text="{Binding Name}" />
-                                            </Border>
+                                        <DataTemplate x:DataType="m:ScaleChoice">
+                                            <Panel>
+                                                <!-- Überschrift „KI-Scaler“ mit Linie darüber, nicht wählbar -->
+                                                <StackPanel IsVisible="{Binding IsHeader}" Margin="0,4,0,0" Spacing="4">
+                                                    <Border Height="1" Background="{DynamicResource BorderStrongBrush}" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextMutedBrush}" />
+                                                </StackPanel>
+                                                <Border Background="Transparent" IsVisible="{Binding IsSelectable}">
+                                                    <ToolTip.Tip>
+                                                        <TextBlock MaxWidth="300" TextWrapping="Wrap" Text="{Binding Description}" />
+                                                    </ToolTip.Tip>
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </Border>
+                                            </Panel>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
                             </Grid>
 
-                            <TextBlock Classes="hint" Margin="76,-4,0,8" TextWrapping="Wrap"
-                                       Text="{Binding SelectedUpscaler.Description}" />
+                            <TextBlock Classes="hint" Margin="76,-4,0,6" TextWrapping="Wrap"
+                                       IsVisible="{Binding HasSizeChange}"
+                                       Text="{Binding SelectedScaleChoice.Description}" />
 
-                            <!-- Modell fehlt: hier laden (mit allen Teilen), nie still im Hintergrund -->
+                            <CheckBox Margin="76,0,0,8" IsChecked="{Binding GammaCorrect}"
+                                      Content="{l:T 'Gamma-korrekt skalieren'}" FontSize="12"
+                                      ToolTip.Tip="{l:T 'Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus.'}" />
+
+                            <!-- KI-Modell fehlt: hier laden (mit allen Teilen), nie still im Hintergrund -->
                             <Button Margin="76,0,0,8" HorizontalAlignment="Left"
                                     IsVisible="{Binding UpscaleModelMissing}"
                                     IsEnabled="{Binding !IsDownloadingUpscaler}"
@@ -557,72 +540,33 @@
                                     Command="{Binding DownloadUpscalerCommand}"
                                     ToolTip.Tip="{l:T 'Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI-Modelle.'}" />
 
-                            <StackPanel IsVisible="{Binding UsesAiUpscaler}">
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto"
-                                      ToolTip.Tip="{l:T 'Treue-Sicherung: Das Ergebnis wird so nachgeführt, dass es verkleinert wieder genau das Original ergibt. Die KI darf Feines ergänzen, aber Formen, Helligkeit und Farben nicht verschieben. 100 % empfohlen.'}">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Treue'}" />
-                                    <Slider Grid.Column="1" Minimum="0" Maximum="1"
-                                            Value="{Binding UpscaleFidelity}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleFidelityLabel}" />
-                                </Grid>
-
-                                <Grid Classes="row" ColumnDefinitions="76,*,Auto"
-                                      ToolTip.Tip="{l:T 'Wie viel von der KI kommt: 100 % = nur KI, weniger = gemischt mit dem einfach vergrößerten Bild (Filter). Wirkt sofort, ohne neu zu rechnen.'}">
-                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Details'}" />
-                                    <Slider Grid.Column="1" Minimum="0" Maximum="1"
-                                            Value="{Binding UpscaleDetails}" />
-                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleDetailsLabel}" />
-                                </Grid>
-
-                                <Grid ColumnDefinitions="*,8,*" Margin="76,2,0,6">
-                                    <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            Content="{l:T 'Upscalen'}"
-                                            Command="{Binding UpscaleCommand}"
-                                            ToolTip.Tip="{l:T 'Rechnet jetzt — bei langer Dauer wird gefragt, ob der sichtbare Ausschnitt reicht. Fertige Kacheln erscheinen sofort in der Prüfansicht.'}" />
-                                    <ToggleButton Grid.Column="2" HorizontalAlignment="Stretch"
-                                                  HorizontalContentAlignment="Center"
-                                                  IsChecked="{Binding UpscaleInspect}"
-                                                  Content="{l:T 'Prüfansicht'}"
-                                                  ToolTip.Tip="{l:T 'Zeigt das Ergebnis in voller Auflösung — zum Hineinzoomen. Mit „Vorher / Nachher“ links der Filter, rechts die KI, genau übereinander. Ohne Licht, Farbe und Schärfe.'}" />
-                                </Grid>
-
-                                <TextBlock Classes="hint" Margin="76,0,0,8" TextWrapping="Wrap"
-                                           IsVisible="{Binding UpscaleStatus, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                           Text="{Binding UpscaleStatus}" />
-                            </StackPanel>
-                        </StackPanel>
-                    </HeaderedContentControl>
-
-                    <!-- ============================== Auflösung und DPI -->
-                    <HeaderedContentControl Header="{l:T 'AUFLÖSUNG &amp; DPI'}">
-                        <StackPanel>
-                            <Grid Classes="row" ColumnDefinitions="76,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="DPI" />
-                                <NumericUpDown Grid.Column="1" Value="{Binding Dpi}"
-                                               Minimum="1" Maximum="2400"
-                                               ToolTip.Tip="{l:T 'Bis 2400 eintippbar, z. B. für Scans von Strichzeichnungen.'}" />
-                                <TextBlock Grid.Column="2" Classes="label" Text="ppi" Margin="7,0,0,0" />
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto"
+                                  IsEnabled="{Binding AiScalingActive}" ToolTip.ShowOnDisabled="True"
+                                  ToolTip.Tip="{l:T 'Nur bei KI-Scalern. Treue-Sicherung: Das Ergebnis wird so nachgeführt, dass es verkleinert wieder genau das Original ergibt. Die KI darf Feines ergänzen, aber Formen, Helligkeit und Farben nicht verschieben. 100 % empfohlen.'}">
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Treue'}" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="1"
+                                        Value="{Binding UpscaleFidelity}" />
+                                <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleFidelityLabel}" />
                             </Grid>
 
-                            <!-- Regler 72–1200, mit Marken bei den üblichen Werten; Feld und Regler folgen einander -->
-                            <Slider Minimum="72" Maximum="1200" Margin="76,-6,0,0"
-                                    SmallChange="1" LargeChange="50"
-                                    Ticks="72,96,150,300,600,1200" TickPlacement="BottomRight"
-                                    Value="{Binding Dpi}"
-                                    ToolTip.Tip="{l:T '72–96: Bildschirm · 150: einfacher Druck · 300: Fotodruck · 600: Kunstdruck · 1200: Strichzeichnungen'}" />
-                            <TextBlock Classes="hint" Margin="76,0,0,10" Text="{Binding DpiPurpose}" />
+                            <Grid Classes="row" ColumnDefinitions="76,*,Auto"
+                                  IsEnabled="{Binding AiScalingActive}" ToolTip.ShowOnDisabled="True"
+                                  ToolTip.Tip="{l:T 'Nur bei KI-Scalern. Wie viel von der KI kommt: 100 % = nur KI, weniger = gemischt mit dem einfach vergrößerten Bild (Lanczos). Wirkt sofort, ohne neu zu rechnen.'}">
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Details'}" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="1"
+                                        Value="{Binding UpscaleDetails}" />
+                                <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleDetailsLabel}" />
+                            </Grid>
 
-                            <StackPanel Spacing="6" Margin="0,0,0,8">
-                                <RadioButton GroupName="dpi" FontSize="12"
-                                             IsChecked="{Binding !DpiMetadataOnly}"
-                                             Content="{l:T 'Pixel neu berechnen'}"
-                                             ToolTip.Tip="{l:T 'Die Druckgröße bleibt gleich, die Pixelzahl folgt der DPI: mehr DPI = mehr Pixel. Skaliert mit dem gewählten Filter.'}" />
-                                <RadioButton GroupName="dpi" FontSize="12"
-                                             IsChecked="{Binding DpiMetadataOnly}"
-                                             Content="{l:T 'Nur Metadaten ändern'}"
-                                             ToolTip.Tip="{l:T 'Die Pixel bleiben wie sie sind — verlustfrei. Es ändert sich nur, wie groß das Bild beim Drucken herauskommt.'}" />
-                            </StackPanel>
+                            <Button Margin="76,2,0,6" Classes="primary" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Content="{Binding ScaleButtonText}"
+                                    Command="{Binding UpscaleCommand}"
+                                    ToolTip.Tip="{l:T 'Rechnet die Skalierung jetzt in voller Größe und zeigt sie in der Vorschau — zum Hineinzoomen und für Vorher/Nachher. Filter: Sekunden. KI: bei langer Dauer wird gefragt, ob der sichtbare Ausschnitt reicht; fertige Kacheln erscheinen sofort. Speichern geht auch ohne — bei KI wird dann gefragt.'}" />
+
+                            <TextBlock Classes="hint" Margin="76,0,0,8" TextWrapping="Wrap"
+                                       IsVisible="{Binding UpscaleStatus, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       Text="{Binding UpscaleStatus}" />
 
                             <TextBlock Classes="hint" Text="{Binding PrintSize}" />
                         </StackPanel>

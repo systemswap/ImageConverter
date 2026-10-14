@@ -1,9 +1,12 @@
 # Upscaling mit KI
 
-Gruppe **„Upscaling“** im allgemeinen Tab, direkt unter „Größe“. Wirkt nur beim Vergrößern: Statt die fehlenden Pixel
-nur mit dem Filter (Lanczos …) zu rechnen, erzeugt eine KI das Bild in vierfacher Größe; daraus verkleinert der Filter auf
-die eingestellte Zielgröße. Gerechnet wird nur auf Knopfdruck oder nach Rückfrage beim Speichern — nie bei jeder
-Reglerbewegung. Konzept und Messungen: `KONZEPT.md` §1 N.
+Gruppe **„Größe“** im allgemeinen Tab (seit 0.5.77 beta eine Gruppe für Einheit, Maße, DPI, Verfahren, Treue/Details,
+„Skalieren“ und Druckgröße). Die Liste **„Verfahren“** richtet sich nach der Richtung: beim Verkleinern nur Filter, die dafür
+taugen (Lanczos, Bikubisch, Catmull-Rom, Mitchell, Spline, Bilinear, Box, Nearest); beim Vergrößern oben die Filter ohne
+Bilinear und Box, unter einer Linie mit der Überschrift „KI-Scaler“ die drei KI-Verfahren. Mit einem KI-Scaler erzeugt die
+KI das Bild in vierfacher Größe; daraus bringt der Filter (Lanczos) es auf die eingestellte Zielgröße — größer als ×4
+vergrößert der Filter den Rest. Gerechnet wird immer in einem Schritt aus dem Bild selbst, KI nur auf Knopfdruck oder nach
+Rückfrage beim Speichern. Konzept und Messungen: `KONZEPT.md` §1 N.
 
 ## Verfahren
 
@@ -22,13 +25,14 @@ dieses Rechners.
 - **Verfahren** wählen. Fehlt das Modell, steht dort „Herunterladen (…)“ — geladen wird nur auf Klick, mit allen Teilen
   (PiSA-SR: LoRA von Google Drive, UNet, VAE und Text-Encoder von SD 2.1 vom Spiegel). Verwalten wie alle Modelle in den
   Einstellungen › KI-Modelle (Gruppen „Upscaling“ und „Stable Diffusion 2.1“).
-- **Upscalen** rechnet. Dauert es länger als 45 s, fragt die App: ganzes Bild oder nur der sichtbare Ausschnitt (vorher
-  hineinzoomen) — zum Ausprobieren reicht der Ausschnitt.
-- **Prüfansicht** zeigt das Ergebnis in voller Auflösung (so groß, wie die Zielgröße braucht, höchstens ×4 und rund
-  64 Megapixel), damit man bis 100 % und weiter hineinzoomen kann. Fertige Kacheln erscheinen sofort, schon während der
-  Rechnung. Mit **Vorher / Nachher**: links der Filter, rechts die KI, pixelgenau übereinander; die Zoom-Anzeige bezieht
-  sich auf das Ergebnis. Die Prüfansicht zeigt das Upscaling allein, ohne Licht, Farbe und Schärfe; ausgeschaltet zeigt
-  die normale Vorschau die ganze Kette — dann aus dem Bild ×4 verkleinert.
+- **Skalieren** (bei KI mit geschätzter Zeit, z. B. „Skalieren (≈ 6 min)“) rechnet jetzt und zeigt das Ergebnis in der
+  Vorschau in voller Größe (so groß, wie die Zielgröße braucht, höchstens rund 64 Megapixel), damit man bis 100 % und weiter
+  hineinzoomen kann. Mit einem Filter dauert das Sekunden, Vorher ist dann das Bild selbst. Mit KI: dauert es länger als
+  45 s, fragt die App — ganzes Bild oder nur der sichtbare Ausschnitt (vorher hineinzoomen); fertige Kacheln erscheinen
+  sofort, Vorher ist der Filter (Lanczos), pixelgenau übereinander. Ist das Ergebnis schon gerechnet, zeigt „Skalieren“
+  es nur wieder an. Die Ansicht zeigt die Skalierung allein, ohne Licht, Farbe und Schärfe; jede andere Einstellung führt
+  zurück zur normalen Vorschau mit der ganzen Kette — dann aus dem Bild ×4 verkleinert.
+- **Treue** und **Details** sind nur bei KI-Scalern aktiv (sonst ausgegraut).
 - **Treue** (Vorgabe 100 %): Rückprojektion E ← E + U(O − V(E)), drei Runden (V = Lanczos ÷4, U = bikubisch ×4). Danach
   ergibt das Ergebnis verkleinert wieder das Original — die KI darf Feines ergänzen, aber nichts verschieben. Hebt die
   Prüfung „verkleinert gegen Original“ von 22–35 dB auf 49–65 dB.
@@ -36,7 +40,8 @@ dieses Rechners.
 - **Speichern**: Ist das Upscaling (für das ganze Bild) gerechnet, wird es verwendet. Sonst fragt die App: jetzt
   berechnen, ohne KI speichern (nur Filter) oder abbrechen; beim Export mehrerer Bilder einmal für alle, mit der
   geschätzten Gesamtzeit. Abbrechen im Export-Fenster stoppt auch ein laufendes Upscaling.
-- Je Bild gemerkt (wie alle Einstellungen, mit Rückgängig): Verfahren, Treue, Details. Das Ergebnis selbst nur für das
+- Je Bild gemerkt (wie alle Einstellungen, mit Rückgängig): Filter und KI-Scaler getrennt (die KI-Wahl bleibt beim
+  Verkleinern erhalten und gilt wieder beim Vergrößern), Treue, Details. Das Ergebnis selbst nur für das
   zuletzt gerechnete Bild (Speicher); es gilt, solange Pixelbild, Ausrichten und Verfahren gleich sind.
 
 ## So arbeitet die App
@@ -91,12 +96,13 @@ wie `PiSaSrNet`.
    `Ai/Onnx/SafeTensors.cs` darf bleiben (`OnnxGraph`/`TorchCheckpoint` braucht SyntheticDoc).
 2. `ImageConverter.Core/Ai/AiModels.cs`: `UltraSharpV2`, `PiSaSr`, `Sd21Unet`, `Sd21Vae`, `Sd21Text` und ihre Einträge in
    `All`, die Kinds `Upscale` und `Part`.
-3. `ImageConverter.Ui/ViewModels/MainViewModel.Upscale.cs` und `Models/UpscaleOption.cs` löschen; Verweise in
+3. `ImageConverter.Ui/ViewModels/MainViewModel.Upscale.cs` und `Models/UpscaleOption.cs` löschen, in
+   `Models/ScaleChoice.cs` die KI-Einträge und die Überschrift weglassen (die Liste „Verfahren“ bleibt für die Filter); Verweise in
    `MainViewModel.cs` (`OnUpscaleRelevantChange`), `.History.cs` (drei Felder in `SettingsState`, `TrackedSettings`,
    `CaptureSettings`, `ApplySettings`), `.Preview.cs` (`PreviewJob.Upscaled`, `ResizeKey.Up`, `EmptyUpscaleTrash`),
    `.Export.cs` (`UpscaleBeforeExportAsync`), `.PerImage.cs` (`UpscaleForBatchAsync`), `ExportDialogViewModel.cs`
    (Rückfrage, `UpscaleEstimate`), `Ai/AiViewModel.cs` (`IsBusy`, zwei Gruppen).
-4. `ImageConverter.Ui/Views/MainView.axaml`: Gruppe „UPSCALING“. `ChoiceWindow`, `CropView.RedrawToken` und
-   `VisibleImageRect` dürfen bleiben.
+4. `ImageConverter.Ui/Views/MainView.axaml`: in der Gruppe „Größe“ Modell-Download, Treue, Details (der Knopf
+   „Skalieren“ mit Filter darf bleiben). `ChoiceWindow`, `CropView.RedrawToken` und `VisibleImageRect` dürfen bleiben.
 5. `ImageConverter.Core/Imaging/ImageExporter.cs`: `ExportOptions.Upscaled` und `ResizeBasis` (ohne Upscaler harmlos).
 6. `ImageConverter.Core/Localization/English.cs`: Abschnitt „Upscaling“ (`LocalizationTests` meldet Reste).

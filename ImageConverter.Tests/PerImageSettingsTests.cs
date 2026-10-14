@@ -79,15 +79,15 @@ public class PerImageSettingsTests
     }
 
     [Fact]
-    public void OptionsFor_UsesStateValues_AndDoNotEnlarge()
+    public void OptionsFor_UsesStateValues_AlsoWhenEnlarging()
     {
-        var s = Landscape(8000, 6000) with { DoNotEnlarge = true, SelectedFormat = "JPEG", Quality = 70 };
+        var s = Landscape(8000, 6000) with { SelectedFormat = "JPEG", Quality = 70 };
 
         var o = MainViewModel.OptionsFor(s);
 
         Assert.Equal(OutputFormat.Jpeg, o.Format);
         Assert.Equal(70, o.Quality);
-        Assert.Equal((4000, 3000), (o.Width, o.Height));   // nicht größer als das Original
+        Assert.Equal((8000, 6000), (o.Width, o.Height));   // vergrößert wird, wenn die Maße es sagen
     }
 
     [Fact]

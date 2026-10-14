@@ -138,15 +138,7 @@ public partial class MainViewModel
         return EffectiveResize(s);
     }
 
-    private static (int Width, int Height) EffectiveResize(SettingsState s)
-    {
-        var w = Math.Max(1, s.TargetWidth);
-        var h = Math.Max(1, s.TargetHeight);
-        if (!s.DoNotEnlarge || (w <= s.SourceWidth && h <= s.SourceHeight)) return (w, h);
-
-        var f = Math.Min((double)s.SourceWidth / w, (double)s.SourceHeight / h);
-        return (Math.Max(1, (int)Math.Round(w * f)), Math.Max(1, (int)Math.Round(h * f)));
-    }
+    private static (int Width, int Height) EffectiveResize(SettingsState s) => (Math.Max(1, s.TargetWidth), Math.Max(1, s.TargetHeight));
 
     /// <summary>Export-Auftrag für einen Einstellungsstand.</summary>
     internal static ExportOptions OptionsFor(SettingsState s)

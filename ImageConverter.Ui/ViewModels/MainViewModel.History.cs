@@ -32,8 +32,8 @@ public partial class MainViewModel
         string SelectedSizeUnit, bool KeepAspectRatio, bool WidthIsLeading,
         int TargetWidth, int TargetHeight, double PrintWidthIn, double PrintHeightIn,
         ResizeCalculator Calc,
-        FilterOption SelectedFilter, bool DoNotEnlarge, bool GammaCorrect,
-        int Dpi, bool DpiMetadataOnly,
+        FilterOption SelectedFilter, bool GammaCorrect,
+        int Dpi,
         string SelectedAspectPreset, Rect? CropSelection, double CornerRadius,
         double SharpenAmount, double SharpenRadius, double NoiseReduction,
         double Dehaze, double Brightness, double Contrast, double Shadows, double Highlights, double Vibrance, double Saturation,
@@ -81,10 +81,8 @@ public partial class MainViewModel
         [nameof(TargetWidth)] = "Größe",
         [nameof(TargetHeight)] = "Größe",
         [nameof(SelectedFilter)] = null,
-        [nameof(DoNotEnlarge)] = null,
         [nameof(GammaCorrect)] = null,
         [nameof(Dpi)] = "DPI",
-        [nameof(DpiMetadataOnly)] = null,
         [nameof(SelectedAspectPreset)] = null,
         [nameof(CropSelection)] = "Auswahl",
         [nameof(RotationAngle)] = "Auswahl",   // dreht den Rahmen mit — ein Schritt
@@ -256,8 +254,8 @@ public partial class MainViewModel
         SelectedSizeUnit, KeepAspectRatio, WidthIsLeading,
         TargetWidth, TargetHeight, _printWidthIn, _printHeightIn,
         _calc,
-        SelectedFilter, DoNotEnlarge, GammaCorrect,
-        Dpi, DpiMetadataOnly,
+        SelectedFilter, GammaCorrect,
+        Dpi,
         SelectedAspectPreset, CropSelection, CornerRadius,
         SharpenAmount, SharpenRadius, NoiseReduction,
         Dehaze, Brightness, Contrast, Shadows, Highlights, Vibrance, Saturation, SelectedTint, TintHue,
@@ -290,7 +288,6 @@ public partial class MainViewModel
                 SelectedSizeUnit = s.SelectedSizeUnit;
                 KeepAspectRatio = s.KeepAspectRatio;
                 Dpi = s.Dpi;
-                DpiMetadataOnly = s.DpiMetadataOnly;
                 TargetWidth = s.TargetWidth;
                 TargetHeight = s.TargetHeight;
                 WidthIsLeading = s.WidthIsLeading;
@@ -298,7 +295,6 @@ public partial class MainViewModel
                 _printHeightIn = s.PrintHeightIn;
                 _calc = s.Calc;
                 SelectedFilter = s.SelectedFilter;
-                DoNotEnlarge = s.DoNotEnlarge;
                 GammaCorrect = s.GammaCorrect;
                 SelectedAspectPreset = s.SelectedAspectPreset;
                 RotationAngle = s.RotationAngle;   // vor der Auswahl: der Winkel setzt sonst den automatischen Rahmen
@@ -359,6 +355,7 @@ public partial class MainViewModel
         }
 
         OnPropertyChanged(nameof(DpiPurpose));
+        OnPropertyChanged(nameof(DpiTip));
         NotifySizeDerived();
         ResetHistoryBaseline();
     }

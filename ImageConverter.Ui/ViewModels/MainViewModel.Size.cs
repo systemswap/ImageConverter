@@ -28,7 +28,6 @@ public partial class MainViewModel
     [ObservableProperty] public partial FilterOption SelectedFilter { get; set; }
 
     [ObservableProperty] public partial bool KeepAspectRatio { get; set; } = true;
-    [ObservableProperty] public partial bool DoNotEnlarge { get; set; } = true;
     [ObservableProperty] public partial bool GammaCorrect { get; set; } = true;
 
     [ObservableProperty] public partial int TargetWidth { get; set; }
@@ -80,9 +79,7 @@ public partial class MainViewModel
         NotifySizeDerived();
     }
 
-    partial void OnDoNotEnlargeChanged(bool value) => NotifySizeDerived();
     partial void OnGammaCorrectChanged(bool value) => RequestPreview();
-    partial void OnSelectedFilterChanged(FilterOption value) => RequestPreview();
 
     /// <summary>Neues Bild bzw. neuer Stand nach Zuschnitt/Drehen: Ziel = Original.</summary>
     private void ApplySourceSize(int width, int height)
@@ -141,12 +138,12 @@ public partial class MainViewModel
     {
         OnPropertyChanged(nameof(SizeSummary));
         OnPropertyChanged(nameof(PrintSize));
-        OnPropertyChanged(nameof(UpscaleHint));
-        OnPropertyChanged(nameof(HasUpscaleHint));
+        OnPropertyChanged(nameof(DpiTip));
         OnPropertyChanged(nameof(FieldWidth));
         OnPropertyChanged(nameof(FieldHeight));
         OnPropertyChanged(nameof(PixelEquivalent));
         OnPropertyChanged(nameof(ViewOutputSize));
+        SyncScaleChoices();   // Richtung: andere Einträge in „Verfahren“
         RequestPreview();
     }
 
@@ -207,50 +204,30 @@ public partial class MainViewModel
         _isSyncingSize = true;
         WidthIsLeading = isWidth;
 
-        if (DpiMetadataOnly)
+        // Pixel = Druckgröße × DPI
+        if (isWidth)
         {
-            // Pixel bleiben fest → die DPI ergibt sich aus Pixel ÷ Druckgröße.
-            // Die andere Kante folgt dem Seitenverhältnis der Pixel.
-            var pixels = isWidth ? TargetWidth : TargetHeight;
-            Dpi = Math.Max(1, (int)Math.Round(pixels / inches));
-            if (isWidth)
-            {
-                _printWidthIn = inches;
-                _printHeightIn = TargetHeight / (double)Dpi;
-            }
-            else
-            {
-                _printHeightIn = inches;
-                _printWidthIn = TargetWidth / (double)Dpi;
-            }
+            _printWidthIn = inches;
+            if (KeepAspectRatio) _printHeightIn = inches / _calc.AspectRatio;
         }
         else
         {
-            // Pixel neu berechnen: Pixel = Druckgröße × DPI
-            if (isWidth)
-            {
-                _printWidthIn = inches;
-                if (KeepAspectRatio) _printHeightIn = inches / _calc.AspectRatio;
-            }
-            else
-            {
-                _printHeightIn = inches;
-                if (KeepAspectRatio) _printWidthIn = inches * _calc.AspectRatio;
-            }
-            TargetWidth = Math.Max(1, (int)Math.Round(_printWidthIn * Dpi));
-            TargetHeight = Math.Max(1, (int)Math.Round(_printHeightIn * Dpi));
+            _printHeightIn = inches;
+            if (KeepAspectRatio) _printWidthIn = inches * _calc.AspectRatio;
         }
+        TargetWidth = Math.Max(1, (int)Math.Round(_printWidthIn * Dpi));
+        TargetHeight = Math.Max(1, (int)Math.Round(_printHeightIn * Dpi));
 
         _isSyncingSize = false;
         OnPropertyChanged(nameof(DpiPurpose));
+        OnPropertyChanged(nameof(DpiTip));
         NotifySizeDerived();
     }
 
     /// <summary>
     /// Standardformat wählen (A4, Fotoabzug …): Einheit auf mm, Hoch- oder Querformat wie das Bild, bei
-    /// geschlossener Kette ganz hinein (eine Kante füllt das Format), sonst genau das Format. Die DPI bleibt;
-    /// bei „Nur Metadaten ändern“ ändert sich statt der Pixel die DPI. Muss das Bild dafür größer werden, wird
-    /// „Nicht vergrößern“ ausgeschaltet — sonst käme ein kleines Bild nie auf das Format.
+    /// geschlossener Kette ganz hinein (eine Kante füllt das Format), sonst genau das Format. Die DPI bleibt, die Pixel
+    /// folgen (Pixel = Druckgröße × DPI).
     /// </summary>
     [RelayCommand]
     private void ApplyPaperFormat(string key)
@@ -269,60 +246,34 @@ public partial class MainViewModel
             FieldWidth = (decimal)wMm;
             FieldHeight = (decimal)hMm;
         }
-
-        if (!DpiMetadataOnly && DoNotEnlarge && (TargetWidth > SourceWidth || TargetHeight > SourceHeight))
-            DoNotEnlarge = false;
     }
 
     public string SizeSummary =>
         $"{SourceWidth} × {SourceHeight} → {TargetWidth} × {TargetHeight} px";
 
-    /// <summary>
-    /// Zielgröße, die tatsächlich gerechnet wird: mit „Nicht vergrößern" höchstens
-    /// so groß wie das Original (Seitenverhältnis bleibt).
-    /// </summary>
+    /// <summary>Zielgröße, die gerechnet wird (bei ausgeblendeter Größe das Bild selbst).</summary>
     private (int Width, int Height) EffectiveTarget()
     {
         if (!Shows(EditSteps.Resize)) return (Math.Max(1, SourceWidth), Math.Max(1, SourceHeight));   // Größe ausgeblendet
         return EffectiveResize();
     }
 
-    private (int Width, int Height) EffectiveResize()
-    {
-        var w = Math.Max(1, TargetWidth);
-        var h = Math.Max(1, TargetHeight);
-        if (!DoNotEnlarge || (w <= SourceWidth && h <= SourceHeight)) return (w, h);
-
-        var f = Math.Min((double)SourceWidth / w, (double)SourceHeight / h);
-        return (Math.Max(1, (int)Math.Round(w * f)), Math.Max(1, (int)Math.Round(h * f)));
-    }
-
-    public bool HasUpscaleHint => UpscaleHint is not null;
-
-    public string? UpscaleHint
-    {
-        get
-        {
-            if (TargetWidth <= SourceWidth && TargetHeight <= SourceHeight) return null;
-            if (!DoNotEnlarge) return Tr.T("Wird hochgerechnet: mehr Pixel, aber keine zusätzlichen Details.");
-            var (w, h) = EffectiveTarget();
-            return Tr.T("Größer als das Original — wegen „Nicht vergrößern“ bleibt es bei {0} × {1} px.", w, h);
-        }
-    }
+    private (int Width, int Height) EffectiveResize() => (Math.Max(1, TargetWidth), Math.Max(1, TargetHeight));
 
     // ---------------------------------------------------------- DPI / Druck
 
-    /// <summary>Obergrenze des Reglers. Im Zahlenfeld geht mehr (bis 2400), etwa für Scans.</summary>
-    public const int DpiSliderMax = 1200;
-
     [ObservableProperty] public partial int Dpi { get; set; } = (int)ImageLoader.DefaultDpi;
 
-    /// <summary>Standard: Pixel neu berechnen — die Druckgröße bleibt, die Pixel folgen der DPI.</summary>
-    [ObservableProperty] public partial bool DpiMetadataOnly { get; set; }
+    /// <summary>
+    /// Die Einheit entscheidet, was die DPI ändert: bei Pixel bleiben die Pixel (nur die Druckgröße folgt, verlustfrei),
+    /// bei mm bleibt die Druckgröße und die Pixel werden neu berechnet.
+    /// </summary>
+    private bool DpiMetadataOnly => !IsMillimeter;
 
     partial void OnDpiChanged(int value)
     {
         OnPropertyChanged(nameof(DpiPurpose));
+        OnPropertyChanged(nameof(DpiTip));
         if (_isSyncingSize || value <= 0) return;
 
         if (DpiMetadataOnly)
@@ -354,6 +305,9 @@ public partial class MainViewModel
 
     public string PrintSize =>
         Tr.T("Druckgröße {0:F1} × {1:F1} cm", _printWidthIn * 2.54, _printHeightIn * 2.54);
+
+    /// <summary>Tooltip des DPI-Felds: wofür der Wert taugt und was die DPI je nach Einheit ändert.</summary>
+    public string DpiTip => Tr.T("{0}. Bei der Einheit Pixel ändert die DPI nur die Druckgröße — die Pixel bleiben. Bei mm bleibt die Druckgröße, die Pixel werden neu berechnet. Üblich: 72–96 Bildschirm · 150 einfacher Druck · 300 Fotodruck · 600 Kunstdruck · 1200 Strichzeichnungen; bis 2400 möglich.", DpiPurpose);
 
     /// <summary>Wofür sich die eingestellte Auflösung eignet — als Orientierung unter dem Regler.</summary>
     public string DpiPurpose => Dpi switch

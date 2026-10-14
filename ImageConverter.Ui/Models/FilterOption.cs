@@ -3,10 +3,15 @@ using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.Models;
 
-/// <summary>Ein Skalierungsfilter mit kurzer, laienverständlicher Erklärung für den Tooltip.</summary>
-public sealed record FilterOption(string Name, ResampleFilter Filter, string Description, string BestFor)
+/// <summary>
+/// Ein Skalierungsfilter mit kurzer, laienverständlicher Erklärung für den Tooltip. <paramref name="Down"/> und
+/// <paramref name="Up"/>: in der Liste „Verfahren“ beim Verkleinern bzw. Vergrößern angeboten.
+/// </summary>
+public sealed record FilterOption(string Name, ResampleFilter Filter, string Description, string BestFor, bool Down = true, bool Up = true)
 {
     public override string ToString() => Name;
+
+    public static FilterOption Lanczos => All[0];
 
     public static IReadOnlyList<FilterOption> All { get; } =
     [
@@ -32,11 +37,11 @@ public sealed record FilterOption(string Name, ResampleFilter Filter, string Des
 
         new("Bilinear", ResampleFilter.Bilinear,
             "Schnell und einfach, Ergebnis eher weich. Beim starken Verkleinern können flimmernde Muster entstehen.",
-            "Kleine Größenänderungen und schnelle Vorschauen."),
+            "Kleine Größenänderungen und schnelle Vorschauen.", Up: false),
 
         new("Box / Area", ResampleFilter.Box,
             "Fasst jeweils einen Block Pixel zu einem zusammen und nimmt den Durchschnitt. Sehr sauber beim Verkleinern, beim Vergrößern blockig.",
-            "Starkes Verkleinern, z. B. auf Vorschaubild-Größe."),
+            "Starkes Verkleinern, z. B. auf Vorschaubild-Größe.", Up: false),
 
         new("Nearest", ResampleFilter.Nearest,
             "Übernimmt einfach den nächstgelegenen Pixel, ohne zu glätten — Kanten bleiben hart und pixelig.",

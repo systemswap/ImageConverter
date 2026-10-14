@@ -1918,3 +1918,24 @@ Test oder Nachweis.
   Projekts): Bild öffnen → ×4 → „KI schnell“ (Kacheln live, Prüfansicht 2000 × 1200, Vorher/Nachher, Treue neu) →
   Speichern ohne Rückfrage → „KI mittel“ mit Rückfrage und Ausschnitt → Speichern fragt → PiSA-SR mit Umwandeln beim
   ersten Mal. Am Fenster nicht geklickt (Benutzer arbeitete).
+
+## 62. Gruppe „Größe“ neu: Verfahren je Richtung, „Skalieren“, DPI über die Einheit (0.5.77 beta)
+
+- **Wunsch des Benutzers:** Der Upscaler soll nichts im KI-Tab voraussetzen; alles zur Größe in eine Gruppe: Einheit und
+  Formate, Maße mit Kette, DPI (nur das Feld), eine Liste „Verfahren“ (beim Verkleinern nur Filter dafür, beim Vergrößern
+  oben die Filter inkl. Lanczos und Spline, unter einer Linie „KI-Scaler“), Treue/Details, Knopf „Skalieren“ auch für die
+  Filter (vorher sah man eine reine Pixeländerung in der 2048-px-Vorschau nicht), Druckgröße. Weg: „Nicht vergrößern“,
+  DPI-Regler und Radioknöpfe, Prüfansicht als Schalter, Größe (2×/4×) im KI-Tab.
+- **DPI:** die Einheit entscheidet — Pixel: DPI ändert nur die Druckgröße (Pixel bleiben, früher „Nur Metadaten“); mm: die
+  Druckgröße bleibt, die Pixel folgen. `DpiMetadataOnly` ist jetzt `!IsMillimeter`, nicht mehr im Einstellungsstand.
+- **Falle (ComboBox):** Die Liste je Richtung auszutauschen (`ItemsSource` neu) setzt die Auswahl auf null; danach blieb das
+  Feld leer, obwohl im ViewModel Lanczos galt — auch mit erneutem PropertyChanged. Lösung: feste Liste je ViewModel,
+  Einträge per `IsOffered` ausblenden (`ComboBoxItem.IsVisible`), Überschrift mit `IsEnabled = false`.
+- **Speichern:** Filter und KI-Wahl getrennt im Stand (`SelectedFilter`, `Upscaler`); die KI-Wahl bleibt beim
+  Verkleinern erhalten. Ein Filter, den die neue Richtung nicht anbietet (Box beim Vergrößern), wird zu Lanczos.
+- **Ansicht in voller Größe:** „Skalieren“ zeigt das Ergebnis (Filter: Zielgröße bis 64 MP, Vorher = Bild selbst; KI wie
+  #61); jede andere Einstellung (alles aus `TrackedSettings` außer Treue/Details) führt zur normalen Vorschau zurück, erneut
+  „Skalieren“ zeigt ein schon gerechnetes KI-Ergebnis ohne neue Rechnung.
+- **Geprüft:** alle Tests; Prüfstand ohne Fenster (Liste je Richtung, Box → Lanczos, Skalieren Filter klein/groß, KI mit
+  Kacheln, Rückkehr nach Helligkeit, erneut Skalieren 1,4 s, KI-Wahl gemerkt, Speichern, DPI bei Pixel und mm) und die
+  Oberfläche headless gerendert (Gruppe, aufgeklappte Liste mit Trennlinie). Am echten Fenster nicht geklickt.

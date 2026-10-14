@@ -46,12 +46,10 @@ public partial class AiViewModel : ViewModelBase
             Group("GESICHTSERKENNUNG", "Hilfsmodelle für die Gesichtsmodelle: finden Gesichter und ihre Bereiche. Werden mit jedem Gesichtsmodell automatisch geladen.", AiModelKind.Helper),
             Group("ENTFERNEN", "Wasserzeichen, Schrift oder Störendes übermalen und füllen lassen – in der Rubrik „Entfernen“.", AiModelKind.Inpaint),
             Group("BEGRADIGEN", "Fotografierte, gewölbte oder zerknitterte Blätter mit einem Klick gerade ziehen – Symbol „KI begradigen“ in der Vorschau.", AiModelKind.Dewarp),
-            Group("UPSCALING", "Vergrößern mit KI – unter „Größe“ in der Gruppe „Upscaling“. „KI schnell“ ist das Modell „Allround“ oben.", AiModelKind.Upscale),
+            Group("UPSCALING", "Vergrößern mit KI – unter „Größe“, Liste „Verfahren“ (KI-Scaler). „KI schnell“ ist Real-ESRGAN x4v3: dieselbe Datei wie „Allround“ oben.", AiModelKind.Upscale, AiModelCatalog.Allround),
             Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR („KI wie Referenzwerkzeug“). Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
         ];
 
-        SizeOptions = ["Größe behalten", "Doppelte Größe (2×)", "Vierfache Größe (4×)"];
-        SelectedSize = SizeOptions[0];
 
         Rescan();
         WatchFolders();
@@ -83,8 +81,9 @@ public partial class AiViewModel : ViewModelBase
     /// <summary>Die Modelle in Gruppen für die Verwaltung — je Gruppe ein Kasten.</summary>
     public IReadOnlyList<AiModelGroup> ModelGroups { get; }
 
-    private AiModelGroup Group(string title, string hint, AiModelKind kind) =>
-        new(title, hint, Models.Where(m => m.Model.Kind == kind).ToList());
+    /// <param name="also">Modelle aus anderen Gruppen, die hier auch gebraucht werden (eine Datei, zwei Einträge).</param>
+    private AiModelGroup Group(string title, string hint, AiModelKind kind, params AiModel[] also) =>
+        new(title, hint, Models.Where(m => m.Model.Kind == kind || also.Contains(m.Model)).OrderBy(m => m.Model.Kind == kind).ToList());   // mitgenutzte zuerst (x4v3 = „KI schnell“)
 
     /// <summary>Vorhandene, wählbare Modelle (ohne Hilfsmodelle).</summary>
     public ObservableCollection<AiModel> Available { get; } = [];
@@ -107,7 +106,7 @@ public partial class AiViewModel : ViewModelBase
     // ------------------------------------------------------------ Auswahl
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint), nameof(IsFaceModel), nameof(HasFidelity), nameof(CanChooseSize), nameof(CanShowMap))]
+    [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint), nameof(IsFaceModel), nameof(HasFidelity), nameof(CanShowMap))]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     public partial AiModel? SelectedModel { get; set; }
 
@@ -116,9 +115,6 @@ public partial class AiViewModel : ViewModelBase
     public partial double Strength { get; set; } = 100;
 
     public string StrengthLabel => $"{Strength:0} %";
-
-    public IReadOnlyList<string> SizeOptions { get; }
-    [ObservableProperty] public partial string SelectedSize { get; set; }
 
     public bool IsEnhanceModel => SelectedModel?.Kind == AiModelKind.Enhance;
     public bool HasModels => Available.Count > 0;
@@ -131,7 +127,6 @@ public partial class AiViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(CommitCommand), nameof(DiscardCommand))]
-    [NotifyPropertyChangedFor(nameof(CanChooseSize))]
     public partial bool IsRunning { get; set; }
 
     /// <summary>Fortschritt 0…100.</summary>
@@ -199,7 +194,6 @@ public partial class AiViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool IsRenderingLook { get; set; }
 
-    public bool CanChooseSize => IsEnhanceModel && !IsRunning;
     public bool CanShowMap => IsFaceModel && HasPending;
 
     // Vorgaben der Haut-Regler: vom Benutzer am Foto 172251 (2012) als passend befunden (0.5.20)
@@ -332,7 +326,8 @@ public partial class AiViewModel : ViewModelBase
         var start = setup is null ? ChooseStart(current) : default;
         var image = setup?.Input ?? start.Base;
 
-        var factor = SelectedSize == SizeOptions[2] ? 4 : SelectedSize == SizeOptions[1] ? 2 : 1;
+        // Vergrößern gehört zu „Größe“ (Upscaling) — hier immer in Originalgröße (×4 gerechnet, zurückgemittelt)
+        const int factor = 1;
         if (model.Kind == AiModelKind.Enhance
             && !AiEnhancer.PossibleFactors(model.Scale, (int)image.Width, (int)image.Height).Contains(factor))
         {
@@ -675,7 +670,6 @@ public partial class AiViewModel : ViewModelBase
         _lastAi = null;
         Status = null;
         SelectedModel = Available.FirstOrDefault();
-        SelectedSize = SizeOptions[0];
         SelectedOrder = OrderOptions[0];
         Strength = 100;
         Texture = DefaultTexture;
