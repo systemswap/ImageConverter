@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Ai.Upscale;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Imaging;
 using ImageConverter.ViewModels;
@@ -38,6 +39,7 @@ public partial class AiViewModel : ViewModelBase
     {
         _main = main;
         Store = AiModelStore.CreateDefault();
+        Upscalers.OnGpu = _sessions.OnGpu;
         Models = AiModelCatalog.All.Select(m => new AiModelItem(this, m)).ToList();
         ModelGroups =
         [
@@ -61,6 +63,27 @@ public partial class AiViewModel : ViewModelBase
 
     /// <summary>Geöffnete Modelle — mit dem Entfernen geteilt, damit nur ein großes Modell im Speicher liegt.</summary>
     internal OnnxSessions Sessions => _sessions;
+
+    // ------------------------------------------------------------ Grafikkarte
+
+    // Ist eine Grafikkarte da, wird sie genutzt — ohne Schalter (Wunsch des Benutzers); hier nur, was gerade gilt.
+
+    /// <summary>Was gerade genutzt wird — oder warum nicht (Einstellungen › KI-Modelle).</summary>
+    public string GpuStatus =>
+        OnnxSessions.GpuName is not { } name ? Tr.T("Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU.")
+        : _sessions.GpuProblem is { } problem ? Tr.T("Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}", name, problem)
+        : Tr.T("Die KI rechnet auf der Grafikkarte ({0}); klappt es dort nicht, auf der CPU.", name);
+
+    /// <summary>Nach dem Öffnen eines Modells: Grafikkarte genutzt oder (nach einem Fehler) doch die CPU?</summary>
+    internal void RefreshGpuStatus()
+    {
+        if (Upscalers.OnGpu != _sessions.OnGpu)
+        {
+            Upscalers.OnGpu = _sessions.OnGpu;
+            _main.GpuChanged();
+        }
+        OnPropertyChanged(nameof(GpuStatus));
+    }
 
     /// <summary>Nach jedem Durchsehen des Modellordners (Download, Löschen, von Hand kopiert).</summary>
     internal event EventHandler? ModelsChanged;

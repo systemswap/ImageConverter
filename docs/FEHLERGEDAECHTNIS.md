@@ -1939,3 +1939,18 @@ Test oder Nachweis.
 - **Geprüft:** alle Tests; Prüfstand ohne Fenster (Liste je Richtung, Box → Lanczos, Skalieren Filter klein/groß, KI mit
   Kacheln, Rückkehr nach Helligkeit, erneut Skalieren 1,4 s, KI-Wahl gemerkt, Speichern, DPI bei Pixel und mm) und die
   Oberfläche headless gerendert (Gruppe, aufgeklappte Liste mit Trennlinie). Am echten Fenster nicht geklickt.
+
+## 63. KI auf der Grafikkarte: DirectML unter Windows, automatisch (0.5.79 beta)
+
+- **Wunsch des Benutzers:** AMD- und NVIDIA-Grafikkarten nutzen, ohne Schalter — ist eine da, wird sie genommen.
+  Was noch fehlt (Linux mit der RX 6650 XT, NVIDIA unter Linux, fp16, größere Kacheln): `docs/KI-GRAFIKKARTE.md`.
+- **Umsetzung:** Paket `Microsoft.ML.OnnxRuntime.DirectML` für Windows (nach Zielplattform in `ImageConverter.Core.csproj`),
+  `OnnxSessions` wählt die erste vorhandene Anbindung (DirectML, MIGraphX, ROCm, CUDA, WebGPU) und fällt beim Öffnen auf
+  die CPU zurück (`GpuProblem`); Anzeige in Einstellungen › KI-Modelle. Zeitschätzung getrennt für CPU und Grafikkarte.
+- **Fallen:** (1) DirectML gibt es nur bis 1.24.4 — die Programmschnittstelle muss zur nativen Laufzeit passen, deshalb
+  überall 1.24.4 statt 1.30 (sonst findet die Anbindung ihre API-Fassung nicht). (2) `DirectML.dll` kopiert das Paket nur bei
+  fester x64-Plattform; ohne sie nähme Windows die zu alte aus System32 — von Hand kopiert und vor `onnxruntime.dll` geladen.
+  (3) DirectML braucht `EnableMemoryPattern = false` und Ausführung der Reihe nach.
+- **Gemessen** (Notebook-Prozessor, eingebaute Radeon, gemeinsamer Speicher; 500 × 300 → 2000 × 1200): x4v3 3,2 → 2,0 s,
+  UltraSharpV2 120 → 80 s, PiSA-SR 355 → 137 s, Ergebnis jeweils gleich (PSNR identisch). Eine eingebaute Grafik teilt sich
+  den langsamen Arbeitsspeicher mit der CPU — mehr als Faktor 2–3 ist da nicht drin; eigene Karten sind viel schneller.

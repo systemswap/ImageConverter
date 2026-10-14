@@ -25,8 +25,12 @@
         <!-- Drucken unter Windows (Druckdienst). Wird nur unter Windows aufgerufen. -->
         <PackageVersion Include="System.Drawing.Common" Version="10.0.12" />
 
-        <!-- KI-Modelle lokal ausführen (CPU). Native Laufzeit steckt im Paket. MIT -->
-        <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
+        <!-- KI-Modelle lokal ausführen. Native Laufzeit steckt im Paket. MIT.
+             Windows: Paket mit DirectML (Grafikkarte jedes Herstellers über DirectX 12, Rückfall CPU). Microsoft pflegt
+             es nur noch (letzte Fassung 1.24.4) — deshalb überall dieselbe Fassung, auch unter Linux, damit Programm-
+             schnittstelle und Laufzeit zusammenpassen (auch für einen eigenen Linux-Bau mit ROCm/MIGraphX). -->
+        <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
+        <PackageVersion Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
 
         <!-- Test packages -->
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

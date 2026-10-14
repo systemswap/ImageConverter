@@ -54,7 +54,7 @@
             <_ImageMagickNative Include="@(ResolvedFileToPublish)"
                                 Condition="$([System.String]::Copy('%(Filename)').StartsWith('Magick.Native-'))" />
             <_OnnxRuntimeNative Include="@(ResolvedFileToPublish)"
-                                Condition="('%(Filename)' == 'onnxruntime' Or '%(Filename)' == 'libonnxruntime' Or $([System.String]::Copy('%(Filename)').Contains('onnxruntime_providers_')))
+                                Condition="('%(Filename)' == 'onnxruntime' Or '%(Filename)' == 'libonnxruntime' Or '%(Filename)' == 'DirectML' Or $([System.String]::Copy('%(Filename)').Contains('onnxruntime_providers_')))
                                            And ('%(Extension)' == '.dll' Or '%(Extension)' == '.so' Or '%(Extension)' == '.dylib')" />
             <ResolvedFileToPublish Remove="@(_ImageMagickNative);@(_OnnxRuntimeNative)" />
             <ResolvedFileToPublish Include="@(_ImageMagickNative)">

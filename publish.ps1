@@ -118,8 +118,15 @@ function Copy-Notices([string]$dest) {
     if (Test-Path $licenses) { Remove-Item $licenses -Recurse -Force }
     Copy-Item (Join-Path $root 'packaging\licenses') $licenses -Recurse
     Copy-Item (Join-Path $nugetDir "magick.net-q16-anycpu\$magickVersion\Notice.txt") (Join-Path $dest 'Tools\ImageMagick\') -Force
-    Copy-Item (Join-Path $nugetDir "microsoft.ml.onnxruntime\$onnxVersion\LICENSE") (Join-Path $dest 'Tools\OnnxRuntime\') -Force
-    Copy-Item (Join-Path $nugetDir "microsoft.ml.onnxruntime\$onnxVersion\ThirdPartyNotices.txt") (Join-Path $dest 'Tools\OnnxRuntime\') -Force
+    # Windows: ONNX Runtime mit DirectML (Grafikkarte) - Lizenzen aus diesem Paket, dazu die von DirectML selbst
+    $onnxTools = Join-Path $dest 'Tools\OnnxRuntime'
+    $onnxPackage = if (Test-Path (Join-Path $onnxTools 'DirectML.dll')) { 'microsoft.ml.onnxruntime.directml' } else { 'microsoft.ml.onnxruntime' }
+    Copy-Item (Join-Path $nugetDir "$onnxPackage\$onnxVersion\LICENSE") $onnxTools -Force
+    Copy-Item (Join-Path $nugetDir "$onnxPackage\$onnxVersion\ThirdPartyNotices.txt") $onnxTools -Force
+    if ($onnxPackage -ne 'microsoft.ml.onnxruntime') {
+        $dml = Get-ChildItem (Join-Path $nugetDir 'microsoft.ai.directml') -Directory | Sort-Object { [version]$_.Name } | Select-Object -Last 1
+        Copy-Item (Join-Path $dml.FullName 'LICENSE.txt') (Join-Path $onnxTools 'DirectML-LICENSE.txt') -Force
+    }
 }
 
 # ------------------------------------------------------------------ Windows

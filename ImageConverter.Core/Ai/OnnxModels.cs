@@ -6,9 +6,62 @@ namespace ImageConverter.Core.Ai;
 /// <summary>
 /// Geöffnete Modelle. Das Laden großer Modelle dauert Sekunden und belegt Hunderte MB —
 /// deshalb bleibt immer nur ein großes Modell (plus die kleine Gesichtserkennung) offen.
+/// <para>
+/// Grafikkarte (<see cref="UseGpu"/>): Windows über DirectML (jeder Hersteller, DirectX 12); eine eigene Laufzeit unter
+/// Linux mit MIGraphX/ROCm (AMD), CUDA (NVIDIA) oder WebGPU wird ebenso genutzt, wenn sie in <c>Tools/OnnxRuntime</c>
+/// liegt. Geht das Öffnen auf der Grafikkarte schief, rechnet das Modell auf der CPU (<see cref="GpuProblem"/>).
+/// </para>
 /// </summary>
 public sealed class OnnxSessions : IDisposable
 {
+    /// <summary>Was die Laufzeit an Grafikkarten-Anbindung mitbringt (in dieser Reihenfolge bevorzugt), sonst null.</summary>
+    public static string? GpuProvider { get; } = FindGpuProvider();
+
+    private static string? FindGpuProvider()
+    {
+        try
+        {
+            EnsureNoTelemetry();
+            var available = OrtEnv.Instance().GetAvailableProviders();
+            return new[] { "DmlExecutionProvider", "MIGraphXExecutionProvider", "ROCMExecutionProvider", "CUDAExecutionProvider", "WebGpuExecutionProvider" }
+                .FirstOrDefault(available.Contains);
+        }
+        catch (Exception)
+        {
+            return null;   // Laufzeit fehlt (z. B. Tests ohne native Bibliothek)
+        }
+    }
+
+    /// <summary>Lesbarer Name der Anbindung („DirectML“ …), null ohne.</summary>
+    public static string? GpuName => GpuProvider switch
+    {
+        "DmlExecutionProvider" => "DirectML",
+        "MIGraphXExecutionProvider" => "AMD MIGraphX",
+        "ROCMExecutionProvider" => "AMD ROCm",
+        "CUDAExecutionProvider" => "NVIDIA CUDA",
+        "WebGpuExecutionProvider" => "WebGPU",
+        _ => null,
+    };
+
+    /// <summary>Auf der Grafikkarte rechnen, wenn möglich. Ändern schließt die offenen Modelle (werden neu geöffnet).</summary>
+    public bool UseGpu
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            GpuProblem = null;
+            Dispose();
+        }
+    } = true;
+
+    /// <summary>Rechnen die offenen Modelle gerade auf der Grafikkarte?</summary>
+    public bool OnGpu => UseGpu && GpuProvider is not null && GpuProblem is null;
+
+    /// <summary>Warum die Grafikkarte nicht genutzt wird (Fehler beim Öffnen), sonst null.</summary>
+    public string? GpuProblem { get; private set; }
+
     private readonly Dictionary<string, InferenceSession> _open = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _modelOf = new(StringComparer.Ordinal);   // Pfad → Modell-Id
     private readonly Lock _lock = new();
@@ -31,12 +84,49 @@ public sealed class OnnxSessions : IDisposable
             }
 
             EnsureNoTelemetry();
-            using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
-            session = new InferenceSession(path, options);
+            session = Open(path);
             _open[path] = session;
             _modelOf[path] = model.Id;
             return session;
         }
+    }
+
+    /// <summary>Öffnen — mit Grafikkarte, wenn gewünscht und vorhanden; scheitert das, auf der CPU.</summary>
+    private InferenceSession Open(string path)
+    {
+        if (UseGpu && GpuProvider is { } provider && GpuProblem is null)
+        {
+            try
+            {
+                using var gpu = GpuOptions(provider);
+                return new InferenceSession(path, gpu);
+            }
+            catch (Exception e) when (e is OnnxRuntimeException or EntryPointNotFoundException or DllNotFoundException)
+            {
+                GpuProblem = e.Message;
+            }
+        }
+        using var cpu = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        return new InferenceSession(path, cpu);
+    }
+
+    private static SessionOptions GpuOptions(string provider)
+    {
+        var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        switch (provider)
+        {
+            case "DmlExecutionProvider":
+                // DirectML verlangt: kein Speichermuster, der Reihe nach
+                o.EnableMemoryPattern = false;
+                o.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+                o.AppendExecutionProvider_DML(0);
+                break;
+            case "MIGraphXExecutionProvider": o.AppendExecutionProvider_MIGraphX(0); break;
+            case "ROCMExecutionProvider": o.AppendExecutionProvider_ROCm(0); break;
+            case "CUDAExecutionProvider": o.AppendExecutionProvider_CUDA(0); break;
+            case "WebGpuExecutionProvider": o.AppendExecutionProvider("WebGPU"); break;
+        }
+        return o;
     }
 
     private static bool _telemetryOff;

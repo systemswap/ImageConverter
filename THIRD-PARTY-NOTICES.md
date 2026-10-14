@@ -18,7 +18,7 @@ Lizenz es steht und wo der Lizenztext liegt.
 | HarfBuzzSharp / HarfBuzz | 8.3.1.3 | MIT / „Old MIT“ | https://github.com/mono/SkiaSharp, https://github.com/harfbuzz/harfbuzz |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | https://github.com/CommunityToolkit/dotnet |
 | Magick.NET (Anbindung an ImageMagick) | 14.17.2 | Apache-2.0 | https://github.com/dlemstra/Magick.NET |
-| Microsoft.ML.OnnxRuntime.Managed (Anbindung an die ONNX Runtime) | 1.30.0 | MIT | https://github.com/microsoft/onnxruntime |
+| Microsoft.ML.OnnxRuntime.Managed (Anbindung an die ONNX Runtime) | 1.24.4 | MIT | https://github.com/microsoft/onnxruntime |
 | PDFsharp (Druck, „Als PDF speichern“) | 6.2.4 | MIT | https://github.com/empira/PDFsharp |
 | System.Drawing.Common (Drucken, nur Windows), System.Numerics.Tensors, Microsoft.Extensions.*, Microsoft.IO.RecyclableMemoryStream | | MIT | https://github.com/dotnet |
 | Tmds.DBus.Protocol | 0.94.1 | MIT | https://github.com/tmds/Tmds.DBus |
@@ -53,7 +53,8 @@ ihrem eigenen Ordner daneben, mit ihren Lizenztexten.
 | Ordner | Bestandteil | Version | Lizenz | Lizenztexte |
 |---|---|---|---|---|
 | `Tools/ImageMagick` | ImageMagick (Magick.Native, Q16) mit den eingebauten Bibliotheken für die Bildformate | 7.1.2 (aus Magick.NET 14.17.2) | ImageMagick-Lizenz (Apache-2.0-artig); eingebaute Bibliotheken u. a. **LGPL** (librsvg, pango, glib, gdk-pixbuf, fribidi, libheif, libde265, libraw, cairo), außerdem BSD, MIT, zlib | `Tools/ImageMagick/Notice.txt` – alle Bestandteile mit Version und vollem Lizenztext |
-| `Tools/OnnxRuntime` | ONNX Runtime (KI-Modelle lokal ausführen, CPU) | 1.30.0 | MIT | `Tools/OnnxRuntime/LICENSE`, `ThirdPartyNotices.txt` |
+| `Tools/OnnxRuntime` | ONNX Runtime (KI-Modelle lokal ausführen; unter Windows mit DirectML für die Grafikkarte) | 1.24.4 | MIT | `Tools/OnnxRuntime/LICENSE`, `ThirdPartyNotices.txt` |
+| `Tools/OnnxRuntime` (nur Windows) | DirectML (Microsoft DirectX Machine Learning, KI auf der Grafikkarte) | 1.15.4 | Microsoft-Lizenz (Weitergabe in Anwendungen erlaubt, nur Windows) | `Tools/OnnxRuntime/DirectML-LICENSE.txt` |
 
 ImageMagick wird unverändert so weitergegeben, wie es das NuGet-Paket
 Magick.NET-Q16-AnyCPU enthält. Quelltext und Build-Skripte dieser Fassung:

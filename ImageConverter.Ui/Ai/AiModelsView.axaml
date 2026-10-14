@@ -10,6 +10,8 @@
         <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,12">
             <TextBlock TextWrapping="Wrap" FontSize="13"
                        Text="{l:T 'Die Modelle laufen komplett auf deinem Rechner. Nach dem Herunterladen stehen sie in den Rubriken „KI“ und „Entfernen“ zur Auswahl.'}" />
+            <!-- Grafikkarte: wird genutzt, wenn da (Windows: DirectML; Linux: eigene Laufzeit mit MIGraphX, CUDA …) -->
+            <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap" Text="{Binding GpuStatus}" />
             <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4,0,0">
                 <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center" Margin="0,0,6,0" Text="{l:T 'Ordner:'}" />
                 <SelectableTextBlock Grid.Column="1" FontSize="11.5" VerticalAlignment="Center"

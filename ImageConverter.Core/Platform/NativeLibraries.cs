@@ -49,6 +49,11 @@ public static class NativeLibraries
             var onnx = Path.Combine(AppLocations.ToolFolder(OnnxRuntimeFolder), OnnxLibraryFileName);
             if (File.Exists(onnx))
             {
+                // Windows: DirectML.dll (Grafikkarte) aus demselben Ordner zuerst laden — sonst nähme die Laufzeit die
+                // ältere aus System32
+                var directMl = Path.Combine(Path.GetDirectoryName(onnx)!, "DirectML.dll");
+                if (OperatingSystem.IsWindows() && File.Exists(directMl)) NativeLibrary.Load(directMl);
+
                 // Eigener Resolver statt dem eingebauten der ONNX Runtime; den abschalten,
                 // sonst meldet er, dass schon einer registriert ist.
                 OrtEnv.DisableDllImportResolver = true;

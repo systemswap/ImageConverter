@@ -136,8 +136,16 @@ notices() {
 
   # Lizenztexte der mitgelieferten Bibliotheken genau aus den verwendeten Paketen
   install -m 0644 "$NUGET_DIR/magick.net-q16-anycpu/$MAGICK_VERSION/Notice.txt" "$dest/Tools/ImageMagick/Notice.txt"
-  install -m 0644 "$NUGET_DIR/microsoft.ml.onnxruntime/$ONNX_VERSION/LICENSE" "$dest/Tools/OnnxRuntime/LICENSE"
-  install -m 0644 "$NUGET_DIR/microsoft.ml.onnxruntime/$ONNX_VERSION/ThirdPartyNotices.txt" "$dest/Tools/OnnxRuntime/ThirdPartyNotices.txt"
+  # Windows: ONNX Runtime mit DirectML (Grafikkarte) — Lizenzen aus diesem Paket, dazu die von DirectML selbst
+  local onnx_package=microsoft.ml.onnxruntime
+  [ -f "$dest/Tools/OnnxRuntime/DirectML.dll" ] && onnx_package=microsoft.ml.onnxruntime.directml
+  install -m 0644 "$NUGET_DIR/$onnx_package/$ONNX_VERSION/LICENSE" "$dest/Tools/OnnxRuntime/LICENSE"
+  install -m 0644 "$NUGET_DIR/$onnx_package/$ONNX_VERSION/ThirdPartyNotices.txt" "$dest/Tools/OnnxRuntime/ThirdPartyNotices.txt"
+  if [ "$onnx_package" != microsoft.ml.onnxruntime ]; then
+    local dml
+    dml="$(ls -d "$NUGET_DIR"/microsoft.ai.directml/*/ | sort -V | tail -1)"
+    install -m 0644 "${dml}LICENSE.txt" "$dest/Tools/OnnxRuntime/DirectML-LICENSE.txt"
+  fi
 }
 
 # Was das Programm neben sich schreibt; bleibt bei jedem Bau stehen.

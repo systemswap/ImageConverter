@@ -532,6 +532,7 @@ public partial class MainViewModel
             }, cts.Token);
 
             var took = clock.Elapsed;
+            Ai.RefreshGpuStatus();
             Upscalers.Measured(method, result.SourceWidth, result.SourceHeight, took);
             _upscale = new UpscaleEntry(key, region, result, took);
             _upscaledImage = null;
@@ -851,6 +852,13 @@ public partial class MainViewModel
             return result.Compose(s.UpscaleFidelity, s.UpscaleDetails, ct);
         }, ct);
         return (composed, true);
+    }
+
+    /// <summary>Grafikkarte an/aus: andere Zeitschätzung, Ergebnis bleibt gültig.</summary>
+    internal void GpuChanged()
+    {
+        OnPropertyChanged(nameof(ScaleButtonText));
+        UpdateUpscaleStatus();
     }
 
     /// <summary>Bild gewechselt oder geschlossen: Ansicht weg; das Ergebnis bleibt (gilt nur für sein Bild).</summary>

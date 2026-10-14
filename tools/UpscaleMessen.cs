@@ -3,7 +3,8 @@
 // liegt (PSNR), roh und mit Treue-Sicherung. Schreibt <name>-roh.png und <name>-treu.png in den Ausgabeordner.
 // Aufruf (Bauausgabe außerhalb des Projekts):
 //   dotnet run tools/UpscaleMessen.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
-//       <pisasr|onnx-datei> <modellordner|-> <bild> <ausgabeordner> [<wahres-bild>]
+//       <pisasr|onnx-datei> <modellordner|-> <bild> <ausgabeordner> [<wahres-bild>] [--gpu]
+// --gpu: auf der Grafikkarte (Windows: DirectML).
 // pisasr: die drei ONNX-Dateien im Modellordner; sonst eine ×4-Kachelmodell-Datei (Real-ESRGAN x4v3, UltraSharpV2).
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.Upscale;
@@ -15,12 +16,21 @@ if (args.Length < 4)
     Console.Error.WriteLine("Aufruf: UpscaleMessen.cs <pisasr|onnx-datei> <modellordner|-> <bild> <ausgabeordner> [<wahres-bild>]");
     return 1;
 }
+var gpu = args.Contains("--gpu");
+args = args.Where(a => a != "--gpu").ToArray();
 var (method, dir, file, outDir) = (args[0], args[1], args[2], args[3]);
 Directory.CreateDirectory(outDir);
 using var source = new MagickImage(file);
 var name = Path.GetFileNameWithoutExtension(file);
 var clock = System.Diagnostics.Stopwatch.StartNew();
 using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+if (gpu)
+{
+    options.EnableMemoryPattern = false;
+    options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+    options.AppendExecutionProvider_DML(0);
+}
+Console.WriteLine(gpu ? $"Grafikkarte (DirectML), Laufzeit {OrtEnv.Instance().GetVersionString()}" : "CPU");
 var last = -1;
 var progress = new Progress<double>(p =>
 {

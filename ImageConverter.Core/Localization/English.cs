@@ -670,6 +670,11 @@ public static class English
             "White: click the brightest spot that should be white but still has detail (not blown out). Several clicks are averaged; Esc ends.",
         ["Pipette wählen und ins Bild klicken. Eine Pipette reicht – Neutral (grau) ist meist die beste. Mit Schwarz und Weiß dazu und mit mehreren Klicks wird es genauer."] =
             "Choose an eyedropper and click into the image. One is enough – Neutral (grey) is usually the best. Adding Black and White and clicking several times makes it more accurate.",
+        // ------------------------------------------------------------ Grafikkarte (Einstellungen › KI-Modelle)
+        ["Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU."] = "This runtime cannot use a graphics card — the AI runs on the CPU.",
+        ["Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}"] = "The graphics card ({0}) could not be used — the AI runs on the CPU. Reason: {1}",
+        ["Die KI rechnet auf der Grafikkarte ({0}); klappt es dort nicht, auf der CPU."] = "The AI runs on the graphics card ({0}); if that fails, on the CPU.",
+
         // ------------------------------------------------------------ Upscaling (Gruppe unter „Größe“)
         ["Vielfaches des Bildes"] = "Multiple of the image",
         ["{0}×  ·  {1} × {2} px"] = "{0}×  ·  {1} × {2} px",

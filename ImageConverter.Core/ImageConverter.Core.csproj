@@ -13,6 +13,23 @@
         <PackageReference Include="Magick.NET-Q16-AnyCPU" />
         <PackageReference Include="PDFsharp" />
         <PackageReference Include="System.Drawing.Common" />
-        <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    </ItemGroup>
+
+    <!-- ONNX Runtime: für Windows mit DirectML (Grafikkarte), sonst die normale. Beim Veröffentlichen entscheidet die
+         Ziel-Plattform (-r win-x64 / linux-x64), beim Bauen ohne Plattform das System, auf dem gebaut wird. -->
+    <PropertyGroup>
+        <OnnxForWindows Condition="'$(RuntimeIdentifier)' != ''">$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win'))</OnnxForWindows>
+        <OnnxForWindows Condition="'$(RuntimeIdentifier)' == ''">$([MSBuild]::IsOSPlatform('Windows'))</OnnxForWindows>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Condition="'$(OnnxForWindows)' == 'true'" />
+        <PackageReference Include="Microsoft.ML.OnnxRuntime" Condition="'$(OnnxForWindows)' != 'true'" />
+    </ItemGroup>
+    <!-- DirectML.dll kopiert das Paket nur bei fester Plattform (x64) — hier von Hand, neben die Programme (beim
+         Veröffentlichen nach Tools/OnnxRuntime, siehe ImageConverter.Desktop.csproj). Die mit Windows gelieferte
+         DirectML.dll ist für diese Laufzeit zu alt. -->
+    <ItemGroup Condition="'$(OnnxForWindows)' == 'true' And '$(Microsoft_AI_DirectML_Bin_Dir_Windows_x64)' != ''">
+        <None Include="$(Microsoft_AI_DirectML_Bin_Dir_Windows_x64)\DirectML.dll" Link="DirectML.dll" Visible="false"
+              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>
