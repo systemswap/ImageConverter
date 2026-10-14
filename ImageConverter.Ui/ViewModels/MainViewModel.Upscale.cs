@@ -451,10 +451,10 @@ public partial class MainViewModel
         if (whole > TimeSpan.FromSeconds(45) && ChoiceRequested is { } ask)
         {
             var visible = VisibleRegion(w, h);
-            var choices = new List<string> { Tr.T("Ganzes Bild berechnen (≈ {0})", Upscalers.Format(whole)) };
+            var choices = new List<string> { Tr.T("Ganzes Bild berechnen (≈ {0})", Upscalers.FormatWithEnd(whole, DateTime.Now)) };
             if (visible is { } v)
                 choices.Add(Tr.T("Nur den sichtbaren Ausschnitt ({0} × {1} px, ≈ {2})", v.Width, v.Height,
-                    Upscalers.Format(Upscalers.Estimate(key.Method, v.Width, v.Height))));
+                    Upscalers.FormatWithEnd(Upscalers.Estimate(key.Method, v.Width, v.Height), DateTime.Now)));
             choices.Add(Tr.T("Abbrechen"));
             var answer = await ask(new ChoiceRequest(Tr.T("Upscaling dauert länger"),
                 Tr.T("„{0}“ braucht für dieses Bild ({1} × {2} px) auf diesem Rechner etwa {3}. Zum Ausprobieren reicht der Ausschnitt, den du gerade siehst — zoome dazu vorher hinein.",
@@ -490,17 +490,21 @@ public partial class MainViewModel
         ErrorMessage = null;
         var clock = Stopwatch.StartNew();
         var preparing = false;
+        int dw, dh;
+        lock (doc) (dw, dh) = ((int)doc.Width, (int)doc.Height);
+        var expected = region is { } part ? Upscalers.Estimate(key.Method, part.Width, part.Height) : Upscalers.Estimate(key.Method, dw, dh);
         void Report(double f)
         {
+            var remaining = RemainingText(clock.Elapsed, f, expected);
             ActivityText = preparing
                 ? Tr.T("Upscaling · KI-Modell wird vorbereitet (einmalig) … {0:0} %", f * 100)
-                : Tr.T("Upscaling · {0:0} %{1}", f * 100, RemainingText(clock.Elapsed, f));
+                : Tr.T("Upscaling · {0:0} %{1}", f * 100, remaining);
             ActivityProgress = f * 100;
+            if (!preparing) UpscaleStatus = Tr.T("Wird berechnet …") + remaining;
         }
         var progress = new Progress<double>(Report);
         ActivityCancel = CancelUpscaleCommand;
         Report(0);
-        UpscaleStatus = Tr.T("Wird berechnet …");
 
         // Prüfansicht vorbereiten: Vorher = Filter, Nachher füllt sich mit fertigen Kacheln
         int w, h;
@@ -601,10 +605,20 @@ public partial class MainViewModel
         return clone;
     }
 
-    private static string RemainingText(TimeSpan elapsed, double fraction)
+    /// <summary>
+    /// „  ·  noch ca. 4 min, fertig gegen 15:42“: aus dem Fortschritt, ganz am Anfang (noch zu wenig gerechnet) aus der
+    /// Schätzung <paramref name="expected"/>.
+    /// </summary>
+    private static string RemainingText(TimeSpan elapsed, double fraction, TimeSpan? expected = null)
     {
-        if (fraction < 0.03 || elapsed.TotalSeconds < 3) return "";
-        return Tr.T("  ·  noch ca. {0}", Upscalers.Format(TimeSpan.FromSeconds(elapsed.TotalSeconds / fraction * (1 - fraction))));
+        TimeSpan left;
+        if (fraction >= 0.03 && elapsed.TotalSeconds >= 3)
+            left = TimeSpan.FromSeconds(elapsed.TotalSeconds / fraction * (1 - fraction));
+        else if (expected is { } e && e > elapsed)
+            left = e - elapsed;
+        else
+            return "";
+        return Tr.T("  ·  noch ca. {0}", Upscalers.FormatWithEnd(left, DateTime.Now));
     }
 
     // ------------------------------------------------------------ Prüfansicht
@@ -805,7 +819,7 @@ public partial class MainViewModel
         if (MatchingUpscale() is not null) return (false, await UpscaledForExportAsync());
         if (UpscaleModelMissing || ChoiceRequested is not { } ask) return (false, null);
 
-        var estimate = Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight));
+        var estimate = Upscalers.FormatWithEnd(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight), DateTime.Now);
         var answer = await ask(new ChoiceRequest(Tr.T("Upscaling noch nicht berechnet"),
             Tr.T("Für dieses Bild ist „{0}“ gewählt, aber noch nicht berechnet. Das dauert etwa {1}.", SelectedUpscaler.Name, estimate),
             [Tr.T("Jetzt berechnen und speichern (≈ {0})", estimate), Tr.T("Ohne KI speichern (nur Filter)"), Tr.T("Abbrechen")]));
@@ -844,7 +858,7 @@ public partial class MainViewModel
 
         var clock = Stopwatch.StartNew();
         var step = new Progress<double>(f => progress?.Report(new WorkProgress(f,
-            Tr.T("Upscaling (KI) · {0:0} %{1}", f * 100, RemainingText(clock.Elapsed, f)))));
+            Tr.T("Upscaling (KI) · {0:0} %{1}", f * 100, RemainingText(clock.Elapsed, f, Upscalers.Estimate(s.Upscaler, w, h))))));
         var composed = await Task.Run(() =>
         {
             var result = ComputeUpscale(image, s.Upscaler, step, prepare => { if (!prepare) clock.Restart(); }, ct);

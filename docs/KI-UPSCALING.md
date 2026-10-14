@@ -32,6 +32,9 @@ dieses Rechners.
   sofort, Vorher ist der Filter (Lanczos), pixelgenau übereinander. Ist das Ergebnis schon gerechnet, zeigt „Skalieren“
   es nur wieder an. Die Ansicht zeigt die Skalierung allein, ohne Licht, Farbe und Schärfe; jede andere Einstellung führt
   zurück zur normalen Vorschau mit der ganzen Kette — dann aus dem Bild ×4 verkleinert.
+- **Fortschritt** unten in der Vorschau und in der Gruppe: Prozent, Restzeit und ab einer Minute die Uhrzeit, wann es
+  fertig ist („noch ca. 12 min, fertig gegen 15:42“) — von Anfang an aus der Schätzung, ab 3 % aus dem Fortschritt. Die
+  Rückfragen nennen die Uhrzeit ebenso.
 - **Treue** und **Details** sind nur bei KI-Scalern aktiv (sonst ausgegraut).
 - **Treue** (Vorgabe 100 %): Rückprojektion E ← E + U(O − V(E)), drei Runden (V = Lanczos ÷4, U = bikubisch ×4). Danach
   ergibt das Ergebnis verkleinert wieder das Original — die KI darf Feines ergänzen, aber nichts verschieben. Hebt die

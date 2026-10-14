@@ -154,7 +154,7 @@ public partial class ExportDialogViewModel : ViewModelBase
         var needs = selected.Where(i => i.UpscaleEstimate is not null).ToList();
         if (needs.Count > 0 && ChoiceRequested is { } ask)
         {
-            var duration = Core.Ai.Upscale.Upscalers.Format(TimeSpan.FromTicks(needs.Sum(i => i.UpscaleEstimate!.Value.Ticks)));
+            var duration = Core.Ai.Upscale.Upscalers.FormatWithEnd(TimeSpan.FromTicks(needs.Sum(i => i.UpscaleEstimate!.Value.Ticks)), DateTime.Now);
             var answer = await ask(new ChoiceRequest(Tr.T("Upscaling noch nicht berechnet"),
                 needs.Count == 1
                     ? Tr.T("Für 1 Bild ist ein KI-Upscaler gewählt, aber noch nicht berechnet. Das dauert etwa {0}.", duration)

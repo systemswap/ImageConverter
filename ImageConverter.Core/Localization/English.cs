@@ -715,6 +715,7 @@ public static class English
         ["Noch nicht berechnet (≈ {0}). Beim Speichern wird gefragt."] = "Not computed yet (≈ {0}). You will be asked when saving.",
         ["Wird berechnet …"] = "Computing …",
         ["Ganzes Bild berechnen (≈ {0})"] = "Compute the whole image (≈ {0})",
+        ["{0}, fertig gegen {1}"] = "{0}, done around {1}",
         ["Nur den sichtbaren Ausschnitt ({0} × {1} px, ≈ {2})"] = "Only the visible part ({0} × {1} px, ≈ {2})",
         ["Upscaling dauert länger"] = "Upscaling takes a while",
         ["„{0}“ braucht für dieses Bild ({1} × {2} px) auf diesem Rechner etwa {3}. Zum Ausprobieren reicht der Ausschnitt, den du gerade siehst — zoome dazu vorher hinein."] = "“{0}” needs about {3} for this image ({1} × {2} px) on this computer. To try it out, the part you are looking at is enough — zoom in first.",

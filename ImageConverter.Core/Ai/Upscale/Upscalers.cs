@@ -62,6 +62,19 @@ public static class Upscalers
             SecondsPerMegapixel[key] = SecondsPerMegapixel[key] * (1 - weight) + elapsed.TotalSeconds / mp * weight;
     }
 
+    /// <summary>
+    /// Dauer mit Uhrzeit, wann es fertig ist: „4 min, fertig gegen 15:42“ (am nächsten Tag mit Datum). Unter einer
+    /// Minute nur die Dauer.
+    /// </summary>
+    public static string FormatWithEnd(TimeSpan t, DateTime now)
+    {
+        if (t.TotalSeconds < 60) return Format(t);
+        var end = now + t;
+        var clock = end.Date == now.Date ? end.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : end.ToString("dd.MM. HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        return Tr.T("{0}, fertig gegen {1}", Format(t), clock);
+    }
+
     /// <summary>„3 s“, „4 min“, „2 h 10 min“.</summary>
     public static string Format(TimeSpan t) =>
         t.TotalSeconds < 60 ? $"{Math.Max(1, Math.Round(t.TotalSeconds)):0} s"

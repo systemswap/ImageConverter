@@ -208,6 +208,15 @@ public class UpscaleTests
         Assert.True(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300) > Upscalers.Estimate(UpscaleMethod.Medium, 500, 300));
     }
 
+    [Fact]
+    public void FormatWithEnd_ShowsTheClockTime_FromOneMinute()
+    {
+        var now = new DateTime(2026, 10, 14, 15, 30, 0);
+        Assert.Equal("40 s", Upscalers.FormatWithEnd(TimeSpan.FromSeconds(40), now));
+        Assert.Equal("12 min, fertig gegen 15:42", Upscalers.FormatWithEnd(TimeSpan.FromMinutes(12), now));
+        Assert.Equal("10 h 00 min, fertig gegen 15.10. 01:30", Upscalers.FormatWithEnd(TimeSpan.FromHours(10), now));
+    }
+
     private static float[] Planes(MagickImage image)
     {
         int w = (int)image.Width, h = (int)image.Height;
