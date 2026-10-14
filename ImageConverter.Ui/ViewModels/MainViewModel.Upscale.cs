@@ -143,6 +143,7 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(AiScalingActive));
         OnPropertyChanged(nameof(ScaleButtonText));
         UpscaleCommand.NotifyCanExecuteChanged();
+        ResetScaleCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>„Skalieren“, bei KI mit der geschätzten Zeit.</summary>

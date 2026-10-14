@@ -139,6 +139,9 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(SizeSummary));
         OnPropertyChanged(nameof(PrintSize));
         OnPropertyChanged(nameof(DpiTip));
+        OnPropertyChanged(nameof(ScaleTwiceText));
+        OnPropertyChanged(nameof(ScaleFourText));
+        OnPropertyChanged(nameof(ResetScaleTip));
         OnPropertyChanged(nameof(FieldWidth));
         OnPropertyChanged(nameof(FieldHeight));
         OnPropertyChanged(nameof(PixelEquivalent));
@@ -247,6 +250,40 @@ public partial class MainViewModel
             FieldHeight = (decimal)hMm;
         }
     }
+
+    /// <summary>Maße auf das <paramref name="factor"/>-Fache des Bildes (Menü der Formate: 2×, 4×).</summary>
+    [RelayCommand]
+    private void ApplyScaleFactor(string factor)
+    {
+        if (!int.TryParse(factor, out var f) || f < 1) return;
+        SetTargetPixels(SourceWidth * f, SourceHeight * f);
+    }
+
+    /// <summary>Skalierung zurücksetzen: Maße wieder wie das Bild.</summary>
+    [RelayCommand(CanExecute = nameof(HasSizeChange))]
+    private void ResetScale() => SetTargetPixels(SourceWidth, SourceHeight);
+
+    /// <summary>Beide Kanten setzen (ein Rückgängig-Schritt), Seitenverhältnis des Bildes, Druckgröße folgt.</summary>
+    private void SetTargetPixels(int width, int height)
+    {
+        CommitPendingSettings();   // eigener Rückgängig-Schritt, nicht mit Tippen in die Maße zusammengefasst
+        _isSyncingSize = true;
+        TargetWidth = Math.Max(1, width);
+        TargetHeight = Math.Max(1, height);
+        WidthIsLeading = true;
+        _isSyncingSize = false;
+        if (KeepAspectRatio) _calc = new ResizeCalculator(Math.Max(1, SourceWidth), Math.Max(1, SourceHeight));
+        UpdatePrintSizeFromPixels();
+        NotifySizeDerived();
+        CommitPendingSettings();
+    }
+
+    /// <summary>Einträge im Menü der Formate: „2×  ·  1000 × 600 px“.</summary>
+    public string ScaleTwiceText => Tr.T("{0}×  ·  {1} × {2} px", 2, SourceWidth * 2, SourceHeight * 2);
+    public string ScaleFourText => Tr.T("{0}×  ·  {1} × {2} px", 4, SourceWidth * 4, SourceHeight * 4);
+
+    /// <summary>Tooltip von „Zurücksetzen“ mit der Originalgröße.</summary>
+    public string ResetScaleTip => Tr.T("Skalierung zurücksetzen: wieder die Größe des Bildes ({0} × {1} px).", SourceWidth, SourceHeight);
 
     public string SizeSummary =>
         $"{SourceWidth} × {SourceHeight} → {TargetWidth} × {TargetHeight} px";
