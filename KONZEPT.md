@@ -282,7 +282,7 @@ Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
   Rezept gilt (ausschaltbar) oder nur beim Speichern wirkt, PDF-Seitengröße (DIN aus
   der Schätzung?).
 
-### N. Upscaling (Wunsch vom 14.10.2026, Konzept mit Messplatz und Modellwahl — noch nicht umgesetzt)
+### N. Upscaling (Wunsch vom 14.10.2026, Konzept mit Messplatz und Modellwahl — umgesetzt in 0.5.76 beta, siehe `docs/KI-UPSCALING.md`)
 
 **Ziel:** Vergrößern auf dem Stand der Technik, ohne etwas Neues ins Bild zu erfinden — das
 Original muss ohne Weiteres wiederzuerkennen sein. Vorbild Referenzwerkzeug/Referenzwerkzeug „Precision“
@@ -394,6 +394,12 @@ stammt deshalb aus der ScanCode-Lizenzdatenbank. Daraus baut die App ihre ONNX-D
 
 **Bewusst nicht:** Online-Dienste (Referenzwerkzeug, Referenzwerkzeug, Referenzwerkzeug-Cloud) — nur lokal; SUPIR, TSD-SR
 (zu groß, praktisch nur mit Grafikkarte); Prompt- oder „Kreativ“-Modi.
+
+**Umgesetzt (0.5.76 beta):** alle drei Verfahren, Treue und Details, Knopf mit Rückfrage (ganzes Bild oder sichtbarer
+Ausschnitt), Prüfansicht in voller Auflösung mit fertigen Kacheln schon während der Rechnung und Vorher/Nachher
+(Filter ↔ KI), Rückfrage beim Speichern (auch für mehrere Bilder), Modelle im Download-Manager. PiSA-SR ohne Python:
+Nachbau in C#, gegen PyTorch geprüft. Noch nicht: Grafikkarte (DirectML/ROCm), Speicherprüfung vor dem Rechnen, das
+2×/4× im KI-Tab bleibt vorerst daneben bestehen.
 
 **Offen:** ×2-Modelle (weniger Zeit bei kleinem Faktor)? „Upscaling“ auch ohne Vergrößerung als
 „Details schärfen“ (Supersampling wie „Größe behalten“ der KI)? Gesichter zusätzlich mit dem

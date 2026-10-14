@@ -26,6 +26,24 @@ public class SettingsUndoTests
     }
 
     [Fact]
+    public async Task Upscaler_AndItsSliders_CanBeUndone()
+    {
+        var vm = Create();
+        vm.SelectedUpscaler = ImageConverter.Models.UpscaleOption.Of(ImageConverter.Core.Ai.Upscale.UpscaleMethod.Generative);
+        vm.CommitPendingSettings();
+        for (var v = 1.0; v >= 0.5; v -= 0.05) vm.UpscaleFidelity = v;
+        vm.CommitPendingSettings();
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(1, vm.UpscaleFidelity);
+        Assert.Equal(ImageConverter.Core.Ai.Upscale.UpscaleMethod.Generative, vm.SelectedUpscaler.Method);
+
+        await vm.UndoCommand.ExecuteAsync(null);
+        Assert.Equal(ImageConverter.Core.Ai.Upscale.UpscaleMethod.Filter, vm.SelectedUpscaler.Method);
+        Assert.False(vm.UsesAiUpscaler);
+    }
+
+    [Fact]
     public async Task DraggingASlider_IsOneStep()
     {
         var vm = Create();

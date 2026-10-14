@@ -46,6 +46,8 @@ public partial class AiViewModel : ViewModelBase
             Group("GESICHTSERKENNUNG", "Hilfsmodelle für die Gesichtsmodelle: finden Gesichter und ihre Bereiche. Werden mit jedem Gesichtsmodell automatisch geladen.", AiModelKind.Helper),
             Group("ENTFERNEN", "Wasserzeichen, Schrift oder Störendes übermalen und füllen lassen – in der Rubrik „Entfernen“.", AiModelKind.Inpaint),
             Group("BEGRADIGEN", "Fotografierte, gewölbte oder zerknitterte Blätter mit einem Klick gerade ziehen – Symbol „KI begradigen“ in der Vorschau.", AiModelKind.Dewarp),
+            Group("UPSCALING", "Vergrößern mit KI – unter „Größe“ in der Gruppe „Upscaling“. „KI schnell“ ist das Modell „Allround“ oben.", AiModelKind.Upscale),
+            Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR („KI wie Referenzwerkzeug“). Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
         ];
 
         SizeOptions = ["Größe behalten", "Doppelte Größe (2×)", "Vierfache Größe (4×)"];
@@ -828,7 +830,7 @@ public partial class AiViewModel : ViewModelBase
         Rescan();
     }
 
-    internal bool IsBusy => IsRunning || BusyElsewhere?.Invoke() == true;
+    internal bool IsBusy => IsRunning || _main.IsUpscaling || BusyElsewhere?.Invoke() == true;
 
 
     /// <summary>Rechnet gerade das Entfernen? (Modelle dann nicht löschen.)</summary>

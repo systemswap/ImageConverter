@@ -1,12 +1,12 @@
 using System.Text;
 
-namespace ImageConverter.Core.Ai.SyntheticDoc;
+namespace ImageConverter.Core.Ai.Onnx;
 
 /// <summary>
 /// Baut ein ONNX-Modell (Graph aus Knoten, Gewichte als Initialisierer) und schreibt es als Protobuf — ohne Abhängigkeit,
 /// nur die Felder von <c>onnx.proto</c>, die ein Inferenzmodell braucht. Namen der Werte vergibt der Graph selbst.
 /// </summary>
-public sealed class OnnxGraph
+public sealed class OnnxGraph : IDisposable
 {
     private readonly List<byte[]> _nodes = [];
     private readonly List<byte[]> _initializers = [];
@@ -14,7 +14,30 @@ public sealed class OnnxGraph
     private readonly List<byte[]> _outputs = [];
     private int _next;
 
+    // Ausgelagerte Gewichte (Modelle über 2 GB — Protobuf erlaubt nicht mehr): große Initialisierer gehen gleich beim
+    // Anlegen in eine Datei neben dem Modell, im Modell steht nur Ort, Versatz und Länge
+    private readonly FileStream? _external;
+    private readonly string? _externalName;
+    private const int ExternalFrom = 4096;   // ab so vielen Bytes auslagern
+
     public const int Opset = 17;
+
+    /// <summary>Alles im Modell selbst (bis 2 GB).</summary>
+    public OnnxGraph()
+    {
+    }
+
+    /// <summary>
+    /// Große Gewichte in <paramref name="externalDataPath"/> auslagern (ONNX „external data“); das Modell muss dann
+    /// im selben Ordner liegen und verweist über den Dateinamen darauf.
+    /// </summary>
+    public OnnxGraph(string externalDataPath)
+    {
+        _external = File.Create(externalDataPath);
+        _externalName = Path.GetFileName(externalDataPath);
+    }
+
+    public void Dispose() => _external?.Dispose();
 
     /// <summary>Eingang float32 mit Form; Zahlen sind feste, Texte benannte (offene) Größen.</summary>
     public string Input(string name, params object[] dims)
@@ -34,10 +57,28 @@ public sealed class OnnxGraph
     public string Weight(float[] data, params long[] dims)
     {
         var name = "w" + _next++;
-        var raw = new byte[data.Length * 4];
-        Buffer.BlockCopy(data, 0, raw, 0, raw.Length);
-        _initializers.Add(Tensor(name, 1, dims, raw));
+        var bytes = System.Runtime.InteropServices.MemoryMarshal.AsBytes(data.AsSpan());
+        if (_external is not null && bytes.Length >= ExternalFrom)
+        {
+            // auf 64 Bytes ausrichten (ONNX Runtime kann die Datei dann direkt einblenden)
+            var pad = (int)((64 - _external.Position % 64) % 64);
+            if (pad > 0) _external.Write(new byte[pad]);
+            var offset = _external.Position;
+            _external.Write(bytes);
+            _initializers.Add(ExternalTensor(name, 1, dims, _externalName!, offset, bytes.Length));
+        }
+        else
+        {
+            _initializers.Add(Tensor(name, 1, dims, bytes.ToArray()));
+        }
         return name;
+    }
+
+    /// <summary>Modell schreiben (bei ausgelagerten Gewichten: diese zuerst abschließen, Modell in denselben Ordner).</summary>
+    public void Save(string path, string producer = "ImageConverter")
+    {
+        _external?.Flush();
+        File.WriteAllBytes(path, ToModel(producer));
     }
 
     /// <summary>Ganzzahlige Konstante (int64), z. B. Polster oder Größen.</summary>
@@ -95,6 +136,24 @@ public sealed class OnnxGraph
         w.Int(2, dataType);
         w.String(8, name);
         w.Bytes(9, raw);
+        return w.ToArray();
+    }
+
+    private static byte[] ExternalTensor(string name, int dataType, long[] dims, string location, long offset, long length)
+    {
+        var w = new ProtoWriter();
+        foreach (var d in dims) w.Int(1, d);
+        w.Int(2, dataType);
+        w.String(8, name);
+        foreach (var (k, v) in new[] { ("location", location), ("offset", offset.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                     ("length", length.ToString(System.Globalization.CultureInfo.InvariantCulture)) })
+        {
+            var entry = new ProtoWriter();
+            entry.String(1, k);
+            entry.String(2, v);
+            w.Message(13, entry.ToArray());   // external_data
+        }
+        w.Int(14, 1);                         // data_location = EXTERNAL
         return w.ToArray();
     }
 

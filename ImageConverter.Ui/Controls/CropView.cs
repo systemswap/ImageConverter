@@ -32,6 +32,17 @@ public sealed class CropView : Control
     public static readonly StyledProperty<Bitmap?> SourceProperty =
         AvaloniaProperty.Register<CropView, Bitmap?>(nameof(Source));
 
+    /// <summary>Neu zeichnen, wenn sich der Wert ändert — für Bitmaps, deren Pixel sich an Ort und Stelle ändern
+    /// (Upscaling: fertige Kacheln kommen in dieselbe Bitmap).</summary>
+    public static readonly StyledProperty<object?> RedrawTokenProperty =
+        AvaloniaProperty.Register<CropView, object?>(nameof(RedrawToken));
+
+    public object? RedrawToken
+    {
+        get => GetValue(RedrawTokenProperty);
+        set => SetValue(RedrawTokenProperty, value);
+    }
+
     /// <summary>Auswahl in Bildpixeln; null = keine Auswahl.</summary>
     public static readonly StyledProperty<Rect?> SelectionProperty =
         AvaloniaProperty.Register<CropView, Rect?>(nameof(Selection),
@@ -463,7 +474,7 @@ public sealed class CropView : Control
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
             CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty,
             PickActiveProperty, PickMarkersProperty, BrushActiveProperty, BrushStrokesProperty, BrushDimProperty, BrushSizeProperty,
-            WarpLinesProperty);
+            WarpLinesProperty, RedrawTokenProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -792,6 +803,15 @@ public sealed class CropView : Control
         _fitMode = true;
         UpdateGeometry();
         InvalidateVisual();
+    }
+
+    /// <summary>Der sichtbare Teil des Bildes in Bildpixeln (ganzes Bild, wenn eingepasst); leer ohne Bild.</summary>
+    public Rect VisibleImageRect()
+    {
+        if (_imageRect.Width <= 0 || _scale <= 0) return default;
+        var a = ToImage(ViewArea.TopLeft);
+        var b = ToImage(ViewArea.BottomRight);
+        return new Rect(a, b).Intersect(new Rect(0, 0, ImageSize.Width, ImageSize.Height));
     }
 
     /// <summary>Originalgröße (100 %), um die Mitte der Ansicht.</summary>

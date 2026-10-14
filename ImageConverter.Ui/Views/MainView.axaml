@@ -525,6 +525,75 @@
                         </StackPanel>
                     </HeaderedContentControl>
 
+                    <!-- ============================== Upscaling: beim Vergrößern entstehen die Pixel aus einer KI -->
+                    <HeaderedContentControl Header="{l:T 'UPSCALING'}">
+                        <StackPanel>
+                            <Grid Classes="row" ColumnDefinitions="76,*">
+                                <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Verfahren'}" />
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding UpscaleOptions}"
+                                          SelectedItem="{Binding SelectedUpscaler}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="m:UpscaleOption">
+                                            <Border Background="Transparent">
+                                                <ToolTip.Tip>
+                                                    <TextBlock MaxWidth="290" TextWrapping="Wrap" Text="{Binding Description}" />
+                                                </ToolTip.Tip>
+                                                <TextBlock Text="{Binding Name}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <TextBlock Classes="hint" Margin="76,-4,0,8" TextWrapping="Wrap"
+                                       Text="{Binding SelectedUpscaler.Description}" />
+
+                            <!-- Modell fehlt: hier laden (mit allen Teilen), nie still im Hintergrund -->
+                            <Button Margin="76,0,0,8" HorizontalAlignment="Left"
+                                    IsVisible="{Binding UpscaleModelMissing}"
+                                    IsEnabled="{Binding !IsDownloadingUpscaler}"
+                                    Content="{Binding UpscaleDownloadText}"
+                                    Command="{Binding DownloadUpscalerCommand}"
+                                    ToolTip.Tip="{l:T 'Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI-Modelle.'}" />
+
+                            <StackPanel IsVisible="{Binding UsesAiUpscaler}">
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto"
+                                      ToolTip.Tip="{l:T 'Treue-Sicherung: Das Ergebnis wird so nachgeführt, dass es verkleinert wieder genau das Original ergibt. Die KI darf Feines ergänzen, aber Formen, Helligkeit und Farben nicht verschieben. 100 % empfohlen.'}">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Treue'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="1"
+                                            Value="{Binding UpscaleFidelity}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleFidelityLabel}" />
+                                </Grid>
+
+                                <Grid Classes="row" ColumnDefinitions="76,*,Auto"
+                                      ToolTip.Tip="{l:T 'Wie viel von der KI kommt: 100 % = nur KI, weniger = gemischt mit dem einfach vergrößerten Bild (Filter). Wirkt sofort, ohne neu zu rechnen.'}">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Details'}" />
+                                    <Slider Grid.Column="1" Minimum="0" Maximum="1"
+                                            Value="{Binding UpscaleDetails}" />
+                                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleDetailsLabel}" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,8,*" Margin="76,2,0,6">
+                                    <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Content="{l:T 'Upscalen'}"
+                                            Command="{Binding UpscaleCommand}"
+                                            ToolTip.Tip="{l:T 'Rechnet jetzt — bei langer Dauer wird gefragt, ob der sichtbare Ausschnitt reicht. Fertige Kacheln erscheinen sofort in der Prüfansicht.'}" />
+                                    <ToggleButton Grid.Column="2" HorizontalAlignment="Stretch"
+                                                  HorizontalContentAlignment="Center"
+                                                  IsChecked="{Binding UpscaleInspect}"
+                                                  Content="{l:T 'Prüfansicht'}"
+                                                  ToolTip.Tip="{l:T 'Zeigt das Ergebnis in voller Auflösung — zum Hineinzoomen. Mit „Vorher / Nachher“ links der Filter, rechts die KI, genau übereinander. Ohne Licht, Farbe und Schärfe.'}" />
+                                </Grid>
+
+                                <TextBlock Classes="hint" Margin="76,0,0,8" TextWrapping="Wrap"
+                                           IsVisible="{Binding UpscaleStatus, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                           Text="{Binding UpscaleStatus}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
                     <!-- ============================== Auflösung und DPI -->
                     <HeaderedContentControl Header="{l:T 'AUFLÖSUNG &amp; DPI'}">
                         <StackPanel>
@@ -1094,6 +1163,7 @@
                         <c:CropView x:Name="Crop"
                                     IsVisible="{Binding HasImage}"
                                     Source="{Binding DisplayBitmap}"
+                                    RedrawToken="{Binding RedrawToken}"
                                     CompareSource="{Binding CompareBitmap}"
                                     BeforeLabel="{l:T 'Vorher'}"
                                     AfterLabel="{l:T 'Nachher'}"

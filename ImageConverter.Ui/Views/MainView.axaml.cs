@@ -38,6 +38,8 @@ public partial class MainView : UserControl
             _vm.MultiExportRequested -= OnMultiExportRequested;
             _vm.PrintRequested -= OnPrintRequested;
             _vm.SettingsRequested -= OnSettingsRequested;
+            _vm.ChoiceRequested -= OnChoiceRequested;
+            _vm.VisibleImageArea = null;
         }
 
         _vm = DataContext as MainViewModel;
@@ -48,6 +50,8 @@ public partial class MainView : UserControl
             _vm.MultiExportRequested += OnMultiExportRequested;
             _vm.PrintRequested += OnPrintRequested;
             _vm.SettingsRequested += OnSettingsRequested;
+            _vm.ChoiceRequested += OnChoiceRequested;
+            _vm.VisibleImageArea = () => Crop.VisibleImageRect();
         }
     }
 
@@ -63,6 +67,15 @@ public partial class MainView : UserControl
         _settings.Closed += (_, _) => _settings = null;
         _settings.Show(owner);
         return Task.CompletedTask;
+    }
+
+    /// <summary>Rückfrage mit mehreren Antworten (modal).</summary>
+    private async Task<int> OnChoiceRequested(ChoiceRequest request)
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return -1;
+        var window = new ChoiceWindow(request);
+        await window.ShowDialog(owner);
+        return window.Result;
     }
 
     private async Task OnPrintRequested(PrintDialogViewModel dialogVm)

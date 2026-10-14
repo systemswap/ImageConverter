@@ -45,7 +45,8 @@ public sealed record ExportOptions(
     bool HighBitDepth = false,         // PNG/TIFF mit 16 Bit je Kanal (sonst 8 Bit mit Dither)
     double ColorDenoise = 0,           // Farbrauschen 0…1 (Denoise = Helligkeitsrauschen)
     GrainSettings? Grain = null,       // Körnung — der letzte Schritt; null = keine
-    double GrainScale = 1);            // Größe der Rechnung relativ zur echten Ausgabe (verkleinerter Druck < 1)
+    double GrainScale = 1,             // Größe der Rechnung relativ zur echten Ausgabe (verkleinerter Druck < 1)
+    MagickImage? Upscaled = null);     // Upscaler: dasselbe Bild in vierfacher Größe (KI) — beim Vergrößern Grundlage statt der Quelle
 
 /// <summary>
 /// Die Export-Kette: Skalieren → Entrauschen → Tools (Licht, Farbe) → Schärfen → Körnung → Farbprofil
@@ -90,14 +91,15 @@ public static class ImageExporter
         if (cache is not null) return RenderCached(source, o, plan, cache);
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
+        var basis = ResizeBasis(source, o);
 
         // Beim Vergrößern erst entrauschen, dann vergrößern — sonst bläst das Vergrößern das Korn zu Flecken auf,
         // bevor der Entrauscher es sieht. Beim Verkleinern wie bisher danach: schneller, das Verkleinern mittelt ohnehin.
         var noiseFirst = NoiseFirst(source, o);
-        var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : source;
+        var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : basis;
         plan?.Next();
         var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
-        if (!ReferenceEquals(start, source)) start.Dispose();
+        if (!ReferenceEquals(start, basis)) start.Dispose();
         var result = noiseFirst
             ? RenderLook(resized, 0, 0, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale)
             : RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale);
@@ -122,15 +124,16 @@ public static class ImageExporter
         cache.BeginRun();
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
-        var key = new LookCache.InputKey(new LookCache.SourceRef(source), o.Width, o.Height, o.Filter, o.GammaCorrect,
+        var basis = ResizeBasis(source, o);
+        var key = new LookCache.InputKey(new LookCache.SourceRef(basis), o.Width, o.Height, o.Filter, o.GammaCorrect,
             o.Denoise, o.ColorDenoise);
         var input = cache.GetInput(key, () =>
         {
             var noiseFirst = NoiseFirst(source, o);
-            var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : source;
+            var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : basis;
             plan?.Next();
             var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
-            if (!ReferenceEquals(start, source)) start.Dispose();
+            if (!ReferenceEquals(start, basis)) start.Dispose();
             try
             {
                 var px = Pixels.FromMagick(resized);
@@ -199,10 +202,21 @@ public static class ImageExporter
         return result;
     }
 
+    /// <summary>
+    /// Woraus skaliert wird: beim Vergrößern mit Upscaler das Bild in vierfacher Größe (daraus auf das Ziel verkleinert),
+    /// sonst die Quelle.
+    /// </summary>
+    public static MagickImage ResizeBasis(MagickImage source, ExportOptions o)
+    {
+        if (o.Upscaled is null) return source;
+        lock (source) return o.Width > source.Width || o.Height > source.Height ? o.Upscaled : source;
+    }
+
     /// <summary>Wird vergrößert und entrauscht? Dann kommt das Entrauschen vor das Skalieren.</summary>
     public static bool NoiseFirst(MagickImage source, ExportOptions o)
     {
         if (o.Denoise <= 0.01 && o.ColorDenoise <= 0.01) return false;
+        if (!ReferenceEquals(ResizeBasis(source, o), source)) return false;   // KI hat schon entrauscht; danach wie beim Verkleinern
         lock (source) return (long)o.Width * o.Height > (long)source.Width * source.Height;
     }
 

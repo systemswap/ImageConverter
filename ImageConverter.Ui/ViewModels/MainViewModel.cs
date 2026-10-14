@@ -54,6 +54,7 @@ public partial class MainViewModel : ViewModelBase
         // KI-Modul (abtrennbar, siehe Ordner Ai/)
         Ai = new AiViewModel(this);
         Retouch = new RetouchViewModel(this, Ai);
+        PropertyChanged += OnUpscaleRelevantChange;   // Upscaling folgt Bild und Größe
 
         // Sprachwechsel: berechnete Texte (Hinweise, Druckgröße …) neu abfragen lassen
         Tr.Instance.PropertyChanged += (_, _) => RefreshTexts();

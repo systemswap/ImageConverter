@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ImageConverter.Core.Imaging;
@@ -210,13 +211,21 @@ public partial class MainViewModel
              _files.IndexOf(path) + 1, DateTime.Now, ImageExporter.Extension(o.Format)));
 
     /// <summary>Exportiert eine Datei mit ihrem Stand. Gibt Zielpfad und Größe zurück.</summary>
-    internal async Task<(string Path, long Bytes)> ExportFileAsync(string path, IProgress<WorkProgress>? progress = null)
+    /// <param name="upscale">Upscaler (KI) rechnen, wo gewählt; false = nur Filter.</param>
+    internal async Task<(string Path, long Bytes)> ExportFileAsync(string path, IProgress<WorkProgress>? progress = null, bool upscale = true,
+        CancellationToken ct = default)
     {
         var (image, owned, _, dpi) = await GetImageAsync(path);
+        MagickImage? upscaled = null;
         try
         {
             var state = SettingsFor(path, (int)image.Width, (int)image.Height, dpi);
             var options = OptionsFor(state);
+            if (upscale && await UpscaleForBatchAsync(path, image, state, options, progress, ct) is { } up)
+            {
+                options = options with { Upscaled = up.Image };
+                if (up.Owned) upscaled = up.Image;
+            }
             var (folder, fileName) = PlanOutput(path, state, options);
 
             return await Task.Run(() =>
@@ -229,6 +238,7 @@ public partial class MainViewModel
         finally
         {
             if (owned) image.Dispose();
+            upscaled?.Dispose();
         }
     }
 }

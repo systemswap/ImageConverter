@@ -1,0 +1,13 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ImageConverter.Views.ChoiceWindow"
+        Icon="/Assets/app.ico"
+        Width="460" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}">
+    <StackPanel Margin="20,18,20,16" Spacing="14">
+        <TextBlock x:Name="Heading" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock x:Name="Message" TextWrapping="Wrap" />
+        <StackPanel x:Name="Buttons" Spacing="8" />
+    </StackPanel>
+</Window>

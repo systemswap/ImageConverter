@@ -5,6 +5,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
+using ImageConverter.Core.Ai.Upscale;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Models;
 
@@ -59,7 +60,10 @@ public partial class MainViewModel
         double GrainSize = 40,
         double GrainRoughness = 30,
         double GrainColor = 0,
-        double GrainHardness = 0);
+        double GrainHardness = 0,
+        UpscaleMethod Upscaler = UpscaleMethod.Filter,   // Upscaling: Verfahren, Treue, Details
+        double UpscaleFidelity = 1,
+        double UpscaleDetails = 1);
 
     /// <summary>
     /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
@@ -129,6 +133,9 @@ public partial class MainViewModel
         [nameof(OutputFolder)] = "Ordner",
         [nameof(NamePattern)] = "Dateiname",
         [nameof(HiddenSteps)] = null,
+        [nameof(SelectedUpscaler)] = null,
+        [nameof(UpscaleFidelity)] = "Treue",
+        [nameof(UpscaleDetails)] = "Details",
     };
 
     /// <summary>
@@ -260,7 +267,8 @@ public partial class MainViewModel
         SourceWidth, SourceHeight,
         DehazePasses, DehazeClarity, DehazeContrast, DehazeVibrance, DehazeSharpen, DehazeEdge, DehazeBrightness, DehazeDeband, DehazeCast,
         HighBitDepth, HiddenSteps, ColorNoiseReduction, RotationAngle, WbNeutral, WbBlack, WbWhite, MatchLimit, MatchTarget, MatchGlobal, MaskAmount, MaskEnd, MaskCurve,
-        GrainAmount, GrainSize, GrainRoughness, GrainColor, GrainHardness);
+        GrainAmount, GrainSize, GrainRoughness, GrainColor, GrainHardness,
+        SelectedUpscaler.Method, UpscaleFidelity, UpscaleDetails);
 
     /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
     private void ApplySettings(SettingsState s)
@@ -340,6 +348,9 @@ public partial class MainViewModel
                 OutputFolder = s.OutputFolder;
                 NamePattern = s.NamePattern;
                 HiddenSteps = s.Hidden;
+                SelectedUpscaler = UpscaleOption.Of(s.Upscaler);
+                UpscaleFidelity = s.UpscaleFidelity;
+                UpscaleDetails = s.UpscaleDetails;
             }
             finally
             {

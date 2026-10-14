@@ -1,4 +1,5 @@
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.SyntheticDoc;
 using ImageConverter.Core.Imaging;
 using ImageMagick;

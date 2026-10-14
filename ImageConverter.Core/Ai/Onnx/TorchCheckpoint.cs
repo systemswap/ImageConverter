@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace ImageConverter.Core.Ai.SyntheticDoc;
+namespace ImageConverter.Core.Ai.Onnx;
 
 /// <summary>Ein Tensor aus einem Checkpoint: Werte zusammenhängend (C-Reihenfolge) und Form.</summary>
 public sealed record TorchTensor(float[] Data, int[] Shape)

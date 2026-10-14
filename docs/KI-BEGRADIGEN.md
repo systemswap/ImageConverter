@@ -1,4 +1,9 @@
-# KI begradigen (SyntheticDoc)
+| `Onnx/OnnxGraph.cs` | Schreibt ONNX-Modelle (Protobuf, nur die nötigen Felder, ohne Abhängigkeit; große Gewichte auf Wunsch in eine Datei daneben, für Modelle über 2 GB). |Alles, was nur SyntheticDoc betrifft, liegt in `ImageConverter.Core/Ai/SyntheticDoc/`; die zwei Bausteine zum Lesen von
+Checkpoints und Schreiben von ONNX teilt es seit 0.5.76 mit dem Upscaling (PiSA-SR) in `ImageConverter.Core/Ai/Onnx/`:
+
+| Datei | Aufgabe |
+|---|---|
+| `Onnx/TorchCheckpoint.cs` |# KI begradigen (SyntheticDoc)
 
 Zweites Werkzeug neben „Gewölbtes Blatt“ (Linien + Blattmodell): ein Klick, keine Linien. Ein neuronales Netz
 sagt für ein fotografiertes Blatt voraus, wo jeder Punkt der flachen Seite im Foto liegt, und das Foto wird
@@ -176,6 +181,7 @@ Gewichte vom 6.8.).
 
 1. Ordner löschen: `ImageConverter.Core/Ai/SyntheticDoc/`, `extern/SyntheticDoc/`,
    `ImageConverter.Tests/SyntheticDocTests.cs`, auf der Platte `KI-Modelle/syntheticdoc/`.
+   `ImageConverter.Core/Ai/Onnx/` bleibt — PiSA-SR (Upscaling) braucht es auch.
 2. `ImageConverter.Core/Ai/AiModels.cs`: Eintrag `SyntheticDoc` und seine Erwähnung in `All`
    (dazu nach Wunsch `AiModelKind.Dewarp`).
 3. `ImageConverter.Ui/ViewModels/MainViewModel.Dewarp.cs`: den Abschnitt „KI begradigen (SyntheticDoc)“

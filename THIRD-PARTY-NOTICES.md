@@ -83,6 +83,9 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 | Gesichter – CodeFormer | **S-Lab License 1.0 – nur nicht-kommerzielle Nutzung** | Shangchen Zhou (CodeFormer), ONNX von FaceFusion |
 | Entfernen – LaMa (big-lama) | Apache-2.0 | Roman Suvorov u. a. (LaMa, Samsung AI Center), ONNX von Carve (Hugging Face `Carve/LaMa-ONNX`, feste Fassung) |
 | Entfernen – MI-GAN | MIT | Andranik Sargsyan u. a. (MI-GAN, Picsart AI Research), Hugging Face `andraniksargsyan/migan`, feste Fassung |
+| Upscaling – 4x-UltraSharpV2 | **CC BY-NC-SA 4.0 – nur nicht-kommerzielle Nutzung**, Namensnennung | Kim2091 (UltraSharpV2), Hugging Face `Kim2091/UltraSharpV2`, feste Fassung |
+| Upscaling – PiSA-SR (LoRA) | Apache-2.0 (laut README des Codes) | Lingchen Sun u. a. (PiSA-SR, CVPR 2025), Google Drive der Autoren; Code als Kopie in `extern/PiSA-SR/` |
+| Upscaling – Stable Diffusion 2.1-base (UNet, VAE, Text-Encoder; Teile für PiSA-SR) | CreativeML Open RAIL++-M (Nutzungsbeschränkungen der Lizenz gelten) | Stability AI; das Original ist zurückgezogen, geladen vom Spiegel `Manojb/stable-diffusion-2-1-base` auf Hugging Face, feste Fassung |
 
 ## Netzzugriffe
 

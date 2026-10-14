@@ -6,6 +6,7 @@
 //   dotnet run tools/SyntheticDocVergleich.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <alt.ckpt> <neu.ckpt> <ausgabeordner> <bild> [<bild> …]
 // Bewertung: docs/KI-BEGRADIGEN.md, Abschnitt „Updates des Originals“.
+using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.SyntheticDoc;
 using ImageConverter.Core.Imaging;
 using ImageMagick;

@@ -240,6 +240,11 @@ public partial class MainViewModel
         var (w, h) = EffectiveTarget();
         var options = BuildExportOptions(w, h);
 
+        // Upscaler gewählt: berechnetes Bild ×4 als Grundlage (sonst nachfragen)
+        var (cancel, upscaled) = await UpscaleBeforeExportAsync();
+        if (cancel) return;
+        if (upscaled is not null) options = options with { Upscaled = upscaled };
+
         ExportProgress = 0;
         ExportStep = Tr.T("Vorbereiten …");
         IsExporting = true;

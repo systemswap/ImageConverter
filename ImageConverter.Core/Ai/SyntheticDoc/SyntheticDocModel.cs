@@ -1,3 +1,5 @@
+using ImageConverter.Core.Ai.Onnx;
+
 namespace ImageConverter.Core.Ai.SyntheticDoc;
 
 /// <summary>

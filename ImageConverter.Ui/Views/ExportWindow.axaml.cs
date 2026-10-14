@@ -17,6 +17,12 @@ public partial class ExportWindow : Window
     {
         DataContext = vm;
         Opened += async (_, _) => await vm.LoadAsync();
+        vm.ChoiceRequested += async request =>
+        {
+            var window = new ChoiceWindow(request);
+            await window.ShowDialog(this);
+            return window.Result;
+        };
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)

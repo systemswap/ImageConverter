@@ -5,6 +5,7 @@
 //       <checkpoint.ckpt> [ausgabe.onnx] [--schatten]
 // Ohne Ausgabe: syntheticdoc.onnx neben den Checkpoint, mit --schatten syntheticdoc-schatten.onnx (Schattenkarte
 // dazu, doppelte Rechenzeit) — die App baut beide selbst.
+using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.SyntheticDoc;
 using Microsoft.ML.OnnxRuntime;
 

@@ -354,7 +354,7 @@ public partial class MainViewModel
         MagickImage Doc, int Width, int Height,
         ResampleFilter Filter, bool Gamma,
         (double Luma, double Chroma) Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma, double Scale,
-        GrainSettings? Grain);
+        GrainSettings? Grain, MagickImage? Upscaled = null);   // Upscaling: Bild ×4 als Grundlage fürs Vergrößern
 
     private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
 
@@ -379,7 +379,7 @@ public partial class MainViewModel
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments Adjust, float[] Pixels)> _adjustedCache = [];
 
-    private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G);
+    private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G, MagickImage? Up = null);
 
     /// <summary>
     /// Fordert eine neue Vorschau an. Läuft schon eine Berechnung, wird danach genau
@@ -446,6 +446,7 @@ public partial class MainViewModel
         {
             _renderRunning = false;
             ShowRendering = false;
+            EmptyUpscaleTrash();
         }
 
     }
@@ -497,6 +498,7 @@ public partial class MainViewModel
         var adjust = CurrentAdjustments() is var a && ShowMask && Shows(EditSteps.LumMask) ? a with { MaskPreview = true } : CurrentAdjustments();
         var grain = EffectiveGrain;
         if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone && grain is null) return null;
+        var upscaled = ToolView == GeometryStages.All ? UpscaledForPreview() : null;   // nicht in der Ansicht eines Werkzeugs
 
         // Vorschau höchstens PreviewMaxEdge groß; der Schärferadius wird
         // mitskaliert, damit er relativ zum Ergebnis gleich wirkt.
@@ -505,18 +507,18 @@ public partial class MainViewModel
         var ph = Math.Max(1, (int)Math.Round(th * scale));
 
         return new PreviewJob(doc, pw, ph, SelectedFilter.Filter, GammaCorrect,
-            noise, adjust, sharpen, SharpenRadius * scale, scale, grain);
+            noise, adjust, sharpen, SharpenRadius * scale, scale, grain, upscaled);
     }
 
     /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>
     private PreviewResult Render(PreviewJob job, WorkPlan plan)
     {
         // 1) Skalieren — teuer, nur bei Größe/Filter/Gamma neu
-        var key = new ResizeKey(job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
+        var key = new ResizeKey(job.Doc, job.Width, job.Height, job.Filter, job.Gamma, job.Upscaled);
         var resized = Cached(_resizedCache, e => e.Key == key)?.Image;
         if (resized is null)
         {
-            resized = ImageOps.Resize(job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
+            resized = ImageOps.Resize(job.Upscaled ?? job.Doc, job.Width, job.Height, job.Filter, job.Gamma);
             AddCached(_resizedCache, (Key: key, Image: resized), e => e.Image.Dispose());
         }
 
@@ -526,7 +528,7 @@ public partial class MainViewModel
         {
             int docW, docH;
             lock (job.Doc) (docW, docH) = ((int)job.Doc.Width, (int)job.Doc.Height);
-            if (job.Noise != (0, 0) && (long)job.Width * job.Height > (long)docW * docH)
+            if (job.Noise != (0, 0) && job.Upscaled is null && (long)job.Width * job.Height > (long)docW * docH)
             {
                 // Vergrößern: erst entrauschen, dann vergrößern — wie im Export (ImageExporter.NoiseFirst)
                 plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * docW * docH / 1e6);
@@ -542,7 +544,7 @@ public partial class MainViewModel
             {
                 denoised = ImageOps.ToDisplayPixels(resized);
             }
-            if (job.Noise != (0, 0) && (long)job.Width * job.Height <= (long)docW * docH)
+            if (job.Noise != (0, 0) && (job.Upscaled is not null || (long)job.Width * job.Height <= (long)docW * docH))
             {
                 // Helligkeit und Farbe getrennt; Radien mit dem Vorschau-Maßstab wie beim Export
                 plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * job.Width * job.Height / 1e6);

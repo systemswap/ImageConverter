@@ -1893,3 +1893,28 @@ Test oder Nachweis.
   16 Bit automatisch bei kräftiger Bearbeitung (#60) — vom Benutzer als Meilenstein bestimmt. Tag `v0.5.72`; schlanke
   Sicherung `../ImageConverter-0.5.72-Sicherung.zip` (Kopie in `published/`), mit `.git` samt Hooks, der lokalen Anweisungsdatei und
   `KI-Modelle/syntheticdoc/` (Checkpoint, ARCSim), ohne ONNX-Dateien, `TestBilder/`, `bin/`, `obj/`, `published/`.
+
+## 61. Upscaling mit KI: Gruppe unter „Größe“, PiSA-SR ohne Python (0.5.76 beta)
+
+- **Wunsch des Benutzers:** Vergrößern wie Referenzwerkzeug, aber lokal und so, dass das Original erkennbar bleibt; drei Stufen
+  (x4v3 · UltraSharpV2 · PiSA-SR), Knopf statt Rechnen bei jeder Änderung, Fortschritt mit Restzeit, fertige Kacheln
+  sofort sichtbar, Vorher/Nachher und richtig hineinzoomen — auch schon während der Rechnung. Konzept `KONZEPT.md` §1 N,
+  Doku `docs/KI-UPSCALING.md` (mit Liste zum Entfernen).
+- **PiSA-SR nachgebaut** (`PiSaSrNet`): drei ONNX-Teile aus SD 2.1 + LoRA, gegen PyTorch höchstens 1,5 · 10⁻⁵ daneben.
+  Fallen: (1) Im Modus „Standard“ sind pix *und* sem eingerechnet (`set_weights_and_activate_adapters` mit allen drei
+  Adaptern, α/r = 8/4 = 2). (2) UNet über 2 GB → Gewichte ab 4 KB gleich beim Anlegen in `.data` (Protobuf-Grenze),
+  64 Byte ausgerichtet. (3) Aufmerksamkeit als MatMul + Softmax hält 5 × N² Werte: Latentkacheln 64 (wie trainiert), nicht
+  96 wie im Original (bei 96 wären es 1,7 GB je Schicht). (4) Der Decoder kostet am meisten (60 % der Zeit), nicht das UNet.
+- **Kachelränder:** Gewichte, die sich überall zu 1 ergänzen (`TileAxis`), statt Summe und Gewicht in voller Größe —
+  direkt ins 16-Bit-Ergebnis addiert. Treue (Rückprojektion) braucht 16 Quellpixel Rand: während der Rechnung ist das
+  Roh-Ergebnis daneben noch leer → helle Linien an den Kachelgrenzen der Prüfansicht (die Datei war sauber).
+  Abhilfe: `ComposeRegion(known:)` begrenzt den Rand auf die fertige Fläche, nach dem Ende wird die Ansicht einmal ganz
+  neu gesetzt.
+- **Fortschritt:** `Progress<T>` ohne Synchronisationskontext meldet über den Threadpool, also ungeordnet — in Core für
+  Teilschritte `PiSaSrNet.Part` (direkt weitergereicht).
+- **Nicht tun:** in der Oberfläche eine Eigenschaft wie eine Klasse aus Core nennen (`Upscalers` → `UpscaleOptions`);
+  PiSA-SR als fehlend melden, nur weil der Text-Encoder fehlt — die leere Beschreibung reicht (`PiSaSrModel.Find`).
+- **Geprüft:** `UpscaleTests` (13), Undo der drei Einstellungen; Prüfstand ohne Fenster (Avalonia headless, außerhalb des
+  Projekts): Bild öffnen → ×4 → „KI schnell“ (Kacheln live, Prüfansicht 2000 × 1200, Vorher/Nachher, Treue neu) →
+  Speichern ohne Rückfrage → „KI mittel“ mit Rückfrage und Ausschnitt → Speichern fragt → PiSA-SR mit Umwandeln beim
+  ersten Mal. Am Fenster nicht geklickt (Benutzer arbeitete).

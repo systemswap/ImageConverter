@@ -16,6 +16,12 @@ public enum AiModelKind
 
     /// <summary>Fotografiertes Blatt begradigen („KI begradigen“ in der Vorschau).</summary>
     Dewarp,
+
+    /// <summary>Vergrößern mit KI (Gruppe „Upscaling“ unter „Größe“).</summary>
+    Upscale,
+
+    /// <summary>Gewichte, aus denen die App ein Modell baut (Stable Diffusion für PiSA-SR) — nur über das Hauptmodell geladen.</summary>
+    Part,
 }
 
 /// <summary>
@@ -248,7 +254,81 @@ public static class AiModelCatalog
         NonCommercial: false,
         Origin: "Daniel Woortmann, Tanguy Magne, Olga Sorkine-Hornung (SyntheticDoc, ECCV 2026, ETH Zürich)");
 
-    public static IReadOnlyList<AiModel> All { get; } = [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, FaceDetector, FaceParser];
+    // Feste Fassungen (Commits), nicht „main“
+    private const string UltraSharpRepo = "https://huggingface.co/Kim2091/UltraSharpV2/resolve/2d1db39ff692c111da92112d49f833e4ad7035ae/";
+    // Stable Diffusion 2.1-base: Stability AI hat das Original 2025 zurückgezogen — Spiegel mit denselben Dateien
+    private const string Sd21Repo = "https://huggingface.co/Manojb/stable-diffusion-2-1-base/resolve/0094d483a120f3f33dafbd187ea4aa60d10de75c/";
+    private const string Sd21License = "CreativeML-OpenRAIL++-M";
+    private const string Sd21Origin = "Stability AI (Stable Diffusion 2.1-base), Spiegel „Manojb/stable-diffusion-2-1-base“ auf Hugging Face";
+
+    /// <summary>Upscaling „KI mittel“: 4x-UltraSharpV2 (DAT), ONNX vom Autor.</summary>
+    public static AiModel UltraSharpV2 { get; } = new(
+        "ultrasharpv2",
+        "4x-UltraSharpV2",
+        "Upscaling „KI mittel“ – scharf und treu, etwa eine Minute je Megapixel",
+        "UltraSharpV2 (Kim2091, 2025): vergrößert ×4, schärft Kanten und feine Strukturen, ohne viel dazuzuerfinden. " +
+        "Deutlich langsamer als „KI schnell“. Lizenz erlaubt nur nicht-kommerzielle Nutzung.",
+        AiModelKind.Upscale,
+        UltraSharpRepo + "4x-UltraSharpV2_fp32_op17.onnx",
+        51_800_517,
+        "6c0201e3403745f39a9aa5273c50ed084cf6c4af5a71a4654c30252cf19bf0a5",
+        IsZip: false,
+        MainFile: "4x-UltraSharpV2_fp32_op17.onnx",
+        License: "CC-BY-NC-SA-4.0",
+        NonCommercial: true,
+        Origin: "Kim2091 (UltraSharpV2, OpenModelDB)",
+        Scale: 4,
+        TileSize: 128,
+        FixedTile: false);
+
+    /// <summary>
+    /// Upscaling „KI wie Referenzwerkzeug“: PiSA-SR (CVPR 2025) — LoRA der Autoren auf Stable Diffusion 2.1. Geladen werden die
+    /// Gewichte (LoRA von Google Drive, SD 2.1 vom Spiegel); die ONNX-Dateien baut die App beim ersten Gebrauch selbst
+    /// (<c>Upscale.PiSaSrModel</c>, ohne Python).
+    /// </summary>
+    public static AiModel PiSaSr { get; } = new(
+        "pisasr",
+        "PiSA-SR",
+        "Upscaling „KI wie Referenzwerkzeug“ – erfindet feine Details (Nadeln, Blätter, Haut)",
+        "PiSA-SR (Lingchen Sun u. a., CVPR 2025): Ein-Schritt-Diffusion auf Stable Diffusion 2.1. Ergänzt glaubhafte feine " +
+        "Strukturen, wo das Original nur Matsch hat; die Treue-Sicherung hält Formen und Farben am Original. Sehr langsam auf " +
+        "der CPU (Minuten je Megapixel). Lädt Stable Diffusion 2.1 (2,6 GB) mit und wird beim ersten Gebrauch umgewandelt.",
+        AiModelKind.Upscale,
+        "https://drive.usercontent.google.com/download?id=1PWFM5zUd6lNMOyKX64anvUXhKEOCrf8L&export=download&confirm=t",
+        32_865_445,
+        "13502f7bde5e4e585f84f24c3d904d9c848e068bf89f984046fe87da81a391f6",
+        IsZip: false,
+        MainFile: "pisa_sr.pkl",
+        License: "Apache-2.0 (Code); SD 2.1: CreativeML-OpenRAIL++-M",
+        NonCommercial: false,
+        Origin: "Lingchen Sun, Rongyuan Wu, Zhiyuan Ma, Shuaizheng Liu, Qiaosi Yi, Lei Zhang (PiSA-SR, PolyU / OPPO)",
+        Scale: 4,
+        Requires: ["sd21-unet", "sd21-vae", "sd21-text"]);
+
+    public static AiModel Sd21Unet { get; } = new(
+        "sd21-unet", "Stable Diffusion 2.1 – UNet", "Teil von PiSA-SR",
+        "Das Herz von Stable Diffusion 2.1 (halbe Genauigkeit, reicht als Quelle — die App rechnet in voller). Wird mit PiSA-SR geladen.",
+        AiModelKind.Part, Sd21Repo + "unet/diffusion_pytorch_model.fp16.safetensors", 1_731_904_736,
+        "28ec9cf3b239c0751c201b1f6fb46b551df5862731b30a37aa1360101cb3fbab", IsZip: false,
+        MainFile: "diffusion_pytorch_model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
+
+    public static AiModel Sd21Vae { get; } = new(
+        "sd21-vae", "Stable Diffusion 2.1 – Bildkodierer (VAE)", "Teil von PiSA-SR",
+        "Übersetzt zwischen Bild und dem inneren Raum von Stable Diffusion. Wird mit PiSA-SR geladen.",
+        AiModelKind.Part, Sd21Repo + "vae/diffusion_pytorch_model.fp16.safetensors", 167_335_342,
+        "3e4c08995484ee61270175e9e7a072b66a6e4eeb5f0c266667fe1f45b90daf9a", IsZip: false,
+        MainFile: "diffusion_pytorch_model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
+
+    public static AiModel Sd21Text { get; } = new(
+        "sd21-text", "Stable Diffusion 2.1 – Text-Encoder", "Teil von PiSA-SR",
+        "Wird nur einmal gebraucht: PiSA-SR rechnet mit leerer Beschreibung, die die App beim Umwandeln daraus berechnet. " +
+        "Wird mit PiSA-SR geladen.",
+        AiModelKind.Part, Sd21Repo + "text_encoder/model.fp16.safetensors", 680_821_096,
+        "681c555376658c81dc273f2d737a2aeb23ddb6d1d8e5b3a7064636d359a22668", IsZip: false,
+        MainFile: "model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
+
+    public static IReadOnlyList<AiModel> All { get; } =
+        [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, UltraSharpV2, PiSaSr, Sd21Unet, Sd21Vae, Sd21Text, FaceDetector, FaceParser];
 
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

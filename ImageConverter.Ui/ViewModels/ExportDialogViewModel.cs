@@ -25,6 +25,9 @@ public partial class ExportItem(string path) : ObservableObject
     [ObservableProperty] public partial string Status { get; set; } = "";
     [ObservableProperty] public partial bool Failed { get; set; }
     [ObservableProperty] public partial bool Done { get; set; }
+
+    /// <summary>Upscaling muss beim Export noch gerechnet werden (geschätzte Dauer), sonst null.</summary>
+    internal TimeSpan? UpscaleEstimate { get; set; }
 }
 
 /// <summary>
@@ -39,6 +42,10 @@ public partial class ExportDialogViewModel : ViewModelBase
     private readonly MainViewModel _main;
     private readonly CancellationTokenSource _closing = new();
     private bool _cancelRequested;
+    private CancellationTokenSource? _exportCts;   // bricht auch ein laufendes Upscaling ab
+
+    /// <summary>Rückfrage (modal über diesem Fenster); Ergebnis: Nummer der Antwort, −1 = geschlossen.</summary>
+    public event Func<ChoiceRequest, Task<int>>? ChoiceRequested;
 
     public ExportDialogViewModel(MainViewModel main)
     {
@@ -103,6 +110,7 @@ public partial class ExportDialogViewModel : ViewModelBase
                     var (_, fileName) = _main.PlanOutput(item.Path, state, options);
 
                     item.Resolution = $"{options.Width} × {options.Height} px";
+                    item.UpscaleEstimate = _main.UpscaleNeededFor(item.Path, w, h, state, options);
                     item.Details = fileName;
 
                     var (thumb, tw, th) = await Task.Run(() =>
@@ -140,6 +148,26 @@ public partial class ExportDialogViewModel : ViewModelBase
         _cancelRequested = false;
 
         var selected = Items.Where(i => i.Include).ToList();
+
+        // Upscaling (KI) noch zu rechnen: einmal für alle fragen
+        var upscale = true;
+        var needs = selected.Where(i => i.UpscaleEstimate is not null).ToList();
+        if (needs.Count > 0 && ChoiceRequested is { } ask)
+        {
+            var duration = Core.Ai.Upscale.Upscalers.Format(TimeSpan.FromTicks(needs.Sum(i => i.UpscaleEstimate!.Value.Ticks)));
+            var answer = await ask(new ChoiceRequest(Tr.T("Upscaling noch nicht berechnet"),
+                needs.Count == 1
+                    ? Tr.T("Für 1 Bild ist ein KI-Upscaler gewählt, aber noch nicht berechnet. Das dauert etwa {0}.", duration)
+                    : Tr.T("Für {0} Bilder ist ein KI-Upscaler gewählt, aber noch nicht berechnet. Das dauert zusammen etwa {1}.", needs.Count, duration),
+                [Tr.T("Jetzt berechnen und speichern (≈ {0})", duration), Tr.T("Ohne KI speichern (nur Filter)"), Tr.T("Abbrechen")]));
+            if (answer is < 0 or 2)
+            {
+                IsExporting = false;
+                return;
+            }
+            upscale = answer == 0;
+        }
+        _exportCts = CancellationTokenSource.CreateLinkedTokenSource(_closing.Token);
         var ok = 0;
         long total = 0;
         string? lastFolder = null;
@@ -162,13 +190,18 @@ public partial class ExportDialogViewModel : ViewModelBase
             });
             try
             {
-                var (path, bytes) = await _main.ExportFileAsync(item.Path, progress);
+                var (path, bytes) = await _main.ExportFileAsync(item.Path, progress, upscale, _exportCts.Token);
                 item.Status = $"✓  {FormatBytes(bytes)}";
                 item.Details = Path.GetFileName(path);   // tatsächlicher Name, ggf. mit „ (2)"
                 item.Done = true;
                 lastFolder = Path.GetDirectoryName(path);
                 total += bytes;
                 ok++;
+            }
+            catch (OperationCanceledException)
+            {
+                item.Status = Tr.T("abgebrochen");
+                break;
             }
             catch (Exception ex)
             {
@@ -193,9 +226,13 @@ public partial class ExportDialogViewModel : ViewModelBase
         IsDone = true;
     }
 
-    /// <summary>Beendet nach dem Bild, das gerade läuft.</summary>
+    /// <summary>Beendet nach dem Bild, das gerade läuft — ein laufendes Upscaling sofort.</summary>
     [RelayCommand]
-    private void CancelExport() => _cancelRequested = true;
+    private void CancelExport()
+    {
+        _cancelRequested = true;
+        _exportCts?.Cancel();
+    }
 
     /// <summary>Fenster wird geschlossen: Laden der Vorschaubilder beenden.</summary>
     public void OnClosing()
