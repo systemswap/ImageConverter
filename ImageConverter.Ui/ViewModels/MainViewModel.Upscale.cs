@@ -155,6 +155,11 @@ public partial class MainViewModel
         ResetScaleCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>Worauf die KI-Scaler rechnen — unter Treue/Details und im Fortschritt.</summary>
+    public string ComputeDeviceText => Ai.Sessions.OnGpu && OnnxSessions.GpuName is { } gpu
+        ? Tr.T("KI rechnet auf der Grafikkarte ({0}).", gpu)
+        : Tr.T("KI rechnet auf der CPU.");
+
     /// <summary>„Skalieren“, bei KI mit der geschätzten Zeit.</summary>
     public string ScaleButtonText => AiScalingActive && MatchingUpscale() is null
         ? Tr.T("Skalieren (≈ {0})", Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight)))
@@ -514,7 +519,9 @@ public partial class MainViewModel
             var remaining = RemainingText(clock.Elapsed, f, expected);
             ActivityText = preparing
                 ? Tr.T("Upscaling · KI-Modell wird vorbereitet (einmalig) … {0:0} %", f * 100)
-                : Tr.T("Upscaling · {0:0} %{1}", f * 100, remaining);
+                : Ai.Sessions.OnGpu
+                    ? Tr.T("Upscaling auf der Grafikkarte · {0:0} %{1}", f * 100, remaining)
+                    : Tr.T("Upscaling auf der CPU · {0:0} %{1}", f * 100, remaining);
             ActivityProgress = f * 100;
             if (!preparing) UpscaleStatus = Tr.T("Wird berechnet …") + remaining;
         }
@@ -897,6 +904,7 @@ public partial class MainViewModel
     /// <summary>Grafikkarte an/aus: andere Zeitschätzung, Ergebnis bleibt gültig.</summary>
     internal void GpuChanged()
     {
+        OnPropertyChanged(nameof(ComputeDeviceText));
         OnPropertyChanged(nameof(ScaleButtonText));
         UpdateUpscaleStatus();
     }

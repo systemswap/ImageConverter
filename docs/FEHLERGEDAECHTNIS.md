@@ -1962,3 +1962,15 @@ Test oder Nachweis.
   wandeln, danach zurück. Konstanten in Mul/Add müssen den Typ des Graphen haben (`Net.Const`), Resize-Skalen und die
   Skalen der InstanceNormalization bleiben fp32.
 - **Gemessen:** PiSA-SR 137 → 97 s auf der eingebauten Radeon, Ergebnis gegen fp32 53 dB (im Mittel 0,2 Stufen).
+
+## 65. PiSA-SR: Kacheln erst am Ende sichtbar; Grafikkarte/CPU nicht zu sehen (0.5.83 beta)
+
+- **Meldung des Benutzers:** bei „KI wie Referenzwerkzeug“ keine Kacheln, und nicht erkennbar, ob Grafikkarte oder CPU rechnet.
+- **Ursache:** PiSA-SR lief in drei Durchgängen über das ganze Bild (Encoder, UNet, Decoder) — fertige Bildteile gab es erst
+  im letzten. Jetzt streifenweise: je Zeile Decoder-Kacheln nur so viel Encoder und UNet, wie die Zeilen darüber brauchen
+  (eine Latentzeile ist fertig, wenn alle Kacheln mit Anfang davor gerechnet sind). Ergebnis bitgleich (0 Stufen
+  Unterschied), Kacheln über die ganze Rechnung verteilt.
+- **Anzeige:** Fortschritt „Upscaling auf der Grafikkarte · … / auf der CPU · …“, in der Gruppe „KI rechnet auf der
+  Grafikkarte (DirectML).“ (`ComputeDeviceText`).
+- **Zeitangaben** kommen nicht von der KI: vorab Schätzung (gemessene Werte je Megapixel, nach jedem Lauf an diesen Rechner
+  angepasst, nur bis zum Schließen), während der Rechnung aus dem Fortschritt.

@@ -7,7 +7,8 @@ namespace ImageConverter.Core.Ai.Upscale;
 /// PiSA-SR auf einem ganzen Bild, in Kacheln — wie <c>PiSASR_eval</c> im Modus „Standard“: Original bikubisch ×4, in den
 /// Latentraum (VAE-Encoder), ein Schritt UNet (Rauschen vorhersagen und abziehen), zurück ins Bild (VAE-Decoder), Farben
 /// angleichen (AdaIN). Alle drei Teile laufen in Kacheln mit weichen Übergängen; nichts davon braucht je das ganze
-/// Bild in voller Größe als Gleitkomma. Fertige Flächen werden gemeldet, sobald keine spätere Kachel sie mehr berührt.
+/// Bild in voller Größe als Gleitkomma. Gerechnet wird streifenweise von oben nach unten (je Decoder-Zeile so viel Encoder
+/// und UNet wie nötig); fertige Flächen werden gemeldet, sobald keine spätere Kachel sie mehr berührt.
 /// </summary>
 public static class PiSaSrRun
 {
@@ -52,40 +53,58 @@ public static class PiSaSrRun
         var raw = result.Raw;
         var colors = new ColorMatch(src, channels, w * h);
 
-        // 1) Encoder: bikubisch ×4 → −1 … 1 → Latent (Mittelwert · 0,18215)
+        // Streifenweise von oben nach unten: jede Zeile Decoder-Kacheln, sobald die Zeilen darüber durch Encoder und UNet
+        // fertig sind — so erscheinen fertige Bildteile über die ganze Rechnung verteilt, nicht erst am Ende. Eine
+        // Latentzeile ist fertig, wenn alle Kacheln, die sie berühren, gerechnet sind; das sind die mit Anfang davor.
         var latent = new float[4 * lh * lw];
-        for (var ky = 0; ky < ey.Count; ky++)
-        for (var kx = 0; kx < ex.Count; kx++)
-        {
-            ct.ThrowIfCancellationRequested();
-            int tx = ex.Starts[kx], ty = ey.Starts[ky], tw = ex.Size, th = ey.Size;
-            var image = Resample4.Up(Src, 3, tx * 8, ty * 8, tw * 8, th * 8, Resample4.Kernel.Bicubic);
-            for (var i = 0; i < image.Length; i++) image[i] = Math.Clamp(image[i], 0f, 1f) * 2 - 1;
-            var lat = RunOne(encoder, "image", image, [1, 3, th * 8, tw * 8], ct);
-            Accumulate(latent, lat, lw, lh, tx, ty, tw, th, ex.Weights[kx], ey.Weights[ky]);
-            Advance(tw * th * EncoderCost);
-        }
-
-        // 2) UNet: Vorhersage je Kachel, weich zusammengesetzt, vom Latent abgezogen
         var pred = new float[latent.Length];
-        for (var ky = 0; ky < uy.Count; ky++)
-        for (var kx = 0; kx < ux.Count; kx++)
-        {
-            ct.ThrowIfCancellationRequested();
-            int tx = ux.Starts[kx], ty = uy.Starts[ky], tw = ux.Size, th = uy.Size;
-            var p = RunOne(unet, "latent", Cut(latent, lw, lh, tx, ty, tw, th), [1, 4, th, tw], ct);
-            Accumulate(pred, p, lw, lh, tx, ty, tw, th, ux.Weights[kx], uy.Weights[ky]);
-            Advance(tw * th * UnetCost);
-        }
-        for (var i = 0; i < latent.Length; i++) latent[i] -= pred[i];
+        int encoderRow = 0, unetRow = 0;
 
-        // 3) Decoder: Kachel für Kachel ins 16-Bit-Ergebnis (Gewichte ergeben zusammen 1 → direkt aufaddieren)
+        // 1) Encoder bis Latentzeile rowEnd: bikubisch ×4 → −1 … 1 → Latent (Mittelwert · 0,18215)
+        void EncodeUpTo(int rowEnd)
+        {
+            for (; encoderRow < ey.Count && ey.Starts[encoderRow] < rowEnd; encoderRow++)
+            for (var kx = 0; kx < ex.Count; kx++)
+            {
+                ct.ThrowIfCancellationRequested();
+                int tx = ex.Starts[kx], ty = ey.Starts[encoderRow], tw = ex.Size, th = ey.Size;
+                var image = Resample4.Up(Src, 3, tx * 8, ty * 8, tw * 8, th * 8, Resample4.Kernel.Bicubic);
+                for (var i = 0; i < image.Length; i++) image[i] = Math.Clamp(image[i], 0f, 1f) * 2 - 1;
+                var lat = RunOne(encoder, "image", image, [1, 3, th * 8, tw * 8], ct);
+                Accumulate(latent, lat, lw, lh, tx, ty, tw, th, ex.Weights[kx], ey.Weights[encoderRow]);
+                Advance(tw * th * EncoderCost);
+            }
+        }
+
+        // 2) UNet bis Latentzeile rowEnd: Vorhersage je Kachel, weich zusammengesetzt
+        void PredictUpTo(int rowEnd)
+        {
+            for (; unetRow < uy.Count && uy.Starts[unetRow] < rowEnd; unetRow++)
+            {
+                EncodeUpTo(uy.Starts[unetRow] + uy.Size);
+                for (var kx = 0; kx < ux.Count; kx++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    int tx = ux.Starts[kx], ty = uy.Starts[unetRow], tw = ux.Size, th = uy.Size;
+                    var p = RunOne(unet, "latent", Cut(latent, lw, lh, tx, ty, tw, th), [1, 4, th, tw], ct);
+                    Accumulate(pred, p, lw, lh, tx, ty, tw, th, ux.Weights[kx], uy.Weights[unetRow]);
+                    Advance(tw * th * UnetCost);
+                }
+            }
+        }
+
+        // 3) Decoder: Latent − Vorhersage, Kachel für Kachel ins 16-Bit-Ergebnis (Gewichte ergeben zusammen 1 → direkt aufaddieren)
         for (var ky = 0; ky < dy.Count; ky++)
         for (var kx = 0; kx < dx.Count; kx++)
         {
             ct.ThrowIfCancellationRequested();
             int tx = dx.Starts[kx], ty = dy.Starts[ky], tw = dx.Size, th = dy.Size;
-            var img = RunOne(decoder, "latent", Cut(latent, lw, lh, tx, ty, tw, th), [1, 4, th, tw], ct);
+            EncodeUpTo(ty + th);
+            PredictUpTo(ty + th);
+            var z = Cut(latent, lw, lh, tx, ty, tw, th);
+            var zp = Cut(pred, lw, lh, tx, ty, tw, th);
+            for (var i = 0; i < z.Length; i++) z[i] -= zp[i];
+            var img = RunOne(decoder, "latent", z, [1, 4, th, tw], ct);
             int pw = tw * 8, ph = th * 8, px = tx * 8, py = ty * 8;
             var wx = dxp.Weights[kx];
             var wy = dyp.Weights[ky];

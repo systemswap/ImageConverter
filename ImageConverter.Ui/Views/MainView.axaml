@@ -557,6 +557,9 @@
                                 <TextBlock Grid.Column="2" Classes="value" Text="{Binding UpscaleDetailsLabel}" />
                             </Grid>
 
+                            <TextBlock Classes="hint" Margin="76,-2,0,6" IsVisible="{Binding AiScalerChosen}"
+                                       Text="{Binding ComputeDeviceText}" />
+
                             <Grid ColumnDefinitions="*,8,Auto" Margin="76,2,0,6">
                                 <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
