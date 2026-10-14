@@ -282,6 +282,87 @@ Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
   Rezept gilt (ausschaltbar) oder nur beim Speichern wirkt, PDF-Seitengröße (DIN aus
   der Schätzung?).
 
+### N. Upscaling (Wunsch vom 14.10.2026, Konzept — noch nicht umgesetzt)
+
+**Ziel:** Vergrößern auf dem Stand der Technik, ohne etwas Neues ins Bild zu erfinden — das
+Original muss ohne Weiteres wiederzuerkennen sein. Vorbild Referenzwerkzeug/Referenzwerkzeug „Precision“
+(laut Hersteller: Auflösung höher, Inhalt und Aufbau bleiben, keine neuen Elemente). Wunsch
+als Messlatte: Panorama aus 5000+ px auf 600 px verkleinert, wieder vergrößert, sieht aus
+wie das Original — idealerweise mit Nadeln und Blättern im Wald.
+
+**Was physikalisch geht (ehrlich):** Auf 600 px sind einzelne Nadeln und Blätter nicht mehr im
+Bild, nur ihre mittlere Farbe und Struktur. Jedes Verfahren, das sie „zurückbringt“, malt
+*plausible* Nadeln — nicht die echten. Das ist unvermeidlich und auch bei Referenzwerkzeug/Referenzwerkzeug so.
+Sauber wird es durch eine **Treue-Sicherung** (unten): das Ergebnis muss, wieder verkleinert,
+genau das Original ergeben. Dann ist alles Gemalte feiner als ein Originalpixel, und das
+Bild bleibt in jeder Größe, in der es vorher zu sehen war, dasselbe.
+
+**Ort in der Oberfläche:** eigene Gruppe **„UPSCALING“ im allgemeinen Tab direkt unter
+„GRÖSSE“** (Wunsch: dort liegen die meistgenutzten Funktionen). „Größe“ legt weiter die
+Pixel fest; „Upscaling“ bestimmt nur, *wie* vergrößert wird. Sichtbar, sobald das Ziel größer
+als das Bild ist (sonst ausgegraut mit Hinweis „nur beim Vergrößern“).
+- **Verfahren:** Filter (wie bisher, Lanczos 3 …) · KI treu · KI natürlich — nur
+  heruntergeladene Modelle wählbar, sonst Verweis auf den Tab KI (Download wie gehabt).
+- **Details** (0–100 %, nur KI): wie viel der vom Modell gefundenen feinen Struktur ins
+  Ergebnis kommt (Mischung mit der Filter-Vergrößerung, live ohne neues Rechnen).
+- **Treue-Sicherung** (Haken, Vorgabe an): siehe unten.
+- Hinweis zur Laufzeit („≈ 2 min auf diesem Rechner“), Fortschritt und Abbrechen wie in der KI.
+- Die Vergrößerungsfunktion im Tab KI („2× / 4×“ beim Allround-Modell) zieht hierher um; der
+  Tab KI bleibt fürs Restaurieren (Rauschen, Artefakte, Gesichter).
+
+**Stelle in der Bildkette:** ersetzt den Schritt „Skalieren“ beim Vergrößern: Pixelbild nach
+Ausrichten (Drehen, Entzerren, Gewölbt, Zuschnitt) → Modell (×2 oder ×4, je nach Ziel) →
+mit Lanczos genau auf die Zielgröße → Entrauschen, Dunst, Licht und Farbe, Schärfen, Körnung
+wie bisher (Körnung in Ausgabepixeln, also nach dem Upscaling). Das Modellergebnis wird je Bild
+zwischengespeichert (nur Rezept, Modell, Faktor zählen) — Regler danach rechnen nicht neu.
+Vorschau: ab 100 % Zoom der echte Ausschnitt, darunter verkleinert (dort sieht man den
+Unterschied ohnehin nicht).
+
+**Treue-Sicherung (Rückprojektion):** Ergebnis E, Original O, Verkleinern V, Vergrößern U:
+E ← E + U(O − V(E)), zwei bis drei Durchgänge. Danach gilt V(E) ≈ O auf weniger als eine
+Stufe — keine Farbverschiebung, keine verrutschten Kanten, kein neuer Gegenstand größer als
+ein Originalpixel. Billig (Sekundenbruchteile), unabhängig vom Modell; so lässt sich auch
+ein kreativeres Modell „an die Leine legen“. Das ist der Kern von „Original erkennbar“.
+
+**Drei Modelle im Angebot** (Wunsch: drei anbieten; Stand 14.10.2026, je ≤ 1 GB, als ONNX):
+
+| Angebot | erste Wahl (zu messen) | Ausweichen | Art |
+|---|---|---|---|
+| **Schnell** | 4xNomos2_realplksr_dysample (Phhofm, 06/2024; Fotos, verträgt JPEG bis Qualität 70) | 4x-UltraSharpV2 Lite (RealPLKSR) · Real-ESRGAN x4v3 (schon da) | kleines Netz, Sekunden bis 1 min |
+| **Treu** | 4xNomos2_hq_drct-l (DRCT-L, 09/2024, CC BY 4.0; Foto) | 4xNomos2_hq_atd (ATD, 09/2024; nur für saubere Vorlagen) · 4xNomos8kSCHAT-L (HAT-L) | Transformer, höchste Genauigkeit, langsam |
+| **Natürlich** | 4x-UltraSharpV2 (DAT, 05/2025, CC BY-NC-SA 4.0 — nur nicht-kommerziell, privat in Ordnung) | 4xNomos2_hq_dat2 (DAT2) | mehr Feinstruktur (Nadeln, Blätter), mit Treue-Sicherung |
+
+Hinweise aus den Modellseiten: RealPLKSR-Nomos2 übersättigt leicht (Farbausgleich nach der KI —
+die Treue-Sicherung erledigt das mit); ATD ist für unbeschädigte Vorlagen gedacht (bei JPEG
+und Rauschen DRCT-L oder vorher entrauschen). Klassische PSNR-Fassungen (HAT, DRCT, ATD,
+MambaIRv2 aus den Papern) sind auf ideal verkleinerte Bilder trainiert und verstärken bei echten
+Fotos JPEG-Blöcke — deshalb die Fotofassungen. Vor dem Einbau je Modell **Lizenz und
+ONNX-Fassung prüfen** (OpenModelDB nennt beides; manche gibt es nur als PyTorch → selbst
+umwandeln wie bei SyntheticDoc). Was in der Messung vorn liegt, kommt in die drei Plätze; die
+Tabelle ist die Kandidatenliste, nicht die Entscheidung.
+
+**Bewusst nicht:**
+- **Diffusions-Upscaler** (SUPIR, OSEDiff, PiSA-SR, TSD-SR, InvSR): 1,7 Mrd. Parameter und mehr,
+  über 1 GB, ohne Grafikkarte Minuten bis Stunden je Bild; sie erfinden am meisten. Für
+  später mit GPU als Versuch notiert (wie schon im Fehlergedächtnis #19).
+- Prompt- oder „Kreativ“-Modi.
+
+**Zeit (Abschätzung, aus 0.4.14 gemessen):** x4v3 ≈ 15 s je Megapixel Eingang; ein großes
+Transformer-/ESRGAN-Modell ≈ 400 s je Megapixel Eingang auf der CPU. Ein 600 × 800-Bild
+(0,5 MP) bräuchte also mit dem treuen Modell rund 3 min, mit RealPLKSR vermutlich unter
+einer Minute. Unter Windows lässt sich DirectML (integrierte Radeon) als Beschleuniger
+versuchen.
+
+**Prüfen vor dem Einbau (Messplatz):** Panorama und zwei, drei weitere Fotos auf 600 px
+verkleinern, mit jedem Kandidaten zurückvergrößern; nebeneinander in `TestBilder/Merge`
+(Original · Filter · Modelle) und gemessen gegen das Original: Abweichung, Schärfe, Zeit. Dazu
+Ergebnis mit und ohne Treue-Sicherung. Danach entscheidet der Benutzer, welche Modelle in
+den Katalog kommen.
+
+**Offen:** ×2-Modelle zusätzlich (weniger Rechenzeit bei kleinem Vergrößerungsfaktor)? Darf
+„Upscaling“ auch ohne Vergrößerung als „Details schärfen“ laufen (Supersampling wie
+„Größe behalten“ der KI)? Gesichter im Bild zusätzlich mit dem Gesichtsmodell?
+
 ---
 
 ## 2. Was ein einfacher Konverter noch braucht (von dir nicht genannt)
