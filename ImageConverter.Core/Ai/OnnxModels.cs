@@ -84,17 +84,17 @@ public sealed class OnnxSessions : IDisposable
             }
 
             EnsureNoTelemetry();
-            session = Open(path);
+            session = Open(path, model.Gpu);
             _open[path] = session;
             _modelOf[path] = model.Id;
             return session;
         }
     }
 
-    /// <summary>Öffnen — mit Grafikkarte, wenn gewünscht und vorhanden; scheitert das, auf der CPU.</summary>
-    private InferenceSession Open(string path)
+    /// <summary>Öffnen — mit Grafikkarte, wenn gewünscht, vorhanden und für das Modell freigegeben; scheitert das, auf der CPU.</summary>
+    private InferenceSession Open(string path, bool allowGpu)
     {
-        if (UseGpu && GpuProvider is { } provider && GpuProblem is null)
+        if (allowGpu && UseGpu && GpuProvider is { } provider && GpuProblem is null)
         {
             try
             {

@@ -72,7 +72,7 @@ public partial class AiViewModel : ViewModelBase
     public string GpuStatus =>
         OnnxSessions.GpuName is not { } name ? Tr.T("Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU.")
         : _sessions.GpuProblem is { } problem ? Tr.T("Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}", name, problem)
-        : Tr.T("Die KI rechnet auf der Grafikkarte ({0}); klappt es dort nicht, auf der CPU.", name);
+        : Tr.T("Die KI-Scaler (Größe › Verfahren) rechnen auf der Grafikkarte ({0}), die übrigen Modelle (Gesichter, Entfernen, Begradigen) auf der CPU.", name);
 
     /// <summary>Nach dem Öffnen eines Modells: Grafikkarte genutzt oder (nach einem Fehler) doch die CPU?</summary>
     internal void RefreshGpuStatus()
@@ -188,6 +188,25 @@ public partial class AiViewModel : ViewModelBase
     /// <param name="Current">Das aktuelle Bild beim Rechnen — „Übernehmen“ nur, solange es noch das aktuelle ist.</param>
     /// <param name="Turns">Vierteldrehungen, mit denen <paramref name="Input"/> gedreht ist (Gesichter aufrecht, wie angezeigt).</param>
     /// <param name="Flip">… und ob gespiegelt. Das Ergebnis wird damit vor dem Übernehmen zurückgedreht.</param>
+    /// <summary>
+    /// Nur Gesichter, deren Mitte im angezeigten Bild liegt (Zuschnitt, Entzerren …). Die Gesichtserkennung bekommt das
+    /// Pixelbild (nur gedreht/gespiegelt) — ohne diesen Filter würden auch weggeschnittene Gesichter bearbeitet und gezählt.
+    /// </summary>
+    private static IReadOnlyList<DetectedFace> VisibleFaces(IReadOnlyList<DetectedFace> faces, RunSetup setup, GeometryRecipe recipe,
+        GeometryStages stages)
+    {
+        int w, h;
+        lock (setup.Base) (w, h) = ((int)setup.Base.Width, (int)setup.Base.Height);
+        var (sw, sh) = recipe.SizeFor(w, h, stages);
+        var orient = new GeometryRecipe(Turns: setup.Turns, Flip: setup.Flip);
+        return faces.Where(f =>
+        {
+            var (px, py) = orient.ToSource((f.X1 + f.X2) / 2, (f.Y1 + f.Y2) / 2, w, h, GeometryStages.Orient);
+            var (x, y) = recipe.ToResult(px, py, w, h, stages);
+            return x >= 0 && y >= 0 && x < sw && y < sh;
+        }).ToList();
+    }
+
     private sealed record RunSetup(MagickImage Base, MagickImage Input, MainViewModel.Look? Baked,
         MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current, int Turns = 0, bool Flip = false);
 
@@ -441,6 +460,8 @@ public partial class AiViewModel : ViewModelBase
                     var input = image;
                     faces = await Task.Run(() =>
                         AiFaces.Detect(input, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
+                    // Die KI sieht das ganze Pixelbild; Gesichter außerhalb des Zuschnitts (und anderer Ausrichtung) bleiben, wie sie sind
+                    faces = VisibleFaces(faces, setup!, geometry.Recipe, geometry.Stages);
                 }
 
                 if (faces.Count == 0)

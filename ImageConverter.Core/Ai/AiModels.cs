@@ -34,6 +34,10 @@ public enum AiModelKind
 /// <param name="TileSize">Kachelgröße (Enhance) bzw. Gesichtsgröße (Face) in Pixeln.</param>
 /// <param name="FixedTile">Modell nimmt nur genau diese Kachelgröße an.</param>
 /// <param name="Requires">Ids weiterer Modelle, die mit heruntergeladen werden.</param>
+/// <param name="Gpu">
+/// Darf auf der Grafikkarte rechnen. Nur Modelle, die dort geprüft sind — ein Fehler im Grafikkartentreiber oder in DirectML
+/// ist ein Speicherfehler, den die App nicht abfangen kann (das Gesichtsbereichsmodell stürzte so ab, 14.10.2026).
+/// </param>
 public sealed record AiModel(
     string Id,
     string Name,
@@ -51,7 +55,8 @@ public sealed record AiModel(
     int Scale = 1,
     int TileSize = 512,
     bool FixedTile = true,
-    string[]? Requires = null)
+    string[]? Requires = null,
+    bool Gpu = false)
 {
     public string[] Requires { get; init; } = Requires ?? [];
 
@@ -88,7 +93,8 @@ public static class AiModelCatalog
         Origin: "Xintao Wang (Real-ESRGAN), ONNX von Qualcomm AI Hub",
         Scale: 4,
         TileSize: 128,
-        FixedTile: true);
+        FixedTile: true,
+        Gpu: true);
 
     public static AiModel FaceDetector { get; } = new(
         "yunet",
@@ -279,7 +285,8 @@ public static class AiModelCatalog
         Origin: "Kim2091 (UltraSharpV2, OpenModelDB)",
         Scale: 4,
         TileSize: 128,
-        FixedTile: false);
+        FixedTile: false,
+        Gpu: true);
 
     /// <summary>
     /// Upscaling „KI wie Referenzwerkzeug“: PiSA-SR (CVPR 2025) — LoRA der Autoren auf Stable Diffusion 2.1. Geladen werden die
@@ -303,7 +310,8 @@ public static class AiModelCatalog
         NonCommercial: false,
         Origin: "Lingchen Sun, Rongyuan Wu, Zhiyuan Ma, Shuaizheng Liu, Qiaosi Yi, Lei Zhang (PiSA-SR, PolyU / OPPO)",
         Scale: 4,
-        Requires: ["sd21-unet", "sd21-vae", "sd21-text"]);
+        Requires: ["sd21-unet", "sd21-vae", "sd21-text"],
+        Gpu: true);
 
     public static AiModel Sd21Unet { get; } = new(
         "sd21-unet", "Stable Diffusion 2.1 – UNet", "Teil von PiSA-SR",

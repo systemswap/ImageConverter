@@ -1981,3 +1981,16 @@ Test oder Nachweis.
   Kopf- und Fußleiste, Einstellungen, Drehen/Entzerren/Gewölbtes Blatt/KI begradigen, Rahmen aufziehen (`SelectionActive`),
   Rückgängig, Bildwechsel, Speichern, Drucken — auch die Tastenkürzel (CanExecute). Frei: Zoom, Verschieben, Vorher/Nachher,
   Abbrechen. „Zurücksetzen“ als Symbol ↺, sonst war „Skalieren (≈ 2 min)“ abgeschnitten.
+
+## 67. Absturz bei „Gesichter“ nach DirectML; weggeschnittene Gesichter mitgezählt (0.5.85 beta)
+
+- **Meldung des Benutzers:** Familienfoto auf ein Gesicht zugeschnitten, RestoreFormer++ — „2 Gesichter gefunden“, Ergebnis
+  deutlich schlechter, danach Absturz. Ereignisanzeige: Zugriffsverletzung in `InferenceSession.Run` im Gesichtsbereichsmodell
+  (BiSeNet) auf DirectML — ein Speicherfehler der Laufzeit, den .NET nicht abfangen kann.
+- **Abhilfe:** Grafikkarte nur für Modelle, die dort geprüft sind (`AiModel.Gpu`: x4v3, UltraSharpV2, PiSA-SR); Gesichter,
+  Entfernen und KI begradigen wieder auf der CPU. Allein nachgestellt lief BiSeNet auf DirectML — der Fehler tritt erst im
+  Zusammenspiel auf, deshalb lieber nicht freigeben, bevor jedes Modell einzeln geprüft ist.
+- **Zweites Problem:** Die KI im KI-Tab bekommt das Pixelbild ohne Zuschnitt (nur gedreht/gespiegelt) — die Gesichtserkennung
+  fand auch Gesichter außerhalb. Jetzt nur Gesichter, deren Mitte im angezeigten Bild liegt (`VisibleFaces`: Mitte über
+  Drehen zurück ins Pixelbild, mit dem Rezept ins angezeigte Bild). Geprüft am selben Foto: „1 Gesicht gefunden“, Ergebnis
+  klarer als vorher, kein Absturz.
