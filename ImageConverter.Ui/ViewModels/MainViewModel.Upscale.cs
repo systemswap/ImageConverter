@@ -93,7 +93,7 @@ public partial class MainViewModel
     private IReadOnlyList<ScaleChoice> CreateScaleChoices()
     {
         var list = ScaleChoice.CreateList();
-        foreach (var c in list) c.IsOffered = c.OfferedFor(_wasEnlarging);
+        foreach (var c in list) c.IsOffered = c.OfferedFor(_direction);
         return list;
     }
 
@@ -103,7 +103,7 @@ public partial class MainViewModel
         get
         {
             var list = ScaleChoices;
-            if (IsEnlarging && UsesAiUpscaler && list.FirstOrDefault(c => c.Ai == SelectedUpscaler) is { } ai) return ai;
+            if (Direction != ScaleDirection.Down && UsesAiUpscaler && list.FirstOrDefault(c => c.Ai == SelectedUpscaler) is { } ai) return ai;
             return list.FirstOrDefault(c => c.Filter == SelectedFilter && c.IsOffered) ?? list.First(c => c.Filter == FilterOption.Lanczos);
         }
         set
@@ -117,12 +117,18 @@ public partial class MainViewModel
             else
             {
                 SelectedFilter = value.Filter!;
-                if (IsEnlarging) SelectedUpscaler = UpscaleOption.Of(UpscaleMethod.Filter);
+                if (Direction != ScaleDirection.Down) SelectedUpscaler = UpscaleOption.Of(UpscaleMethod.Filter);
             }
         }
     }
 
-    private bool _wasEnlarging;
+    private ScaleDirection _direction = ScaleDirection.Same;
+
+    /// <summary>Kleiner, gleich oder größer als das Bild.</summary>
+    public ScaleDirection Direction => IsEnlarging ? ScaleDirection.Up : HasSizeChange ? ScaleDirection.Down : ScaleDirection.Same;
+
+    /// <summary>KI-Scaler gewählt und nicht beim Verkleinern — Treue und Details lassen sich schon vor den Maßen einstellen.</summary>
+    public bool AiScalerChosen => UsesAiUpscaler && Direction != ScaleDirection.Down;
 
     /// <summary>
     /// Nach jeder Größenänderung: Richtung gewechselt → andere Liste; ein Filter, der in der neuen Richtung nicht
@@ -130,13 +136,16 @@ public partial class MainViewModel
     /// </summary>
     private void SyncScaleChoices()
     {
-        var up = IsEnlarging;
-        if (up && !SelectedFilter.Up || !up && !SelectedFilter.Down) SelectedFilter = FilterOption.Lanczos;
-        if (up != _wasEnlarging)
+        var direction = Direction;
+        if (direction == ScaleDirection.Up && !SelectedFilter.Up || direction == ScaleDirection.Down && !SelectedFilter.Down)
+            SelectedFilter = FilterOption.Lanczos;
+        if (direction != _direction)
         {
-            _wasEnlarging = up;
-            foreach (var c in ScaleChoices) c.IsOffered = c.OfferedFor(up);
+            _direction = direction;
+            foreach (var c in ScaleChoices) c.IsOffered = c.OfferedFor(direction);
         }
+        OnPropertyChanged(nameof(Direction));
+        OnPropertyChanged(nameof(AiScalerChosen));
         OnPropertyChanged(nameof(SelectedScaleChoice));
         OnPropertyChanged(nameof(IsEnlarging));
         OnPropertyChanged(nameof(HasSizeChange));
@@ -360,6 +369,7 @@ public partial class MainViewModel
         UpdateUpscaleStatus();
         OnPropertyChanged(nameof(SelectedScaleChoice));
         OnPropertyChanged(nameof(AiScalingActive));
+        OnPropertyChanged(nameof(AiScalerChosen));
         OnPropertyChanged(nameof(ScaleButtonText));
         UpscaleCommand.NotifyCanExecuteChanged();
         RequestPreview();
@@ -395,7 +405,13 @@ public partial class MainViewModel
         var inspect = UpscaleInspect
             ? Tr.T("Die Vorschau zeigt das Ergebnis in voller Größe, nur skaliert — Licht, Farbe und Schärfe kommen zurück, sobald du etwas anderes einstellst.")
             : null;
-        if (!HasSizeChange) { UpscaleStatus = Tr.T("Keine Größenänderung."); return; }
+        if (!HasSizeChange)
+        {
+            UpscaleStatus = UsesAiUpscaler
+                ? Tr.T("Keine Größenänderung — der KI-Scaler wirkt, sobald die Maße größer sind als das Bild (z. B. 4× im Menü der Formate).")
+                : Tr.T("Keine Größenänderung.");
+            return;
+        }
         if (!AiScalingActive) { UpscaleStatus = inspect; return; }
         if (UpscaleModelMissing) { UpscaleStatus = Tr.T("Modell nicht geladen."); return; }
         var estimate = Upscalers.Format(Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight));

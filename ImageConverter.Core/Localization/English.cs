@@ -680,6 +680,7 @@ public static class English
         ["{0}×  ·  {1} × {2} px"] = "{0}×  ·  {1} × {2} px",
         ["Skalierung zurücksetzen: wieder die Größe des Bildes ({0} × {1} px)."] = "Reset scaling: back to the size of the image ({0} × {1} px).",
         ["Keine Größenänderung."] = "No change of size.",
+        ["Keine Größenänderung — der KI-Scaler wirkt, sobald die Maße größer sind als das Bild (z. B. 4× im Menü der Formate)."] = "No change of size — the AI scaler takes effect as soon as the size is larger than the image (e.g. 4× in the formats menu).",
         ["Skalieren"] = "Scale",
         ["Skalieren (≈ {0})"] = "Scale (≈ {0})",
         ["Skalieren …"] = "Scaling …",

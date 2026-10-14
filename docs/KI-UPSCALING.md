@@ -3,7 +3,8 @@
 Gruppe **„Größe“** im allgemeinen Tab (seit 0.5.77 beta eine Gruppe für Einheit, Maße, DPI, Verfahren, Treue/Details,
 „Skalieren“ und Druckgröße). Die Liste **„Verfahren“** richtet sich nach der Richtung: beim Verkleinern nur Filter, die dafür
 taugen (Lanczos, Bikubisch, Catmull-Rom, Mitchell, Spline, Bilinear, Box, Nearest); beim Vergrößern oben die Filter ohne
-Bilinear und Box, unter einer Linie mit der Überschrift „KI-Scaler“ die drei KI-Verfahren. Mit einem KI-Scaler erzeugt die
+Bilinear und Box, unter einer Trennlinie die drei KI-Verfahren; ohne Größenänderung alles (so lässt sich das Verfahren
+schon vor den Maßen wählen, Treue und Details ebenso). Mit einem KI-Scaler erzeugt die
 KI das Bild in vierfacher Größe; daraus bringt der Filter (Lanczos) es auf die eingestellte Zielgröße — größer als ×4
 vergrößert der Filter den Rest. Gerechnet wird immer in einem Schritt aus dem Bild selbst, KI nur auf Knopfdruck oder nach
 Rückfrage beim Speichern. Konzept und Messungen: `KONZEPT.md` §1 N.

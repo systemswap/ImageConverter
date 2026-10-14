@@ -499,7 +499,6 @@
                                 <ComboBox Grid.Column="1"
                                           ItemsSource="{Binding ScaleChoices}"
                                           SelectedItem="{Binding SelectedScaleChoice}"
-                                          IsEnabled="{Binding HasSizeChange}" ToolTip.ShowOnDisabled="True"
                                           ToolTip.Tip="{l:T 'Womit die Pixel beim Skalieren entstehen. Die Liste richtet sich nach der Richtung: beim Verkleinern nur Filter, die dafür taugen; beim Vergrößern oben die Filter (sofort), unten die KI-Scaler (Sekunden bis Stunden). Gerechnet wird immer in einem Schritt aus dem Bild selbst.'}">
                                     <ComboBox.Styles>
                                         <Style Selector="ComboBoxItem">
@@ -526,7 +525,6 @@
                             </Grid>
 
                             <TextBlock Classes="hint" Margin="76,-4,0,6" TextWrapping="Wrap"
-                                       IsVisible="{Binding HasSizeChange}"
                                        Text="{Binding SelectedScaleChoice.Description}" />
 
                             <CheckBox Margin="76,0,0,8" IsChecked="{Binding GammaCorrect}"
@@ -542,7 +540,7 @@
                                     ToolTip.Tip="{l:T 'Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI-Modelle.'}" />
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto"
-                                  IsEnabled="{Binding AiScalingActive}" ToolTip.ShowOnDisabled="True"
+                                  IsEnabled="{Binding AiScalerChosen}" ToolTip.ShowOnDisabled="True"
                                   ToolTip.Tip="{l:T 'Nur bei KI-Scalern. Treue-Sicherung: Das Ergebnis wird so nachgeführt, dass es verkleinert wieder genau das Original ergibt. Die KI darf Feines ergänzen, aber Formen, Helligkeit und Farben nicht verschieben. 100 % empfohlen.'}">
                                 <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Treue'}" />
                                 <Slider Grid.Column="1" Minimum="0" Maximum="1"
@@ -551,7 +549,7 @@
                             </Grid>
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto"
-                                  IsEnabled="{Binding AiScalingActive}" ToolTip.ShowOnDisabled="True"
+                                  IsEnabled="{Binding AiScalerChosen}" ToolTip.ShowOnDisabled="True"
                                   ToolTip.Tip="{l:T 'Nur bei KI-Scalern. Wie viel von der KI kommt: 100 % = nur KI, weniger = gemischt mit dem einfach vergrößerten Bild (Lanczos). Wirkt sofort, ohne neu zu rechnen.'}">
                                 <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Details'}" />
                                 <Slider Grid.Column="1" Minimum="0" Maximum="1"

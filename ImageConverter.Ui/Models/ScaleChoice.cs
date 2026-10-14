@@ -11,6 +11,9 @@ namespace ImageConverter.Models;
 /// Verkleinern Filter, die dafür taugen, beim Vergrößern die passenden Filter und darunter die KI-Scaler. Ausblenden statt
 /// Austauschen: Eine neue Liste setzt die Auswahl der ComboBox zurück, und sie zeigte danach nichts mehr an.
 /// </summary>
+/// <summary>Richtung der Skalierung: kleiner, gleich (noch keine Maße), größer.</summary>
+public enum ScaleDirection { Same, Down, Up }
+
 public sealed partial class ScaleChoice(FilterOption? filter, UpscaleOption? ai) : ObservableObject
 {
     public FilterOption? Filter { get; } = filter;
@@ -28,8 +31,16 @@ public sealed partial class ScaleChoice(FilterOption? filter, UpscaleOption? ai)
     public string? Description => Filter is { } f ? Tr.T(f.Description) + "\n\n" + Tr.T("Gut für:") + " " + Tr.T(f.BestFor)
         : Ai?.Description;
 
-    /// <summary>Gehört in die Liste für diese Richtung (Trennlinie und KI-Scaler nur beim Vergrößern).</summary>
-    public bool OfferedFor(bool enlarging) => Filter is { } f ? (enlarging ? f.Up : f.Down) : enlarging;
+    /// <summary>
+    /// Gehört in die Liste für diese Richtung: beim Vergrößern die Filter dafür und die KI-Scaler, beim Verkleinern nur
+    /// Filter dafür; ohne Größenänderung alles — so lässt sich das Verfahren schon vor den Maßen wählen.
+    /// </summary>
+    public bool OfferedFor(ScaleDirection direction) => direction switch
+    {
+        ScaleDirection.Up => Filter is not { } f || f.Up,
+        ScaleDirection.Down => Filter is { Down: true },
+        _ => true,
+    };
 
     public override string ToString() => Name;
 
