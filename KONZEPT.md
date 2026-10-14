@@ -282,7 +282,7 @@ Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
   Rezept gilt (ausschaltbar) oder nur beim Speichern wirkt, PDF-Seitengröße (DIN aus
   der Schätzung?).
 
-### N. Upscaling (Wunsch vom 14.10.2026, Konzept — noch nicht umgesetzt)
+### N. Upscaling (Wunsch vom 14.10.2026, Konzept mit Messplatz und Modellwahl — noch nicht umgesetzt)
 
 **Ziel:** Vergrößern auf dem Stand der Technik, ohne etwas Neues ins Bild zu erfinden — das
 Original muss ohne Weiteres wiederzuerkennen sein. Vorbild Referenzwerkzeug/Referenzwerkzeug „Precision“
@@ -297,71 +297,100 @@ Sauber wird es durch eine **Treue-Sicherung** (unten): das Ergebnis muss, wieder
 genau das Original ergeben. Dann ist alles Gemalte feiner als ein Originalpixel, und das
 Bild bleibt in jeder Größe, in der es vorher zu sehen war, dasselbe.
 
-**Ort in der Oberfläche:** eigene Gruppe **„UPSCALING“ im allgemeinen Tab direkt unter
-„GRÖSSE“** (Wunsch: dort liegen die meistgenutzten Funktionen). „Größe“ legt weiter die
-Pixel fest; „Upscaling“ bestimmt nur, *wie* vergrößert wird. Sichtbar, sobald das Ziel größer
-als das Bild ist (sonst ausgegraut mit Hinweis „nur beim Vergrößern“).
-- **Verfahren:** Filter (wie bisher, Lanczos 3 …) · KI treu · KI natürlich — nur
-  heruntergeladene Modelle wählbar, sonst Verweis auf den Tab KI (Download wie gehabt).
-- **Details** (0–100 %, nur KI): wie viel der vom Modell gefundenen feinen Struktur ins
-  Ergebnis kommt (Mischung mit der Filter-Vergrößerung, live ohne neues Rechnen).
-- **Treue-Sicherung** (Haken, Vorgabe an): siehe unten.
-- Hinweis zur Laufzeit („≈ 2 min auf diesem Rechner“), Fortschritt und Abbrechen wie in der KI.
-- Die Vergrößerungsfunktion im Tab KI („2× / 4×“ beim Allround-Modell) zieht hierher um; der
-  Tab KI bleibt fürs Restaurieren (Rauschen, Artefakte, Gesichter).
+**Ort in der Oberfläche (entschieden 14.10.2026):** eigene Gruppe **„UPSCALING“ im allgemeinen
+Tab direkt unter „GRÖSSE“** (dort liegen die meistgenutzten Funktionen). „Größe“ legt weiter
+die Pixel fest, ihr Filter gilt fürs Verkleinern und für den letzten Schritt auf die genaue
+Zielgröße; „Upscaling“ bestimmt, *wie* vergrößert wird. Aktiv, sobald das Ziel größer als das
+Bild ist (sonst ausgegraut, Hinweis „nur beim Vergrößern“; steht „Nicht vergrößern“ an, sagt
+die Gruppe das und löst den Haken mit einem Klick).
+- **Verfahren** (ComboBox): Filter · KI sofort (x4v3, der bisherige) · KI mittel
+  (UltraSharpV2) · KI wie Referenzwerkzeug (PiSA-SR) — hinter jedem Eintrag die geschätzte Zeit für das
+  aktuelle Bild; nicht heruntergeladene Modelle sichtbar, aber ausgegraut („im Tab KI
+  herunterladen“).
+- **Knopf „Upscalen“:** rechnet nur auf Abruf, nie bei jeder Pixeländerung. Gerechnet wird das
+  Bild, wie es zu sehen ist (mit Zuschnitt, Drehen, Entzerren, Gewölbt, KI, Entfernen), vor
+  Dunst/Licht/Farbe — die wirken danach live. Wer nur einen Ausschnitt will, schneidet vorher zu.
+- **Ein Lauf genügt:** das Modell rechnet fest ×4; jede Zielgröße darunter entsteht danach in
+  Sekundenbruchteilen aus diesem Ergebnis (Lanczos). Pixeländerungen rechnen also nicht neu,
+  nur eine Änderung am Eingangsbild oder ein anderes Modell.
+- **Zustand** neben dem Knopf: „berechnet (4×)“ · „veraltet – Bild geändert“ · „nicht berechnet“.
+- **„Ausschnitt testen“:** nur der sichtbare Teil in 1:1 (Sekunden statt Minuten), Vergleich mit
+  Vorher/Nachher.
+- **Beim Speichern** mit gewähltem, aber nicht berechnetem oder veraltetem Upscaling Rückfrage
+  „Upscaler aktiv – jetzt berechnen (≈ … min)?“ · Ja · Ohne KI speichern · Abbrechen.
+- **Jedes Bild:** gilt wie jede Einstellung je Bild bzw. bei „Gleiche Einstellungen für alle“
+  für alle; die Rückfrage nennt dann die Gesamtzeit.
+- **Fortschritt:** Balken mit Restzeit über alle Kacheln (bei PiSA-SR drei Abschnitte, nach
+  Messung gewichtet); fertige Kacheln erscheinen sofort im Bild, der Rest bleibt blass;
+  Abbrechen jederzeit (auch mitten in einer Kachel). Feinheit endet bei der Kachel — in Ordnung.
+- **Regler, alle live nach dem einen Lauf:** **Details** (0–100 %: Mischung der Feinstruktur des
+  Modells mit der Filter-Vergrößerung) · **Treue** (0–100 %: Stärke der Rückprojektion; 100 % =
+  verkleinert genau das Original). Korn: die Modelle glätten es weg — Gruppe Körnung („Aus dem
+  Foto ermitteln“) füllt es in Ausgabepixeln wieder auf (Hinweis in der Gruppe).
+- Die Vergrößerung im Tab KI („2× / 4×“ beim Allround-Modell) zieht hierher um; der Tab KI bleibt
+  fürs Restaurieren (Rauschen, Artefakte, Gesichter).
+- **Keine feste Größengrenze** (Wunsch: auch sehr große Ergebnisse): gerechnet wird in Kacheln;
+  vor dem Start prüft die App den Arbeitsspeicher und nennt Zeit und Bedarf; nur wenn es nicht
+  passt, schlägt sie ×2 oder den Filter vor.
+- **Nur lokal, nur ONNX** (Wunsch; Referenzwerkzeug & Co. nur als Vergleich, nie eingebaut). Mindestens
+  CPU; AMD-Grafik: unter Windows über DirectML (`Microsoft.ML.OnnxRuntime.DirectML`, jede
+  DirectX-12-Karte), unter Linux ROCm/MIGraphX oder WebGPU prüfen.
 
-**Stelle in der Bildkette:** ersetzt den Schritt „Skalieren“ beim Vergrößern: Pixelbild nach
-Ausrichten (Drehen, Entzerren, Gewölbt, Zuschnitt) → Modell (×2 oder ×4, je nach Ziel) →
-mit Lanczos genau auf die Zielgröße → Entrauschen, Dunst, Licht und Farbe, Schärfen, Körnung
-wie bisher (Körnung in Ausgabepixeln, also nach dem Upscaling). Das Modellergebnis wird je Bild
-zwischengespeichert (nur Rezept, Modell, Faktor zählen) — Regler danach rechnen nicht neu.
-Vorschau: ab 100 % Zoom der echte Ausschnitt, darunter verkleinert (dort sieht man den
-Unterschied ohnehin nicht).
+**Stelle in der Bildkette:** ersetzt beim Vergrößern das Skalieren: Pixelbild nach Ausrichten →
+Modell ×4 → Treue-Sicherung → mit Lanczos genau auf die Zielgröße → Entrauschen, Dunst, Licht und
+Farbe, Schärfen, Körnung wie bisher (Körnung in Ausgabepixeln). Das Modellergebnis wird je Bild
+zwischengespeichert (Schlüssel: Eingangsbild, Modell). Vorschau: ab 100 % Zoom der echte
+Ausschnitt, darunter verkleinert.
 
 **Treue-Sicherung (Rückprojektion):** Ergebnis E, Original O, Verkleinern V, Vergrößern U:
-E ← E + U(O − V(E)), zwei bis drei Durchgänge. Danach gilt V(E) ≈ O auf weniger als eine
-Stufe — keine Farbverschiebung, keine verrutschten Kanten, kein neuer Gegenstand größer als
-ein Originalpixel. Billig (Sekundenbruchteile), unabhängig vom Modell; so lässt sich auch
-ein kreativeres Modell „an die Leine legen“. Das ist der Kern von „Original erkennbar“.
+E ← E + U(O − V(E)), drei Durchgänge (V = Lanczos, U = bikubisch). Danach gilt V(E) ≈ O —
+keine Farbverschiebung, keine verrutschten Kanten, kein neuer Gegenstand größer als ein
+Originalpixel. Sekundenbruchteile, unabhängig vom Modell. Gemessen: hebt die Übereinstimmung
+verkleinert/Original bei allen Modellen von 28–50 dB auf 49–65 dB und behebt die Tonverschiebung
+von PiSA-SR (roh dunkler und orangestichig) vollständig.
 
-**Drei Modelle im Angebot** (Wunsch: drei anbieten; Stand 14.10.2026, je ≤ 1 GB, als ONNX):
+**Entschieden: drei Modelle** (Messplatz 14.10.2026, vom Benutzer gewählt):
 
-| Angebot | erste Wahl (zu messen) | Ausweichen | Art |
-|---|---|---|---|
-| **Schnell** | 4xNomos2_realplksr_dysample (Phhofm, 06/2024; Fotos, verträgt JPEG bis Qualität 70) | 4x-UltraSharpV2 Lite (RealPLKSR) · Real-ESRGAN x4v3 (schon da) | kleines Netz, Sekunden bis 1 min |
-| **Treu** | 4xNomos2_hq_drct-l (DRCT-L, 09/2024, CC BY 4.0; Foto) | 4xNomos2_hq_atd (ATD, 09/2024; nur für saubere Vorlagen) · 4xNomos8kSCHAT-L (HAT-L) | Transformer, höchste Genauigkeit, langsam |
-| **Natürlich** | 4x-UltraSharpV2 (DAT, 05/2025, CC BY-NC-SA 4.0 — nur nicht-kommerziell, privat in Ordnung) | 4xNomos2_hq_dat2 (DAT2) | mehr Feinstruktur (Nadeln, Blätter), mit Treue-Sicherung |
+| Platz | Modell | Größe | Lizenz | CPU-Zeit 0,15 MP → 2,4 MP |
+|---|---|---|---|---|
+| KI sofort | Real-ESRGAN general x4v3 (schon im Katalog) | 4 MB | BSD-3 | 3 s |
+| KI mittel | 4x-UltraSharpV2 (DAT, 05/2025, Kim2091), ONNX fp32 opset 17 | 52 MB | CC BY-NC-SA 4.0 (privat in Ordnung) | 2 min |
+| KI wie Referenzwerkzeug | PiSA-SR (CVPR 2025, SD 2.1-base + Dual-LoRA, ein Schritt) | ≈ 5,2 GB fp32 (2,6 GB fp16) + 33 MB LoRA | Code Apache-2.0, SD 2.1 OpenRAIL++, LoRA ohne Angabe | 7,5 min |
 
-Hinweise aus den Modellseiten: RealPLKSR-Nomos2 übersättigt leicht (Farbausgleich nach der KI —
-die Treue-Sicherung erledigt das mit); ATD ist für unbeschädigte Vorlagen gedacht (bei JPEG
-und Rauschen DRCT-L oder vorher entrauschen). Klassische PSNR-Fassungen (HAT, DRCT, ATD,
-MambaIRv2 aus den Papern) sind auf ideal verkleinerte Bilder trainiert und verstärken bei echten
-Fotos JPEG-Blöcke — deshalb die Fotofassungen. Vor dem Einbau je Modell **Lizenz und
-ONNX-Fassung prüfen** (OpenModelDB nennt beides; manche gibt es nur als PyTorch → selbst
-umwandeln wie bei SyntheticDoc). Was in der Messung vorn liegt, kommt in die drei Plätze; die
-Tabelle ist die Kandidatenliste, nicht die Entscheidung.
+**Messplatz** (`~/.cache/imageconverter-build/pisa/`, Skript `werkzeug/messplatz.py`): zwei
+Ausschnitte des Panoramas (2000 × 1200, Kiefernnadeln und Waldhang) auf 500 × 300 verkleinert und
+zurückgerechnet; Bilder `TestBilder/Merge/upscale-vergleich-{nadeln,hang}.jpg`,
+`upscale-ohne-treue-nadeln.jpg`.
 
-**Bewusst nicht:**
-- **Diffusions-Upscaler** (SUPIR, OSEDiff, PiSA-SR, TSD-SR, InvSR): 1,7 Mrd. Parameter und mehr,
-  über 1 GB, ohne Grafikkarte Minuten bis Stunden je Bild; sie erfinden am meisten. Für
-  später mit GPU als Versuch notiert (wie schon im Fehlergedächtnis #19).
-- Prompt- oder „Kreativ“-Modi.
+| Verfahren (+ Treue) | Zeit | Nadeln dB | Hang dB | Eindruck |
+|---|---|---|---|---|
+| Lanczos | sofort | 25,6 | 34,4 | matschig |
+| x4v3 | 3 s | 25,7 | 34,9 | knapp besser als Lanczos |
+| 4xNomos2 RealPLKSR | 40 s | 24,1 | 34,0 | Kleckse, Plastik — verworfen |
+| 4xNomos2 DAT2 | 2 min | 23,7 | 33,9 | scharf, aber wurmige Strukturen — verworfen |
+| 4x-UltraSharpV2 | 2 min | 26,2 | 35,2 | treu und natürlich |
+| PiSA-SR | 7,5 min | 23,2 | 31,4 | einzelne Nadeln und Wipfel, glaubwürdig — am nächsten am Wunsch |
 
-**Zeit (Abschätzung, aus 0.4.14 gemessen):** x4v3 ≈ 15 s je Megapixel Eingang; ein großes
-Transformer-/ESRGAN-Modell ≈ 400 s je Megapixel Eingang auf der CPU. Ein 600 × 800-Bild
-(0,5 MP) bräuchte also mit dem treuen Modell rund 3 min, mit RealPLKSR vermutlich unter
-einer Minute. Unter Windows lässt sich DirectML (integrierte Radeon) als Beschleuniger
-versuchen.
+dB = PSNR gegen den echten Ausschnitt; das Maß bevorzugt Weiches, gemalte (nicht pixelgenaue)
+Feinstruktur wird bestraft — entschieden wird am Bild. Ein überzeugendes Modell für ≈ 20 s gibt
+es nicht (RealPLKSR schlechter als x4v3).
 
-**Prüfen vor dem Einbau (Messplatz):** Panorama und zwei, drei weitere Fotos auf 600 px
-verkleinern, mit jedem Kandidaten zurückvergrößern; nebeneinander in `TestBilder/Merge`
-(Original · Filter · Modelle) und gemessen gegen das Original: Abweichung, Schärfe, Zeit. Dazu
-Ergebnis mit und ohne Treue-Sicherung. Danach entscheidet der Benutzer, welche Modelle in
-den Katalog kommen.
+**PiSA-SR als ONNX (noch zu bauen):** Modus „Standard“ (LoRA in die UNet eingerechnet, ein
+UNet-Lauf je Kachel); leere Bildbeschreibung → Textteil einmal vorab gerechnet, RAM/CLIP nicht
+nötig. Drei ONNX-Teile: VAE-Encoder, UNet (merged), VAE-Decoder; Kacheln im Latentraum 96 mit
+Überlappung 32, VAE in Kacheln (Gruppennorm über alle Kacheln wie im Original-Code). Ablauf:
+Eingang bikubisch ×4 → Encoder → UNet (t = 1) → x − Vorhersage → Decoder. Getestet in
+PyTorch fp32 auf der CPU (Original-Code, `cuda` → `cpu` umgestellt). Offen: Umwandlung in C#
+(wie SyntheticDoc) oder einmalig mit Python; fp16 für die GPU; Download der Grundgewichte
+(Stable Diffusion 2.1 nur noch über Spiegel, z. B. `Manojb/stable-diffusion-2-1-base`).
 
-**Offen:** ×2-Modelle zusätzlich (weniger Rechenzeit bei kleinem Vergrößerungsfaktor)? Darf
-„Upscaling“ auch ohne Vergrößerung als „Details schärfen“ laufen (Supersampling wie
-„Größe behalten“ der KI)? Gesichter im Bild zusätzlich mit dem Gesichtsmodell?
+**Bewusst nicht:** Online-Dienste (Referenzwerkzeug, Referenzwerkzeug, Referenzwerkzeug-Cloud) — nur lokal; SUPIR, TSD-SR
+(zu groß, praktisch nur mit Grafikkarte); Prompt- oder „Kreativ“-Modi.
+
+**Offen:** ×2-Modelle (weniger Zeit bei kleinem Faktor)? „Upscaling“ auch ohne Vergrößerung als
+„Details schärfen“ (Supersampling wie „Größe behalten“ der KI)? Gesichter zusätzlich mit dem
+Gesichtsmodell? Gewicht der PiSA-Regler (λpix/λsem kosten einen zweiten UNet-Lauf) statt
+„Details“ als Mischung?
 
 ---
 
