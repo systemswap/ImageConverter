@@ -560,7 +560,8 @@ public partial class MainViewModel
                 rows.Add(Row(EditSteps.Orient, recipe.NormalTurns != 0 ? Tr.T("Gedreht") : Tr.T("Gespiegelt"), string.Join(" · ", parts)));
             }
             if (TargetWidth != SourceWidth || TargetHeight != SourceHeight)
-                rows.Add(Row(EditSteps.Resize, Tr.T("Größe"), $"{TargetWidth} × {TargetHeight} px"));
+                rows.Add(Row(EditSteps.Resize, Tr.T("Größe"),     // mit Verfahren: man sieht, was gerechnet hat
+                    $"{TargetWidth} × {TargetHeight} px · {(AiScalingActive ? SelectedUpscaler.Name : SelectedFilter.Name)}"));
             if (NoiseReduction > 0.005)
                 rows.Add(Row(EditSteps.Denoise, Tr.T("Rauschen"), $"{NoiseReduction * 100:0} %"));
             if (ColorNoiseReduction > 0.005)

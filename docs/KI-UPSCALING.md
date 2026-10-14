@@ -14,9 +14,9 @@ Rückfrage beim Speichern. Konzept und Messungen: `KONZEPT.md` §1 N.
 | Auswahl | Modell | Zeit (CPU, je Megapixel des Originals) | Lizenz | Download |
 |---|---|---|---|---|
 | Nur Filter | – | sofort | – | – |
-| KI schnell | Real-ESRGAN general x4v3 (= Modell „Allround“ im KI-Tab) | ≈ 25 s | BSD-3-Clause | 4,5 MB |
-| KI mittel | 4x-UltraSharpV2 (Kim2091, DAT) | ≈ 13 min | CC BY-NC-SA 4.0 (nur nicht-kommerziell) | 52 MB |
-| KI wie Referenzwerkzeug | PiSA-SR (CVPR 2025) auf Stable Diffusion 2.1-base | ≈ 40 min | Code Apache 2.0, SD 2.1 CreativeML Open RAIL++-M | 2,6 GB |
+| KI Real-ESRGAN x4v3 · schnell | Real-ESRGAN general x4v3 (= Modell „Allround“ im KI-Tab) | ≈ 25 s | BSD-3-Clause | 4,5 MB |
+| KI UltraSharpV2 · mittel | 4x-UltraSharpV2 (Kim2091, DAT) | ≈ 13 min | CC BY-NC-SA 4.0 (nur nicht-kommerziell) | 52 MB |
+| KI PiSA-SR · langsam (wie Referenzwerkzeug) | PiSA-SR (CVPR 2025) auf Stable Diffusion 2.1-base | ≈ 40 min | Code Apache 2.0, SD 2.1 CreativeML Open RAIL++-M | 2,6 GB |
 
 Die Zeiten schätzt die App vorab (`Upscalers.Estimate`) und verfeinert sie nach jedem Lauf mit der gemessenen Zeit
 dieses Rechners.

@@ -267,13 +267,13 @@ public static class AiModelCatalog
     private const string Sd21License = "CreativeML-OpenRAIL++-M";
     private const string Sd21Origin = "Stability AI (Stable Diffusion 2.1-base), Spiegel „Manojb/stable-diffusion-2-1-base“ auf Hugging Face";
 
-    /// <summary>Upscaling „KI mittel“: 4x-UltraSharpV2 (DAT), ONNX vom Autor.</summary>
+    /// <summary>Upscaling „KI UltraSharpV2 · mittel“: 4x-UltraSharpV2 (DAT), ONNX vom Autor.</summary>
     public static AiModel UltraSharpV2 { get; } = new(
         "ultrasharpv2",
         "4x-UltraSharpV2",
-        "Upscaling „KI mittel“ – scharf und treu, etwa eine Minute je Megapixel",
+        "Upscaling mittel – scharf und treu, etwa eine Minute je Megapixel",
         "UltraSharpV2 (Kim2091, 2025): vergrößert ×4, schärft Kanten und feine Strukturen, ohne viel dazuzuerfinden. " +
-        "Deutlich langsamer als „KI schnell“. Lizenz erlaubt nur nicht-kommerzielle Nutzung.",
+        "Deutlich langsamer als Real-ESRGAN x4v3. Lizenz erlaubt nur nicht-kommerzielle Nutzung.",
         AiModelKind.Upscale,
         UltraSharpRepo + "4x-UltraSharpV2_fp32_op17.onnx",
         51_800_517,
@@ -289,14 +289,14 @@ public static class AiModelCatalog
         Gpu: true);
 
     /// <summary>
-    /// Upscaling „KI wie Referenzwerkzeug“: PiSA-SR (CVPR 2025) — LoRA der Autoren auf Stable Diffusion 2.1. Geladen werden die
+    /// Upscaling „KI PiSA-SR · langsam“ (wie Referenzwerkzeug): PiSA-SR (CVPR 2025) — LoRA der Autoren auf Stable Diffusion 2.1. Geladen werden die
     /// Gewichte (LoRA von Google Drive, SD 2.1 vom Spiegel); die ONNX-Dateien baut die App beim ersten Gebrauch selbst
     /// (<c>Upscale.PiSaSrModel</c>, ohne Python).
     /// </summary>
     public static AiModel PiSaSr { get; } = new(
         "pisasr",
         "PiSA-SR",
-        "Upscaling „KI wie Referenzwerkzeug“ – erfindet feine Details (Nadeln, Blätter, Haut)",
+        "Upscaling langsam, wie Referenzwerkzeug – erfindet feine Details (Nadeln, Blätter, Haut)",
         "PiSA-SR (Lingchen Sun u. a., CVPR 2025): Ein-Schritt-Diffusion auf Stable Diffusion 2.1. Ergänzt glaubhafte feine " +
         "Strukturen, wo das Original nur Matsch hat; die Treue-Sicherung hält Formen und Farben am Original. Sehr langsam auf " +
         "der CPU (Minuten je Megapixel). Lädt Stable Diffusion 2.1 (2,6 GB) mit und wird beim ersten Gebrauch umgewandelt.",

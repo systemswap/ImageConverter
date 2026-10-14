@@ -48,8 +48,8 @@ public partial class AiViewModel : ViewModelBase
             Group("GESICHTSERKENNUNG", "Hilfsmodelle für die Gesichtsmodelle: finden Gesichter und ihre Bereiche. Werden mit jedem Gesichtsmodell automatisch geladen.", AiModelKind.Helper),
             Group("ENTFERNEN", "Wasserzeichen, Schrift oder Störendes übermalen und füllen lassen – in der Rubrik „Entfernen“.", AiModelKind.Inpaint),
             Group("BEGRADIGEN", "Fotografierte, gewölbte oder zerknitterte Blätter mit einem Klick gerade ziehen – Symbol „KI begradigen“ in der Vorschau.", AiModelKind.Dewarp),
-            Group("UPSCALING", "Vergrößern mit KI – unter „Größe“, Liste „Verfahren“ (KI-Scaler). „KI schnell“ ist Real-ESRGAN x4v3: dieselbe Datei wie „Allround“ oben.", AiModelKind.Upscale, AiModelCatalog.Allround),
-            Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR („KI wie Referenzwerkzeug“). Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
+            Group("UPSCALING", "Vergrößern mit KI – unter „Größe“, Liste „Verfahren“ (KI-Scaler). Real-ESRGAN x4v3 ist dieselbe Datei wie „Allround“ oben.", AiModelKind.Upscale, AiModelCatalog.Allround),
+            Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR. Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
         ];
 
 
@@ -106,7 +106,7 @@ public partial class AiViewModel : ViewModelBase
 
     /// <param name="also">Modelle aus anderen Gruppen, die hier auch gebraucht werden (eine Datei, zwei Einträge).</param>
     private AiModelGroup Group(string title, string hint, AiModelKind kind, params AiModel[] also) =>
-        new(title, hint, Models.Where(m => m.Model.Kind == kind || also.Contains(m.Model)).OrderBy(m => m.Model.Kind == kind).ToList());   // mitgenutzte zuerst (x4v3 = „KI schnell“)
+        new(title, hint, Models.Where(m => m.Model.Kind == kind || also.Contains(m.Model)).OrderBy(m => m.Model.Kind == kind).ToList());   // mitgenutzte zuerst (x4v3 = „KI Real-ESRGAN x4v3 · schnell“)
 
     /// <summary>Vorhandene, wählbare Modelle (ohne Hilfsmodelle).</summary>
     public ObservableCollection<AiModel> Available { get; } = [];

@@ -15,18 +15,19 @@ public sealed record UpscaleOption(UpscaleMethod Method)
 
     public AiModel? Model => Upscalers.ModelOf(Method);
 
+    /// <summary>Name in der Liste: „KI“, das Verfahren, dahinter wie schnell — so sieht man, was gerechnet hat.</summary>
     public string Name => Method switch
     {
-        UpscaleMethod.Fast => Tr.T("KI schnell"),
-        UpscaleMethod.Medium => Tr.T("KI mittel"),
-        UpscaleMethod.Generative => Tr.T("KI wie Referenzwerkzeug"),
+        UpscaleMethod.Fast => Tr.T("KI Real-ESRGAN x4v3 · schnell"),
+        UpscaleMethod.Medium => Tr.T("KI UltraSharpV2 · mittel"),
+        UpscaleMethod.Generative => Tr.T("KI PiSA-SR · langsam"),
         _ => Tr.T("Nur Filter"),
     };
 
     public string Description => Method switch
     {
         UpscaleMethod.Fast => Tr.T("Real-ESRGAN x4v3: entfernt Rauschen und JPEG-Blöcke und macht Kanten klar. Sekunden je Bild, erfindet kaum etwas."),
-        UpscaleMethod.Medium => Tr.T("4x-UltraSharpV2: schärfer und feiner als „KI schnell“, bleibt nah am Original. Etwa eine Minute je Megapixel."),
+        UpscaleMethod.Medium => Tr.T("4x-UltraSharpV2: schärfer und feiner als Real-ESRGAN x4v3, bleibt nah am Original. Etwa eine Minute je Megapixel."),
         UpscaleMethod.Generative => Tr.T("PiSA-SR (Stable Diffusion): ergänzt glaubhafte feine Details wie Nadeln, Blätter, Haut — wie Referenzwerkzeug, aber lokal. Sehr langsam: rund 40 Minuten je Megapixel des Originals."),
         _ => Tr.T("Wie bisher: der Filter oben rechnet die Pixel hoch. Sofort, erfindet nichts — wird aber weich."),
     };
