@@ -384,6 +384,14 @@ PyTorch fp32 auf der CPU (Original-Code, `cuda` → `cpu` umgestellt). Offen: Um
 (wie SyntheticDoc) oder einmalig mit Python; fp16 für die GPU; Download der Grundgewichte
 (Stable Diffusion 2.1 nur noch über Spiegel, z. B. `Manojb/stable-diffusion-2-1-base`).
 
+**Quelldateien gesichert (14.10.2026):** SD 2.1-base UNet und VAE (fp16, Spiegel), PiSA-SR-LoRA, die
+vorgerechnete leere Beschreibung, der PiSA-SR-Code (Apache 2.0) und UltraSharpV2 liegen unter
+`published/windows-x64/KI-Modelle/{pisasr,ultrasharpv2}` und einmal als Modell-Sicherung (1,8 GB,
+mit `HERKUNFT.md`: Quellen, SHA-256, Lizenzen) neben den Code-Sicherungen — Stability AI hat SD
+2.0/2.1 2025 von Hugging Face und GitHub zurückgezogen, der Lizenztext (OpenRAIL++-M, 24.11.2022)
+stammt deshalb aus der ScanCode-Lizenzdatenbank. Daraus baut die App ihre ONNX-Dateien selbst
+(wie SyntheticDoc); ein besseres Modell kann einen Platz später ersetzen.
+
 **Bewusst nicht:** Online-Dienste (Referenzwerkzeug, Referenzwerkzeug, Referenzwerkzeug-Cloud) — nur lokal; SUPIR, TSD-SR
 (zu groß, praktisch nur mit Grafikkarte); Prompt- oder „Kreativ“-Modi.
 
