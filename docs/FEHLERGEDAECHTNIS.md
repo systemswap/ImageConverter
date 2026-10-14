@@ -1974,3 +1974,10 @@ Test oder Nachweis.
   Grafikkarte (DirectML).“ (`ComputeDeviceText`).
 - **Zeitangaben** kommen nicht von der KI: vorab Schätzung (gemessene Werte je Megapixel, nach jedem Lauf an diesen Rechner
   angepasst, nur bis zum Schließen), während der Rechnung aus dem Fortschritt.
+
+## 66. Während des Upscalings weiterbearbeitet (0.5.84 beta)
+
+- **Meldung des Benutzers:** Man konnte während der Rechnung weiter einstellen. Jetzt gesperrt (`IsIdle` = !`IsUpscaling`):
+  Kopf- und Fußleiste, Einstellungen, Drehen/Entzerren/Gewölbtes Blatt/KI begradigen, Rahmen aufziehen (`SelectionActive`),
+  Rückgängig, Bildwechsel, Speichern, Drucken — auch die Tastenkürzel (CanExecute). Frei: Zoom, Verschieben, Vorher/Nachher,
+  Abbrechen. „Zurücksetzen“ als Symbol ↺, sonst war „Skalieren (≈ 2 min)“ abgeschnitten.

@@ -52,8 +52,11 @@ public partial class MainViewModel
     private EditHistory? _history;
 
     // Während eines Bearbeitungsschritts (z. B. KI) nicht: das Ergebnis gehört zum Bild davor
-    public bool CanUndo => !IsEditing && (_undo.Count > 0 || HasPendingSettings);
-    public bool CanRedo => !IsEditing && _redo.Count > 0 && !HasPendingSettings;
+    /// <summary>Drehen und Spiegeln: nur mit Bild und nicht, während skaliert wird.</summary>
+    public bool CanTransform => HasImage && !IsUpscaling;
+
+    public bool CanUndo => !IsEditing && !IsUpscaling && (_undo.Count > 0 || HasPendingSettings);
+    public bool CanRedo => !IsEditing && !IsUpscaling && _redo.Count > 0 && !HasPendingSettings;
 
     [ObservableProperty] public partial bool IsEditing { get; set; }
 
@@ -122,7 +125,7 @@ public partial class MainViewModel
     /// der Rundung danach transparent; das Bild bleibt rechteckig.
     /// </summary>
     /// <summary>Zuschneiden geht mit Auswahl — oder beim Entzerren mit einem brauchbaren Viereck.</summary>
-    public bool CanCropToSelection => HasCropSelection || (PerspectiveTool && IsPerspectiveValid)
+    public bool CanCropToSelection => !IsUpscaling && HasCropSelection || (PerspectiveTool && IsPerspectiveValid)
         || (DewarpTool && (HasDewarpLines || CurrentRecipe.HasDewarp));
 
     [RelayCommand(CanExecute = nameof(CanCropToSelection))]
@@ -347,13 +350,13 @@ public partial class MainViewModel
     }
 
     // Drehen und Spiegeln: nur das Rezept (netto Vierteldrehungen), ein Rückgängig-Schritt je Klick
-    [RelayCommand(CanExecute = nameof(HasImage))]
+    [RelayCommand(CanExecute = nameof(CanTransform))]
     private Task RotateLeft() => Orient(r => r.Rotated(false), new ImageStep(ImageStepKind.Rotate, Tr.T("Links gedreht"), "90°", null));
 
-    [RelayCommand(CanExecute = nameof(HasImage))]
+    [RelayCommand(CanExecute = nameof(CanTransform))]
     private Task RotateRight() => Orient(r => r.Rotated(true), new ImageStep(ImageStepKind.Rotate, Tr.T("Rechts gedreht"), "90°", null));
 
-    [RelayCommand(CanExecute = nameof(HasImage))]
+    [RelayCommand(CanExecute = nameof(CanTransform))]
     private Task FlipHorizontal() => Orient(r => r.Flipped(), new ImageStep(ImageStepKind.Flip, Tr.T("Gespiegelt"), Tr.T("links ↔ rechts"), null));
 
     private async Task Orient(Func<GeometryRecipe, GeometryRecipe> change, ImageStep step)

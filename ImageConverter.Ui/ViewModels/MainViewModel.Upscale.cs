@@ -49,9 +49,22 @@ public partial class MainViewModel
     [NotifyPropertyChangedFor(nameof(UpscaleDetailsLabel))]
     public partial double UpscaleDetails { get; set; } = 1;
 
+    /// <summary>
+    /// Während des Upscalings ist alles andere gesperrt (Einstellungen, Werkzeuge, Rückgängig, Bildwechsel, Speichern) — das
+    /// Ergebnis gehört zu genau diesem Stand. Frei bleiben Zoom, Verschieben, Vorher/Nachher und Abbrechen.
+    /// </summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(UpscaleCommand), nameof(CancelUpscaleCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UpscaleCommand), nameof(CancelUpscaleCommand), nameof(UndoCommand), nameof(RedoCommand),
+        nameof(ExportCommand), nameof(PrintCommand), nameof(RotateLeftCommand), nameof(RotateRightCommand),
+        nameof(FlipHorizontalCommand), nameof(CropToSelectionCommand), nameof(PreviousFileCommand), nameof(NextFileCommand), nameof(StraightenWithAiCommand))]
+    [NotifyPropertyChangedFor(nameof(CanUndo), nameof(CanRedo), nameof(CanTransform), nameof(CanCropToSelection), nameof(IsIdle), nameof(SelectionActive))]
     public partial bool IsUpscaling { get; set; }
+
+    /// <summary>Nichts rechnet — Einstellungen und Werkzeuge frei.</summary>
+    public bool IsIdle => !IsUpscaling;
+
+    /// <summary>Blättern zwischen Bildern (nicht während des Upscalings).</summary>
+    public bool CanBrowse => HasMultipleFiles && !IsUpscaling;
 
     /// <summary>Prüfansicht: Ergebnis in voller Auflösung statt der Vorschau (ohne Licht/Farbe/Schärfe).</summary>
     [ObservableProperty] public partial bool UpscaleInspect { get; set; }

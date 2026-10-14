@@ -36,6 +36,12 @@ dieses Rechners.
 - **Fortschritt** unten in der Vorschau und in der Gruppe: Prozent, Restzeit und ab einer Minute die Uhrzeit, wann es
   fertig ist („noch ca. 12 min, fertig gegen 15:42“) — von Anfang an aus der Schätzung, ab 3 % aus dem Fortschritt. Die
   Rückfragen nennen die Uhrzeit ebenso.
+- **Während des Upscalings** ist alles andere gesperrt (Einstellungen, Werkzeuge, Rückgängig, Bildwechsel, Speichern,
+  Drucken) — das Ergebnis gehört zu genau diesem Stand. Frei bleiben Zoom, Verschieben, Vorher/Nachher und Abbrechen.
+- **Reihenfolge:** Bildschritte (Zuschnitt, Drehen, Entzerren, Gewölbtes Blatt, KI-Tab, Entfernen) → **Skalieren/Upscaling**
+  → Rauschen → Licht, Farbe, Dunst … (Tools) → Schärfen → Körnung → Farbprofil und Metadaten. Der Upscaler bekommt also das
+  Bild ohne Look, alles danach läuft auf den neuen Pixeln. Beim Filter-Vergrößern wird sonst erst entrauscht, dann
+  vergrößert; mit KI-Scaler danach (die Modelle entrauschen selbst).
 - **Treue** und **Details** sind nur bei KI-Scalern aktiv (sonst ausgegraut).
 - **Treue** (Vorgabe 100 %): Rückprojektion E ← E + U(O − V(E)), drei Runden (V = Lanczos ÷4, U = bikubisch ×4). Danach
   ergibt das Ergebnis verkleinert wieder das Original — die KI darf Feines ergänzen, aber nichts verschieben. Hebt die

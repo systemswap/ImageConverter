@@ -167,7 +167,7 @@ public partial class MainViewModel
     /// <summary>Ordner des zuletzt exportierten Bildes — für „Ordner öffnen".</summary>
     [ObservableProperty] public partial string? LastExportFolder { get; set; }
 
-    private bool CanExport => HasImage && !IsExporting;
+    private bool CanExport => HasImage && !IsExporting && !IsUpscaling;
 
     /// <summary>Die Ansicht öffnet das Export-Fenster (modal) und wartet, bis es zu ist.</summary>
     public event Func<ExportDialogViewModel, Task>? MultiExportRequested;

@@ -275,7 +275,7 @@ public partial class MainViewModel
     public partial bool IsStraighteningWithAi { get; set; }
 
     // nicht an HasImage koppeln: der Befehl erführe nichts davon und bliebe gesperrt; ohne Bild ist das Symbol ohnehin unsichtbar
-    private bool CanStraightenWithAi => !IsStraighteningWithAi;
+    private bool CanStraightenWithAi => !IsUpscaling && !IsStraighteningWithAi;
 
     /// <summary>
     /// „Schatten entfernen“ (Rechtsklick auf das KI-Symbol): die Schattenkarte von SyntheticDoc beim Rendern herausrechnen.

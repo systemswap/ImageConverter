@@ -205,10 +205,10 @@ public partial class MainViewModel : ViewModelBase
         await ShowFileAsync(0);
     }
 
-    [RelayCommand(CanExecute = nameof(HasMultipleFiles))]
+    [RelayCommand(CanExecute = nameof(CanBrowse))]
     private Task PreviousFile() => ShowFileAsync((_fileIndex - 1 + _files.Count) % _files.Count);
 
-    [RelayCommand(CanExecute = nameof(HasMultipleFiles))]
+    [RelayCommand(CanExecute = nameof(CanBrowse))]
     private Task NextFile() => ShowFileAsync((_fileIndex + 1) % _files.Count);
 
     private async Task ShowFileAsync(int index)

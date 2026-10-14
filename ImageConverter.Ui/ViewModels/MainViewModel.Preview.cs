@@ -158,7 +158,12 @@ public partial class MainViewModel
 
     /// <summary>Auswahlwerkzeug in der Vorschau: an = Ziehen zieht einen Ausschnitt auf, aus = Ziehen verschiebt
     /// das Bild. Eine Ansichtseinstellung, kein Bearbeitungsschritt (nicht im Rückgängig).</summary>
-    [ObservableProperty] public partial bool SelectionTool { get; set; } = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectionActive))]
+    public partial bool SelectionTool { get; set; } = true;
+
+    /// <summary>Rahmen aufziehen möglich — nicht während des Upscalings (dann verschiebt Ziehen das Bild).</summary>
+    public bool SelectionActive => SelectionTool && !IsUpscaling;
 
     /// <summary>Was die Vorschau gerade rechnet (z. B. „Dunst entfernen – Durchlauf 2 von 3“).</summary>
     [ObservableProperty]
