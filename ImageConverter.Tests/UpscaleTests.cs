@@ -209,6 +209,23 @@ public class UpscaleTests
     }
 
     [Fact]
+    public void OnnxGraph_HalfPrecisionWeights_RunAndStayClose()
+    {
+        // float32 hinein → float16 rechnen (Gewicht fp16) → float32 heraus, wie PiSA-SR auf der Grafikkarte
+        using var g = new OnnxGraph();
+        var x = g.Input("x", 1, 4);
+        var h = g.Node("Cast", [x], ("to", 10L));
+        h = g.Node("Mul", [h, g.WeightHalf([0.5f, 1.25f, -2f, 3.1416f], 4)]);
+        g.Output(g.Node("Cast", [h], ("to", 1L)), "y", 1, 4);
+        using var session = new Microsoft.ML.OnnxRuntime.InferenceSession(g.ToModel());
+        using var input = Microsoft.ML.OnnxRuntime.OrtValue.CreateTensorValueFromMemory(new[] { 2f, 2f, 2f, 2f }, [1, 4]);
+        using var outputs = session.Run(new Microsoft.ML.OnnxRuntime.RunOptions(), ["x"], [input], ["y"]);
+        var y = outputs[0].GetTensorDataAsSpan<float>().ToArray();
+        Assert.Equal([1f, 2.5f, -4f], y[..3]);
+        Assert.Equal(6.2832f, y[3], 2);   // halbe Genauigkeit: drei Stellen
+    }
+
+    [Fact]
     public void FormatWithEnd_ShowsTheClockTime_FromOneMinute()
     {
         var now = new DateTime(2026, 10, 14, 15, 30, 0);

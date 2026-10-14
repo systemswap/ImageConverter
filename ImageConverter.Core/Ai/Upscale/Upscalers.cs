@@ -41,7 +41,7 @@ public static class Upscalers
     };
 
     // Grafikkarte (Radeon des Notebook-Prozessor über DirectML), gemessen am selben Ausschnitt
-    private const double GpuFast = 13, GpuMedium = 530, GpuGenerative = 910;   // 2,0 s, 80 s, 137 s für 0,15 MP
+    private const double GpuFast = 13, GpuMedium = 530, GpuGenerative = 650;   // 2,0 s, 80 s, 97 s (fp16) für 0,15 MP
 
     /// <summary>Rechnen die Modelle gerade auf der Grafikkarte? (setzt die Oberfläche nach den Einstellungen)</summary>
     public static bool OnGpu { get; set; }

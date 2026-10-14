@@ -33,7 +33,7 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
 | Modell | CPU (8 Kerne) | Grafikkarte (DirectML) | Ergebnis gleich? |
 |---|---|---|---|
 | x4v3 („KI schnell“) | 3,2 s | 2,0 s | ja (PSNR identisch) |
-| PiSA-SR („KI wie Referenzwerkzeug“) | 355 s | 137 s | ja (PSNR identisch) |
+| PiSA-SR („KI wie Referenzwerkzeug“) | 355 s | 137 s (fp32), **97 s (fp16)** | fp32 identisch; fp16 gegen fp32 53 dB, im Mittel 0,2 von 255 Stufen, zum wahren Bild 23,41 statt 23,43 dB |
 | UltraSharpV2 („KI mittel“) | 120 s | 80 s | ja (PSNR identisch) |
 
 ## Was noch gebraucht wird
@@ -54,9 +54,12 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
 2. **NVIDIA unter Linux:** Paket `Microsoft.ML.OnnxRuntime.Gpu.Linux` 1.24.4 für `linux-x64` einbinden (statt
    `Microsoft.ML.OnnxRuntime`); braucht CUDA 12 und cuDNN 9 aus der Paketverwaltung. Erst, wenn ein NVIDIA-Rechner da ist —
    das Paket ist groß und hilft der AMD-Karte nicht.
-3. **Halbe Genauigkeit für die Grafikkarte:** PiSA-SR in fp16 bauen (`PiSaSrNet` schreibt die Gewichte als fp16, Cast an
-   Ein- und Ausgängen) — halber Grafikspeicher (1,7 statt 3,4 GB), auf richtigen Grafikkarten deutlich schneller. Messen,
-   ob das Ergebnis gleich bleibt (Referenzwerte in `~/.cache/imageconverter-build/pisa/ref/`).
+3. ~~Halbe Genauigkeit für die Grafikkarte~~ — **erledigt in 0.5.81 beta** für PiSA-SR, automatisch (keine Auswahl):
+   auf der Grafikkarte fp16, auf der CPU fp32 (die rechnet fp16 nicht schneller). `PiSaSrNet` mit `half`: Gewichte und
+   Rechnung fp16, GroupNorm/LayerNorm/Softmax in fp32, Ein-/Ausgänge fp32; eigene Dateien `pisasr-*-fp16.onnx` (1,8 GB),
+   gebaut beim ersten Gebrauch auf der Grafikkarte. Teile gegen PyTorch: Encoder/Decoder 0,3–0,7 %, UNet 1,4 % relativ;
+   am ganzen Bild nicht zu sehen (siehe Tabelle). Öffnet die Grafikkarte doch nicht, nimmt die App die fp32-Dateien.
+   Offen: x4v3 und UltraSharpV2 in fp16 (fremde ONNX-Dateien — bräuchte einen Umwandler für beliebige Graphen).
 4. **Größere Kacheln auf der Grafikkarte:** Kachelgrößen hängen heute an der CPU (`PiSaSrRun`: 96/64/64 Latent,
    Kachelmodelle 128 px). Auf einer Karte mit 8 GB wären größere Kacheln schneller (weniger Überlappung).
 5. **Speicher prüfen:** vor dem Öffnen grob prüfen, ob der Grafikspeicher reicht; sonst gleich CPU statt Fehler.

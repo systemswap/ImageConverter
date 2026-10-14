@@ -40,6 +40,7 @@ public sealed class OnnxGraph : IDisposable
     public void Dispose() => _external?.Dispose();
 
     /// <summary>Eingang float32 mit Form; Zahlen sind feste, Texte benannte (offene) Größen.</summary>
+    /// <remarks>Eingänge und Ausgänge sind immer float32 — ein Graph in halber Genauigkeit wandelt selbst um (Cast).</remarks>
     public string Input(string name, params object[] dims)
     {
         _inputs.Add(ValueInfo(name, dims));
@@ -54,10 +55,20 @@ public sealed class OnnxGraph : IDisposable
     }
 
     /// <summary>Gewicht (float32).</summary>
-    public string Weight(float[] data, params long[] dims)
+    public string Weight(float[] data, params long[] dims) =>
+        Initializer(System.Runtime.InteropServices.MemoryMarshal.AsBytes(data.AsSpan()), 1, dims);
+
+    /// <summary>Gewicht in halber Genauigkeit (float16) — für die Grafikkarte: halber Speicher.</summary>
+    public string WeightHalf(float[] data, params long[] dims)
+    {
+        var half = new Half[data.Length];
+        for (var i = 0; i < data.Length; i++) half[i] = (Half)data[i];
+        return Initializer(System.Runtime.InteropServices.MemoryMarshal.AsBytes(half.AsSpan()), 10, dims);
+    }
+
+    private string Initializer(ReadOnlySpan<byte> bytes, int dataType, long[] dims)
     {
         var name = "w" + _next++;
-        var bytes = System.Runtime.InteropServices.MemoryMarshal.AsBytes(data.AsSpan());
         if (_external is not null && bytes.Length >= ExternalFrom)
         {
             // auf 64 Bytes ausrichten (ONNX Runtime kann die Datei dann direkt einblenden)
@@ -65,11 +76,11 @@ public sealed class OnnxGraph : IDisposable
             if (pad > 0) _external.Write(new byte[pad]);
             var offset = _external.Position;
             _external.Write(bytes);
-            _initializers.Add(ExternalTensor(name, 1, dims, _externalName!, offset, bytes.Length));
+            _initializers.Add(ExternalTensor(name, dataType, dims, _externalName!, offset, bytes.Length));
         }
         else
         {
-            _initializers.Add(Tensor(name, 1, dims, bytes.ToArray()));
+            _initializers.Add(Tensor(name, dataType, dims, bytes.ToArray()));
         }
         return name;
     }

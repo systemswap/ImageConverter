@@ -95,12 +95,26 @@ public static class PiSaSrNet
 
     // ------------------------------------------------------------ Bausteine
 
-    private sealed class Net(OnnxGraph g, IWeights w)
+    /// <param name="half">
+    /// Halbe Genauigkeit (für die Grafikkarte): Gewichte und Rechnung in float16, Normierungen und Softmax in float32
+    /// (sonst laufen Mittelwert/Streuung und die Exponentialfunktion über). Ein- und Ausgänge bleiben float32.
+    /// </param>
+    private sealed class Net(OnnxGraph g, IWeights w, bool half)
     {
         public OnnxGraph G => g;
         public IWeights W => w;
+        public bool Half => half;
 
-        public string Const(float[] data, params long[] dims) => g.Weight(data, dims);
+        /// <summary>Daten-Gewicht im Rechenformat des Graphen.</summary>
+        public string Const(float[] data, params long[] dims) => half ? g.WeightHalf(data, dims) : g.Weight(data, dims);
+
+        public string Cast(string x, bool toHalf) => g.Node("Cast", [x], ("to", toHalf ? 10L : 1L));
+
+        /// <summary>Eingang (float32) ins Rechenformat.</summary>
+        public string In(string x) => half ? Cast(x, true) : x;
+
+        /// <summary>Ergebnis zurück nach float32.</summary>
+        public string Out(string x) => half ? Cast(x, false) : x;
 
         public string Conv(string x, string prefix, int stride = 1, int pad = 1, float[]? extraBias = null)
         {
@@ -108,7 +122,7 @@ public static class PiSaSrNet
             var bias = w.Get(prefix + ".bias").Data;
             if (extraBias is not null) for (var i = 0; i < bias.Length; i++) bias[i] += extraBias[i];
             var k = wt.Shape[2];
-            return g.Node("Conv", [x, g.Weight(wt.Data, wt.Shape.Select(d => (long)d).ToArray()), g.Weight(bias, bias.Length)],
+            return g.Node("Conv", [x, Const(wt.Data, wt.Shape.Select(d => (long)d).ToArray()), Const(bias, bias.Length)],
                 ("kernel_shape", new long[] { k, k }), ("strides", new long[] { stride, stride }), ("pads", new long[] { pad, pad, pad, pad }));
         }
 
@@ -120,11 +134,11 @@ public static class PiSaSrNet
             var t = new float[wt.Count];
             for (var o = 0; o < outF; o++)
             for (var i = 0; i < inF; i++) t[i * outF + o] = wt.Data[o * inF + i] * scale;
-            var y = g.Node("MatMul", [x, g.Weight(t, inF, outF)]);
+            var y = g.Node("MatMul", [x, Const(t, inF, outF)]);
             if (!bias || !w.Has(prefix + ".bias")) return y;
             var b = w.Get(prefix + ".bias").Data;
             if (scale != 1) for (var i = 0; i < b.Length; i++) b[i] *= scale;
-            return g.Node("Add", [y, g.Weight(b, b.Length)]);
+            return g.Node("Add", [y, Const(b, b.Length)]);
         }
 
         public string Silu(string x) => g.Node("Mul", [x, g.Node("Sigmoid", [x])]);
@@ -135,18 +149,21 @@ public static class PiSaSrNet
             var gamma = w.Get(prefix + ".weight").Data;
             var beta = w.Get(prefix + ".bias").Data;
             var shape = g.Node("Shape", [x]);
-            var grouped = g.Node("Reshape", [x, g.Ints(0, groups, -1)]);
+            var grouped = g.Node("Reshape", [half ? Cast(x, false) : x, g.Ints(0, groups, -1)]);   // Normieren immer in float32
             var norm = g.Node("InstanceNormalization",
                 [grouped, g.Weight(Enumerable.Repeat(1f, groups).ToArray(), groups), g.Weight(new float[groups], groups)], ("epsilon", eps));
             var back = g.Node("Reshape", [norm, shape]);
-            return g.Node("Add", [g.Node("Mul", [back, g.Weight(gamma, gamma.Length, 1, 1)]), g.Weight(beta, beta.Length, 1, 1)]);
+            if (half) back = Cast(back, true);
+            return g.Node("Add", [g.Node("Mul", [back, Const(gamma, gamma.Length, 1, 1)]), Const(beta, beta.Length, 1, 1)]);
         }
 
         public string LayerNorm(string x, string prefix, float eps = 1e-5f)
         {
             var gamma = w.Get(prefix + ".weight").Data;
             var beta = w.Get(prefix + ".bias").Data;
-            return g.Node("LayerNormalization", [x, g.Weight(gamma, gamma.Length), g.Weight(beta, beta.Length)], ("axis", -1L), ("epsilon", eps));
+            var y = g.Node("LayerNormalization", [half ? Cast(x, false) : x, g.Weight(gamma, gamma.Length), g.Weight(beta, beta.Length)],
+                ("axis", -1L), ("epsilon", eps));
+            return half ? Cast(y, true) : y;
         }
 
         /// <summary>ResnetBlock2D: GN, SiLU, Faltung (+ Zeit als Bias), GN, SiLU, Faltung; Abkürzung mit 1×1 bei anderer Kanalzahl.</summary>
@@ -207,10 +224,12 @@ public static class PiSaSrNet
                     kt[(hh * d + j) * contextLen + t] = k[t * c + hh * d + j];
                     vt[(hh * contextLen + t) * d + j] = vv[t * c + hh * d + j];
                 }
-                kT = g.Weight(kt, 1, heads, d, contextLen);
-                v = g.Weight(vt, 1, heads, contextLen, d);
+                kT = Const(kt, 1, heads, d, contextLen);
+                v = Const(vt, 1, heads, contextLen, d);
             }
-            var probs = g.Node("Softmax", [g.Node("MatMul", [q, kT])], ("axis", -1L));
+            var scores = g.Node("MatMul", [q, kT]);
+            var probs = g.Node("Softmax", [half ? Cast(scores, false) : scores], ("axis", -1L));
+            if (half) probs = Cast(probs, true);
             var o = g.Node("Transpose", [g.Node("MatMul", [probs, v])], ("perm", new long[] { 0, 2, 1, 3 }));
             return Linear(g.Node("Reshape", [o, g.Ints(0, 0, c)]), prefix + ".to_out.0");
         }
@@ -260,9 +279,9 @@ public static class PiSaSrNet
             var inner = w.Get(prefix + ".net.0.proj.bias").Count / 2;
             var value = g.Node("Slice", [proj, g.Ints(0), g.Ints(inner), g.Ints(-1)]);
             var gate = g.Node("Slice", [proj, g.Ints(inner), g.Ints(2 * inner), g.Ints(-1)]);
-            var half = g.Weight([0.5f], 1);
-            var gelu = g.Node("Mul", [g.Node("Mul", [gate, half]),
-                g.Node("Add", [g.Node("Erf", [g.Node("Mul", [gate, g.Weight([1 / MathF.Sqrt(2)], 1)])]), g.Weight([1f], 1)])]);
+            var halfConst = Const([0.5f], 1);
+            var gelu = g.Node("Mul", [g.Node("Mul", [gate, halfConst]),
+                g.Node("Add", [g.Node("Erf", [g.Node("Mul", [gate, Const([1 / MathF.Sqrt(2)], 1)])]), Const([1f], 1)])]);
             return Linear(g.Node("Mul", [value, gelu]), prefix + ".net.2");
         }
 
@@ -301,13 +320,14 @@ public static class PiSaSrNet
     /// UNet (Eingang „latent“ [1, 4, h, w] → „pred“ [1, 4, h, w]) für t = 1 und die feste Beschreibung
     /// <paramref name="context"/> (77 × 1024). Gewichte ausgelagert in <c>&lt;onnxPath&gt;.data</c> (über 2 GB).
     /// </summary>
-    public static void BuildUnet(IWeights weights, float[] context, string onnxPath, IProgress<double>? progress = null, string? dataPath = null)
+    public static void BuildUnet(IWeights weights, float[] context, string onnxPath, IProgress<double>? progress = null, string? dataPath = null,
+        bool half = false)
     {
         const int ctxLen = 77;
         using var g = new OnnxGraph(dataPath ?? onnxPath + ".data");
-        var n = new Net(g, weights);
+        var n = new Net(g, weights, half);
         var time = TimeEmbedding(n, 1);
-        var x = g.Input("latent", 1, 4, "h", "w");
+        var x = n.In(g.Input("latent", 1, 4, "h", "w"));
 
         var h = n.Conv(x, "conv_in");
         var skips = new List<string> { h };
@@ -350,7 +370,7 @@ public static class PiSaSrNet
         }
 
         h = n.Conv(n.Silu(n.GroupNorm(h, "conv_norm_out", 1e-5f)), "conv_out");
-        g.Output(h, "pred", 1, 4, "h", "w");
+        g.Output(n.Out(h), "pred", 1, 4, "h", "w");
         g.Save(onnxPath, "ImageConverter PiSA-SR UNet");
         progress?.Report(1);
     }
@@ -365,11 +385,11 @@ public static class PiSaSrNet
     }
 
     /// <summary>VAE-Encoder: „image“ [1, 3, H, W] (−1 … 1) → „latent“ [1, 4, H/8, W/8] (Mittelwert · 0,18215).</summary>
-    public static void BuildVaeEncoder(IWeights weights, string onnxPath)
+    public static void BuildVaeEncoder(IWeights weights, string onnxPath, bool half = false)
     {
         using var g = new OnnxGraph();
-        var n = new Net(g, weights);
-        var x = g.Input("image", 1, 3, "H", "W");
+        var n = new Net(g, weights, half);
+        var x = n.In(g.Input("image", 1, 3, "H", "W"));
         var h = n.Conv(x, "encoder.conv_in");
         for (var b = 0; b < 4; b++)
         {
@@ -387,17 +407,17 @@ public static class PiSaSrNet
         h = n.Conv(n.Silu(n.GroupNorm(h, "encoder.conv_norm_out", 1e-6f)), "encoder.conv_out");
         h = n.Conv(h, "quant_conv", pad: 0);
         var mean = g.Node("Slice", [h, g.Ints(0), g.Ints(4), g.Ints(1)]);
-        g.Output(g.Node("Mul", [mean, g.Weight([LatentScale], 1)]), "latent", 1, 4, "h", "w");
+        g.Output(n.Out(g.Node("Mul", [mean, n.Const([LatentScale], 1)])), "latent", 1, 4, "h", "w");
         g.Save(onnxPath, "ImageConverter PiSA-SR VAE-Encoder");
     }
 
     /// <summary>VAE-Decoder: „latent“ [1, 4, h, w] (skaliert) → „image“ [1, 3, 8h, 8w] (−1 … 1, ungeklammert).</summary>
-    public static void BuildVaeDecoder(IWeights weights, string onnxPath)
+    public static void BuildVaeDecoder(IWeights weights, string onnxPath, bool half = false)
     {
         using var g = new OnnxGraph();
-        var n = new Net(g, weights);
-        var z = g.Input("latent", 1, 4, "h", "w");
-        var h = g.Node("Mul", [z, g.Weight([1 / LatentScale], 1)]);
+        var n = new Net(g, weights, half);
+        var z = n.In(g.Input("latent", 1, 4, "h", "w"));
+        var h = g.Node("Mul", [z, n.Const([1 / LatentScale], 1)]);
         h = n.Conv(h, "post_quant_conv", pad: 0);
         h = n.Conv(h, "decoder.conv_in");
         h = n.Resnet(h, "decoder.mid_block.resnets.0", 1e-6f);
@@ -410,7 +430,7 @@ public static class PiSaSrNet
                 h = n.Conv(n.Upsample2x(h), $"decoder.up_blocks.{b}.upsamplers.0.conv");
         }
         h = n.Conv(n.Silu(n.GroupNorm(h, "decoder.conv_norm_out", 1e-6f)), "decoder.conv_out");
-        g.Output(h, "image", 1, 3, "H", "W");
+        g.Output(n.Out(h), "image", 1, 3, "H", "W");
         g.Save(onnxPath, "ImageConverter PiSA-SR VAE-Decoder");
     }
 
@@ -420,22 +440,27 @@ public static class PiSaSrNet
     public const string EncoderFile = "pisasr-vae-encoder.onnx";
     public const string DecoderFile = "pisasr-vae-decoder.onnx";
 
+    /// <summary>Dateiname in voller oder halber Genauigkeit („pisasr-unet-fp16.onnx“).</summary>
+    public static string FileName(string file, bool half) => half ? file.Replace(".onnx", "-fp16.onnx", StringComparison.Ordinal) : file;
+
     /// <summary>
     /// Baut die drei ONNX-Dateien nach <paramref name="targetDir"/> (zuerst unter Hilfsnamen, erst am Ende umbenannt — ein
     /// Abbruch hinterlässt kein halbes Modell). <paramref name="context"/>: leere Beschreibung, 77 × 1024.
     /// </summary>
+    /// <param name="half">Halbe Genauigkeit für die Grafikkarte (Dateien mit „-fp16“).</param>
     public static void BuildAll(string unetPath, string vaePath, string loraPath, float[] context, string targetDir,
-        IProgress<double>? progress = null, CancellationToken cancel = default)
+        IProgress<double>? progress = null, CancellationToken cancel = default, bool half = false)
     {
         Directory.CreateDirectory(targetDir);
-        string Tmp(string f) => Path.Combine(targetDir, f + ".bau");
+        string Name(string f) => FileName(f, half);
+        string Tmp(string f) => Path.Combine(targetDir, Name(f) + ".bau");
 
         using (var vae = new SafeTensors(vaePath))
         {
             var w = new FileWeights(vae);
-            BuildVaeEncoder(w, Tmp(EncoderFile));
+            BuildVaeEncoder(w, Tmp(EncoderFile), half);
             progress?.Report(0.03);
-            BuildVaeDecoder(w, Tmp(DecoderFile));
+            BuildVaeDecoder(w, Tmp(DecoderFile), half);
             progress?.Report(0.06);
         }
         cancel.ThrowIfCancellationRequested();
@@ -444,11 +469,11 @@ public static class PiSaSrNet
         {
             var merged = new MergedUnet(unet, TorchCheckpoint.Load(loraPath));
             // Die .data-Datei heißt im Modell so, wie sie am Ende liegt — sie wird unter ihrem endgültigen Namen geschrieben
-            BuildUnet(merged, context, Tmp(UnetFile), new Part(progress, 0.06, 0.94), Path.Combine(targetDir, UnetFile + ".data"));
+            BuildUnet(merged, context, Tmp(UnetFile), new Part(progress, 0.06, 0.94), Path.Combine(targetDir, Name(UnetFile) + ".data"), half);
         }
         cancel.ThrowIfCancellationRequested();
         foreach (var f in new[] { EncoderFile, DecoderFile, UnetFile })
-            File.Move(Tmp(f), Path.Combine(targetDir, f), overwrite: true);
+            File.Move(Tmp(f), Path.Combine(targetDir, Name(f)), overwrite: true);
         progress?.Report(1);
     }
 

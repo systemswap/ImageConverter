@@ -1954,3 +1954,11 @@ Test oder Nachweis.
 - **Gemessen** (Notebook-Prozessor, eingebaute Radeon, gemeinsamer Speicher; 500 × 300 → 2000 × 1200): x4v3 3,2 → 2,0 s,
   UltraSharpV2 120 → 80 s, PiSA-SR 355 → 137 s, Ergebnis jeweils gleich (PSNR identisch). Eine eingebaute Grafik teilt sich
   den langsamen Arbeitsspeicher mit der CPU — mehr als Faktor 2–3 ist da nicht drin; eigene Karten sind viel schneller.
+
+## 64. Halbe Genauigkeit auf der Grafikkarte (0.5.81 beta)
+
+- **Frage des Benutzers:** auswählbar? Entschieden: nein, automatisch — Grafikkarte fp16, CPU fp32.
+- **Falle:** Normierungen in fp16 (Mittelwert/Streuung über viele Werte) und Softmax laufen über — dort vorher nach fp32
+  wandeln, danach zurück. Konstanten in Mul/Add müssen den Typ des Graphen haben (`Net.Const`), Resize-Skalen und die
+  Skalen der InstanceNormalization bleiben fp32.
+- **Gemessen:** PiSA-SR 137 → 97 s auf der eingebauten Radeon, Ergebnis gegen fp32 53 dB (im Mittel 0,2 Stufen).

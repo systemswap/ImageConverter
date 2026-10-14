@@ -7,7 +7,8 @@
 //       <quellordner> <zielordner> [--pruefen <referenzordner>] [--nur-pruefen]
 // Quellordner: sd21/unet, sd21/vae (fp16-Safetensors), pisa_sr.pkl, dazu leere-beschreibung.safetensors oder
 // sd21/text_encoder/model.fp16.safetensors (dann wird die leere Beschreibung gerechnet und — falls beide da — verglichen;
-// --nur-text: nur das, --ohne-text: gespeicherte nehmen).
+// --nur-text: nur das, --ohne-text: gespeicherte nehmen). --fp16: halbe Genauigkeit (für die Grafikkarte, Dateien „-fp16“);
+// --gpu: die Prüfung auf der Grafikkarte (DirectML).
 using System.Text.Json;
 using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.Upscale;
@@ -23,6 +24,7 @@ if (files.Count < 2)
     return 1;
 }
 var (source, target) = (files[0], files[1]);
+var half = args.Contains("--fp16");
 
 if (!args.Contains("--nur-pruefen"))
 {
@@ -50,7 +52,8 @@ if (!args.Contains("--nur-pruefen"))
     var context = stored ?? computed ?? throw new FileNotFoundException("Weder leere Beschreibung noch Text-Encoder gefunden.");
     if (args.Contains("--nur-text")) return 0;
     PiSaSrNet.BuildAll(Path.Combine(source, "sd21/unet/diffusion_pytorch_model.fp16.safetensors"),
-        Path.Combine(source, "sd21/vae/diffusion_pytorch_model.fp16.safetensors"), Path.Combine(source, "pisa_sr.pkl"), context, target,
+        Path.Combine(source, "sd21/vae/diffusion_pytorch_model.fp16.safetensors"), Path.Combine(source, "pisa_sr.pkl"), context, target, half: half,
+        progress:
         new Reporter(p =>
         {
             var pct = (int)(p * 100);
@@ -77,6 +80,12 @@ float[] Load(string name)
 }
 
 using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+if (args.Contains("--gpu"))
+{
+    options.EnableMemoryPattern = false;
+    options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+    options.AppendExecutionProvider_DML(0);
+}
 var ok = true;
 void Check(string file, string inName, string outName, string refIn, string refOut, double tolerance)
 {
@@ -110,9 +119,11 @@ void Check(string file, string inName, string outName, string refIn, string refO
     Console.WriteLine($"{file,-26} laden {load,6} ms, rechnen {clock.ElapsedMilliseconds,6} ms, max. Abweichung {maxDiff:0.0e0}, relativ {rel:0.0e0} — {(pass ? "stimmt" : "FALSCH")}");
 }
 
-Check(PiSaSrNet.EncoderFile, "image", "latent", "vae_img", "vae_mean", 1e-3);
-Check(PiSaSrNet.DecoderFile, "latent", "image", "dec_in", "dec_out", 1e-3);
-Check(PiSaSrNet.UnetFile, "latent", "pred", "unet_in", "unet_out", 1e-3);
+// Halbe Genauigkeit: rund drei Stellen — relativ bis 1 % gilt als gleich
+var tolerance = half ? 1e-2 : 1e-3;
+Check(PiSaSrNet.FileName(PiSaSrNet.EncoderFile, half), "image", "latent", "vae_img", "vae_mean", tolerance);
+Check(PiSaSrNet.FileName(PiSaSrNet.DecoderFile, half), "latent", "image", "dec_in", "dec_out", tolerance);
+Check(PiSaSrNet.FileName(PiSaSrNet.UnetFile, half), "latent", "pred", "unet_in", "unet_out", tolerance);
 return ok ? 0 : 2;
 
 sealed class Reporter(Action<double> a) : IProgress<double>

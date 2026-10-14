@@ -28,21 +28,22 @@ public static class PiSaSrModel
     /// <summary>Wo die ONNX-Dateien liegen: neben der LoRA.</summary>
     public static string FolderOf(Sources s) => Path.GetDirectoryName(s.Lora)!;
 
-    public static bool NeedsBuild(Sources s)
+    /// <param name="half">Halbe Genauigkeit (Grafikkarte) — eigene Dateien „-fp16“, gebaut nur bei Bedarf.</param>
+    public static bool NeedsBuild(Sources s, bool half = false)
     {
         var dir = FolderOf(s);
         var stamp = new[] { s.Lora, s.Unet, s.Vae }.Max(File.GetLastWriteTimeUtc);
         return new[] { PiSaSrNet.EncoderFile, PiSaSrNet.DecoderFile, PiSaSrNet.UnetFile, PiSaSrNet.UnetFile + ".data" }
-            .Select(f => Path.Combine(dir, f))
+            .Select(f => Path.Combine(dir, PiSaSrNet.FileName(f, half)))
             .Any(p => !File.Exists(p) || File.GetLastWriteTimeUtc(p) < stamp);
     }
 
     /// <summary>Die drei ONNX-Dateien (Encoder, UNet, Decoder); fehlen sie, werden sie gebaut.</summary>
     public static (string Encoder, string Unet, string Decoder) OnnxFor(Sources s, IProgress<double>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, bool half = false)
     {
         var dir = FolderOf(s);
-        if (NeedsBuild(s))
+        if (NeedsBuild(s, half))
         {
             var embedding = Path.Combine(dir, EmbeddingFile);
             float[] context;
@@ -59,8 +60,9 @@ public static class PiSaSrModel
                 File.Move(embedding + ".part", embedding, overwrite: true);
             }
             progress?.Report(0.02);
-            PiSaSrNet.BuildAll(s.Unet, s.Vae, s.Lora, context, dir, new PiSaSrNet.Part(progress, 0.02, 0.98), ct);
+            PiSaSrNet.BuildAll(s.Unet, s.Vae, s.Lora, context, dir, new PiSaSrNet.Part(progress, 0.02, 0.98), ct, half);
         }
-        return (Path.Combine(dir, PiSaSrNet.EncoderFile), Path.Combine(dir, PiSaSrNet.UnetFile), Path.Combine(dir, PiSaSrNet.DecoderFile));
+        string F(string file) => Path.Combine(dir, PiSaSrNet.FileName(file, half));
+        return (F(PiSaSrNet.EncoderFile), F(PiSaSrNet.UnetFile), F(PiSaSrNet.DecoderFile));
     }
 }

@@ -585,12 +585,22 @@ public partial class MainViewModel
         if (method == UpscaleMethod.Generative)
         {
             var sources = PiSaSrModel.Find(Ai.Store) ?? throw new InvalidOperationException(Tr.T("Modell nicht geladen."));
-            var build = PiSaSrModel.NeedsBuild(sources);
+            // Grafikkarte: halbe Genauigkeit (halber Speicher, schneller, Ergebnis gleich); CPU: volle — sie rechnet fp16 nicht schneller
+            var half = Ai.Sessions.OnGpu;
+            var build = PiSaSrModel.NeedsBuild(sources, half);
             if (build) preparing?.Invoke(true);
-            var (enc, unet, dec) = PiSaSrModel.OnnxFor(sources, progress, ct);
+            var (enc, unet, dec) = PiSaSrModel.OnnxFor(sources, progress, ct, half);
             if (build) preparing?.Invoke(false);
-            return PiSaSrRun.Run(source, Ai.Sessions.Get(model, enc), Ai.Sessions.Get(model, unet), Ai.Sessions.Get(model, dec),
-                progress, ct, done);
+            var sessions = (Ai.Sessions.Get(model, enc), Ai.Sessions.Get(model, unet), Ai.Sessions.Get(model, dec));
+            if (half && !Ai.Sessions.OnGpu)
+            {
+                // Grafikkarte ließ sich doch nicht öffnen: die Dateien in voller Genauigkeit für die CPU
+                if (PiSaSrModel.NeedsBuild(sources)) preparing?.Invoke(true);
+                (enc, unet, dec) = PiSaSrModel.OnnxFor(sources, progress, ct);
+                preparing?.Invoke(false);
+                sessions = (Ai.Sessions.Get(model, enc), Ai.Sessions.Get(model, unet), Ai.Sessions.Get(model, dec));
+            }
+            return PiSaSrRun.Run(source, sessions.Item1, sessions.Item2, sessions.Item3, progress, ct, done);
         }
         var path = Ai.Store.PathOf(model) ?? throw new InvalidOperationException(Tr.T("Modell nicht geladen."));
         return UpscaleEngine.RunTiles(source, new OnnxTileModel(Ai.Sessions.Get(model, path), model), progress, ct, done);

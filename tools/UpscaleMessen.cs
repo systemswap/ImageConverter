@@ -4,7 +4,7 @@
 // Aufruf (Bauausgabe außerhalb des Projekts):
 //   dotnet run tools/UpscaleMessen.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <pisasr|onnx-datei> <modellordner|-> <bild> <ausgabeordner> [<wahres-bild>] [--gpu]
-// --gpu: auf der Grafikkarte (Windows: DirectML).
+// --gpu: auf der Grafikkarte (Windows: DirectML). --fp16: PiSA-SR in halber Genauigkeit (Dateien „-fp16“).
 // pisasr: die drei ONNX-Dateien im Modellordner; sonst eine ×4-Kachelmodell-Datei (Real-ESRGAN x4v3, UltraSharpV2).
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.Upscale;
@@ -17,7 +17,8 @@ if (args.Length < 4)
     return 1;
 }
 var gpu = args.Contains("--gpu");
-args = args.Where(a => a != "--gpu").ToArray();
+var half = args.Contains("--fp16");
+args = args.Where(a => a is not ("--gpu" or "--fp16")).ToArray();
 var (method, dir, file, outDir) = (args[0], args[1], args[2], args[3]);
 Directory.CreateDirectory(outDir);
 using var source = new MagickImage(file);
@@ -43,9 +44,9 @@ var progress = new Progress<double>(p =>
 UpscaleResult result;
 if (method == "pisasr")
 {
-    using var enc = new InferenceSession(Path.Combine(dir, PiSaSrNet.EncoderFile), options);
-    using var unet = new InferenceSession(Path.Combine(dir, PiSaSrNet.UnetFile), options);
-    using var dec = new InferenceSession(Path.Combine(dir, PiSaSrNet.DecoderFile), options);
+    using var enc = new InferenceSession(Path.Combine(dir, PiSaSrNet.FileName(PiSaSrNet.EncoderFile, half)), options);
+    using var unet = new InferenceSession(Path.Combine(dir, PiSaSrNet.FileName(PiSaSrNet.UnetFile, half)), options);
+    using var dec = new InferenceSession(Path.Combine(dir, PiSaSrNet.FileName(PiSaSrNet.DecoderFile, half)), options);
     Console.WriteLine($"geladen in {clock.Elapsed:mm\\:ss}");
     clock.Restart();
     result = PiSaSrRun.Run(source, enc, unet, dec, progress, CancellationToken.None);
