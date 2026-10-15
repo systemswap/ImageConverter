@@ -33,9 +33,9 @@ public sealed class OnnxFaceParser(InferenceSession session) : IFaceParser
 
         ct.ThrowIfCancellationRequested();
         using var value = OrtValue.CreateTensorValueFromMemory(input, [1, 3, Size, Size]);
-        using var outputs = session.Run(new RunOptions(), new Dictionary<string, OrtValue> { [session.InputNames[0]] = value },
-            [session.OutputNames[0]]);
-        var logits = outputs[0].GetTensorDataAsSpan<float>();
+        // Über OnnxSessions.Run: die Laufoptionen bleiben bis zum Ende der Rechnung am Leben. Mit „new RunOptions()“ direkt im
+        // Aufruf konnte die Speicherbereinigung sie mitten in der Rechnung freigeben — Absturz (Zugriffsverletzung) in ONNX.
+        var logits = OnnxSessions.Run(session, new Dictionary<string, OrtValue> { [session.InputNames[0]] = value }, ct);
         var classes = logits.Length / plane;
 
         var labels = new byte[size * size];

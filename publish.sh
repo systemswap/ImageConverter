@@ -149,7 +149,7 @@ notices() {
 }
 
 # Was das Programm neben sich schreibt; bleibt bei jedem Bau stehen.
-USER_FILES=(KI-Modelle languages)
+USER_FILES=(KI-Modelle languages ImageConverter.log ImageConverter.log.alt)
 
 # Leert einen Ausgabeordner bis auf die Dateien des Benutzers.
 clear_program_folder() {
@@ -177,13 +177,13 @@ publish() {
     || { echo "Fehler: Tools/ImageMagick oder Tools/OnnxRuntime fehlt in der Ausgabe für $rid." >&2; exit 1; }
 }
 
-# Paket ohne die heruntergeladenen KI-Modelle.
+# Paket ohne die heruntergeladenen KI-Modelle und ohne das Log.
 package() {
   local folder="$1" archive="$2"
   rm -f "$OUT_DIR/$archive"
   case "$archive" in
-    *.tar.gz) tar -C "$OUT_DIR" --exclude="$folder/KI-Modelle" -czf "$OUT_DIR/$archive" "$folder" ;;
-    *.zip) (cd "$OUT_DIR" && zip -qr "$archive" "$folder" -x "$folder/KI-Modelle/*") ;;
+    *.tar.gz) tar -C "$OUT_DIR" --exclude="$folder/KI-Modelle" --exclude="$folder/ImageConverter.log*" -czf "$OUT_DIR/$archive" "$folder" ;;
+    *.zip) (cd "$OUT_DIR" && zip -qr "$archive" "$folder" -x "$folder/KI-Modelle/*" "$folder/ImageConverter.log*") ;;
   esac
 }
 

@@ -61,4 +61,38 @@ public class PlatformTests
         Assert.Contains("domain=\"delegate\" rights=\"none\" pattern=\"*\"", policy);
         Assert.Contains("{HTTP,HTTPS,FTP,URL}", policy);
     }
+    /// <summary>
+    /// Eigenes Log: Bleibt die Lauf-Datei eines beendeten Prozesses liegen (Absturz), kommt beim nächsten Start ein Eintrag
+    /// mit der letzten Tätigkeit ins Log und die Datei verschwindet; die eigene Lauf-Datei hält die Tätigkeit und geht beim
+    /// sauberen Ende weg.
+    /// </summary>
+    [Fact]
+    public void AppLog_LeftoverMarker_BecomesCrashEntry()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ic-applog-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var dead = Path.Combine(dir, $"ImageConverter.{int.MaxValue}.laeuft");
+            File.WriteAllLines(dead, ["2026-10-15T09:01:13.0000000+02:00", "2026-10-15T09:07:58.0000000+02:00", "KI-Tab: Testmodell"]);
+
+            AppLog.Start(dir);
+            AppLog.Activity("Upscaling: Test");
+            var log = Path.Combine(dir, AppLog.FileName);
+            for (var i = 0; i < 200 && File.Exists(dead); i++) Thread.Sleep(50);
+
+            var text = File.ReadAllText(log);
+            Assert.Contains("Absturz", text);
+            Assert.Contains("Zuletzt: KI-Tab: Testmodell (seit 09:07:58)", text);
+            Assert.False(File.Exists(dead));
+            var own = Path.Combine(dir, $"ImageConverter.{Environment.ProcessId}.laeuft");
+            Assert.Contains("Upscaling: Test", File.ReadAllText(own));
+            AppLog.Stop();
+            Assert.False(File.Exists(own));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }

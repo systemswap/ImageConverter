@@ -15,8 +15,16 @@ sealed class Program
         // Vor allem anderen: ImageMagick und ONNX Runtime liegen in Tools/ neben dem Programm,
         // und die ONNX Runtime darf keine Nutzungsdaten senden.
         NativeLibraries.Configure();
-
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // Eigenes Log neben dem Programm (Abstürze, auch die vom letzten Mal)
+        AppLog.Start();
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            AppLog.Stop();
+        }
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.

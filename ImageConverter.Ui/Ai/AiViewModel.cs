@@ -301,32 +301,26 @@ public partial class AiViewModel : ViewModelBase
     partial void OnStrengthChanged(double value) => RequestPreview();
     partial void OnTextureChanged(double value) => RequestPreview();
 
-    private CancellationTokenSource? _fidelityCts;
+    private double _runFidelity;   // Natürlichkeit, mit der das offene Ergebnis gerechnet wurde
+
+    /// <summary>Natürlichkeit seit der Rechnung verstellt — „KI berechnen“ rechnet mit dem neuen Wert neu.</summary>
+    private bool FidelityChangedSinceRun => HasPending && HasFidelity && Math.Abs(Fidelity - _runFidelity) > 0.01;
 
     partial void OnFidelityChanged(double value)
     {
-        // Natürlichkeit geht ins Modell: nach kurzer Ruhe am Regler neu rechnen, wenn schon ein Ergebnis da ist
-        if (!HasPending || !HasFidelity) return;
-        _fidelityCts?.Cancel();
-        var cts = _fidelityCts = new CancellationTokenSource();
-        _ = RerunAfterAsync(cts.Token);
-    }
-
-    private async Task RerunAfterAsync(CancellationToken ct)
-    {
-        try { await Task.Delay(600, ct); }
-        catch (OperationCanceledException) { return; }
-
-        if (IsRunning) _runCts?.Cancel();   // der laufende Lauf hat den alten Wert
-        while (IsRunning && !ct.IsCancellationRequested) await Task.Delay(50, CancellationToken.None);
-        if (!ct.IsCancellationRequested && HasPending) await ComputeAsync(rerun: true);
+        // Natürlichkeit geht ins Modell — aber nicht von selbst neu rechnen (Wunsch): erst mit „KI berechnen“
+        if (FidelityChangedSinceRun && !IsRunning)
+            Status = Tr.T("Natürlichkeit geändert — „KI berechnen“ rechnet mit dem neuen Wert neu.");
     }
 
     private bool CanApply => !IsRunning && SelectedModel is not null && _main.HasImage && !_main.IsEditing;
 
-    /// <summary>Rechnet das Modell und zeigt das Ergebnis — ins Bild kommt es erst mit „Übernehmen“.</summary>
+    /// <summary>
+    /// Rechnet das Modell und zeigt das Ergebnis — ins Bild kommt es erst mit „Übernehmen“. Nur die Natürlichkeit verstellt:
+    /// dasselbe Eingangsbild und dieselben Gesichter, nur das Modell neu.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanApply))]
-    private Task Apply() => ComputeAsync(rerun: false);
+    private Task Apply() => ComputeAsync(rerun: FidelityChangedSinceRun && _runModel == SelectedModel);
 
     /// <summary>
     /// Ausgangsbild und Look für einen neuen Lauf. Immer vom Stand vor der KI: Ist das Bild das Ergebnis des
@@ -379,9 +373,11 @@ public partial class AiViewModel : ViewModelBase
         }
 
         var path = _main.CurrentImagePath;
+        var fidelityUsed = Fidelity;
         using var cts = new CancellationTokenSource();
         _runCts = cts;
         IsRunning = true;
+        AppLog.Activity($"KI-Tab: {model.Name} ({(_sessions.OnGpu && model.Gpu ? "Grafikkarte" : "CPU")}) auf {System.IO.Path.GetFileName(path)}");
         Progress = 0;
         var clock = Stopwatch.StartNew();
         Status = Tr.T("KI rechnet — Fortschritt unten in der Vorschau.");
@@ -471,7 +467,7 @@ public partial class AiViewModel : ViewModelBase
                 }
 
                 Activity(faces.Count == 1 ? Tr.T("1 Gesicht gefunden …") : Tr.T("{0} Gesichter gefunden …", faces.Count), Progress, cancel: true);
-                var (found, input2, fidelity) = (faces, image, Fidelity / 100);
+                var (found, input2, fidelity) = (faces, image, fidelityUsed / 100);
                 var parserPath = Store.PathOf(AiModelCatalog.FaceParser);   // ohne: Falten ersatzweise ohne Augen und Mund
                 run = await Task.Run(() =>
                 {
@@ -498,7 +494,7 @@ public partial class AiViewModel : ViewModelBase
             }
 
             if (!ReferenceEquals(setup, _setup)) DisposeInput(_setup);
-            (_run, _setup, _runFaces, _runModel) = (run, setup, faces, model);
+            (_run, _setup, _runFaces, _runModel, _runFidelity) = (run, setup, faces, model, fidelityUsed);
             rendered = null;   // gehört jetzt zu _setup
             HasPending = true;
             Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
@@ -520,6 +516,7 @@ public partial class AiViewModel : ViewModelBase
             _runCts = null;
             IsRunning = false;
             EndActivity();
+            AppLog.Activity(null);
             if (HasPending) RequestPreview();   // fertiges Ergebnis (oder nach Abbruch das alte) mit den Reglern zeigen
             else _main.OverrideBitmap = null;
         }
@@ -666,7 +663,6 @@ public partial class AiViewModel : ViewModelBase
     {
         if (_run is not { } run || _setup is not { } setup) return;
         var blend = CurrentBlend;
-        _fidelityCts?.Cancel();
 
         // Inzwischen anders bearbeitet (Zuschnitt, Rückgängig …)? Dann passt das Ergebnis nicht mehr.
         if (!ReferenceEquals(_main.CurrentImage, setup.Current))
@@ -754,7 +750,6 @@ public partial class AiViewModel : ViewModelBase
 
     private void ClearRun()
     {
-        _fidelityCts?.Cancel();
         if (IsRunning) _runCts?.Cancel();   // ein Neurechnen benutzt das Eingangsbild noch — dann gibt es der GC frei
         else DisposeInput(_setup);
         _previewCts?.Cancel();

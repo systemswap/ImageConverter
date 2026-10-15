@@ -45,7 +45,7 @@
                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Natürlichkeit'}" />
                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding Fidelity}"
                             IsEnabled="{Binding HasFidelity}" ToolTip.ShowOnDisabled="True"
-                            ToolTip.Tip="{l:T 'Nur CodeFormer: wie nah das Modell am Original bleibt — niedrig = stärkere Verbesserung, die Person kann sich aber verändern; hoch = näher am Original. Geht ins Modell — nach dem Loslassen wird neu gerechnet.'}" />
+                            ToolTip.Tip="{l:T 'Nur CodeFormer: wie nah das Modell am Original bleibt — niedrig = stärkere Verbesserung, die Person kann sich aber verändern; hoch = näher am Original. Geht ins Modell — nach dem Verstellen rechnet „KI berechnen“ neu.'}" />
                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding FidelityLabel}" />
                 </Grid>
 

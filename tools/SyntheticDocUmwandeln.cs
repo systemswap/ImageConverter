@@ -32,7 +32,8 @@ using var session = new InferenceSession(target);
 var input = Enumerable.Repeat(0.4f, 3 * ih * iw).ToArray();
 using var value = OrtValue.CreateTensorValueFromMemory(input, [1, 3, ih, iw]);
 clock.Restart();
-using var outputs = session.Run(new RunOptions(), ["image"], [value], ["bm_map"]);
+using var runOptions = new RunOptions();   // am Leben halten, bis die Rechnung fertig ist
+using var outputs = session.Run(runOptions, ["image"], [value], ["bm_map"]);
 var bm = outputs[0].GetTensorDataAsSpan<float>().ToArray();
 var ok = bm.All(v => v is >= -1 and <= 1) && bm[(rows / 2) * cols] < bm[(rows / 2) * cols + cols - 1];
 Console.WriteLine($"Probelauf: {clock.ElapsedMilliseconds} ms, Gitter {(ok ? "plausibel" : "UNPLAUSIBEL")} (Werte {bm.Min():0.000} … {bm.Max():0.000})");

@@ -171,6 +171,7 @@ public partial class RetouchViewModel : ViewModelBase
         using var cts = new CancellationTokenSource();
         _runCts = cts;
         IsRunning = true;
+        AppLog.Activity($"Entfernen: {model.Name}");
         var clock = Stopwatch.StartNew();
         Status = Tr.T("Wird entfernt …");
         _ai.ShowActivity(Tr.T("Entfernen · Modell wird geladen …"), 0, CancelCommand);
@@ -203,6 +204,7 @@ public partial class RetouchViewModel : ViewModelBase
         {
             _runCts = null;
             IsRunning = false;
+            AppLog.Activity(null);
             _ai.HideActivity();
         }
     }

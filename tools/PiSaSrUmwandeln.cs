@@ -95,7 +95,8 @@ void Check(string file, string inName, string outName, string refIn, string refO
     var input = Load(refIn);
     using var value = OrtValue.CreateTensorValueFromMemory(input, shapes[refIn].Select(d => (long)d).ToArray());
     clock.Restart();
-    using var outputs = session.Run(new RunOptions(), [inName], [value], [outName]);
+    using var runOptions = new RunOptions();   // am Leben halten, bis die Rechnung fertig ist
+    using var outputs = session.Run(runOptions, [inName], [value], [outName]);
     var got = outputs[0].GetTensorDataAsSpan<float>().ToArray();
     var want = Load(refOut);
     var shape = outputs[0].GetTensorTypeAndShape().Shape;

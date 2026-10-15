@@ -2005,3 +2005,17 @@ Test oder Nachweis.
 - **Fallstricke:** Das Ergebnis gehört jetzt auch zur Zielgröße (Basis des zweiten Durchgangs steht im `UpscaleKey`) —
   andere Maße heißt neu rechnen. Die Prüfansicht misst an der Basis des letzten Durchgangs, nicht am Bild (`ToBase` für
   den Ausschnitt). Lange Antworten der Rückfrage wurden abgeschnitten — `ChoiceWindow` bricht jetzt um.
+
+## 69. Absturz bei Gesichtern war die Speicherbereinigung, nicht die Grafikkarte (0.5.89 beta)
+
+- **Meldung des Benutzers:** Familienfoto, mehrere Gesichtsmodelle nacheinander — öfter Absturz, auch nach 0.5.85 (dort
+  auf die CPU verlegt). Ereignisanzeige: wieder Zugriffsverletzung in `InferenceSession.Run` aus `OnnxFaceParser.Parse`.
+- **Ursache:** `session.Run(new RunOptions(), …)` — die Laufoptionen hatten außer dem Aufruf keinen Halter. Im Release-Bau
+  darf die Speicherbereinigung sie freigeben, sobald ihr Zeiger übergeben ist; ihr Finalizer gibt die nativen Optionen frei,
+  während ONNX noch rechnet. Nachgestellt (`gc-probe`: Schleife + ständig GC): alter Code nach ~60 Durchläufen 0xC0000005,
+  neuer 400 Durchläufe ohne Absturz. Im Debug-Bau tritt es nicht auf (Variablen leben bis zum Methodenende).
+- **Regel:** `RunOptions` immer mit `using var` anlegen (oder `OnnxSessions.Run`); nie als Temporärobjekt im Aufruf.
+  Vermutlich war auch der Absturz aus #67 dieser — Gesichter könnten wieder auf die Grafikkarte, erst nach eigenem Test.
+- **Dazu:** Regler „Natürlichkeit“ (CodeFormer) rechnet nicht mehr von selbst neu, erst „KI berechnen“ (dann mit denselben
+  Gesichtern, schneller). Eigenes Log `ImageConverter.log` neben dem Programm (`AppLog`): Abstürze vom letzten Mal mit der
+  letzten Tätigkeit und den Einträgen der Ereignisanzeige (über wevtutil, ANSI-Codepage), unbehandelte Fehler.

@@ -593,6 +593,7 @@ public partial class MainViewModel
         var (method, plan) = (key.Method, key.Plan);
         var cts = _upscaleCts = new CancellationTokenSource();
         IsUpscaling = true;
+        AppLog.Activity($"Upscaling: {SelectedUpscaler.Name}, {plan.Passes} Durchgang/Durchgänge ({(Ai.Sessions.OnGpu ? "Grafikkarte" : "CPU")}) auf {CurrentFileName}");
         ErrorMessage = null;
         var clock = Stopwatch.StartNew();
         var preparing = false;
@@ -686,6 +687,7 @@ public partial class MainViewModel
         finally
         {
             IsUpscaling = false;
+            AppLog.Activity(null);
             ActivityText = null;
             ActivityProgress = -1;
             ActivityCancel = null;

@@ -92,10 +92,13 @@ Write-Step 'Tests'
 dotnet test $solution -c Release --nologo -p:UseArtifactsOutput=true "-p:ArtifactsPath=$artifacts"
 if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen - nichts veroeffentlicht.' }
 
-# Leert einen Ausgabeordner bis auf die Dateien des Benutzers: KI-Modelle und Sprachdateien.
+# Was das Programm neben sich schreibt; bleibt bei jedem Bau stehen (Log nicht ins Paket).
+$userFiles = @('KI-Modelle', 'languages', 'ImageConverter.log', 'ImageConverter.log.alt')
+
+# Leert einen Ausgabeordner bis auf die Dateien des Benutzers: KI-Modelle, Sprachdateien, Log.
 function Clear-ProgramFolder([string]$dest) {
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Get-ChildItem $dest -Force | Where-Object { $_.Name -notin @('KI-Modelle', 'languages') } | Remove-Item -Recurse -Force
+    Get-ChildItem $dest -Force | Where-Object { $_.Name -notin $userFiles } | Remove-Item -Recurse -Force
 }
 
 function Publish-Runtime([string]$rid, [string]$dest) {
@@ -143,7 +146,7 @@ if ($Target -in @('windows', 'beides')) {
 
     $zip = Join-Path $outDir 'ImageConverter-windows-x64.zip'
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    $items = Get-ChildItem $winDir | Where-Object { $_.Name -ne 'KI-Modelle' }
+    $items = Get-ChildItem $winDir | Where-Object { $_.Name -notin @('KI-Modelle', 'ImageConverter.log', 'ImageConverter.log.alt') }
     # Die frisch kopierte EXE haelt kurz ein anderer Prozess fest, auch wenn ImageConverter
     # nicht laeuft (vermutlich der Virenscanner) - dann warten und erneut versuchen.
     for ($try = 1; ; $try++) {

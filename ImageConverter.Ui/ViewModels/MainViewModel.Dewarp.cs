@@ -321,6 +321,7 @@ public partial class MainViewModel
             return;
         }
         IsStraighteningWithAi = true;
+        AppLog.Activity($"KI begradigen: {model.Name}");
         var fallback = System.IO.Path.Combine(Ai.Store.DownloadFolder, model.Id);
         ActivityText = Core.Ai.SyntheticDoc.SyntheticDocModel.NeedsBuild(checkpoint, fallback)
             ? Tr.T("KI-Modell wird vorbereitet …")
@@ -357,6 +358,7 @@ public partial class MainViewModel
         finally
         {
             IsStraighteningWithAi = false;
+            AppLog.Activity(null);
             ActivityText = null;
             OnPropertyChanged(nameof(AiStraightenActive));
         }
