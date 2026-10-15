@@ -2019,3 +2019,20 @@ Test oder Nachweis.
 - **Dazu:** Regler „Natürlichkeit“ (CodeFormer) rechnet nicht mehr von selbst neu, erst „KI berechnen“ (dann mit denselben
   Gesichtern, schneller). Eigenes Log `ImageConverter.log` neben dem Programm (`AppLog`): Abstürze vom letzten Mal mit der
   letzten Tätigkeit und den Einträgen der Ereignisanzeige (über wevtutil, ANSI-Codepage), unbehandelte Fehler.
+
+## 70. Vorschau beschleunigen: messen, nicht raten (0.5.91–0.5.95 beta)
+
+- **Wunsch des Benutzers:** Regler reagieren verzögert; Berechnungen auf die Grafikkarte; Ergebnis muss gleich bleiben,
+  jeder Schritt ein Commit. Messung und Ergebnis: docs/TEMPO.md.
+- **Messfalle:** Der Laptop taktet unter Dauerlast herunter — eine Messung „vorher“ und eine spätere „nachher“ zeigte
+  Verbesserungen und Verschlechterungen bei Stufen, die sich nicht geändert hatten. Nur abwechselnd messen (alter Stand
+  im Arbeitsbaum `~/.cache/imageconverter-build/alt`, `gleich-probe/ab.sh`), bester von mehreren Läufen.
+- **Gleichheit:** Referenz der CPU-Ergebnisse speichern, jede Fassung dagegen vergleichen. CPU-Umbauten bitgleich halten
+  (gleiche Reihenfolge der Additionen je Spalte/Zeile). Grafikkarte: nie bitgleich; winzige Unterschiede kippen an
+  einzelnen Pixeln Schwellen (Entstufen) — das ist normal, nicht ein Fehler im Kernel.
+- **Grafikkarte im Prozessor:** gut für viel Rechnung je Pixel (Non-Local Means ×3,4), schlecht für laufende Summen
+  (Kastenfilter, Guided Filter: langsamer als die CPU). Kopieren hin und zurück ≈ 30 ms je 3 MP — kleine Stufen lohnen nicht.
+- **Tests:** Grafikkarte nie global abschalten — parallel laufende Tests rechnen dann einmal mit, einmal ohne und finden
+  „Abweichungen“. `GpuFilters.CpuOnly()` gilt nur für den eigenen Ablauf (AsyncLocal).
+- **ILGPU:** keine statischen Tabellen im Kernel (hochladen), kein Cbrt (Potenz ⅓ + Newton), Einzeldatei-Veröffentlichung
+  geht. Kernel-Übersetzung beim ersten Gebrauch ≈ 3 s — `WarmUpAsync` beim Start.

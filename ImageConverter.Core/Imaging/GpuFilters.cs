@@ -1,6 +1,7 @@
 using ILGPU;
 using ILGPU.Algorithms;
 using ILGPU.Runtime;
+using ImageConverter.Core.Localization;
 using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
@@ -46,6 +47,27 @@ public static class GpuFilters
     public static string? Problem { get; private set; }
 
     /// <summary>
+    /// Kurz nach dem Start im Hintergrund: Grafikkarte öffnen und die Kernel übersetzen (an einem kleinen Bild) — sonst
+    /// wartete die erste Vorschau mit Rauschen oder Dunst darauf.
+    /// </summary>
+    public static Task WarmUpAsync() => Task.Run(() =>
+    {
+        try
+        {
+            const int w = 96, h = 64;
+            var px = new float[w * h * 4];
+            var rng = new Random(1);
+            for (var i = 0; i < px.Length; i++) px[i] = i % 4 == 3 ? 1 : 0.3f + 0.4f * (float)rng.NextDouble();
+            PixelPool.Return(Denoiser.Apply(px, w, h, 0.5, 0));
+            PixelPool.Return(Adjust.Dehazed(px, w, h, Adjustments.None with { Dehaze = 50 }));
+        }
+        catch (Exception e)
+        {
+            AppLog.Write("Vorwärmen der Grafikkarte fehlgeschlagen", e.ToString());
+        }
+    });
+
+    /// <summary>
     /// <paramref name="work"/> auf der Grafikkarte ausführen (nacheinander, nie gleichzeitig — Vorschau, Schätzung und
     /// Export teilen sich eine). false: keine Grafikkarte oder Fehler — dann auf der CPU rechnen.
     /// </summary>
@@ -85,7 +107,7 @@ public static class GpuFilters
                 .FirstOrDefault();
             if (device is null)
             {
-                Problem = "Keine Grafikkarte mit OpenCL oder CUDA gefunden.";
+                Problem = Tr.T("Keine Grafikkarte mit OpenCL oder CUDA gefunden.");
                 return null;
             }
             _accelerator = device.CreateAccelerator(_context);

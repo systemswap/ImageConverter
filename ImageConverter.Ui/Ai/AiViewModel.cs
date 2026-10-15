@@ -74,6 +74,14 @@ public partial class AiViewModel : ViewModelBase
         : _sessions.GpuProblem is { } problem ? Tr.T("Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}", name, problem)
         : Tr.T("Die KI-Scaler (Größe › Verfahren) rechnen auf der Grafikkarte ({0}), die übrigen Modelle (Gesichter, Entfernen, Begradigen) auf der CPU.", name);
 
+    /// <summary>Worauf Entrauschen und Dunst rechnen (ILGPU: OpenCL/CUDA, unabhängig von der KI-Laufzeit).</summary>
+    public string FilterGpuStatus =>
+        Core.Imaging.GpuFilters.DeviceName is { } device
+            ? Tr.T("Entrauschen und Dunst rechnen auf der Grafikkarte ({0}).", device)
+            : Core.Imaging.GpuFilters.Problem is { } problem
+                ? Tr.T("Entrauschen und Dunst rechnen auf der CPU — {0}", problem)
+                : Tr.T("Entrauschen und Dunst nutzen die Grafikkarte, sobald eine mit OpenCL oder CUDA gefunden ist.");
+
     /// <summary>Nach dem Öffnen eines Modells: Grafikkarte genutzt oder (nach einem Fehler) doch die CPU?</summary>
     internal void RefreshGpuStatus()
     {

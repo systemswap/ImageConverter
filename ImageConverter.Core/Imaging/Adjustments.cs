@@ -211,7 +211,9 @@ public static class Adjust
     /// Erste Stufe von <see cref="Prepare"/>: Weißabgleich und Dunst — der teuerste Teil, hängt nur von
     /// <see cref="Adjustments.DehazeKey"/> ab. Ohne beides <paramref name="px"/> selbst, sonst ein neuer Puffer.
     /// </summary>
-    public static float[] Dehazed(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null)
+    /// <param name="workEdge">Kante der kleinen Fassung, auf der der Dunst geschätzt wird; 0 = wie immer (1024). Kleiner
+    /// nur für die grobe Vorschau beim Ziehen — ein Viertel der Arbeit, das Ergebnis weicht leicht ab.</param>
+    public static float[] Dehazed(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null, int workEdge = 0)
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = px;
@@ -250,7 +252,7 @@ public static class Adjust
             plan?.Next();   // Entstufen der Quelle zählt zum ersten Schritt
             if (dehaze < 0)
             {
-                work = Replace(work, Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f));   // Dunst hinzufügen: ein Schritt
+                work = Replace(work, Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f, workEdge));   // Dunst hinzufügen: ein Schritt
             }
             else
             {
@@ -274,8 +276,8 @@ public static class Adjust
                 for (var i = 0; i < passes; i++)
                 {
                     if (i > 0) plan?.Next();
-                    work = Replace(work, Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, physics, 1f));
-                    Dehaze.LookTone(work, width, height, pass.Scene, look);
+                    work = Replace(work, Dehaze.Apply(work, width, height, (float)(Dehaze.PassAmount * t), pass, physics, 1f, workEdge));
+                    Dehaze.LookTone(work, width, height, pass.Scene, look, workEdge);
                     work = Replace(work, Deband.Apply(work, width, height, deband, seed: (uint)i + 1));
                     Dehaze.LookDetail(work, width, height, pass.Scene, look);
                 }

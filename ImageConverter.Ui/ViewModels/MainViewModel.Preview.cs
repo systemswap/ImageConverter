@@ -29,6 +29,9 @@ public partial class MainViewModel
     /// </summary>
     private const int PreviewDragEdge = 1024;
 
+    /// <summary>Kante, auf der der Dunst in der groben Vorschau geschätzt wird (sonst 1024).</summary>
+    private const int CoarseDehazeEdge = 512;
+
     /// <summary>Zwei Änderungen in diesem Abstand gelten als Ziehen; darunter (<see cref="SameActionMs"/>) als eine Aktion.</summary>
     private const int RapidMs = 300, SameActionMs = 10;
 
@@ -636,7 +639,8 @@ public partial class MainViewModel
                     Adjust.PlanSteps(j, plan, (double)job.Width * job.Height / 1e6, withDehaze: dehazed is null);
                     if (dehazed is null)
                     {
-                        dehazed = Adjust.Dehazed(denoised, job.Width, job.Height, j, plan);
+                        // Beim Ziehen schätzt der Dunst auf einer kleineren Fassung (ein Viertel der Arbeit) — fein wie immer
+                        dehazed = Adjust.Dehazed(denoised, job.Width, job.Height, j, plan, job.Coarse ? CoarseDehazeEdge : 0);
                         AddCached(_dehazedCache, (key, job.Noise, dehazeKey, dehazed), null, PixelCacheSize);
                     }
                     prepared = Adjust.Finish(dehazed, job.Width, job.Height, j, plan);

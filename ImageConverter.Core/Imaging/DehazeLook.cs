@@ -22,13 +22,13 @@ internal static partial class Dehaze
     }
 
     /// <summary>Klarheit, Kurve und Dynamik (vor dem Entstufen), an Ort und Stelle.</summary>
-    internal static void LookTone(float[] px, int width, int height, SceneMap? scene, LookSettings s)
+    internal static void LookTone(float[] px, int width, int height, SceneMap? scene, LookSettings s, int workEdge = 0)
     {
         if (s.Clarity <= 0 && s.Curve == 0 && s.Vibrance <= 0 && s.VibranceSky <= 0) return;
 
         // Grundhelligkeit für die Klarheit: Oklab-L, kantentreu geglättet (Guided Filter auf der kleinen
         // Fassung, Führungsbild das Bild selbst) — ein einfacher Weichzeichner gäbe Lichthöfe an Kanten
-        var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)WorkEdge));
+        var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)(workEdge > 0 ? workEdge : WorkEdge)));
         (float[] A, float[] B) baseL = default;
         int sw = 0, sh = 0;
         if (s.Clarity > 0)

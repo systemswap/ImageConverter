@@ -93,6 +93,8 @@ public partial class App : Application
 
             var vm = new MainViewModel { CoarseWhileDragging = true };   // beim Ziehen grobe Vorschau, fein nach dem Loslassen
             desktop.MainWindow = new MainWindow { DataContext = vm };
+            // Grafikkarte für Entrauschen und Dunst im Hintergrund vorbereiten (Kernel übersetzen)
+            _ = Core.Imaging.GpuFilters.WarmUpAsync();
 
             // Dateien aus "Öffnen mit" bzw. der .desktop-Zeile (Exec=… %F) direkt laden
             if (desktop.Args is { Length: > 0 } args)

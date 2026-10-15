@@ -146,7 +146,7 @@ internal static partial class Dehaze
 
     /// <summary>Wie oben in Fließkomma (B, G, R, A je Pixel, sRGB-kodiert 0–1): Die Durchläufe runden so
     /// nicht nach jedem Schritt auf 8 Bit — das gab Treppen im Himmel.</summary>
-    internal static float[] Apply(float[] bgra, int width, int height, float amount, Pass? pass, Settings s, float share)
+    internal static float[] Apply(float[] bgra, int width, int height, float amount, Pass? pass, Settings s, float share, int workEdge = 0)
     {
         if (amount == 0) return (float[])bgra.Clone();
         var strength = Math.Abs(amount);
@@ -159,7 +159,7 @@ internal static partial class Dehaze
         // Alle Schätzungen auf einer verkleinerten Fassung (Flächenmittel in linearem Licht);
         // das große Bild wird danach nur einmal durchlaufen — Panoramen haben 80 MP, eine
         // Kopie in Fließkomma bräuchte Gigabytes.
-        var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)WorkEdge));
+        var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)(workEdge > 0 ? workEdge : WorkEdge)));
         var (small, sw, sh) = DownscaleLinear(bgra, width, height, f);
         var fresh = pass is null || pass.Air.Length == 0;
         var scene = pass?.Scene ?? SceneMap.Of(small, sw, sh, f);
