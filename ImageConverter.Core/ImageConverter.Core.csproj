@@ -12,6 +12,8 @@
         <InternalsVisibleTo Include="ImageConverter.Tests" />
         <PackageReference Include="Magick.NET-Q16-AnyCPU" />
         <PackageReference Include="PDFsharp" />
+        <PackageReference Include="ILGPU" />
+        <PackageReference Include="ILGPU.Algorithms" />
         <PackageReference Include="System.Drawing.Common" />
     </ItemGroup>
 

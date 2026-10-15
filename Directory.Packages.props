@@ -32,6 +32,11 @@
         <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
         <PackageVersion Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
 
+        <!-- Bildfilter auf der Grafikkarte (Entrauschen, Dunst): ILGPU übersetzt C# nach OpenCL (AMD, Intel) bzw. CUDA
+             (NVIDIA), ohne Treiber-SDK. Universität von Illinois/NCSA-Lizenz. Ohne Grafikkarte rechnet die CPU. -->
+        <PackageVersion Include="ILGPU" Version="1.5.1" />
+        <PackageVersion Include="ILGPU.Algorithms" Version="1.5.1" />
+
         <!-- Test packages -->
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageVersion Include="xunit" Version="2.9.3" />

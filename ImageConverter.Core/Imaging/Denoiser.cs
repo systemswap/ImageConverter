@@ -237,6 +237,10 @@ public static class Denoiser
             invH2[i] = hh > 1e-6f ? 1 / (hh * hh) : 0;
         });
 
+        // Grafikkarte: dieselbe Rechnung je Punkt, alle Verschiebungen in einem Faden (gleiches Ergebnis bis auf Rundung)
+        if (GpuFilters.NonLocalMeans(y, sigma2, invH2, w, h, PatchRadius, SearchRadius, (float)Math.Min(1, 1.5 * strength)) is { } fast)
+            return fast;
+
         var sum = new float[n];
         var weightSum = new float[n];
         var maxWeight = new float[n];
