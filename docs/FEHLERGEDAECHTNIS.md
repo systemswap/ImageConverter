@@ -2036,3 +2036,12 @@ Test oder Nachweis.
   „Abweichungen“. `GpuFilters.CpuOnly()` gilt nur für den eigenen Ablauf (AsyncLocal).
 - **ILGPU:** keine statischen Tabellen im Kernel (hochladen), kein Cbrt (Potenz ⅓ + Newton), Einzeldatei-Veröffentlichung
   geht. Kernel-Übersetzung beim ersten Gebrauch ≈ 3 s — `WarmUpAsync` beim Start.
+
+## 71. Entfernen: Vorher/Nachher-Linie ließ sich nicht ziehen, Markierung erschien wieder (0.5.96 beta)
+
+- **Meldung des Benutzers:** Im Tab „Entfernen“ ließ sich die Trennlinie von Vorher/Nachher nicht ziehen (die Maus malt),
+  und die roten Markierungen standen nach dem letzten Versuch wieder da, obwohl das Markierte entfernt war.
+- **Ursache:** In `CropView.OnPointerPressed` kam der Pinsel (und die Pipette) vor der Trennlinie. Der Versuch, sie zu
+  ziehen, malte einen Strich — und ein neuer Strich blendet die ganze Markierung wieder ein (`StrokesApplied = false`).
+- **Abhilfe:** Die Trennlinie geht vor Pinsel und Pipette, auch beim Mauszeiger (kein Pinselkreis über der Linie).
+  Geprüft ohne Fenster mit simulierter Maus (`linie-probe`): Linie wandert, kein Strich; daneben malt der Pinsel.

@@ -911,6 +911,17 @@ public sealed class CropView : Control
         Focus();
         _pressScreen = p;
 
+        // Vergleich: die Trennlinie geht vor — auch vor Pinsel und Pipette (sonst malte der Versuch, sie zu ziehen, beim
+        // Entfernen einen Strich, und die schon entfernte Markierung erschien wieder)
+        if (OnSplitLine(p))
+        {
+            _mode = DragMode.Split;
+            Cursor = CursorWestEast;
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+
         // Pinsel: malen statt aufziehen
         if (BrushActive && !IsRotated)
         {
@@ -933,16 +944,6 @@ public sealed class CropView : Control
                 var at = ToImage(p);
                 if (pick.CanExecute(at)) pick.Execute(at);
             }
-            e.Handled = true;
-            return;
-        }
-
-        // Vergleich: die Trennlinie geht vor — sie liegt mitten im Bild
-        if (OnSplitLine(p))
-        {
-            _mode = DragMode.Split;
-            Cursor = CursorWestEast;
-            e.Pointer.Capture(this);
             e.Handled = true;
             return;
         }
@@ -1051,6 +1052,15 @@ public sealed class CropView : Control
         switch (_mode)
         {
             case DragMode.None:
+                if ((BrushActive && !IsRotated || PickActive) && OnSplitLine(p))
+                {
+                    // über der Trennlinie: ziehen statt malen/messen — kein Pinselkreis
+                    _brushHover = null;
+                    _pickHover = null;
+                    Cursor = CursorWestEast;
+                    InvalidateVisual();
+                    return;
+                }
                 if (BrushActive && !IsRotated)
                 {
                     _brushHover = OnImage(p) ? p : null;
