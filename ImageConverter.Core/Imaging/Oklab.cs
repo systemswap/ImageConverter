@@ -16,6 +16,10 @@ internal static class Oklab
     private static readonly float[] ToSrgbTable = BuildTable(v =>
         v <= 0.0031308 ? 12.92 * v : 1.055 * Math.Pow(v, 1 / 2.4) - 0.055);
 
+    /// <summary>Tabellen für die Grafikkarte (Dehaze.Gpu): sRGB → linear und zurück, je 4097 Werte.</summary>
+    internal static float[] LinearTableForGpu => ToLinearTable;
+    internal static float[] SrgbTableForGpu => ToSrgbTable;
+
     private static float[] BuildTable(Func<double, double> f)
     {
         var t = new float[TableSize + 1];

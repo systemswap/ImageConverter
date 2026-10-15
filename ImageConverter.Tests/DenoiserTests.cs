@@ -20,19 +20,11 @@ public class DenoiserTests
     {
         var (noisy, _) = Scene(0.06f, 0.02f);
         float[] cpu, gpu;
-        lock (GpuGate)
-        {
-            GpuFilters.Enabled = false;
-            try { cpu = Denoiser.Apply(noisy, W, H, 0.6, 0.4); }
-            finally { GpuFilters.Enabled = true; }
-            gpu = Denoiser.Apply(noisy, W, H, 0.6, 0.4);
-        }
+        using (GpuFilters.CpuOnly()) cpu = Denoiser.Apply(noisy, W, H, 0.6, 0.4);
+        gpu = Denoiser.Apply(noisy, W, H, 0.6, 0.4);
         var max = cpu.Zip(gpu).Max(p => Math.Abs(p.First - p.Second)) * 255;
         Assert.True(max < 1e-3, $"Grafikkarte ({GpuFilters.DeviceName ?? "keine"}) weicht um {max:0.0000} Stufen ab");
     }
-
-    /// <summary>Tests, die die Grafikkarte umschalten, nicht gleichzeitig.</summary>
-    internal static readonly Lock GpuGate = new();
 
     /// <summary>Links eben, rechts feine senkrechte Streifen (Periode 6 px) — dazu Rauschen in Helligkeit und/oder Farbe.</summary>
     private static (float[] Noisy, float[] Clean) Scene(float lumaNoise, float chromaNoise)

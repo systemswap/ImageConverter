@@ -43,6 +43,9 @@ internal static partial class Dehaze
             baseL = GuidedColor.Coefficients(Encode(small), l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 
+        // Grafikkarte: dieselbe Schleife je Pixel
+        if (ToneOnGpu(px, width, height, f, sw, sh, baseL, scene, s)) return;
+
         Parallel.For(0, height, y =>
         {
             var sy = (y + 0.5f) / f - 0.5f;

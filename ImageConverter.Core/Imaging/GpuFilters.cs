@@ -19,8 +19,25 @@ public static class GpuFilters
     private static Accelerator? _accelerator;
     private static bool _tried;
 
-    /// <summary>Grafikkarte benutzen, wenn vorhanden (Tests und Vergleiche schalten ab).</summary>
+    /// <summary>Grafikkarte benutzen, wenn vorhanden.</summary>
     public static bool Enabled { get; set; } = true;
+
+    private static readonly AsyncLocal<bool> CpuOnlyHere = new();
+
+    /// <summary>
+    /// Nur in diesem Ablauf auf der CPU rechnen (Vergleich Grafikkarte/CPU in Tests) — andere, die gleichzeitig rechnen,
+    /// bleiben auf der Grafikkarte.
+    /// </summary>
+    internal static IDisposable CpuOnly()
+    {
+        CpuOnlyHere.Value = true;
+        return new Reset();
+    }
+
+    private sealed class Reset : IDisposable
+    {
+        public void Dispose() => CpuOnlyHere.Value = false;
+    }
 
     /// <summary>Name der Grafikkarte, sobald sie geöffnet ist; null ohne.</summary>
     public static string? DeviceName { get; private set; }
@@ -34,7 +51,7 @@ public static class GpuFilters
     /// </summary>
     internal static bool TryRun(Action<Accelerator> work)
     {
-        if (!Enabled) return false;
+        if (!Enabled || CpuOnlyHere.Value) return false;
         lock (Gate)
         {
             if (Open() is not { } accelerator) return false;
@@ -87,6 +104,7 @@ public static class GpuFilters
     private static void Close()
     {
         _nlm = null;
+        Dehaze.ForgetGpuKernels();
         _accelerator?.Dispose();
         _accelerator = null;
         _context?.Dispose();

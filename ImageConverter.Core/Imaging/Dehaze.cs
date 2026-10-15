@@ -253,6 +253,11 @@ internal static partial class Dehaze
             baseL = GuidedColor.Coefficients(guide, l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 
+        // Grafikkarte: die Pixelschleife des Modells (nur Physik — so rechnen die Durchläufe der Kette)
+        if (amount > 0 && clarity == 0 && sharpen == 0 && curve == 0 && vibrance == 0
+            && ModelOnGpu(bgra, width, height, f, sw, sh, air, sky, plain, strong, gain, airLab, mix, k, s.CastRemoval, strength) is { } onGpu)
+            return onGpu;
+
         var luma = amount > 0 && sharpen > 0 ? LumaPlane(bgra, width, height) : null;
         var result = PixelPool.Rent(bgra.Length);   // jedes Pixel wird unten vollständig geschrieben
         Parallel.For(0, height, y =>
@@ -776,12 +781,15 @@ internal static partial class Dehaze
     private static (float[] A, float[] B) BrightnessGain(float[] before, float[] after, float[] guide, int sw, int sh)
     {
         var logGain = new float[sw * sh];
-        for (var p = 0; p < logGain.Length; p++)
+        Parallel.For(0, sh, row =>
         {
-            var lb = Luma(before[p * 3], before[p * 3 + 1], before[p * 3 + 2]);
-            var la = Luma(after[p * 3], after[p * 3 + 1], after[p * 3 + 2]);
-            logGain[p] = MathF.Log(Math.Clamp(lb / Math.Max(la, 1e-4f), 0.5f, 3f));
-        }
+            for (int x = 0, p = row * sw; x < sw; x++, p++)
+            {
+                var lb = Luma(before[p * 3], before[p * 3 + 1], before[p * 3 + 2]);
+                var la = Luma(after[p * 3], after[p * 3 + 1], after[p * 3 + 2]);
+                logGain[p] = MathF.Log(Math.Clamp(lb / Math.Max(la, 1e-4f), 0.5f, 3f));
+            }
+        });
         return GuidedColor.Coefficients(guide, logGain, sw, sh,
             Math.Max(1.0, BrightnessPerEdge * Math.Max(sw, sh)), eps: 1e-2f);
     }
@@ -877,6 +885,9 @@ internal static class Srgb
     }).ToArray();
 
     public static float ToLinear(byte v) => ToLinearTable[v];
+
+    /// <summary>Tabelle von <see cref="Decode"/> — für die Grafikkarte (Dehaze.Gpu).</summary>
+    internal static float[] DecodeTableForGpu => DecodeTable;
 
     // Für die Fließkomma-Kette (Werte zwischen den 8-Bit-Stufen): feine Tabelle, linear interpoliert
     private const int DecodeSize = 4096;

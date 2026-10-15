@@ -63,6 +63,24 @@ public class DehazeTests
         Enumerable.Range(0, W * H * 4).Where(i => i % 4 != 3).Average(i => Math.Abs(a[i] - b[i]));
 
     /// <summary>
+    /// Grafikkarte (wenn vorhanden) und CPU rechnen denselben Dunst (alle Durchläufe der Kette): im Mittel unter 1/100
+    /// Stufe, einzelne Pixel höchstens wenige Stufen (dort kippt eine Schwelle durch die Rundung). Ohne Grafikkarte prüft
+    /// der Test nur die CPU gegen sich selbst.
+    /// </summary>
+    [Fact]
+    public void Dehaze_GpuAndCpu_Agree()
+    {
+        var px = Pixels.FromBytes(Haze(Scene(), 0.5f, Air));
+        var a = Adjustments.None with { Dehaze = 60, Shadows = 20 };
+        float[] cpu, gpu;
+        using (GpuFilters.CpuOnly()) cpu = Adjust.Dehazed(px, W, H, a);
+        gpu = Adjust.Dehazed(px, W, H, a);
+        var diffs = cpu.Zip(gpu).Select(p => Math.Abs(p.First - p.Second) * 255).ToArray();
+        Assert.True(diffs.Average() < 0.01, $"im Mittel {diffs.Average():0.0000} Stufen ({GpuFilters.DeviceName ?? "keine Grafikkarte"})");
+        Assert.True(diffs.Max() < 6, $"höchstens {diffs.Max():0.00} Stufen");
+    }
+
+    /// <summary>
     /// Kontrast und Farben kommen zurück, die Helligkeit bleibt (Helligkeitsausgleich wie bei
     /// Adobe) — ohne ihn wurde das Ergebnis dunkel.
     /// </summary>
