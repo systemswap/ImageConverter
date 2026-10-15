@@ -36,7 +36,10 @@ internal static partial class Dehaze
             var (small, w2, h2) = DownscaleLinear(px, width, height, f);
             (sw, sh) = (w2, h2);
             var l = new float[sw * sh];
-            for (var p = 0; p < l.Length; p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
+            Parallel.For(0, sh, row =>
+            {
+                for (int x = 0, p = row * sw; x < sw; x++, p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
+            });
             baseL = GuidedColor.Coefficients(Encode(small), l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 

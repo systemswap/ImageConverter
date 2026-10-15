@@ -173,11 +173,14 @@ internal static partial class Dehaze
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         // Farbe des Luftlichts je Feld (Helligkeit linear, Oklab a/b) — für das Abziehen des Farbstichs
         var airLab = new float[sw * sh * 3];
-        for (var p = 0; p < sw * sh; p++)
+        Parallel.For(0, sh, row =>
         {
-            var (_, la, lb) = Oklab.FromLinear(air[p * 3 + 2], air[p * 3 + 1], air[p * 3]);
-            (airLab[p * 3], airLab[p * 3 + 1], airLab[p * 3 + 2]) = (Luma(air[p * 3], air[p * 3 + 1], air[p * 3 + 2]), la, lb);
-        }
+            for (int x = 0, p = row * sw; x < sw; x++, p++)
+            {
+                var (_, la, lb) = Oklab.FromLinear(air[p * 3 + 2], air[p * 3 + 1], air[p * 3]);
+                (airLab[p * 3], airLab[p * 3 + 1], airLab[p * 3 + 2]) = (Luma(air[p * 3], air[p * 3 + 1], air[p * 3 + 2]), la, lb);
+            }
+        });
         var guide = Encode(small);
         var refine = Math.Max(1.0, RefinePerEdge * Math.Max(sw, sh));
         var plain = GuidedColor.Coefficients(guide, t, sw, sh, refine, eps: 1e-3f);
@@ -208,16 +211,19 @@ internal static partial class Dehaze
         if (amount > 0)
         {
             var after = new float[small.Length];
-            var a3 = new float[3];
-            for (var p = 0; p < sw * sh; p++)
+            Parallel.For(0, sh, row =>
             {
-                var o = p * 3;
-                a3[0] = air[o]; a3[1] = air[o + 1]; a3[2] = air[o + 2];
-                var cell = new Cell(sw, sh, p % sw, p / sw);
-                var tt = TransmitAt(cell, sky[p], guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
-                    small[p * 3], small[p * 3 + 1], small[p * 3 + 2], a3);
-                for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[o + c], tt, mix);
-            }
+                var a3 = new float[3];
+                for (int x = 0, p = row * sw; x < sw; x++, p++)
+                {
+                    var o = p * 3;
+                    a3[0] = air[o]; a3[1] = air[o + 1]; a3[2] = air[o + 2];
+                    var cell = new Cell(sw, sh, x, row);
+                    var tt = TransmitAt(cell, sky[p], guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
+                        small[p * 3], small[p * 3 + 1], small[p * 3 + 2], a3);
+                    for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[o + c], tt, mix);
+                }
+            });
             gain = BrightnessGain(small, after, guide, sw, sh);
         }
         var k = s.BrightnessMatch * mix;
@@ -240,7 +246,10 @@ internal static partial class Dehaze
             // Grundhelligkeit für die Klarheit: Oklab-L des Originals, kantentreu geglättet —
             // ein einfacher Weichzeichner gäbe Lichthöfe an Horizont und Häuserkanten
             var l = new float[sw * sh];
-            for (var p = 0; p < l.Length; p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
+            Parallel.For(0, sh, row =>
+            {
+                for (int x = 0, p = row * sw; x < sw; x++, p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
+            });
             baseL = GuidedColor.Coefficients(guide, l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 
@@ -920,7 +929,13 @@ internal static class GuidedColor
     public static (float[] A, float[] B) Coefficients(float[] guide, float[] input, int w, int h, double sigma, float eps)
     {
         var n = w * h;
-        float[] Plane(Func<int, float> f) { var a = new float[n]; for (var i = 0; i < n; i++) a[i] = f(i); Blur.Gauss(a, w, h, sigma); return a; }
+        float[] Plane(Func<int, float> f)
+        {
+            var a = new float[n];
+            Parallel.For(0, h, row => { for (int x = 0, i = row * w; x < w; x++, i++) a[i] = f(i); });
+            Blur.Gauss(a, w, h, sigma);
+            return a;
+        }
 
         var mB = Plane(i => guide[i * 3]);
         var mG = Plane(i => guide[i * 3 + 1]);
@@ -960,9 +975,15 @@ internal static class GuidedColor
 
         // Koeffizienten glätten (jedes Pixel liegt in vielen Fenstern)
         var aB = new float[n]; var aG = new float[n]; var aR = new float[n];
-        for (var i = 0; i < n; i++) { aB[i] = a[i * 3]; aG[i] = a[i * 3 + 1]; aR[i] = a[i * 3 + 2]; }
+        Parallel.For(0, h, row =>
+        {
+            for (int x = 0, i = row * w; x < w; x++, i++) { aB[i] = a[i * 3]; aG[i] = a[i * 3 + 1]; aR[i] = a[i * 3 + 2]; }
+        });
         foreach (var plane in new[] { aB, aG, aR, b }) Blur.Gauss(plane, w, h, sigma);
-        for (var i = 0; i < n; i++) { a[i * 3] = aB[i]; a[i * 3 + 1] = aG[i]; a[i * 3 + 2] = aR[i]; }
+        Parallel.For(0, h, row =>
+        {
+            for (int x = 0, i = row * w; x < w; x++, i++) { a[i * 3] = aB[i]; a[i * 3 + 1] = aG[i]; a[i * 3 + 2] = aR[i]; }
+        });
         return (a, b);
     }
 }

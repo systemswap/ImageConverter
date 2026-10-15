@@ -93,8 +93,11 @@ public static class Denoiser
         var coarse = GuidedFilter(fine, guide, w, h, r2, eps);
         var s = (float)Math.Clamp(strength, 0, 1);
         // feine Stufe ganz, die grobe nach und nach — kleine Werte entfernen erst die Farbpunkte, große auch Flecken
-        for (var i = 0; i < c.Length; i++)
-            c[i] += s * (fine[i] - c[i]) + s * s * (coarse[i] - fine[i]);
+        Parallel.For(0, h, row =>
+        {
+            for (int x = 0, i = row * w; x < w; x++, i++)
+                c[i] += s * (fine[i] - c[i]) + s * s * (coarse[i] - fine[i]);
+        });
     }
 
     /// <summary>Guided Filter (He, Sun, Tang 2010): Ausgang folgt den Kanten der Führung, glättet dazwischen.</summary>
@@ -102,32 +105,43 @@ public static class Denoiser
     {
         var n = p.Length;
         float[] ip = new float[n], ii = new float[n];
-        for (var i = 0; i < n; i++) { ip[i] = guide[i] * p[i]; ii[i] = guide[i] * guide[i]; }
+        Parallel.For(0, h, row =>
+        {
+            for (int x = 0, i = row * w; x < w; x++, i++) { ip[i] = guide[i] * p[i]; ii[i] = guide[i] * guide[i]; }
+        });
         var meanI = BoxMean(guide, w, h, r);
         var meanP = BoxMean(p, w, h, r);
         var corrIP = BoxMean(ip, w, h, r);
         var corrII = BoxMean(ii, w, h, r);
 
         float[] a = ip, b = ii;   // Puffer wiederverwenden
-        for (var i = 0; i < n; i++)
+        Parallel.For(0, h, row =>
         {
-            var varI = corrII[i] - meanI[i] * meanI[i];
-            var cov = corrIP[i] - meanI[i] * meanP[i];
-            a[i] = cov / (varI + eps);
-            b[i] = meanP[i] - a[i] * meanI[i];
-        }
+            for (int x = 0, i = row * w; x < w; x++, i++)
+            {
+                var varI = corrII[i] - meanI[i] * meanI[i];
+                var cov = corrIP[i] - meanI[i] * meanP[i];
+                a[i] = cov / (varI + eps);
+                b[i] = meanP[i] - a[i] * meanI[i];
+            }
+        });
         var meanA = BoxMean(a, w, h, r);
         var meanB = BoxMean(b, w, h, r);
         var q = new float[n];
-        for (var i = 0; i < n; i++) q[i] = meanA[i] * guide[i] + meanB[i];
+        Parallel.For(0, h, row =>
+        {
+            for (int x = 0, i = row * w; x < w; x++, i++) q[i] = meanA[i] * guide[i] + meanB[i];
+        });
         return q;
     }
 
     /// <summary>Mittel über ein Quadrat mit Radius <paramref name="r"/> (am Rand nur über das, was im Bild liegt).</summary>
-    internal static float[] BoxMean(float[] src, int w, int h, int r)
+    internal static float[] BoxMean(float[] src, int w, int h, int r) =>
+        BoxMean(src, w, h, r, new float[src.Length], new float[src.Length]);
+
+    /// <summary>Wie oben, in vorhandene Puffer (<paramref name="tmp"/> Zwischenstand, <paramref name="dst"/> Ergebnis).</summary>
+    internal static float[] BoxMean(float[] src, int w, int h, int r, float[] tmp, float[] dst)
     {
-        var tmp = new float[src.Length];
-        var dst = new float[src.Length];
         Parallel.For(0, h, y =>
         {
             var o = y * w;
@@ -143,18 +157,38 @@ public static class Denoiser
                 if (remove >= 0) { sum -= src[o + remove]; count--; }
             }
         });
-        Parallel.For(0, w, x =>
+        const int block = 64;
+        Parallel.For(0, (w + block - 1) / block, b =>
         {
-            double sum = 0;
+            var x0 = b * block;
+            var len = Math.Min(block, w - x0);
+            Span<double> sum = stackalloc double[block];
+            sum.Clear();
             var count = 0;
-            for (var y = 0; y <= Math.Min(r, h - 1); y++) { sum += tmp[y * w + x]; count++; }
+            for (var y = 0; y <= Math.Min(r, h - 1); y++)
+            {
+                var o = y * w + x0;
+                for (var k = 0; k < len; k++) sum[k] += tmp[o + k];
+                count++;
+            }
             for (var y = 0; y < h; y++)
             {
-                dst[y * w + x] = (float)(sum / count);
+                var o = y * w + x0;
+                for (var k = 0; k < len; k++) dst[o + k] = (float)(sum[k] / count);
                 var add = y + r + 1;
                 var remove = y - r;
-                if (add < h) { sum += tmp[add * w + x]; count++; }
-                if (remove >= 0) { sum -= tmp[remove * w + x]; count--; }
+                if (add < h)
+                {
+                    var a = add * w + x0;
+                    for (var k = 0; k < len; k++) sum[k] += tmp[a + k];
+                    count++;
+                }
+                if (remove >= 0)
+                {
+                    var m = remove * w + x0;
+                    for (var k = 0; k < len; k++) sum[k] -= tmp[m + k];
+                    count--;
+                }
             }
         });
         return dst;
@@ -207,6 +241,7 @@ public static class Denoiser
         var weightSum = new float[n];
         var maxWeight = new float[n];
         var diff = new float[n];
+        float[] boxTmp = new float[n], patch = new float[n];
         for (var dy = -SearchRadius; dy <= SearchRadius; dy++)
         for (var dx = -SearchRadius; dx <= SearchRadius; dx++)
         {
@@ -221,7 +256,7 @@ public static class Denoiser
                     diff[row * w + x] = d * d;
                 }
             });
-            var patch = BoxMean(diff, w, h, PatchRadius);
+            BoxMean(diff, w, h, PatchRadius, boxTmp, patch);
             Parallel.For(0, h, row =>
             {
                 var yy = Math.Clamp(row + oy, 0, h - 1);
