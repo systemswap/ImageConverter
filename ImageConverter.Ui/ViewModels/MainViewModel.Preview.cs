@@ -22,6 +22,24 @@ public partial class MainViewModel
 {
     private const int PreviewMaxEdge = 2048;
 
+    /// <summary>
+    /// Beim Ziehen eines Reglers (Maustaste gedrückt, oder Änderungen schnell hintereinander: Mausrad, Pfeiltasten) rechnet
+    /// die Vorschau mit höchstens dieser Kante — ein Viertel der Pixel, etwa viermal so schnell. Nach dem Loslassen bzw.
+    /// <see cref="RapidMs"/> Ruhe kommt die feine Vorschau.
+    /// </summary>
+    private const int PreviewDragEdge = 1024;
+
+    /// <summary>Zwei Änderungen in diesem Abstand gelten als Ziehen; darunter (<see cref="SameActionMs"/>) als eine Aktion.</summary>
+    private const int RapidMs = 300, SameActionMs = 10;
+
+    /// <summary>Grob rechnen? Nur in der App — Tests und Werkzeuge wollen immer die feine Vorschau.</summary>
+    internal bool CoarseWhileDragging { get; init; }
+
+    private bool _pointerDown;
+    private bool _rapidChanges;
+    private long _lastRequestTicks = long.MinValue / 2;
+    private bool _shownCoarse;   // die angezeigte Vorschau ist die grobe — fein folgt
+
     /// <summary>Das aktuelle Bild in voller Auflösung, unbearbeitet.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage), nameof(CompareBitmap))]
@@ -359,7 +377,8 @@ public partial class MainViewModel
         MagickImage Doc, int Width, int Height,
         ResampleFilter Filter, bool Gamma,
         (double Luma, double Chroma) Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma, double Scale,
-        GrainSettings? Grain, MagickImage? Upscaled = null);   // Upscaling: Bild ×4 als Grundlage fürs Vergrößern
+        GrainSettings? Grain, MagickImage? Upscaled = null,   // Upscaling: Bild ×4 als Grundlage fürs Vergrößern
+        bool Coarse = false);                                // grob beim Ziehen — fein folgt
 
     private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
 
@@ -392,12 +411,47 @@ public partial class MainViewModel
     /// </summary>
     private void RequestPreview()
     {
+        // Änderungen kurz hintereinander (nicht dieselbe Aktion): es wird gezogen
+        var now = Environment.TickCount64;
+        if (now - _lastRequestTicks >= SameActionMs) _rapidChanges = now - _lastRequestTicks < RapidMs;
+        _lastRequestTicks = now;
+        RequestPreviewNow();
+    }
+
+    /// <summary>Maustaste in der Oberfläche gedrückt/losgelassen (setzt die Ansicht). Loslassen: feine Vorschau.</summary>
+    public void SetPointerDown(bool down)
+    {
+        if (_pointerDown == down) return;
+        _pointerDown = down;
+        if (down) return;
+        _rapidChanges = false;
+        if (_shownCoarse || _renderRunning) RequestPreviewNow();
+        else RequestEstimate();   // die Schätzung hat auf das Loslassen gewartet
+    }
+
+    /// <summary>Jetzt grob rechnen? (Ziehen am Regler, schnelle Änderungen)</summary>
+    private bool Interactive => CoarseWhileDragging && (_pointerDown || _rapidChanges);
+
+    /// <summary>Nach einer groben Vorschau ohne gedrückte Taste: nach kurzer Ruhe die feine.</summary>
+    private async Task FineAfterQuietAsync(long requestTicks)
+    {
+        await Task.Delay(RapidMs + 20);
+        if (_lastRequestTicks != requestTicks || _pointerDown || !_shownCoarse) return;
+        _rapidChanges = false;
+        RequestPreviewNow();
+    }
+
+    private void RequestPreviewNow()
+    {
         RequestEstimate();   // Größe, Schärfe, Rauschen … ändern auch die Dateigröße
         UpdateHighBitDepthRecommendation();   // Empfehlung 16 Bit folgt den Reglern (und setzt den Haken selbst)
         if (_renderRunning)
         {
             _renderDirty = true;
-            _renderCts?.Cancel();   // laufende Rechnung zwischen zwei Schritten abbrechen — der Regler läuft weiter
+            // laufende Rechnung zwischen zwei Schritten abbrechen — der Regler läuft weiter. Beim Ziehen nicht: die grobe
+            // Vorschau rechnet fertig (sonst käme bei langsamen Stufen wie Dunst bis zum Innehalten gar keine), danach der
+            // neueste Stand
+            if (!Interactive) _renderCts?.Cancel();
             return;
         }
         _renderTask = RenderLoopAsync();
@@ -416,6 +470,7 @@ public partial class MainViewModel
                 if (job is null)
                 {
                     SetAdjusted(null);
+                    _shownCoarse = false;
                     continue;
                 }
 
@@ -440,6 +495,8 @@ public partial class MainViewModel
                 // rechnet ohnehin neu (RequestPreview hat _renderDirty gesetzt)
                 if (!ReferenceEquals(job.Doc, ShownDocument)) continue;
                 SetAdjusted(BitmapOps.FromBgra(result.Bgra, result.Width, result.Height));
+                _shownCoarse = job.Coarse;
+                if (job.Coarse && !_pointerDown && !_renderDirty) _ = FineAfterQuietAsync(_lastRequestTicks);
             }
             while (_renderDirty);
         }
@@ -505,14 +562,15 @@ public partial class MainViewModel
         if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone && grain is null) return null;
         var upscaled = ToolView == GeometryStages.All ? UpscaledForPreview() : null;   // nicht in der Ansicht eines Werkzeugs
 
-        // Vorschau höchstens PreviewMaxEdge groß; der Schärferadius wird
+        // Vorschau höchstens PreviewMaxEdge groß (beim Ziehen PreviewDragEdge); der Schärferadius wird
         // mitskaliert, damit er relativ zum Ergebnis gleich wirkt.
-        var scale = Math.Min(1.0, (double)PreviewMaxEdge / Math.Max(tw, th));
+        var coarse = Interactive && Math.Max(tw, th) > PreviewDragEdge;
+        var scale = Math.Min(1.0, (double)(coarse ? PreviewDragEdge : PreviewMaxEdge) / Math.Max(tw, th));
         var pw = Math.Max(1, (int)Math.Round(tw * scale));
         var ph = Math.Max(1, (int)Math.Round(th * scale));
 
         return new PreviewJob(doc, pw, ph, SelectedFilter.Filter, GammaCorrect,
-            noise, adjust, sharpen, SharpenRadius * scale, scale, grain, upscaled);
+            noise, adjust, sharpen, SharpenRadius * scale, scale, grain, upscaled, coarse);
     }
 
     /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>

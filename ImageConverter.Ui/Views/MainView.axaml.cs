@@ -26,6 +26,9 @@ public partial class MainView : UserControl
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDrop);
+        // Maustaste gedrückt (Regler ziehen …): die Vorschau rechnet solange gröber, nach dem Loslassen fein
+        AddHandler(PointerPressedEvent, (_, _) => _vm?.SetPointerDown(true), RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerReleasedEvent, (_, _) => _vm?.SetPointerDown(false), RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     protected override void OnDataContextChanged(EventArgs e)

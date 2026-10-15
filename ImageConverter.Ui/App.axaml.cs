@@ -91,7 +91,7 @@ public partial class App : Application
             // Sprache vor dem ersten Fenster: gespeicherte Wahl, sonst Systemsprache
             LanguageViewModel.ApplyAtStartup();
 
-            var vm = new MainViewModel();
+            var vm = new MainViewModel { CoarseWhileDragging = true };   // beim Ziehen grobe Vorschau, fein nach dem Loslassen
             desktop.MainWindow = new MainWindow { DataContext = vm };
 
             // Dateien aus "Öffnen mit" bzw. der .desktop-Zeile (Exec=… %F) direkt laden

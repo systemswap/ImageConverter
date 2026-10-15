@@ -322,6 +322,8 @@ public partial class MainViewModel
             // Nacheinander, nie gleichzeitig: alle teilen sich die verkleinerte Fassung
             try { await previous; } catch { /* vorige Schätzung abgebrochen */ }
             await Task.Delay(350, ct);
+            // Nicht während gezogen wird — sie nähme der Vorschau Rechenzeit (nach dem Loslassen kommt sie neu)
+            if (Interactive) return;
             if (_history is not { } h || await Task.Run(() => ResultDocument) is not { } doc) return;
 
             var (tw, th) = EffectiveTarget();
