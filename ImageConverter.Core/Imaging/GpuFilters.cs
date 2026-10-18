@@ -125,9 +125,11 @@ public static class GpuFilters
         try
         {
             _context = Context.Create(b => b.Default().EnableAlgorithms().Optimize(OptimizationLevel.O2));
-            // Erste echte Grafikkarte (CUDA vor OpenCL); die CPU-Nachbildung von ILGPU ist langsamer als unsere Schleifen
+            // Echte Grafikkarte (CUDA vor OpenCL), bei mehreren die mit dem meisten Speicher — sonst nähme es neben einer
+            // eigenen Karte leicht die im Prozessor eingebaute; die CPU-Nachbildung von ILGPU ist langsamer als unsere Schleifen
             var device = _context.Devices.Where(d => d.AcceleratorType is AcceleratorType.Cuda or AcceleratorType.OpenCL)
                 .OrderBy(d => d.AcceleratorType == AcceleratorType.Cuda ? 0 : 1)
+                .ThenByDescending(d => d.MemorySize)
                 .FirstOrDefault();
             if (device is null)
             {

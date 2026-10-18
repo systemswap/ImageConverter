@@ -94,6 +94,12 @@ unten), auf dem Laptop die Grafikkarte deutlich schneller.
 - **Beobachtung auf dem Debian-Rechner:** Es ist kein OpenCL-Treiber installiert (`/etc/OpenCL/vendors` fehlt) —
   Entrauschen und Dunst rechnen dort deshalb auf der CPU (1,2 s für das Testbild). Für AMD: Mesa-OpenCL (Debian
   `mesa-opencl-icd`, Fedora `mesa-libOpenCL`) — Kandidat für die Prüfung beim Start.
+- **Mesa-OpenCL reicht nicht** (nachgeprüft nach `apt install mesa-opencl-icd`, 18.10.2026): Clover bietet OpenCL 1.1,
+  Rusticl (nur mit `RUSTICL_ENABLE=radeonsi`) OpenCL 3.0 mit OpenCL C 1.2 — ILGPU braucht OpenCL 2.0 und verwirft die
+  Karte („Keine Grafikkarte mit OpenCL oder CUDA gefunden“). Für AMD stattdessen ROCm-OpenCL: Debian
+  `rocm-opencl-icd` (aus Debian selbst, 5.7), Fedora `rocm-opencl`.
+- **Mehrere Grafikkarten** (eigene Karte und die im Prozessor): `GpuFilters.Open` nimmt seit 0.5.101 die mit dem meisten
+  Speicher, vorher die erste gefundene.
 - **Falle beim Messen mit eigenen Testprogrammen:** In einer dateibasierten App (`dotnet run Datei.cs`) wirft
   `ILGPU.Context` einen Fehler im Typinitialisierer, weil dort `PublishAot` voreingestellt ist — `#:property
   PublishAot=false` setzen. Das Programm selbst ist nicht betroffen.
