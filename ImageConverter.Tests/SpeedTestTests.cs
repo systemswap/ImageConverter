@@ -71,15 +71,17 @@ public class SpeedTestTests
         try
         {
             var before = Upscalers.Estimate(UpscaleMethod.Generative, 500, 300);
-            // ein schneller Rechner: 500 × 300 in 58 s (Vorgabe vom Laptop: 355 s)
-            Upscalers.Measured(UpscaleMethod.Generative, 500, 300, TimeSpan.FromSeconds(58), replace: true);
-            Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300).TotalSeconds, 57.9, 58.1);
+            // ein schneller Rechner: ein Sechstel der geltenden Vorgabe (Laptop: CPU 355 s, Grafikkarte 97 s — welche gilt,
+            // hängt davon ab, ob ein anderer Test schon die Grafikkarte geöffnet hat; unter Windows mit DirectML oft ja)
+            var fast = before.TotalSeconds / 6;
+            Upscalers.Measured(UpscaleMethod.Generative, 500, 300, TimeSpan.FromSeconds(fast), replace: true);
+            Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300).TotalSeconds, fast * 0.999, fast * 1.001);
             Assert.True(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300) < before / 3);
 
             // große Bilder nach dem Aufwand der Kacheln, nicht nach der Fläche
             var big = Upscalers.Estimate(UpscaleMethod.Generative, 4000, 3000).TotalSeconds;
             var ratio = Upscalers.Work(UpscaleMethod.Generative, 4000, 3000) / Upscalers.Work(UpscaleMethod.Generative, 500, 300);
-            Assert.InRange(big / 58, ratio * 0.999, ratio * 1.001);
+            Assert.InRange(big / fast, ratio * 0.999, ratio * 1.001);
 
             Assert.True(Upscalers.Learned().ContainsKey(key));
             Upscalers.Restore(new Dictionary<string, double> { [key] = 0.01, ["Unsinn|cpu"] = 1, ["Fast|cpu"] = double.NaN });
