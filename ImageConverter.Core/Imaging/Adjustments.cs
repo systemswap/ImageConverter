@@ -1,4 +1,5 @@
 using ImageConverter.Core.Localization;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -362,7 +363,7 @@ public static class Adjust
         // heller Saum (0.5.38).
         var lifted = regions is not null ? LiftByRegions(Toned, width, height, luminance, regions, limit, target) : null;
 
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
@@ -455,7 +456,7 @@ public static class Adjust
         var weight = PixelPool.Rent(n);
         var cap = PixelPool.Rent(n);
         var weighting = regions.For(limit, target, luminance);
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
@@ -476,7 +477,7 @@ public static class Adjust
         // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Die Gewichtung je Pixel ist deshalb die
         // Obergrenze; die Pyramide glättet nur nach unten (weiche Übergänge ohne Saum).
         var blended = PyramidBlend.Blend(plain, bright, weight, width, height);
-        Parallel.For(0, n, p => blended[p] = Math.Clamp(blended[p], plain[p], Math.Max(plain[p], cap[p])));
+        Parallel.For(0, n, ComputeLimits.Options, p => blended[p] = Math.Clamp(blended[p], plain[p], Math.Max(plain[p], cap[p])));
         PixelPool.Return(plain);
         PixelPool.Return(bright);
         PixelPool.Return(weight);
@@ -533,7 +534,7 @@ public static class Adjust
     private static float[] ShadowsHighlights(float[] bgra, int width, int height, float shadows, float highlights)
     {
         var lum = new float[width * height];
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
                 lum[p] = Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2];
@@ -575,7 +576,7 @@ public static class Adjust
     /// </summary>
     private static void Bound(float[] input, float[] output, Func<float, float> curve, Func<float, float> strength)
     {
-        Parallel.For(0, (input.Length + 4095) / 4096, chunk =>
+        Parallel.For(0, (input.Length + 4095) / 4096, ComputeLimits.Options, chunk =>
         {
             var end = Math.Min(input.Length, (chunk + 1) * 4096);
             for (var i = chunk * 4096; i < end; i++)

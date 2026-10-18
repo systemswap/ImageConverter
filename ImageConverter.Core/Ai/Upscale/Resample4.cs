@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>
@@ -79,7 +80,7 @@ public static class Resample4
         int sy0 = (int)Math.Floor(y0 / 4.0) - 4, sy1 = (int)Math.Floor((y0 + oh - 1) / 4.0) + 4;
         int sw = sx1 - sx0 + 1, sh = sy1 - sy0 + 1;
         var result = new float[channels * ow * oh];
-        Parallel.For(0, channels, c =>
+        Parallel.For(0, channels, ComputeLimits.Options, c =>
         {
             // Quelle lesen, dann waagrecht, dann senkrecht
             var src = new float[sw * sh];
@@ -125,7 +126,7 @@ public static class Resample4
         int bw = 4 * w, bh = 4 * h;
         var (offs, wt) = DownTaps;
         var result = new float[channels * w * h];
-        Parallel.For(0, channels, c =>
+        Parallel.For(0, channels, ComputeLimits.Options, c =>
         {
             var plane = c * bw * bh;
             var horiz = new float[bh * w];

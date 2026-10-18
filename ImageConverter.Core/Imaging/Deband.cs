@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -46,7 +47,7 @@ internal static class Deband
             // Bildzeilen (bei 8000 px je 128 KB) passte deren Umgebung nicht in den Cache des Prozessors
             var tilesX = (width + TileWidth - 1) / TileWidth;
             var tilesY = (height + TileRows - 1) / TileRows;
-            Parallel.For(0, tilesX * tilesY, tile =>
+            Parallel.For(0, tilesX * tilesY, ComputeLimits.Options, tile =>
             {
                 Span<int> tap = stackalloc int[4];
                 var tx0 = tile % tilesX * TileWidth;

@@ -1,6 +1,7 @@
 using ImageConverter.Core.Imaging;
 using ImageMagick;
 using Microsoft.ML.OnnxRuntime;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.SyntheticDoc;
 
@@ -62,7 +63,7 @@ public static class SyntheticDocDewarp
         var map = new DewarpMap(grid.Nx, grid.Ny, grid.Sx, grid.Sy, grid.RelWidth, grid.RelHeight);
         double cw = x1 - x0, ch = y1 - y0;
         var rgb = new float[ShadingWidth * ShadingHeight * 3];
-        Parallel.For(0, ShadingHeight, b =>
+        Parallel.For(0, ShadingHeight, ComputeLimits.Options, b =>
         {
             for (var a = 0; a < ShadingWidth; a++)
             {
@@ -105,7 +106,7 @@ public static class SyntheticDocDewarp
         var t = new float[3 * inH * inW];
         try
         {
-            Parallel.For(0, inH, j =>
+            Parallel.For(0, inH, ComputeLimits.Options, j =>
             {
                 for (var i = 0; i < inW; i++)
                 {
@@ -132,7 +133,7 @@ public static class SyntheticDocDewarp
             int lw = inW / 4, lh = inH / 4;
             var raw = outputs[1];
             var light4 = new float[3 * lw * lh];
-            Parallel.For(0, 3 * lh, row =>
+            Parallel.For(0, 3 * lh, ComputeLimits.Options, row =>
             {
                 int c = row / lh, j = row % lh;
                 for (var i = 0; i < lw; i++)

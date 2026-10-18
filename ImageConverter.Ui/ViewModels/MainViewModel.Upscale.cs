@@ -744,18 +744,46 @@ public partial class MainViewModel
         }
     }
 
+    /// <summary>
+    /// Geschwindigkeitstest: ein Upscaler an einem Testbild von 256 × 256 (mehrere Kacheln je Teil, wie bei großen Bildern),
+    /// vorher ein kleiner Lauf zum Laden des Modells. Ersetzt die Schätzung dieses Rechners. null: Modell fehlt (oder
+    /// PiSA-SR ist noch nie gelaufen — das Umwandeln dauert, das macht der erste echte Lauf).
+    /// </summary>
+    internal TimeSpan? MeasureUpscaler(UpscaleMethod method, CancellationToken ct)
+    {
+        if (Upscalers.ModelOf(method) is not { } model || !UpscaleModelInstalled(model)) return null;
+        if (method == UpscaleMethod.Generative && PiSaSrModel.Find(Ai.Store) is { } sources
+            && PiSaSrModel.NeedsBuild(sources, Ai.Sessions.OnGpu)) return null;
+        static MagickImage Test(int size)
+        {
+            var image = new MagickImage(new MagickColor(30000, 32000, 28000), (uint)size, (uint)size);
+            image.AddNoise(NoiseType.Gaussian, 1.5);
+            image.Alpha(AlphaOption.Off);
+            return image;
+        }
+        var none = new Progress<double>();
+        using (var warm = Test(64)) ComputeUpscale(warm, method, none, null, ct);
+        using var test = Test(256);
+        var clock = Stopwatch.StartNew();
+        ComputeUpscale(test, method, none, null, ct);
+        clock.Stop();
+        Upscalers.Measured(method, 256, 256, clock.Elapsed, replace: true);
+        SaveUpscaleTimes();
+        return clock.Elapsed;
+    }
+
     /// <summary>Gemessene Upscaler-Zeiten für diesen Rechner speichern — die Schätzung stimmt dann auch nach einem Neustart.</summary>
     private static void SaveUpscaleTimes()
     {
         var settings = AppSettings.Load();
-        (settings with { UpscaleTimes = new UpscaleTimes(SpeedTest.AiMachine(OnnxSessions.GpuProvider), Upscalers.Learned()) }).Save();
+        (settings with { UpscaleWork = new UpscaleTimes(SpeedTest.AiMachine(OnnxSessions.GpuProvider), Upscalers.Learned()) }).Save();
     }
 
     /// <summary>Beim Start: gespeicherte Upscaler-Zeiten übernehmen, wenn sie auf diesem Rechner gemessen wurden.</summary>
     internal static void RestoreUpscaleTimes()
     {
-        if (AppSettings.Load().UpscaleTimes is { } times && times.Machine == SpeedTest.AiMachine(OnnxSessions.GpuProvider))
-            Upscalers.Restore(times.SecondsPerMegapixel);
+        if (AppSettings.Load().UpscaleWork is { } times && times.Machine == SpeedTest.AiMachine(OnnxSessions.GpuProvider))
+            Upscalers.Restore(times.SecondsPerWork);
     }
 
     /// <summary>
@@ -851,7 +879,7 @@ public partial class MainViewModel
         // Nachher: blass, bis die Kacheln kommen — beim Ausschnitt nur dort, der Rest bleibt wie Vorher
         var after = (byte[])before.Clone();
         var (rx0, ry0, rx1, ry1) = region is { } r ? (r.X * m, r.Y * m, (r.X + r.Width) * m, (r.Y + r.Height) * m) : (0, 0, w * m, h * m);
-        Parallel.For(ry0, ry1, y =>
+        Parallel.For(ry0, ry1, ComputeLimits.Options, y =>
         {
             for (var x = rx0; x < rx1; x++)
             {
@@ -971,7 +999,7 @@ public partial class MainViewModel
         int bw = rect.Width * m, bh = rect.Height * m, rw = rect.Width * UpscaleResult.Factor;
         var bgra = new byte[bw * bh * 4];
         var norm = 1f / (k * k * 257f);
-        Parallel.For(0, bh, y =>
+        Parallel.For(0, bh, ComputeLimits.Options, y =>
         {
             Span<float> sum = stackalloc float[4];
             for (var x = 0; x < bw; x++)

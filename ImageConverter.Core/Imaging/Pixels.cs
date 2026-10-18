@@ -1,4 +1,5 @@
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -20,7 +21,7 @@ public static class Pixels
     public static float[] FromBytes(byte[] bgra)
     {
         var px = new float[bgra.Length];
-        Parallel.For(0, bgra.Length / 4, p =>
+        Parallel.For(0, bgra.Length / 4, ComputeLimits.Options, p =>
         {
             var i = p * 4;
             px[i] = bgra[i] / 255f;
@@ -46,7 +47,7 @@ public static class Pixels
                 var data = pixels.ToShortArray(0, y0, (uint)w, (uint)rows, "BGRA")
                            ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
                 var offset = y0 * w * 4;
-                Parallel.For(0, rows, r =>
+                Parallel.For(0, rows, ComputeLimits.Options, r =>
                 {
                     for (int i = r * w * 4, end = i + w * 4; i < end; i++) px[offset + i] = data[i] / Q16;
                 });
@@ -77,7 +78,7 @@ public static class Pixels
         for (var y0 = 0; y0 < height; y0 += StripRows)
         {
             var rows = Math.Min(StripRows, height - y0);
-            Parallel.For(0, rows, r =>
+            Parallel.For(0, rows, ComputeLimits.Options, r =>
             {
                 for (var x = 0; x < width; x++)
                 {
@@ -101,7 +102,7 @@ public static class Pixels
     public static byte[] ToBytes(float[] px, bool dither)
     {
         var bgra = new byte[px.Length];
-        Parallel.For(0, px.Length / 4, p =>
+        Parallel.For(0, px.Length / 4, ComputeLimits.Options, p =>
         {
             var i = p * 4;
             for (var c = 0; c < 3; c++)
@@ -126,7 +127,7 @@ public static class Pixels
         var channels = (int)pixels.Channels;
         // Farbkanäle: bei Graustufen der erste, sonst die ersten drei; Alpha wird nur gerundet
         var colour = channels >= 3 ? 3 : 1;
-        Parallel.For(0, data.Length / channels, p =>
+        Parallel.For(0, data.Length / channels, ComputeLimits.Options, p =>
         {
             var i = p * channels;
             for (var c = 0; c < channels; c++)

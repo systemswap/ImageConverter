@@ -1,4 +1,5 @@
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -121,7 +122,7 @@ public static class Grain
                 r = Harden(Field(y0, width, rows, fine, seed: 23), hard);
             }
 
-            Parallel.For(0, rows, row =>
+            Parallel.For(0, rows, ComputeLimits.Options, row =>
             {
                 var o = (long)(y0 + row) * width * 4;
                 for (int x = 0, k = row * width; x < width; x++, k++, o += 4)
@@ -174,7 +175,7 @@ public static class Grain
     {
         if (hard.K <= 0) return field;
         var (k, gain) = (hard.K, hard.Gain);
-        Parallel.For(0, (field.Length + 4095) / 4096, block =>
+        Parallel.For(0, (field.Length + 4095) / 4096, ComputeLimits.Options, block =>
         {
             var end = Math.Min(field.Length, (block + 1) * 4096);
             for (var i = block * 4096; i < end; i++) field[i] = MathF.Tanh(k * field[i]) * gain;
@@ -215,7 +216,7 @@ public static class Grain
         var pad = blur ? (int)Math.Ceiling(3.5 * sigma) + 2 : finer > 0 ? (int)Math.Ceiling(3.5 * FinerBlur) + 2 : 0;
         int pw = width + 2 * pad, ph = rows + 2 * pad;
         var field = PixelPool.Rent(pw * ph);
-        Parallel.For(0, ph, row =>
+        Parallel.For(0, ph, ComputeLimits.Options, row =>
         {
             var y = y0 - pad + row;
             for (var x = 0; x < pw; x++) field[row * pw + x] = Noise(x - pad, y, seed);
@@ -232,7 +233,7 @@ public static class Grain
             Blur.Gauss(low, pw, ph, FinerBlur);
             var a = (float)finer;
             var gain = (float)(1 / Math.Sqrt(FinerEnergy(finer)));
-            Parallel.For(0, rows, row =>
+            Parallel.For(0, rows, ComputeLimits.Options, row =>
             {
                 var from = (row + pad) * pw + pad;
                 for (var x = 0; x < width; x++) result[row * width + x] = (field[from + x] - a * low[from + x]) * gain;
@@ -247,7 +248,7 @@ public static class Grain
         {
             Blur.Gauss(field, pw, ph, sigma);
             var gain = (float)(1 / KernelEnergy(sigma));   // Streuung nach dem Weichzeichnen zurück auf 1
-            Parallel.For(0, rows, row =>
+            Parallel.For(0, rows, ComputeLimits.Options, row =>
             {
                 var from = (row + pad) * pw + pad;
                 for (var x = 0; x < width; x++) result[row * width + x] = field[from + x] * gain;
@@ -398,7 +399,7 @@ public static class Grain
         int w = Math.Max(1, (int)(width * f)), h = Math.Max(1, (int)(height * f));
         int x0 = (width - w) / 2, y0 = (height - h) / 2;
         var rgb = new float[(long)w * h * 3];
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0; x < w; x++)
             {
@@ -424,7 +425,7 @@ public static class Grain
 
         int bw = w / Block, bh = h / Block;
         var stats = new (double Luma, double[] S)[bw * bh];
-        Parallel.For(0, bh, by =>
+        Parallel.For(0, bh, ComputeLimits.Options, by =>
         {
             for (var bx = 0; bx < bw; bx++)
             {

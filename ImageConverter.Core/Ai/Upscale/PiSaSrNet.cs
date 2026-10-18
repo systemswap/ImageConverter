@@ -1,4 +1,5 @@
 using ImageConverter.Core.Ai.Onnx;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
@@ -79,7 +80,7 @@ public static class PiSaSrNet
             int outC = b.Shape[0], r = b.Shape[1];
             var inner = a.Count / r;   // Linear: in; Faltung: in · kh · kw
             if (w.Count != outC * inner) throw new InvalidDataException($"LoRA passt nicht zum Gewicht {w} (A {a}, B {b}).");
-            Parallel.For(0, outC, o =>
+            Parallel.For(0, outC, ComputeLimits.Options, o =>
             {
                 for (var j = 0; j < r; j++)
                 {
@@ -240,7 +241,7 @@ public static class PiSaSrNet
             var wt = w.Get(prefix + ".weight");
             int outF = wt.Shape[0], inF = wt.Shape[1];
             var y = new float[len * outF];
-            Parallel.For(0, len, t =>
+            Parallel.For(0, len, ComputeLimits.Options, t =>
             {
                 for (var o = 0; o < outF; o++)
                 {

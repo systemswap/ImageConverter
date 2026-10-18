@@ -701,8 +701,6 @@ public static class English
         ["KI PiSA-SR · langsam"] = "AI PiSA-SR · slow",
         ["Wie bisher: der Filter oben rechnet die Pixel hoch. Sofort, erfindet nichts — wird aber weich."] = "As before: the filter above computes the extra pixels. Instant, invents nothing — but gets soft.",
         ["Real-ESRGAN x4v3: entfernt Rauschen und JPEG-Blöcke und macht Kanten klar. Sekunden je Bild, erfindet kaum etwas."] = "Real-ESRGAN x4v3: removes noise and JPEG blocks and makes edges crisp. Seconds per image, invents hardly anything.",
-        ["4x-UltraSharpV2: schärfer und feiner als Real-ESRGAN x4v3, bleibt nah am Original. Etwa eine Minute je Megapixel."] = "4x-UltraSharpV2: sharper and finer than Real-ESRGAN x4v3, stays close to the original. About one minute per megapixel.",
-        ["PiSA-SR (Stable Diffusion): ergänzt glaubhafte feine Details wie Nadeln, Blätter, Haut — wie Referenzwerkzeug, aber lokal. Sehr langsam: rund 40 Minuten je Megapixel des Originals."] = "PiSA-SR (Stable Diffusion): adds believable fine detail such as needles, leaves, skin — like Referenzwerkzeug, but local. Very slow: about 40 minutes per megapixel of the original.",
         ["Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI."] = "Downloads the model into the “KI-Modelle” folder next to the program. Manage: Settings › AI.",
         ["Herunterladen ({0})"] = "Download ({0})",
         ["Wird geladen … {0:0} % von {1}"] = "Downloading … {0:0} % of {1}",
@@ -789,6 +787,21 @@ public static class English
         ["Vergrößern mit KI"] = "Enlarge with AI",
         ["Wasserzeichen · Schrift"] = "Watermarks · text",
         ["Überblick · Modellordner"] = "Overview · model folder",
+        ["4x-UltraSharpV2: schärfer und feiner als Real-ESRGAN x4v3, bleibt nah am Original. Deutlich langsamer — die geschätzte Zeit steht am Knopf „Skalieren“."] = "4x-UltraSharpV2: sharper and finer than Real-ESRGAN x4v3, stays close to the original. Much slower — the estimated time is shown on the “Scale” button.",
+        ["PiSA-SR (Stable Diffusion): ergänzt glaubhafte feine Details wie Nadeln, Blätter, Haut — wie Referenzwerkzeug, aber lokal. Sehr langsam — die geschätzte Zeit steht am Knopf „Skalieren“."] = "PiSA-SR (Stable Diffusion): adds believable fine detail such as needles, leaves, skin — like Referenzwerkzeug, but local. Very slow — the estimated time is shown on the “Scale” button.",
+        ["Upscaler „{0}“ wird gemessen …"] = "Measuring upscaler “{0}” …",
+        ["Upscaler, geschätzt für ein Foto mit 12 MP: {0}"] = "Upscalers, estimated for a 12 MP photo: {0}",
+        ["Rechnet Entrauschen, Dunst und ein kleines KI-Modell je einmal auf der Grafikkarte und auf der CPU und nutzt danach, was auf diesem Rechner schneller ist. Dann misst er die vorhandenen Upscaler, damit die Zeitschätzung stimmt (PiSA-SR kann einige Minuten dauern)."] = "Runs noise reduction, haze and a small AI model once on the graphics card and once on the CPU, then uses whichever is faster on this computer. Afterwards it measures the installed upscalers so the time estimate is right (PiSA-SR can take a few minutes).",
+        // Rechner bedienbar halten (Einstellungen › Leistung)
+        ["100 % · alle {0} Kerne"] = "100 % · all {0} cores",
+        ["{0} % · {1} von {2} Kernen"] = "{0} % · {1} of {2} cores",
+        ["Wird beim nächsten Start des Programms wirksam."] = "Takes effect the next time the program starts.",
+        ["Rechner bedienbar halten"] = "Keep the computer usable",
+        ["Mit niedriger Priorität rechnen (empfohlen)"] = "Compute with low priority (recommended)",
+        ["Andere Programme haben Vorrang, der Rechner bleibt bedienbar. Ist er sonst frei, wird trotzdem mit voller Kraft gerechnet."] = "Other programs take precedence, the computer stays usable. If it is otherwise idle, computing still runs at full speed.",
+        ["CPU höchstens"] = "CPU at most",
+        ["Begrenzt, wie viele Kerne KI, Bildfilter und Umwandeln gleichzeitig nutzen. Mit der Hälfte dauert es meist nur rund ein Viertel länger, der Lüfter bleibt ruhiger."] = "Limits how many cores AI, image filters and conversion use at the same time. With half of them it usually takes only about a quarter longer, and the fan stays quieter.",
+        ["Nach einer Änderung der Obergrenze am besten neu testen – die Zeiten gelten je Einstellung."] = "After changing the limit, best test again – the times apply per setting.",
         // Geschwindigkeitstest Grafikkarte/CPU (Einstellungen › Leistung)
         ["Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "The AI runs on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
         ["Entrauschen und Dunst rechnen auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "Noise reduction and haze run on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
@@ -807,7 +820,6 @@ public static class English
         ["KI wird gemessen …"] = "Measuring the AI …",
         ["Test fehlgeschlagen: {0}"] = "Test failed: {0}",
         ["Geschwindigkeit testen"] = "Test speed",
-        ["Rechnet Entrauschen, Dunst und ein kleines KI-Modell je einmal auf der Grafikkarte und auf der CPU (dauert einige Sekunden). Danach nutzt das Programm, was auf diesem Rechner schneller ist."] = "Runs noise reduction, haze and a small AI model once on the graphics card and once on the CPU (takes a few seconds). Afterwards the program uses whichever is faster on this computer.",
     };
 
     public static IReadOnlyDictionary<string, string> Texts => _texts;

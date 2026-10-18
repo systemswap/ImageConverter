@@ -96,6 +96,46 @@ public partial class AiViewModel : ViewModelBase
                 ? Tr.T("Entrauschen und Dunst rechnen auf der CPU — {0}", problem)
                 : Tr.T("Entrauschen und Dunst nutzen die Grafikkarte, sobald eine mit OpenCL oder CUDA gefunden ist.");
 
+    // ------------------------------------------------------------ Rechner bedienbar halten
+
+    /// <summary>Höchstens so viel Prozent der CPU (Regler 10 … 100).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CpuPercentLabel))]
+    public partial double CpuPercent { get; set; } = ComputeLimits.Percent;
+
+    partial void OnCpuPercentChanged(double value)
+    {
+        var percent = (int)Math.Round(value / 5) * 5;
+        if (percent == ComputeLimits.Percent) return;
+        ComputeLimits.SetPercent(percent);
+        (AppSettings.Load() with { CpuPercent = ComputeLimits.Percent }).Save();
+        // Messungen galten für die alte Grenze
+        OnPropertyChanged(nameof(SpeedTestText));
+        OnPropertyChanged(nameof(FilterGpuStatus));
+        RefreshGpuStatus();
+    }
+
+    public string CpuPercentLabel => ComputeLimits.Percent >= 100
+        ? Tr.T("100 % · alle {0} Kerne", ComputeLimits.PhysicalCores)
+        : Tr.T("{0} % · {1} von {2} Kernen", ComputeLimits.Percent, ComputeLimits.AllowedCores, ComputeLimits.PhysicalCores);
+
+    /// <summary>Niedrige Priorität: andere Programme haben Vorrang, sonst volle Geschwindigkeit.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PriorityHint))]
+    public partial bool LowPriority { get; set; } = AppSettings.Load().LowPriority;
+
+    partial void OnLowPriorityChanged(bool value)
+    {
+        (AppSettings.Load() with { LowPriority = value }).Save();
+        if (value) ComputeLimits.LowerPriority();
+        else ComputeLimits.TryNormalPriority();
+    }
+
+    /// <summary>Hinweis, wenn das Ausschalten erst nach einem Neustart wirkt (Linux).</summary>
+    public string? PriorityHint => !LowPriority && ComputeLimits.LowPriority
+        ? Tr.T("Wird beim nächsten Start des Programms wirksam.")
+        : null;
+
     // ------------------------------------------------------------ Geschwindigkeitstest
 
     [ObservableProperty]
@@ -110,13 +150,21 @@ public partial class AiViewModel : ViewModelBase
         get
         {
             var settings = AppSettings.Load();
-            if (settings.FilterSpeed is null && settings.AiSpeed is null)
+            if (settings.FilterSpeed is null && settings.AiSpeed is null && Upscalers.Learned().Count == 0)
                 return Tr.T("Noch nicht getestet — die Grafikkarte wird genutzt, wenn eine da ist.");
             var lines = new List<string>();
             if (settings.FilterSpeed is { } f)
                 lines.Add(Describe(Tr.T("Entrauschen und Dunst"), f, SpeedTest.FilterMachine(GpuFilters.DeviceName)));
             if (settings.AiSpeed is { } a)
                 lines.Add(Describe(Tr.T("KI (Real-ESRGAN x4v3)"), a, SpeedTest.AiMachine(OnnxSessions.GpuProvider)));
+            // Upscaler: geschätzte Zeit für ein typisches Foto (12 MP, ×4), sobald auf diesem Rechner gemessen
+            var learned = Upscalers.Learned();
+            var device = Upscalers.OnGpu ? "gpu" : "cpu";
+            var times = new[] { UpscaleMethod.Fast, UpscaleMethod.Medium, UpscaleMethod.Generative }
+                .Where(m => learned.ContainsKey($"{m}|{device}"))
+                .Select(m => $"{ImageConverter.Models.UpscaleOption.Of(m).Name}: {Upscalers.Format(Upscalers.Estimate(m, 4000, 3000))}")
+                .ToList();
+            if (times.Count > 0) lines.Add(Tr.T("Upscaler, geschätzt für ein Foto mit 12 MP: {0}", string.Join(" · ", times)));
             return string.Join("\n", lines);
         }
     }
@@ -165,6 +213,15 @@ public partial class AiViewModel : ViewModelBase
                 _sessions.Measured = ai;
                 SpeedTestProgress = null;
             }
+            RefreshGpuStatus();   // Upscalers.OnGpu nach der Wahl, bevor die Upscaler gemessen werden
+
+            // Upscaler mit der gewählten Recheneinheit und Obergrenze — die Zeitschätzung stimmt dann ab dem ersten Bild
+            foreach (var method in new[] { UpscaleMethod.Fast, UpscaleMethod.Medium, UpscaleMethod.Generative })
+            {
+                SpeedTestProgress = Tr.T("Upscaler „{0}“ wird gemessen …", ImageConverter.Models.UpscaleOption.Of(method).Name);
+                await Task.Run(() => _main.MeasureUpscaler(method, CancellationToken.None));
+            }
+            SpeedTestProgress = null;
 
             var settings = AppSettings.Load();
             (settings with { FilterSpeed = filters, AiSpeed = ai ?? settings.AiSpeed }).Save();

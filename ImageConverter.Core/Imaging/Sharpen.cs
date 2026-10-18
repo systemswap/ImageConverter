@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -26,7 +27,7 @@ public static class Sharpen
         var blur = new float[pixels * 3];
 
         // B, G, R in eine Fließkomma-Ebene; Alpha wird nicht geschärft
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             var row = y * width;
             for (var x = 0; x < width; x++)
@@ -42,7 +43,7 @@ public static class Sharpen
 
         var amt = (float)amount;
         var thr = (float)threshold;
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             var row = y * width;
             for (var x = 0; x < width; x++)
@@ -72,7 +73,7 @@ public static class Sharpen
 
         var pixels = width * height;
         var blur = PixelPool.Rent(pixels * 3);
-        Parallel.For(0, pixels, p =>
+        Parallel.For(0, pixels, ComputeLimits.Options, p =>
         {
             blur[p * 3] = px[p * 4];
             blur[p * 3 + 1] = px[p * 4 + 1];
@@ -83,7 +84,7 @@ public static class Sharpen
 
         var amt = (float)amount;
         var thr = (float)threshold / 255;
-        Parallel.For(0, pixels, p =>
+        Parallel.For(0, pixels, ComputeLimits.Options, p =>
         {
             for (var c = 0; c < 3; c++)
             {

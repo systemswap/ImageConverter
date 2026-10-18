@@ -1,4 +1,5 @@
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -39,7 +40,7 @@ public static class Denoiser
 
         var n = w * h;
         float[] y = new float[n], cb = new float[n], cr = new float[n];
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
             {
@@ -59,7 +60,7 @@ public static class Denoiser
             y = LumaDenoise(y, px, w, h, luma);
 
         var result = PixelPool.Rent(px.Length);
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
             {
@@ -93,7 +94,7 @@ public static class Denoiser
         var coarse = GuidedFilter(fine, guide, w, h, r2, eps);
         var s = (float)Math.Clamp(strength, 0, 1);
         // feine Stufe ganz, die grobe nach und nach — kleine Werte entfernen erst die Farbpunkte, große auch Flecken
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
                 c[i] += s * (fine[i] - c[i]) + s * s * (coarse[i] - fine[i]);
@@ -105,7 +106,7 @@ public static class Denoiser
     {
         var n = p.Length;
         float[] ip = new float[n], ii = new float[n];
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++) { ip[i] = guide[i] * p[i]; ii[i] = guide[i] * guide[i]; }
         });
@@ -115,7 +116,7 @@ public static class Denoiser
         var corrII = BoxMean(ii, w, h, r);
 
         float[] a = ip, b = ii;   // Puffer wiederverwenden
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
             {
@@ -128,7 +129,7 @@ public static class Denoiser
         var meanA = BoxMean(a, w, h, r);
         var meanB = BoxMean(b, w, h, r);
         var q = new float[n];
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++) q[i] = meanA[i] * guide[i] + meanB[i];
         });
@@ -142,7 +143,7 @@ public static class Denoiser
     /// <summary>Wie oben, in vorhandene Puffer (<paramref name="tmp"/> Zwischenstand, <paramref name="dst"/> Ergebnis).</summary>
     internal static float[] BoxMean(float[] src, int w, int h, int r, float[] tmp, float[] dst)
     {
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             var o = y * w;
             double sum = 0;
@@ -158,7 +159,7 @@ public static class Denoiser
             }
         });
         const int block = 64;
-        Parallel.For(0, (w + block - 1) / block, b =>
+        Parallel.For(0, (w + block - 1) / block, ComputeLimits.Options, b =>
         {
             var x0 = b * block;
             var len = Math.Min(block, w - x0);
@@ -216,7 +217,7 @@ public static class Denoiser
     {
         // Rauschen je Helligkeit messen (wie bei der Körnung) — auf genau diesem Bild, auch in der Vorschau
         var rgb = new float[w * h * 3];
-        Parallel.For(0, w * h, i =>
+        Parallel.For(0, w * h, ComputeLimits.Options, i =>
         {
             rgb[i * 3] = px[i * 4 + 2];
             rgb[i * 3 + 1] = px[i * 4 + 1];
@@ -229,7 +230,7 @@ public static class Denoiser
         var k = 0.25f + 0.75f * (float)Math.Clamp(strength, 0, 1);   // Filterbreite in Vielfachen des Rauschens
         var sigma2 = new float[n];
         var invH2 = new float[n];
-        Parallel.For(0, n, i =>
+        Parallel.For(0, n, ComputeLimits.Options, i =>
         {
             var s = profile.SigmaAt(y[i]);
             sigma2[i] = s * s;
@@ -251,7 +252,7 @@ public static class Denoiser
         {
             if (dx == 0 && dy == 0) continue;
             var (ox, oy) = (dx, dy);
-            Parallel.For(0, h, row =>
+            Parallel.For(0, h, ComputeLimits.Options, row =>
             {
                 var yy = Math.Clamp(row + oy, 0, h - 1);
                 for (var x = 0; x < w; x++)
@@ -261,7 +262,7 @@ public static class Denoiser
                 }
             });
             BoxMean(diff, w, h, PatchRadius, boxTmp, patch);
-            Parallel.For(0, h, row =>
+            Parallel.For(0, h, ComputeLimits.Options, row =>
             {
                 var yy = Math.Clamp(row + oy, 0, h - 1);
                 for (int x = 0, i = row * w; x < w; x++, i++)
@@ -277,7 +278,7 @@ public static class Denoiser
         // der Punkt selbst mit dem größten Gewicht seiner Nachbarn (übliche Wahl), danach mit der Stärke mischen
         var mix = (float)Math.Min(1, 1.5 * strength);
         var result = new float[n];
-        Parallel.For(0, n, i =>
+        Parallel.For(0, n, ComputeLimits.Options, i =>
         {
             var self = Math.Max(maxWeight[i], 1e-3f);
             var filtered = (sum[i] + self * y[i]) / (weightSum[i] + self);

@@ -1,4 +1,5 @@
 using ImageConverter.Core.Ai.Onnx;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
@@ -66,7 +67,7 @@ public static class ClipText
         var bias = w.Get(name + ".bias").Data;
         int outF = wt.Shape[0], inF = wt.Shape[1];
         var y = new float[n * outF];
-        Parallel.For(0, n, t =>
+        Parallel.For(0, n, ComputeLimits.Options, t =>
         {
             for (var o = 0; o < outF; o++)
             {
@@ -87,7 +88,7 @@ public static class ClipText
         const int d = Width / Heads;
         var scale = 1 / Math.Sqrt(d);
         var o = new float[Tokens * Width];
-        Parallel.For(0, Heads, hh =>
+        Parallel.For(0, Heads, ComputeLimits.Options, hh =>
         {
             var scores = new double[Tokens];
             for (var t = 0; t < Tokens; t++)

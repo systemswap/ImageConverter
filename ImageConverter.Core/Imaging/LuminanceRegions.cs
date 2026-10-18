@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -51,7 +52,7 @@ public sealed class LuminanceRegions
     private static float[] Shrink(float[] bgra, int width, int height, int f, int w, int h)
     {
         var small = new float[w * h * 3];
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < w; x++)
             {
@@ -224,8 +225,8 @@ public sealed class LuminanceRegions
     {
         var tmp = new float[src.Length];
         var dst = new float[src.Length];
-        Parallel.For(0, h, y => Line(src, tmp, y * w, 1, w, r));
-        Parallel.For(0, w, x => Line(tmp, dst, x, w, h, r));
+        Parallel.For(0, h, ComputeLimits.Options, y => Line(src, tmp, y * w, 1, w, r));
+        Parallel.For(0, w, ComputeLimits.Options, x => Line(tmp, dst, x, w, h, r));
         return dst;
     }
 

@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -173,7 +174,7 @@ internal static partial class Dehaze
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         // Farbe des Luftlichts je Feld (Helligkeit linear, Oklab a/b) — für das Abziehen des Farbstichs
         var airLab = new float[sw * sh * 3];
-        Parallel.For(0, sh, row =>
+        Parallel.For(0, sh, ComputeLimits.Options, row =>
         {
             for (int x = 0, p = row * sw; x < sw; x++, p++)
             {
@@ -211,7 +212,7 @@ internal static partial class Dehaze
         if (amount > 0)
         {
             var after = new float[small.Length];
-            Parallel.For(0, sh, row =>
+            Parallel.For(0, sh, ComputeLimits.Options, row =>
             {
                 var a3 = new float[3];
                 for (int x = 0, p = row * sw; x < sw; x++, p++)
@@ -246,7 +247,7 @@ internal static partial class Dehaze
             // Grundhelligkeit für die Klarheit: Oklab-L des Originals, kantentreu geglättet —
             // ein einfacher Weichzeichner gäbe Lichthöfe an Horizont und Häuserkanten
             var l = new float[sw * sh];
-            Parallel.For(0, sh, row =>
+            Parallel.For(0, sh, ComputeLimits.Options, row =>
             {
                 for (int x = 0, p = row * sw; x < sw; x++, p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
             });
@@ -260,7 +261,7 @@ internal static partial class Dehaze
 
         var luma = amount > 0 && sharpen > 0 ? LumaPlane(bgra, width, height) : null;
         var result = PixelPool.Rent(bgra.Length);   // jedes Pixel wird unten vollständig geschrieben
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             var sy = (y + 0.5f) / f - 0.5f;
             Span<float> lin = stackalloc float[3];
@@ -374,7 +375,7 @@ internal static partial class Dehaze
     private static float[] LumaPlane(float[] bgra, int w, int h)
     {
         var luma = PixelPool.Rent(w * h);
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             for (int x = 0, p = y * w; x < w; x++, p++)
                 luma[p] = 0.0722f * bgra[p * 4] + 0.7152f * bgra[p * 4 + 1] + 0.2126f * bgra[p * 4 + 2];
@@ -781,7 +782,7 @@ internal static partial class Dehaze
     private static (float[] A, float[] B) BrightnessGain(float[] before, float[] after, float[] guide, int sw, int sh)
     {
         var logGain = new float[sw * sh];
-        Parallel.For(0, sh, row =>
+        Parallel.For(0, sh, ComputeLimits.Options, row =>
         {
             for (int x = 0, p = row * sw; x < sw; x++, p++)
             {
@@ -823,7 +824,7 @@ internal static partial class Dehaze
     {
         int sw = (w + f - 1) / f, sh = (h + f - 1) / f;
         var dst = new float[sw * sh * 3];
-        Parallel.For(0, sh, sy =>
+        Parallel.For(0, sh, ComputeLimits.Options, sy =>
         {
             for (var sx = 0; sx < sw; sx++)
             {
@@ -849,9 +850,9 @@ internal static partial class Dehaze
     internal static float[] MinFilter(float[] src, int width, int height, int r)
     {
         var rows = new float[src.Length];
-        Parallel.For(0, height, y => SlidingMin(src, rows, y * width, 1, width, r));
+        Parallel.For(0, height, ComputeLimits.Options, y => SlidingMin(src, rows, y * width, 1, width, r));
         var dst = new float[src.Length];
-        Parallel.For(0, width, x => SlidingMin(rows, dst, x, width, height, r));
+        Parallel.For(0, width, ComputeLimits.Options, x => SlidingMin(rows, dst, x, width, height, r));
         return dst;
     }
 
@@ -943,7 +944,7 @@ internal static class GuidedColor
         float[] Plane(Func<int, float> f)
         {
             var a = new float[n];
-            Parallel.For(0, h, row => { for (int x = 0, i = row * w; x < w; x++, i++) a[i] = f(i); });
+            Parallel.For(0, h, ComputeLimits.Options, row => { for (int x = 0, i = row * w; x < w; x++, i++) a[i] = f(i); });
             Blur.Gauss(a, w, h, sigma);
             return a;
         }
@@ -964,7 +965,7 @@ internal static class GuidedColor
 
         var a = new float[n * 3];
         var b = new float[n];
-        Parallel.For(0, n, i =>
+        Parallel.For(0, n, ComputeLimits.Options, i =>
         {
             // Kovarianz Σ (+ ε·E) und Kovarianz mit der Eingabe
             double s11 = bb[i] - mB[i] * mB[i] + eps, s12 = bg[i] - mB[i] * mG[i], s13 = br[i] - mB[i] * mR[i];
@@ -986,12 +987,12 @@ internal static class GuidedColor
 
         // Koeffizienten glätten (jedes Pixel liegt in vielen Fenstern)
         var aB = new float[n]; var aG = new float[n]; var aR = new float[n];
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++) { aB[i] = a[i * 3]; aG[i] = a[i * 3 + 1]; aR[i] = a[i * 3 + 2]; }
         });
         foreach (var plane in new[] { aB, aG, aR, b }) Blur.Gauss(plane, w, h, sigma);
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++) { a[i * 3] = aB[i]; a[i * 3 + 1] = aG[i]; a[i * 3 + 2] = aR[i]; }
         });

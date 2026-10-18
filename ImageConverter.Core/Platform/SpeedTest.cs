@@ -39,11 +39,14 @@ public static class SpeedTest
     /// <summary>Größe des Testbildes für die KI (x4v3: 3 × 3 Kacheln).</summary>
     internal const int AiSize = 300;
 
-    /// <summary>Kennung des Rechners für die Bildfilter: Grafikkarte (ILGPU) und Zahl der Kerne.</summary>
-    public static string FilterMachine(string? device) => $"{device ?? "-"} · {Environment.ProcessorCount}";
+    /// <summary>Kennung des Rechners für die Bildfilter: Grafikkarte (ILGPU), Zahl der Kerne und CPU-Obergrenze.</summary>
+    public static string FilterMachine(string? device) => $"{device ?? "-"} · {Environment.ProcessorCount}{Limit}";
 
-    /// <summary>Kennung des Rechners für die KI: Anbindung der Laufzeit (DirectML …) und Zahl der Kerne.</summary>
-    public static string AiMachine(string? provider) => $"{provider ?? "-"} · {Environment.ProcessorCount}";
+    /// <summary>Kennung des Rechners für die KI: Anbindung der Laufzeit (DirectML …), Zahl der Kerne und CPU-Obergrenze.</summary>
+    public static string AiMachine(string? provider) => $"{provider ?? "-"} · {Environment.ProcessorCount}{Limit}";
+
+    // Andere Obergrenze, andere CPU-Zeiten — dann gelten Messungen nicht mehr (100 % ohne Zusatz wie bisher)
+    private static string Limit => ComputeLimits.Percent >= 100 ? "" : $" · {ComputeLimits.Percent} %";
 
     /// <summary>Entrauschen und Dunst an einem Testbild, Grafikkarte und CPU.</summary>
     public static SpeedMeasure Filters(CancellationToken ct = default)
@@ -97,7 +100,7 @@ public static class SpeedTest
                 AppLog.Write("Geschwindigkeitstest: Grafikkarte für die KI nicht nutzbar", e.ToString());
             }
         }
-        using var cpuOptions = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        using var cpuOptions = OnnxSessions.CpuOptions();
         var cpu = Run(cpuOptions);
         return new SpeedMeasure(cpu, gpu, AiMachine(provider), DateTime.Now);
     }

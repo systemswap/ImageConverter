@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -56,7 +57,7 @@ internal static class Blur
     private static void ConvolveHorizontal(float[] src, float[] dst, int w, int h, int ch, float[] k)
     {
         var r = k.Length / 2;
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             var row = y * w * ch;
             for (var x = 0; x < w; x++)
@@ -74,7 +75,7 @@ internal static class Blur
     {
         var r = k.Length / 2;
         var stride = w * ch;
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             var outp = y * stride;
             for (var i = -r; i <= r; i++)
@@ -111,7 +112,7 @@ internal static class Blur
         if (r <= 0) { Array.Copy(src, dst, src.Length); return; }
         var inv = 1f / (2 * r + 1);
 
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             var row = y * w * ch;
             for (var c = 0; c < ch; c++)
@@ -140,7 +141,7 @@ internal static class Blur
         var blocks = (w + block - 1) / block;
         var stride = w * ch;
 
-        Parallel.For(0, blocks, b =>
+        Parallel.For(0, blocks, ComputeLimits.Options, b =>
         {
             var x0 = b * block * ch;
             var len = Math.Min(block, w - b * block) * ch;

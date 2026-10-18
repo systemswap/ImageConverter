@@ -226,9 +226,11 @@ public class UpscaleTests
         var plan = Upscalers.Plan(300, 180, 4000, 2400, twice: true);
         var both = Upscalers.Estimate(UpscaleMethod.Medium, 300, 180, plan);
         Assert.Equal(Upscalers.Estimate(UpscaleMethod.Medium, 300, 180) + Upscalers.Estimate(UpscaleMethod.Medium, 1000, 600), both);
-        // Ausschnitt: beide Durchgänge im selben Verhältnis kleiner
+        // Ausschnitt: beide Durchgänge im selben Verhältnis kleiner (seit 0.5.105 nach Kacheln geschätzt, nicht nach
+        // Fläche — ein Viertel der Fläche ist daher nicht genau ein Viertel der Zeit)
         var part = Upscalers.Estimate(UpscaleMethod.Medium, 300, 180, plan, 150, 90);
-        Assert.InRange(part.TotalSeconds, both.TotalSeconds / 4 * 0.98, both.TotalSeconds / 4 * 1.02);
+        Assert.Equal(Upscalers.Estimate(UpscaleMethod.Medium, 150, 90) + Upscalers.Estimate(UpscaleMethod.Medium, 500, 300), part);
+        Assert.True(part < both);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -224,7 +225,7 @@ public static class ImageOps
 
         // Ein Viertel rechnen, auf alle vier Ecken spiegeln
         var corner = new byte[cw * ch];
-        Parallel.For(0, ch, ly =>
+        Parallel.For(0, ch, ComputeLimits.Options, ly =>
         {
             for (var lx = 0; lx < cw; lx++)
             {
@@ -360,7 +361,7 @@ public static class ImageOps
 
         // 1) Zeilenstreifen: nach linear, waagerecht auf die Zielbreite
         var wide = new ushort[(long)width * sh * ch];
-        Parallel.ForEach(Strips(sh), r =>
+        Parallel.ForEach(Strips(sh), ComputeLimits.Options, r =>
         {
             int offset = r.Start * sw * ch, count = r.Length * sw * ch;
             if (toLinear is not null) MapColor(source.AsSpan(offset, count), ch, toLinear);
@@ -370,7 +371,7 @@ public static class ImageOps
 
         // 2) Spaltenstreifen: senkrecht auf die Zielhöhe, zurück nach sRGB
         var result = new ushort[(long)width * height * ch];
-        Parallel.ForEach(Strips(width), c =>
+        Parallel.ForEach(Strips(width), ComputeLimits.Options, c =>
         {
             var row = c.Length * ch;
             var column = new ushort[row * sh];

@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -36,7 +37,7 @@ internal static partial class Dehaze
             var (small, w2, h2) = DownscaleLinear(px, width, height, f);
             (sw, sh) = (w2, h2);
             var l = new float[sw * sh];
-            Parallel.For(0, sh, row =>
+            Parallel.For(0, sh, ComputeLimits.Options, row =>
             {
                 for (int x = 0, p = row * sw; x < sw; x++, p++) l[p] = Oklab.FromLinear(small[p * 3 + 2], small[p * 3 + 1], small[p * 3]).L;
             });
@@ -46,7 +47,7 @@ internal static partial class Dehaze
         // Grafikkarte: dieselbe Schleife je Pixel
         if (ToneOnGpu(px, width, height, f, sw, sh, baseL, scene, s)) return;
 
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             var sy = (y + 0.5f) / f - 0.5f;
             for (int x = 0, p = y * width; x < width; x++, p++)
@@ -118,7 +119,7 @@ internal static partial class Dehaze
     private static void WeightedSharpen(float[] px, int width, int height, SceneMap? scene, float amount, double sigma)
     {
         var sharp = Sharpen.UnsharpMask(px, width, height, amount, sigma);
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             for (int x = 0, p = y * width; x < width; x++, p++)
             {

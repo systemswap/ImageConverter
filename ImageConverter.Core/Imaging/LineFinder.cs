@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>Woher ein Vorschlag stammt.</summary>
@@ -37,7 +38,7 @@ public static class LineFinder
     public static IReadOnlyList<FoundLine> Find(float[] bgra, int w, int h)
     {
         var gray = new float[w * h];
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             for (int x = 0, i = y * w; x < w; x++, i++)
                 gray[i] = 0.114f * bgra[i * 4] + 0.587f * bgra[i * 4 + 1] + 0.299f * bgra[i * 4 + 2];
@@ -109,7 +110,7 @@ public static class LineFinder
         Blur.Gauss(bg, w, h, Math.Max(6, maxDim / 80.0));
         var dark = ink = new bool[w * h];
         letter = Math.Max(6, maxDim / 100.0);   // ohne Text: grob geschätzt
-        Parallel.For(0, w * h, i => dark[i] = bg[i] - gray[i] > Math.Max(0.07f, 0.18f * bg[i]));
+        Parallel.For(0, w * h, ComputeLimits.Options, i => dark[i] = bg[i] - gray[i] > Math.Max(0.07f, 0.18f * bg[i]));
 
         var (blobs, pixels) = Components(dark, w, h);
         var sizes = blobs.Where(b => b.Count >= 6 && b.Height <= maxDim / 20 && b.Width <= maxDim / 20).Select(b => b.Height).OrderBy(v => v).ToList();
@@ -357,7 +358,7 @@ public static class LineFinder
         int rw = (int)Math.Ceiling(a1 - a0) + 1, rh = (int)Math.Ceiling(b1 - b0) + 1;
         var grid = new bool[rw * rh];
         var inkGrid = new bool[rw * rh];
-        Parallel.For(0, rh, j =>
+        Parallel.For(0, rh, ComputeLimits.Options, j =>
         {
             for (var i = 0; i < rw; i++)
             {
@@ -579,7 +580,7 @@ public static class LineFinder
         // schwache Striche nur im Innern des Blatts: am Rand liegen Schatten, Heftrücken und der Saum der Kante — lauter
         // parallele „Linien“, die nicht auf dem Blatt liegen
         var inner = page is null ? null : Morph(page, w, h, (int)Math.Ceiling(1.5 * hm), grow: false);
-        Parallel.For(0, w * h, i => mask[i] = ink[i] || (closed[i] - gray[i] > tau && (inner?[i] ?? true)));
+        Parallel.For(0, w * h, ComputeLimits.Options, i => mask[i] = ink[i] || (closed[i] - gray[i] > tau && (inner?[i] ?? true)));
         return mask;
     }
 
@@ -587,7 +588,7 @@ public static class LineFinder
     private static float[] Extreme(float[] src, int w, int h, int r, bool max)
     {
         var rows = new float[w * h];
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < w; x++)
             {
@@ -598,7 +599,7 @@ public static class LineFinder
             }
         });
         var result = new float[w * h];
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < w; x++)
             {
@@ -671,7 +672,7 @@ public static class LineFinder
             for (var i = 0; i < w * h; i++) bg[i] = ch[c][i] * paperLike[i];
             Blur.Gauss(bg, w, h, maxDim / 10.0);
             var v = ch[c];
-            Parallel.For(0, w * h, i =>
+            Parallel.For(0, w * h, ComputeLimits.Options, i =>
             {
                 if (weight[i] < 0.05f) return;
                 diff[i] = Math.Max(diff[i], Math.Abs(v[i] - bg[i] / weight[i]));
@@ -936,7 +937,7 @@ public static class LineFinder
             }
         }
         var result = new bool[w * h];
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             int y0 = Math.Max(0, y - r), y1 = Math.Min(h, y + r + 1);
             for (var x = 0; x < w; x++)

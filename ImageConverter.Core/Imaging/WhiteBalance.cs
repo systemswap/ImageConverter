@@ -1,4 +1,5 @@
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -151,7 +152,7 @@ public static class WhiteBalance
 
         var result = PixelPool.Rent(px.Length);
         var pixels = width * height;
-        Parallel.For(0, height, y =>
+        Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             for (int i = y * width * 4, end = Math.Min(i + width * 4, pixels * 4); i < end; i += 4)
             {

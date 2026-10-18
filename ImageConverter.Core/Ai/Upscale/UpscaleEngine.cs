@@ -1,10 +1,18 @@
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>Ein ×4-Kachelmodell (Real-ESRGAN x4v3, UltraSharpV2) über ein ganzes Bild, als <see cref="UpscaleResult"/>.</summary>
 public static class UpscaleEngine
 {
+    /// <summary>Zahl der Kacheln für ein Original dieser Größe (wie <see cref="RunTiles"/> kachelt).</summary>
+    public static int TileCount(int w, int h, int tile)
+    {
+        var core = tile - 2 * Math.Max(4, tile / 12);
+        return ((w + core - 1) / core) * ((h + core - 1) / core);
+    }
+
     /// <param name="done">Fertige Fläche (in Pixeln des Originals) — aus dem Rechen-Thread aufgerufen.</param>
     public static UpscaleResult RunTiles(MagickImage source, ITileModel model, IProgress<double>? progress, CancellationToken ct,
         Action<UpscaleResult, SourceRect>? done = null)
@@ -46,7 +54,7 @@ public static class UpscaleEngine
             var output = model.Run(input, tile, tile, ct);
             var os = tile * 4;
             var plane = os * os;
-            Parallel.For(0, ch * 4, y =>
+            Parallel.For(0, ch * 4, ComputeLimits.Options, y =>
             {
                 var oy = cy * 4 + y;
                 for (var x = 0; x < cw * 4; x++)

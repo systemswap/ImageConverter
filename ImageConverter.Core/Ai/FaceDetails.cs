@@ -1,5 +1,6 @@
 using ImageConverter.Core.Imaging;
 using Microsoft.ML.OnnxRuntime;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
@@ -122,7 +123,7 @@ public static class FaceDetails
                 (template[1].X * size, template[1].Y * size, 0.075 * size),
                 (mouth.Item1, mouth.Item2, 0.12 * size),
             ];
-            Parallel.For(0, size, y =>
+            Parallel.For(0, size, ComputeLimits.Options, y =>
             {
                 for (var x = 0; x < size; x++)
                 {
@@ -249,7 +250,7 @@ public static class FaceDetails
         if (w < Block * 2 || h < Block * 2) return GrainProfile.None;
 
         var y = new float[(long)w * h];
-        Parallel.For(0, h, row =>
+        Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (long x = 0, i = (long)row * w; x < w; x++, i++)
                 y[i] = 0.2126f * image[i * 3] + 0.7152f * image[i * 3 + 1] + 0.0722f * image[i * 3 + 2];
@@ -346,7 +347,7 @@ public static class FaceDetails
         Blur.Gauss(blurred, w, h, sigma);
         int bw = w / Block, bh = h / Block;
         var blocks = new (float Mean, float Std)[bw * bh];
-        Parallel.For(0, bh, by =>
+        Parallel.For(0, bh, ComputeLimits.Options, by =>
         {
             for (var bx = 0; bx < bw; bx++)
             {
@@ -408,7 +409,7 @@ public static class FaceDetails
         var pad = (int)Math.Ceiling(sigma * 3) + 1;
         int pw = w + 2 * pad, ph = h + 2 * pad;
         var field = new float[pw * ph];
-        Parallel.For(0, ph, row =>
+        Parallel.For(0, ph, ComputeLimits.Options, row =>
         {
             for (var x = 0; x < pw; x++)
                 field[row * pw + x] = Gaussian(x0 - pad + x, y0 - pad + row, seed);

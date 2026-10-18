@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
@@ -27,7 +28,7 @@ internal sealed class AiPreviewSink(Action<AiPreviewFrame>? target, int maxEdge)
         int pw = Math.Max(1, (int)Math.Round(width * k)), ph = Math.Max(1, (int)Math.Round(height * k));
         var bgra = new byte[pw * ph * 4];
 
-        Parallel.For(0, ph, py =>
+        Parallel.For(0, ph, ComputeLimits.Options, py =>
         {
             Span<float> rgba = stackalloc float[4];
             var y = Math.Min(height - 1, (int)((py + 0.5) / k));

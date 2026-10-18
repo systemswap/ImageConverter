@@ -1,6 +1,7 @@
 using ImageConverter.Core.Imaging;
 using ImageMagick;
 using Microsoft.ML.OnnxRuntime;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
@@ -289,7 +290,7 @@ public static class AiFaces
         var crop = new float[3 * size * size];
         var plane = size * size;
 
-        Parallel.For(0, size, v =>
+        Parallel.For(0, size, ComputeLimits.Options, v =>
         {
             Span<float> rgb = stackalloc float[3];
             for (var u = 0; u < size; u++)
@@ -363,7 +364,7 @@ public static class AiFaces
         var grainAmount = grain is null ? 0 : (float)Math.Max(0, blend.Grain);
         var plane = size * size;
 
-        Parallel.For(y0, y1 + 1, y =>
+        Parallel.For(y0, y1 + 1, ComputeLimits.Options, y =>
         {
             Span<float> enh = stackalloc float[3];
             Span<float> low = stackalloc float[3];

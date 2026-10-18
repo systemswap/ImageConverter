@@ -93,9 +93,14 @@ public partial class App : Application
 
             var vm = new MainViewModel { CoarseWhileDragging = true };   // beim Ziehen grobe Vorschau, fein nach dem Loslassen
             desktop.MainWindow = new MainWindow { DataContext = vm };
+            // Rechner bedienbar halten: CPU-Obergrenze und niedrige Priorität (Einstellungen › Leistung), vor allem Rechnen
+            var settings = Core.Platform.AppSettings.Load();
+            Core.Platform.ComputeLimits.SetPercent(settings.CpuPercent);
+            if (settings.LowPriority) Core.Platform.ComputeLimits.LowerPriority();
+
             // Grafikkarte für Entrauschen und Dunst im Hintergrund vorbereiten (Kernel übersetzen); letzter
             // Geschwindigkeitstest entscheidet, ob sie oder die CPU rechnet
-            Core.Imaging.GpuFilters.Measured = Core.Platform.AppSettings.Load().FilterSpeed;
+            Core.Imaging.GpuFilters.Measured = settings.FilterSpeed;
             _ = Core.Imaging.GpuFilters.WarmUpAsync();
 
             // Dateien aus "Öffnen mit" bzw. der .desktop-Zeile (Exec=… %F) direkt laden

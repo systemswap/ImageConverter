@@ -107,6 +107,51 @@ unten), auf dem Laptop die Grafikkarte deutlich schneller.
   `ILGPU.Context` einen Fehler im Typinitialisierer, weil dort `PublishAot` voreingestellt ist — `#:property
   PublishAot=false` setzen. Das Programm selbst ist nicht betroffen.
 
+## Rechner bedienbar halten, Upscaler im Test (0.5.105 beta)
+
+Wunsch des Benutzers (18.10.2026): Bei stundenlangem Rechnen auf 100 % ist der Rechner nicht mehr benutzbar; die
+Zeitschätzung soll schon vor dem ersten Lauf stimmen.
+
+- **Niedrige Priorität** (Einstellungen › Leistung, Vorgabe an; `ComputeLimits.LowerPriority`): andere Programme haben
+  Vorrang, ist der Rechner frei, wird trotzdem voll gerechnet. Linux: `setpriority` auf nice 10 für jeden Strang unter
+  `/proc/self/task` — „nice“ gilt je Strang, neue erben ihn (nachgeprüft: nach `Parallel.For` 41 Stränge, alle nice 10;
+  die Stränge der KI-Laufzeit entstehen ebenso). Zurück auf normal geht unter Linux nur mit Administratorrechten — das
+  Ausschalten wirkt dort nach einem Neustart (Hinweis in den Einstellungen). Windows: `BelowNormal` für den Prozess.
+- **Obergrenze „CPU höchstens … %“** (10–100 %, Vorgabe 100): `ComputeLimits.Options` in allen 107 parallelen Schleifen
+  (`MaxDegreeOfParallelism`), Stränge der KI-Laufzeit (`IntraOpNumThreads`, nach echten Kernen — Linux aus
+  `/sys/devices/system/cpu/*/topology`, Windows `GetLogicalProcessorInformation`) und ImageMagick
+  (`ResourceLimits.Thread`). Die Kennung des Rechners für Test und Zeitschätzung enthält die Grenze — nach einer Änderung
+  gelten alte Messungen nicht.
+- **Upscaler im Geschwindigkeitstest:** nach Bildfiltern und KI je installiertem Upscaler ein Testbild 256 × 256 (vorher
+  64 × 64 zum Laden), mit der gewählten Recheneinheit und Grenze; PiSA-SR nur, wenn seine ONNX-Dateien schon gebaut sind.
+  Auf dem Debian-Rechner 86 s für den ganzen Test.
+- **Schätzung nach Kachelaufwand statt Fläche** (`Upscalers.Work`): Kachelmodelle nach Zahl der Kacheln, PiSA-SR nach
+  Kacheln × Fläche × Kosten je Teil (`PiSaSrRun.Work`). Kleine Bilder überlappen anteilig mehr; mit Sekunden je Megapixel
+  lag ein Test an 256 × 256 für große Bilder deutlich daneben. Gespeichert in `settings.json` als `UpscaleWork`
+  (Sekunden je Aufwandseinheit; der Eintrag `UpscaleTimes` aus 0.5.104 in Sekunden je Megapixel wird nicht mehr gelesen).
+
+### CPU-Feinschliff für PiSA-SR — gemessen, verworfen
+
+Gemessen auf dem Ryzen 9 7950X3D (16 Kerne, zwei Gruppen zu 8: eine mit 3D-V-Cache, eine höher getaktet — keine
+Effizienzkerne), PiSA-SR fp32 auf der CPU:
+
+| Versuch | Zeit | Ergebnis |
+|---|---|---|
+| Decoder-Kachel 64 (Vorgabe), 600 × 360 | 101,7 s | Referenz |
+| Decoder-Kachel 96 | 89,9 s | PSNR 36 dB, einzelne Stellen bis 107/255 anders |
+| Decoder-Kachel 128 (auch Encoder 128/160) | 106–109 s | PSNR 33–34,5 dB |
+| 8 statt 16 Stränge | 134 s | gleich |
+| 32 Stränge | 108 s | gleich |
+| zwei Kacheln gleichzeitig, eine Sitzung (400 × 240, zwei Bilder) | 90,8 s statt 98,5 s | gleich |
+| zwei Kacheln gleichzeitig, zwei Sitzungen je 8 Stränge | 85,6 s (Messung gestört, eher ~90) | gleich, doppelter Speicher |
+
+- **Kachelgröße bleibt fest:** Der VAE-Decoder normiert innerhalb jeder Kachel (GroupNorm) — das Ergebnis hängt
+  sichtbar von der Kachelgröße ab, und schneller wird es kaum. Bedingung des Benutzers: Qualität darf nicht schlechter
+  werden. **Nicht tun:** Kachelgrößen je Gerät „optimieren“, ohne das Ergebnis zu vergleichen.
+- **Mehr Stränge bringen nichts** (16 → 32), weniger kosten wenig (8 Stränge: +26 %) — Grundlage der Obergrenze.
+- **Zwei Kacheln gleichzeitig:** nur 8 % — lohnt den Umbau der Reihenfolge nicht; unter DirectML sind gleichzeitige
+  Aufrufe einer Sitzung ohnehin nicht erlaubt.
+
 ## WebGPU unter Linux (gebaut und gemessen, 18.10.2026)
 
 Messplatz: Debian 13, AMD Ryzen 9 7950X3D (16 Kerne), Radeon RX 6650 XT (8 GB, Mesa/RADV), Stand 0.5.96 beta.

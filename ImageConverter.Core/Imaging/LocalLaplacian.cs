@@ -1,3 +1,4 @@
+using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
@@ -51,7 +52,7 @@ internal static class LocalLaplacian
 
             // Bild so umgerechnet, als läge überall die Umgebung gamma vor
             remapped ??= PixelPool.Rent(lum.Length);   // einmal, für alle Umgebungswerte (vollständig geschrieben)
-            Parallel.For(0, height, y =>
+            Parallel.For(0, height, ComputeLimits.Options, y =>
             {
                 for (int x = 0, i = y * width; x < width; x++, i++)
                 {
@@ -68,7 +69,7 @@ internal static class LocalLaplacian
                 var band = l < top ? r.Laplacian(l) : r[top];   // Laplace-Stufe aus dem Pool, unten zurück
                 var g = guides[l];
                 var o = output[l];
-                Parallel.For(0, o.Length / 4096 + 1, chunk =>
+                Parallel.For(0, o.Length / 4096 + 1, ComputeLimits.Options, chunk =>
                 {
                     var end = Math.Min(o.Length, (chunk + 1) * 4096);
                     for (var i = chunk * 4096; i < end; i++)
@@ -209,7 +210,7 @@ internal sealed class Pyramid
     {
         int cw = (w + 1) / 2, ch = (h + 1) / 2;
         var rows = PixelPool.Rent(cw * h);
-        Parallel.For(0, h, y =>
+        Parallel.For(0, h, ComputeLimits.Options, y =>
         {
             var row = y * w;
             for (var x = 0; x < cw; x++)
@@ -220,7 +221,7 @@ internal sealed class Pyramid
             }
         });
         var dst = PixelPool.Rent(cw * ch);
-        Parallel.For(0, ch, y =>
+        Parallel.For(0, ch, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < cw; x++)
             {
@@ -237,7 +238,7 @@ internal sealed class Pyramid
     private static float[] Up(float[] src, int cw, int ch, int fw, int fh)
     {
         var rows = PixelPool.Rent(fw * ch);
-        Parallel.For(0, ch, y =>
+        Parallel.For(0, ch, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < fw; x++)
             {
@@ -253,7 +254,7 @@ internal sealed class Pyramid
             }
         });
         var dst = PixelPool.Rent(fw * fh);
-        Parallel.For(0, fh, y =>
+        Parallel.For(0, fh, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < fw; x++)
             {

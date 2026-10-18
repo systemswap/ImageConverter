@@ -88,10 +88,23 @@ public sealed class OnnxSessions : IDisposable
     private readonly Dictionary<string, string> _modelOf = new(StringComparer.Ordinal);   // Pfad → Modell-Id
     private readonly Lock _lock = new();
 
+    // Obergrenze geändert: die Stränge gelten erst beim Öffnen — beim nächsten Holen neu öffnen (nicht sofort schließen,
+    // ein laufender Auftrag rechnet vielleicht noch mit den offenen)
+    public OnnxSessions() => ComputeLimits.Changed += (_, _) => _stale = true;
+
+    private volatile bool _stale;
+
     public InferenceSession Get(AiModel model, string path)
     {
         lock (_lock)
         {
+            if (_stale)
+            {
+                _stale = false;
+                foreach (var s in _open.Values) s.Dispose();
+                _open.Clear();
+                _modelOf.Clear();
+            }
             if (_open.TryGetValue(path, out var session)) return session;
 
             if (!StaysOpen(model.Kind))
@@ -128,13 +141,23 @@ public sealed class OnnxSessions : IDisposable
                 GpuProblem = e.Message;
             }
         }
-        using var cpu = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        using var cpu = CpuOptions();
         return new InferenceSession(path, cpu);
+    }
+
+    /// <summary>Für die CPU: so viele Stränge, wie die Obergrenze erlaubt (Einstellungen › Leistung).</summary>
+    internal static SessionOptions CpuOptions()
+    {
+        var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        if (ComputeLimits.OnnxThreads is { } threads) o.IntraOpNumThreads = threads;
+        return o;
     }
 
     internal static SessionOptions GpuOptions(string provider)
     {
         var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        // auch auf der Grafikkarte rechnet ein Teil auf der CPU (Formen, Übergänge)
+        if (ComputeLimits.OnnxThreads is { } threads) o.IntraOpNumThreads = threads;
         switch (provider)
         {
             case "DmlExecutionProvider":

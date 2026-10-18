@@ -1,4 +1,5 @@
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
@@ -65,7 +66,7 @@ public sealed class DewarpMap
         var src = Pixels.FromMagick(source);
         var dst = PixelPool.Rent(ow * oh * 4);
         var shading = Shading;
-        Parallel.For(0, oh, y =>
+        Parallel.For(0, oh, ComputeLimits.Options, y =>
         {
             var v = (y + 0.5) / oh;
             for (var x = 0; x < ow; x++)
@@ -973,7 +974,7 @@ public static class Dewarp
             var cell = Math.Max(x1 - x0, y1 - y0) / Cells;
             int nx = Math.Max(2, (int)Math.Ceiling((x1 - x0) / cell) + 1), ny = Math.Max(2, (int)Math.Ceiling((y1 - y0) / cell) + 1);
             var g = new Grid(nx, ny, x0, y0, (x1 - x0) / (nx - 1), (y1 - y0) / (ny - 1));
-            Parallel.For(0, ny, j =>
+            Parallel.For(0, ny, ComputeLimits.Options, j =>
             {
                 for (var i = 0; i < nx; i++)
                     (g._u[j * nx + i], g._v[j * nx + i]) = at(x0 + i * g._dx, y0 + j * g._dy);
@@ -1020,7 +1021,7 @@ public static class Dewarp
             var (wx, wy) = (smooth * alongX, smooth * alongY);
             void Apply(double[] d, double[] r)
             {
-                Parallel.For(0, _ny, j =>
+                Parallel.For(0, _ny, ComputeLimits.Options, j =>
                 {
                     for (var i = 0; i < _nx; i++)
                     {
@@ -1141,7 +1142,7 @@ public static class Dewarp
             // Jacobi-Matrix numerisch (Vorwärtsdifferenzen)
             var m = r.Length;
             var jac = new double[n][];
-            Parallel.For(0, n, c =>
+            Parallel.For(0, n, ComputeLimits.Options, c =>
             {
                 var th = (double[])theta.Clone();
                 var h = 1e-6 * Math.Max(1, Math.Abs(th[c]));
@@ -1153,7 +1154,7 @@ public static class Dewarp
             });
             var a = new double[n, n];
             var g = new double[n];
-            Parallel.For(0, n, i =>
+            Parallel.For(0, n, ComputeLimits.Options, i =>
             {
                 for (var j = i; j < n; j++)
                 {

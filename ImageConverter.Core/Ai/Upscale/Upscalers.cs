@@ -30,30 +30,43 @@ public static class Upscalers
         _ => null,
     };
 
-    // Sekunden je Megapixel des Originals (gemessen am Panorama-Ausschnitt 500 × 300 → 2000 × 1200 auf einem Ryzen 7
-    // Notebook-Prozessor; CPU: x4v3 3,5 s, UltraSharpV2 2 min, PiSA-SR 6 min; Grafikkarte = dessen Radeon über DirectML). Nach jedem Lauf
-    // gilt die gemessene Zeit dieses Rechners — gespeichert (Learned/Restore), sonst schätzte ein schneller Rechner nach
-    // jedem Start wieder mit den Laptop-Werten (Ryzen 9 7950X3D: PiSA-SR etwa 6× so schnell, Anzeige 34 statt 6 min).
-    private static readonly Dictionary<(UpscaleMethod, bool Gpu), double> SecondsPerMegapixel = new()
+    // Vorgaben: Sekunden je Megapixel des Originals, gemessen am Panorama-Ausschnitt 500 × 300 → 2000 × 1200 auf einem
+    // Notebook-Prozessor (CPU: x4v3 3,5 s, UltraSharpV2 2 min, PiSA-SR 6 min; Grafikkarte = dessen Radeon über DirectML).
+    // Geschätzt wird über den Rechenaufwand (Kacheln samt Überlappung, Work) statt über die Fläche — bei kleinen Bildern
+    // überlappen die Kacheln anteilig mehr, die Fläche allein lag dort daneben. Gemessene Werte dieses Rechners
+    // (Geschwindigkeitstest, jeder Lauf) ersetzen die Vorgaben und werden gespeichert (Learned/Restore) — sonst schätzte
+    // ein schneller Rechner nach jedem Start mit den Laptop-Werten (Ryzen 9 7950X3D: PiSA-SR etwa 6× so schnell).
+    private static readonly Dictionary<(UpscaleMethod, bool Gpu), double> DefaultSecondsPerMegapixel = new()
     {
         [(UpscaleMethod.Fast, false)] = 23,
         [(UpscaleMethod.Medium, false)] = 800,
         [(UpscaleMethod.Generative, false)] = 2370,
-        [(UpscaleMethod.Fast, true)] = GpuFast,
-        [(UpscaleMethod.Medium, true)] = GpuMedium,
-        [(UpscaleMethod.Generative, true)] = GpuGenerative,
+        [(UpscaleMethod.Fast, true)] = 13,          // Grafikkarte: 2,0 s, 80 s, 97 s (fp16) für 0,15 MP
+        [(UpscaleMethod.Medium, true)] = 530,
+        [(UpscaleMethod.Generative, true)] = 650,
     };
 
-    // Grafikkarte (Radeon des Notebook-Prozessor über DirectML), gemessen am selben Ausschnitt
-    private const double GpuFast = 13, GpuMedium = 530, GpuGenerative = 650;   // 2,0 s, 80 s, 97 s (fp16) für 0,15 MP
+    /// <summary>Sekunden je Aufwandseinheit (<see cref="Work"/>) je Verfahren und Gerät.</summary>
+    private static readonly Dictionary<(UpscaleMethod, bool Gpu), double> SecondsPerWork =
+        DefaultSecondsPerMegapixel.ToDictionary(p => p.Key, p => p.Value * 0.15 / Work(p.Key.Item1, 500, 300));
+
+    /// <summary>Rechenaufwand für ein Original dieser Größe: Kacheln (Kachelmodelle) bzw. Kachelflächen (PiSA-SR).</summary>
+    public static double Work(UpscaleMethod method, int width, int height) => method switch
+    {
+        UpscaleMethod.Generative => PiSaSrRun.Work(width, height),
+        UpscaleMethod.Fast or UpscaleMethod.Medium => UpscaleEngine.TileCount(width, height, ModelOf(method)!.TileSize),
+        _ => 0,
+    };
 
     /// <summary>Rechnen die Modelle gerade auf der Grafikkarte? (setzt die Oberfläche nach den Einstellungen)</summary>
     public static bool OnGpu { get; set; }
 
     /// <summary>Geschätzte Rechenzeit für ein Original dieser Größe (ohne einmaliges Umwandeln/Laden).</summary>
-    public static TimeSpan Estimate(UpscaleMethod method, int width, int height) =>
-        method == UpscaleMethod.Filter ? TimeSpan.Zero
-            : TimeSpan.FromSeconds(SecondsPerMegapixel[(method, OnGpu)] * width * (double)height / 1e6);
+    public static TimeSpan Estimate(UpscaleMethod method, int width, int height)
+    {
+        if (method == UpscaleMethod.Filter || width <= 0 || height <= 0) return TimeSpan.Zero;
+        lock (SecondsPerWork) return TimeSpan.FromSeconds(SecondsPerWork[(method, OnGpu)] * Work(method, width, height));
+    }
 
     /// <summary>
     /// Wie gerechnet wird: ein KI-Durchgang (×4, den Rest macht der Filter) oder — über 4× und wenn gewünscht — zwei. Beim
@@ -84,39 +97,42 @@ public static class Upscalers
     /// <summary>Werte, die auf diesem Rechner gemessen wurden (nicht die Vorgaben).</summary>
     private static readonly HashSet<(UpscaleMethod, bool)> LearnedKeys = [];
 
-    /// <summary>Gemessene Zeit eines Laufs merken (verfeinert die Schätzung; kleine Läufe zählen weniger).</summary>
-    public static void Measured(UpscaleMethod method, int width, int height, TimeSpan elapsed)
+    /// <summary>
+    /// Gemessene Zeit eines Laufs merken (verfeinert die Schätzung; kleine Läufe zählen weniger). Die erste Messung eines
+    /// Rechners und jede aus dem Geschwindigkeitstest (<paramref name="replace"/>) ersetzen den Wert ganz.
+    /// </summary>
+    public static void Measured(UpscaleMethod method, int width, int height, TimeSpan elapsed, bool replace = false)
     {
         var mp = width * (double)height / 1e6;
-        if (method == UpscaleMethod.Filter || mp < 0.01) return;
+        var work = Work(method, width, height);
+        if (method == UpscaleMethod.Filter || mp < 0.002 || work <= 0) return;
         var key = (method, OnGpu);
-        lock (SecondsPerMegapixel)
+        lock (SecondsPerWork)
         {
-            // erste Messung dieses Rechners ersetzt die Vorgabe (die kommt von einem anderen Rechner), danach gleitend
-            var weight = LearnedKeys.Add(key) ? 1 : Math.Min(1, mp / 0.3);
-            SecondsPerMegapixel[key] = SecondsPerMegapixel[key] * (1 - weight) + elapsed.TotalSeconds / mp * weight;
+            var weight = LearnedKeys.Add(key) || replace ? 1 : Math.Min(1, mp / 0.3);
+            SecondsPerWork[key] = SecondsPerWork[key] * (1 - weight) + elapsed.TotalSeconds / work * weight;
         }
     }
 
-    /// <summary>Die gemessenen Werte zum Speichern („Generative|cpu“ → Sekunden je Megapixel).</summary>
+    /// <summary>Die gemessenen Werte zum Speichern („Generative|cpu“ → Sekunden je Aufwandseinheit).</summary>
     public static Dictionary<string, double> Learned()
     {
-        lock (SecondsPerMegapixel)
-            return LearnedKeys.ToDictionary(k => $"{k.Item1}|{(k.Item2 ? "gpu" : "cpu")}", k => SecondsPerMegapixel[k]);
+        lock (SecondsPerWork)
+            return LearnedKeys.ToDictionary(k => $"{k.Item1}|{(k.Item2 ? "gpu" : "cpu")}", k => SecondsPerWork[k]);
     }
 
     /// <summary>Gespeicherte Werte dieses Rechners übernehmen (unbekannte oder unsinnige Einträge werden übergangen).</summary>
     public static void Restore(IReadOnlyDictionary<string, double>? saved)
     {
         if (saved is null) return;
-        lock (SecondsPerMegapixel)
+        lock (SecondsPerWork)
             foreach (var (name, seconds) in saved)
             {
                 var parts = name.Split('|');
                 if (parts.Length != 2 || !Enum.TryParse<UpscaleMethod>(parts[0], out var method) || method == UpscaleMethod.Filter
                     || parts[1] is not ("cpu" or "gpu") || !double.IsFinite(seconds) || seconds <= 0) continue;
                 var key = (method, parts[1] == "gpu");
-                SecondsPerMegapixel[key] = seconds;
+                SecondsPerWork[key] = seconds;
                 LearnedKeys.Add(key);
             }
     }

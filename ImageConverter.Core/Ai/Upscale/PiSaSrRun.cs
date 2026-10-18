@@ -1,5 +1,6 @@
 using ImageMagick;
 using Microsoft.ML.OnnxRuntime;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
@@ -20,6 +21,23 @@ public static class PiSaSrRun
 
     // Geschätzte Kosten je Latentpixel (für den Fortschritt; gemessen auf CPU, nur das Verhältnis zählt)
     private const double EncoderCost = 1.45, UnetCost = 1.06, DecoderCost = 3.4;   // 500 × 300: 80 s, 65 s, 210 s
+
+    /// <summary>
+    /// Rechenaufwand für ein Original dieser Größe — Kacheln × Kachelfläche × Kosten je Teil, wie <see cref="Run"/>
+    /// rechnet (mit Überlappung). Grundlage der Zeitschätzung: Zeit = Sekunden je Einheit × Aufwand.
+    /// </summary>
+    public static double Work(int w, int h)
+    {
+        int lw = (4 * w + 7) / 8, lh = (4 * h + 7) / 8;
+        static double Part(int lw, int lh, int tile, int overlap, double cost)
+        {
+            var x = new TileAxis(lw, tile, overlap);
+            var y = new TileAxis(lh, tile, overlap);
+            return x.Count * y.Count * (double)x.Size * y.Size * cost;
+        }
+        return Part(lw, lh, EncoderTile, EncoderOverlap, EncoderCost) + Part(lw, lh, UnetTile, UnetOverlap, UnetCost)
+               + Part(lw, lh, DecoderTile, DecoderOverlap, DecoderCost);
+    }
 
     /// <param name="done">Fertige Fläche (in Pixeln des Originals) — aus dem Rechen-Thread aufgerufen.</param>
     public static UpscaleResult Run(MagickImage source, InferenceSession encoder, InferenceSession unet, InferenceSession decoder,
@@ -108,7 +126,7 @@ public static class PiSaSrRun
             int pw = tw * 8, ph = th * 8, px = tx * 8, py = ty * 8;
             var wx = dxp.Weights[kx];
             var wy = dyp.Weights[ky];
-            Parallel.For(0, Math.Min(ph, oh - py), y =>
+            Parallel.For(0, Math.Min(ph, oh - py), ComputeLimits.Options, y =>
             {
                 for (var x = 0; x < Math.Min(pw, ow - px); x++)
                 {

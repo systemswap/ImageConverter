@@ -1,5 +1,6 @@
 using ImageConverter.Core.Imaging;
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
@@ -41,7 +42,7 @@ public sealed class EnhanceRun : IAiRun
         int sw = size.Width, sh = size.Height;
         var s = (float)Math.Clamp(blend.Strength, 0, 1);
         var bgra = new float[sw * sh * 4];
-        Parallel.For(0, sh, y =>
+        Parallel.For(0, sh, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < sw; x++)
             {
@@ -65,7 +66,7 @@ public sealed class EnhanceRun : IAiRun
         else
         {
             pixels = new ushort[_result.Length];
-            Parallel.For(0, _h, y =>
+            Parallel.For(0, _h, ComputeLimits.Options, y =>
             {
                 for (long i = (long)y * _w * _channels, end = i + (long)_w * _channels; i < end; i++)
                     pixels[i] = (ushort)(_baseline[i] + (_result[i] - _baseline[i]) * s + 0.5f);

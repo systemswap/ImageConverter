@@ -1,5 +1,6 @@
 using ImageConverter.Core.Imaging;
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
@@ -81,7 +82,7 @@ public sealed class FaceRun : IAiRun
         {
             var toCrop = Scaled(face.ToCrop, small.K);
             var (x0, y0, x1, y1) = AiFaces.Bounds(toCrop, face.Size, w, h);
-            Parallel.For(y0, y1 + 1, y =>
+            Parallel.For(y0, y1 + 1, ComputeLimits.Options, y =>
             {
                 for (var x = x0; x <= x1; x++)
                 {
@@ -187,7 +188,7 @@ public sealed class FaceRun : IAiRun
         var y1 = Math.Min(h - 1, (int)Math.Ceiling((full.Y0 + full.Height) * k));
         int sw = x1 - x0 + 1, sh = y1 - y0 + 1;
         var field = new float[sw * sh];
-        Parallel.For(0, sh, row =>
+        Parallel.For(0, sh, ComputeLimits.Options, row =>
         {
             for (var col = 0; col < sw; col++)
             {
@@ -209,7 +210,7 @@ public sealed class FaceRun : IAiRun
     {
         int sw = size.Width, sh = size.Height;
         var bgra = new float[sw * sh * 4];
-        Parallel.For(0, sh, y =>
+        Parallel.For(0, sh, ComputeLimits.Options, y =>
         {
             for (var x = 0; x < sw; x++)
             {

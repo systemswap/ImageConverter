@@ -1,5 +1,6 @@
 using ImageConverter.Core.Imaging;
 using ImageMagick;
+using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
@@ -90,7 +91,7 @@ public sealed class UpscaleResult
         float Src(int c, int x, int y) =>
             _source[((long)Math.Clamp(y, 0, sh - 1) * sw + Math.Clamp(x, 0, sw - 1)) * ch + c] / 65535f;
 
-        Parallel.For(0, tilesX * tilesY, new ParallelOptions { CancellationToken = ct }, t =>
+        Parallel.For(0, tilesX * tilesY, new ParallelOptions { MaxDegreeOfParallelism = ComputeLimits.Options.MaxDegreeOfParallelism, CancellationToken = ct }, t =>
         {
             int cx = region.X + t % tilesX * core, cy = region.Y + t / tilesX * core;
             int cw = Math.Min(core, region.X + region.Width - cx), chh = Math.Min(core, region.Y + region.Height - cy);

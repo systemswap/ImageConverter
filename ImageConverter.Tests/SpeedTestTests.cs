@@ -66,17 +66,40 @@ public class SpeedTestTests
     [Fact]
     public void UpscaleTimes_FirstMeasurementReplacesTheDefault_AndSurvivesARestart()
     {
-        var before = Upscalers.Estimate(UpscaleMethod.Generative, 1000, 1000);
-        // ein schneller Rechner: 0,15 MP in 58 s (387 s je MP statt der Vorgabe vom Laptop)
-        Upscalers.Measured(UpscaleMethod.Generative, 500, 300, TimeSpan.FromSeconds(58));
-        var learned = Upscalers.Estimate(UpscaleMethod.Generative, 1000, 1000);
-        Assert.InRange(learned.TotalSeconds, 380, 395);
-        Assert.True(learned < before / 3, $"{learned} gegen Vorgabe {before}");
-
         var saved = Upscalers.Learned();
-        Assert.True(saved.ContainsKey(Upscalers.OnGpu ? "Generative|gpu" : "Generative|cpu"));
-        Upscalers.Restore(new Dictionary<string, double> { [Upscalers.OnGpu ? "Generative|gpu" : "Generative|cpu"] = 500, ["Unsinn|cpu"] = 1, ["Fast|cpu"] = double.NaN });
-        Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 1000, 1000).TotalSeconds, 499, 501);
-        Upscalers.Restore(saved);   // für andere Tests wie vorher
+        var key = Upscalers.OnGpu ? "Generative|gpu" : "Generative|cpu";
+        try
+        {
+            var before = Upscalers.Estimate(UpscaleMethod.Generative, 500, 300);
+            // ein schneller Rechner: 500 × 300 in 58 s (Vorgabe vom Laptop: 355 s)
+            Upscalers.Measured(UpscaleMethod.Generative, 500, 300, TimeSpan.FromSeconds(58), replace: true);
+            Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300).TotalSeconds, 57.9, 58.1);
+            Assert.True(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300) < before / 3);
+
+            // große Bilder nach dem Aufwand der Kacheln, nicht nach der Fläche
+            var big = Upscalers.Estimate(UpscaleMethod.Generative, 4000, 3000).TotalSeconds;
+            var ratio = Upscalers.Work(UpscaleMethod.Generative, 4000, 3000) / Upscalers.Work(UpscaleMethod.Generative, 500, 300);
+            Assert.InRange(big / 58, ratio * 0.999, ratio * 1.001);
+
+            Assert.True(Upscalers.Learned().ContainsKey(key));
+            Upscalers.Restore(new Dictionary<string, double> { [key] = 0.01, ["Unsinn|cpu"] = 1, ["Fast|cpu"] = double.NaN });
+            Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300).TotalSeconds,
+                0.01 * Upscalers.Work(UpscaleMethod.Generative, 500, 300) * 0.999, 0.01 * Upscalers.Work(UpscaleMethod.Generative, 500, 300) * 1.001);
+        }
+        finally
+        {
+            Upscalers.Restore(saved);   // für andere Tests wie vorher
+        }
+    }
+
+    [Fact]
+    public void Work_SmallImagesOverlapMore_ThanTheirArea()
+    {
+        // Aufwand je Megapixel ist bei kleinen Bildern höher (Kacheln überlappen anteilig mehr) — die Fläche allein
+        // unterschätzte große und überschätzte kleine Bilder
+        double PerMp(int w, int h) => Upscalers.Work(UpscaleMethod.Generative, w, h) / (w * (double)h);
+        Assert.True(PerMp(256, 256) > PerMp(4000, 3000));
+        Assert.Equal(1, UpscaleEngine.TileCount(100, 100, 128));
+        Assert.True(UpscaleEngine.TileCount(1000, 1000, 128) > 50);
     }
 }
