@@ -113,7 +113,8 @@ public partial class AiViewModel : ViewModelBase
         var percent = (int)Math.Round(value / 5) * 5;
         if (percent == ComputeLimits.Percent) return;
         ComputeLimits.SetPercent(percent);
-        (AppSettings.Load() with { CpuPercent = ComputeLimits.Percent }).Save();
+        var clamped = ComputeLimits.Percent;   // nach dem Begrenzen auf 10 … 100
+        AppSettings.Update(s => s with { CpuPercent = clamped });
         // Messungen galten für die alte Grenze
         OnPropertyChanged(nameof(SpeedTestText));
         OnPropertyChanged(nameof(FilterGpuStatus));
@@ -131,7 +132,7 @@ public partial class AiViewModel : ViewModelBase
 
     partial void OnLowPriorityChanged(bool value)
     {
-        (AppSettings.Load() with { LowPriority = value }).Save();
+        AppSettings.Update(s => s with { LowPriority = value });
         if (value) ComputeLimits.LowerPriority();
         else ComputeLimits.TryNormalPriority();
     }
@@ -228,8 +229,7 @@ public partial class AiViewModel : ViewModelBase
             }
             SpeedTestProgress = null;
 
-            var settings = AppSettings.Load();
-            (settings with { FilterSpeed = filters, AiSpeed = ai ?? settings.AiSpeed }).Save();
+            AppSettings.Update(s => s with { FilterSpeed = filters, AiSpeed = ai ?? s.AiSpeed });
         }
         catch (Exception e)
         {

@@ -777,8 +777,8 @@ public partial class MainViewModel
     /// <summary>Gemessene Upscaler-Zeiten für diesen Rechner speichern — die Schätzung stimmt dann auch nach einem Neustart.</summary>
     private static void SaveUpscaleTimes()
     {
-        var settings = AppSettings.Load();
-        (settings with { UpscaleWork = new UpscaleTimes(SpeedTest.AiMachine(OnnxSessions.GpuProvider), Upscalers.Learned()) }).Save();
+        var times = new UpscaleTimes(SpeedTest.AiMachine(OnnxSessions.GpuProvider), Upscalers.Learned());
+        AppSettings.Update(s => s with { UpscaleWork = times });
     }
 
     /// <summary>Beim Start: gespeicherte Upscaler-Zeiten übernehmen, wenn sie auf diesem Rechner gemessen wurden.</summary>

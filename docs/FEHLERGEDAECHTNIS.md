@@ -2202,3 +2202,9 @@ Test oder Nachweis.
   zugeteilt 7,2 → 0,96 GB; Helligkeit + Farbe 2,38 → 1,90 s, Spitze 5,6 → 4,4 GB. **Pixelgleich** (Prüfsummen der
   Ergebnisse unverändert). Summen-Puffer der Non-Local-Means auf der CPU werden vor Gebrauch geleert (aus dem Pool
   kommen sie nicht leer). Mit Grenze 2 nur halb so viel gespart (3,3 GB zugeteilt).
+- **Nachtrag 0.6.10 beta (Sicherheit der Einstellungen):** `settings.json` wurde direkt überschrieben — ein Absturz beim
+  Schreiben hätte eine halbe Datei hinterlassen, die `Load` still durch die Vorgaben ersetzt (Sprache, Obergrenze,
+  Geschwindigkeitstest weg). Und Lesen-Ändern-Schreiben lief ohne Sperre: Upscaler im Hintergrund und ein Regler konnten
+  sich gegenseitig überschreiben. Jetzt `AppSettings.Save` über Zwischendatei und Umbenennen, `AppSettings.Update` liest,
+  ändert und schreibt unter einer Sperre; alle Schreibstellen nutzen `Update`. Test
+  `SpeedTestTests.Settings_UpdatesFromSeveralThreads_KeepEveryChange_AndLeaveNoTempFile`.

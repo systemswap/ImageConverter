@@ -102,4 +102,29 @@ public class SpeedTestTests
         Assert.Equal(1, UpscaleEngine.TileCount(100, 100, 128));
         Assert.True(UpscaleEngine.TileCount(1000, 1000, 128) > 50);
     }
+
+    [Fact]
+    public void Settings_UpdatesFromSeveralThreads_KeepEveryChange_AndLeaveNoTempFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ic-settings-" + Guid.NewGuid().ToString("N"));
+        var file = Path.Combine(dir, "settings.json");
+        try
+        {
+            var m = new SpeedMeasure(0.5, 0.25, Here, new DateTime(2026, 10, 18, 12, 0, 0));
+            // gleichzeitig verschiedene Felder ändern: keins darf das andere überschreiben
+            Parallel.For(0, 40, i =>
+            {
+                if (i % 2 == 0) AppSettings.Update(s => s with { FilterSpeed = m }, file);
+                else AppSettings.Update(s => s with { CpuPercent = 50 }, file);
+            });
+            var loaded = AppSettings.Load(file);
+            Assert.Equal(m, loaded.FilterSpeed);
+            Assert.Equal(50, loaded.CpuPercent);
+            Assert.False(File.Exists(file + ".tmp"));
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
+    }
 }

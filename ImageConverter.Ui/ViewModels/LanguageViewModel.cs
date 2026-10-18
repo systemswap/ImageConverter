@@ -49,7 +49,7 @@ public partial class LanguageViewModel : ObservableObject
     {
         if (_syncing || value is null) return;
         Tr.Use(value);
-        (AppSettings.Load() with { Language = value.Code }).Save();
+        AppSettings.Update(s => s with { Language = value.Code });
         Status = null;
     }
 

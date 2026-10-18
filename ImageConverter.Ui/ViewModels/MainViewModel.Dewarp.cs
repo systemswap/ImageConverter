@@ -285,7 +285,7 @@ public partial class MainViewModel
 
     partial void OnAiRemoveShadowsChanged(bool value)
     {
-        (AppSettings.Load() with { AiRemoveShadows = value }).Save();
+        AppSettings.Update(s => s with { AiRemoveShadows = value });
         _ = SwitchAiShadowsAsync(value);
     }
 

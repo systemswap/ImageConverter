@@ -34,17 +34,43 @@ public sealed record AppSettings(string? Language = null, bool AiRemoveShadows =
         }
     }
 
+    private static readonly Lock Gate = new();
+
+    /// <summary>
+    /// Lesen, ändern, schreiben in einem Zug — zwei Stellen, die gleichzeitig speichern (Upscaler im Hintergrund, ein
+    /// Regler), überschreiben sich sonst gegenseitig.
+    /// </summary>
+    public static AppSettings Update(Func<AppSettings, AppSettings> change, string? file = null)
+    {
+        lock (Gate)
+        {
+            var next = change(Load(file));
+            next.Save(file);
+            return next;
+        }
+    }
+
+    /// <summary>
+    /// Speichern: erst in eine Zwischendatei, dann umbenennen — ein Absturz mitten im Schreiben hinterlässt nie eine halbe
+    /// Datei (die beim nächsten Start still durch die Vorgaben ersetzt würde, samt Geschwindigkeitstest).
+    /// </summary>
     public void Save(string? file = null)
     {
         file ??= DefaultFile;
-        try
+        lock (Gate)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.WriteAllText(file, JsonSerializer.Serialize(this, Json));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Nicht speicherbar (schreibgeschützt …): gilt dann nur bis zum Beenden
+            var temp = file + ".tmp";
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                File.WriteAllText(temp, JsonSerializer.Serialize(this, Json));
+                File.Move(temp, file, overwrite: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Nicht speicherbar (schreibgeschützt …): gilt dann nur bis zum Beenden
+                try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            }
         }
     }
 }
