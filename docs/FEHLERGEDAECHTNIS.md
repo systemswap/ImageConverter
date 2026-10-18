@@ -2149,3 +2149,23 @@ Test oder Nachweis.
   Pixel mit dem Hintergrund (Farbe wird 0) — Test `UpscaleTests.Compose_InBands_IsPixelIdentical_ToOnePiece` (beide Fälle;
   schlug mit Bändern bei Alpha an). Nicht umgesetzt (Upscaler selten benutzt, Hinweis des Benutzers): Puffer je Kachel
   beim Zusammensetzen, Speicher-Arenen der KI-Laufzeit, Zwischenbild bei zwei Durchgängen.
+
+## 76. Entzerren und Gerade richten liefen auf einem Kern (0.6.6 beta)
+
+- **Entdeckt in:** 0.6.5 beta (18.10.2026) bei der Speicher- und Tempo-Analyse; bekannt seit #8 (0.4.25), damals nur das
+  Verkleinern selbst parallelisiert. **Behoben in:** 0.6.6 beta.
+- **Was:** Ausrichten in voller Größe (Panorama 28 MP): Entzerren 3,7 s, Gerade richten mit Zuschnitt 3,5 s — auf einem
+  von 32 Kernen. `ResourceLimits.Thread` ließ sich nicht erhöhen.
+- **Warum:** `Magick.NET-Q16-AnyCPU` ist ohne OpenMP gebaut (`MagickNET.Features` ohne OpenMP, `Thread` bleibt 1).
+- **Wie behoben:** Paket `Magick.NET-Q16-OpenMP-x64` (gleiche Fassung 14.17.2, gleiche ImageMagick-Fassung). Entzerren
+  3,70 → 0,93 s, Gerade richten + Zuschnitt 3,54 → 0,74 s, **pixelgleich** (Prüfsummen gleich, alle Tests mit
+  Pixelvergleich grün, Panorama-Export 0 abweichende Werte). OpenMP-Laufzeit: Windows `vcomp140.dll` aus dem Paket nach
+  `Tools/ImageMagick` (Target in `ImageConverter.Desktop.csproj`) und vor ImageMagick geladen; Linux `libgomp.so.1` — die
+  des Systems, sonst die mitgelieferte (`publish.sh` legt die des Bau-Rechners daneben; braucht glibc ≥ 2.38).
+  Lizenzen: `THIRD-PARTY-NOTICES.md`, `packaging/licenses/libgomp-*`. Die CPU-Obergrenze (`ComputeLimits`) gilt jetzt
+  auch für ImageMagick.
+- **Nicht tun:** ARM-Ziele mit diesem Paket bauen (nur x64; für ARM gäbe es `Magick.NET-Q16-OpenMP-arm64`).
+  `vcomp140.dll` nicht ins Programmverzeichnis legen, sondern zu ImageMagick.
+- **Wo:** `Directory.Packages.props`, `ImageConverter.Core.csproj`, `Core/Platform/NativeLibraries.cs` (`LoadOpenMp`),
+  `ImageConverter.Desktop.csproj`, `publish.sh`, `publish.ps1`.
+- **Offen:** unter Windows (Laptop) noch nicht im echten Programm geprüft.

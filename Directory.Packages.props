@@ -19,7 +19,11 @@
         <!-- Bildverarbeitung: ImageMagick, 16 Bit pro Kanal. Q8 verlor beim gamma-korrekten
              Skalieren dunkle Tonwerte (6 von 41 Stufen, Q16: 32+). Doppelter Speicher, gleiche Paketgröße.
              Native Bibliothek steckt im Paket, keine Installation auf dem System. -->
-        <PackageVersion Include="Magick.NET-Q16-AnyCPU" Version="14.17.2" />
+        <!-- Mehrkern-Fassung (OpenMP): dieselbe ImageMagick-Fassung wie Magick.NET-Q16-AnyCPU, aber Entzerren, Drehen,
+             Farbumrechnung usw. auf allen Kernen — gemessen 4–5× schneller, pixelgleich. Nur x64 (Windows, Linux).
+             Braucht unter Windows vcomp140.dll (im Paket), unter Linux libgomp.so.1 (meist installiert; publish.sh legt
+             sie als Rückfall daneben, NativeLibraries lädt sie, wenn das System keine hat). -->
+        <PackageVersion Include="Magick.NET-Q16-OpenMP-x64" Version="14.17.2" />
 
         <!-- PDF für Druck und „Als PDF speichern" — plattformunabhängige Core-Variante, MIT -->
         <PackageVersion Include="PDFsharp" Version="6.2.4" />

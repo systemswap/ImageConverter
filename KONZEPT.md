@@ -795,7 +795,7 @@ KI-Entrauschung und -Upscaling · SVG-Rasterung · Wasserzeichen/Rahmen
 
 ## 8. Offene Entscheidungen
 
-1. ~~**Bildbibliothek**~~ — **entschieden: Magick.NET-Q16-AnyCPU 14.17.2** als einzige
+1. ~~**Bildbibliothek**~~ — **entschieden: Magick.NET-Q16-AnyCPU 14.17.2** (seit 0.6.6 die Mehrkern-Fassung Magick.NET-Q16-OpenMP-x64, gleiche Version) als einzige
    Bibliothek (alle Formate inkl. ICO/BMP/RAW, Async-I/O mit CancellationToken).
    Gemessen: +15 MB Linux / +10 MB Windows im Paket. Erst Q8, dann auf Q16 gewechselt:
    Q8 behielt beim gamma-korrekten Skalieren nur 6 von 41 dunklen Tonstufen (Banding),

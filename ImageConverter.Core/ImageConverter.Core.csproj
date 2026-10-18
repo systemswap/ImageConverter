@@ -10,7 +10,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="ImageConverter.Tests" />
-        <PackageReference Include="Magick.NET-Q16-AnyCPU" />
+        <PackageReference Include="Magick.NET-Q16-OpenMP-x64" />
         <PackageReference Include="PDFsharp" />
         <!-- nur, um die anfällige Fassung aus PDFsharp zu ersetzen (siehe Directory.Packages.props) -->
         <PackageReference Include="System.Security.Cryptography.Pkcs" />

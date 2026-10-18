@@ -58,8 +58,9 @@
          Core/Platform/NativeLibraries.cs; die Ordnernamen müssen dazu passen. -->
     <Target Name="ForeignNativeLibrariesBesideProgram" AfterTargets="ComputeResolvedFilesToPublishList">
         <ItemGroup>
+            <!-- Mehrkern-ImageMagick: unter Windows mit vcomp140.dll (OpenMP-Laufzeit aus dem Paket) -->
             <_ImageMagickNative Include="@(ResolvedFileToPublish)"
-                                Condition="$([System.String]::Copy('%(Filename)').StartsWith('Magick.Native-'))" />
+                                Condition="$([System.String]::Copy('%(Filename)').StartsWith('Magick.Native-')) Or '%(Filename)%(Extension)' == 'vcomp140.dll'" />
             <_OnnxRuntimeNative Include="@(ResolvedFileToPublish)"
                                 Condition="('%(Filename)' == 'onnxruntime' Or '%(Filename)' == 'libonnxruntime' Or '%(Filename)' == 'DirectML' Or $([System.String]::Copy('%(Filename)').Contains('onnxruntime_providers_')))
                                            And ('%(Extension)' == '.dll' Or '%(Extension)' == '.so' Or '%(Extension)' == '.dylib')" />

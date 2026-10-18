@@ -39,6 +39,7 @@ public static class NativeLibraries
                 NativeLibrary.SetDllImportResolver(typeof(MagickImage).Assembly, (name, _, _) =>
                 {
                     if (!name.StartsWith("Magick.Native-", StringComparison.Ordinal)) return IntPtr.Zero;
+                    LoadOpenMp(magick);
                     var file = new[] { name, name + ".so", name + ".dylib" }
                         .Select(n => Path.Combine(magick, n))
                         .FirstOrDefault(File.Exists);
@@ -63,6 +64,32 @@ public static class NativeLibraries
 
             // Nach dem Resolver (lädt ImageMagick), vor jedem anderen Zugriff darauf.
             ImageMagickPolicy.Apply();
+        }
+    }
+
+    /// <summary>
+    /// ImageMagick ist in der Mehrkern-Fassung (OpenMP) eingebunden und braucht dessen Laufzeit: unter Windows
+    /// vcomp140.dll aus demselben Ordner (vorher laden, sonst sucht Windows sie nur neben dem Programm und im System),
+    /// unter Linux libgomp.so.1 — zuerst die des Systems, sonst die mitgelieferte.
+    /// </summary>
+    private static void LoadOpenMp(string folder)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var vcomp = Path.Combine(folder, "vcomp140.dll");
+                if (File.Exists(vcomp)) NativeLibrary.Load(vcomp);
+            }
+            else if (OperatingSystem.IsLinux() && !NativeLibrary.TryLoad("libgomp.so.1", out _))
+            {
+                var gomp = Path.Combine(folder, "libgomp.so.1");
+                if (File.Exists(gomp)) NativeLibrary.Load(gomp);
+            }
+        }
+        catch (Exception e) when (e is DllNotFoundException or BadImageFormatException)
+        {
+            // ImageMagick meldet dann selbst, was fehlt
         }
     }
 

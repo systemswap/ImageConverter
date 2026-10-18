@@ -111,7 +111,7 @@ fi
 
 VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT_DIR/Directory.Build.props" | head -1)"
 package_version() { sed -n "s:.*Include=\"$1\" Version=\"\([^\"]*\)\".*:\1:p" "$PROJECT_DIR/Directory.Packages.props" | head -1; }
-MAGICK_VERSION="$(package_version Magick.NET-Q16-AnyCPU)"
+MAGICK_VERSION="$(package_version Magick.NET-Q16-OpenMP-x64)"
 ONNX_VERSION="$(package_version Microsoft.ML.OnnxRuntime)"
 echo "ImageConverter $VERSION"
 
@@ -135,7 +135,7 @@ notices() {
   install -m 0644 "$PROJECT_DIR/packaging/licenses/"* "$dest/licenses/"
 
   # Lizenztexte der mitgelieferten Bibliotheken genau aus den verwendeten Paketen
-  install -m 0644 "$NUGET_DIR/magick.net-q16-anycpu/$MAGICK_VERSION/Notice.txt" "$dest/Tools/ImageMagick/Notice.txt"
+  install -m 0644 "$NUGET_DIR/magick.net-q16-openmp-x64/$MAGICK_VERSION/Notice.txt" "$dest/Tools/ImageMagick/Notice.txt"
   # Windows: ONNX Runtime mit DirectML (Grafikkarte) — Lizenzen aus diesem Paket, dazu die von DirectML selbst
   local onnx_package=microsoft.ml.onnxruntime
   [ -f "$dest/Tools/OnnxRuntime/DirectML.dll" ] && onnx_package=microsoft.ml.onnxruntime.directml
@@ -195,6 +195,16 @@ package() {
 if [ "$TARGET" = all ] || [ "$TARGET" = linux ]; then
   echo "== Linux ($FORM)"
   publish linux-x64 "$WORK_DIR/linux"
+
+  # ImageMagick (Mehrkern) braucht libgomp.so.1 — meist installiert; als Rückfall die dieses Rechners daneben legen
+  # (NativeLibraries nimmt zuerst die des Systems). GPL-3.0 mit GCC-Laufzeit-Ausnahme, Texte in licenses/.
+  magick_so="$(ls "$WORK_DIR/linux/Tools/ImageMagick/"Magick.Native-*.so 2>/dev/null | head -1)"
+  gomp="$( [ -n "$magick_so" ] && ldd "$magick_so" | awk '/libgomp\.so\.1/ {print $3}' )"
+  if [ -n "$gomp" ] && [ -f "$gomp" ]; then
+    install -m 0644 "$(readlink -f "$gomp")" "$WORK_DIR/linux/Tools/ImageMagick/libgomp.so.1"
+  else
+    echo "Warnung: libgomp.so.1 nicht gefunden – nicht mitgeliefert (Debian: libgomp1, Fedora: libgomp)." >&2
+  fi
 
   clear_program_folder "$LINUX_DIR"
 

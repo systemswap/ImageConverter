@@ -310,7 +310,8 @@ public static class ImageOps
 
     // ------------------------------------------------------- Paralleles Skalieren
     //
-    // Magick.NET-Q16-AnyCPU ist ohne OpenMP gebaut und rechnet auf einem Kern: Ein
+    // Bis 0.6.5 war ImageMagick ohne OpenMP eingebunden (Magick.NET-Q16-AnyCPU, ein Kern; seit 0.6.6 die
+    // Mehrkern-Fassung, siehe Directory.Packages.props). Damals: Ein
     // 24-Megapixel-Foto gamma-korrekt auf 2048 px zu verkleinern dauerte 2,8 s (1,6 s
     // davon die Umrechnung nach linear, 1 s das Skalieren). Skalieren ist trennbar:
     // erst waagerecht (jede Zeile für sich), dann senkrecht (jede Spalte für sich).

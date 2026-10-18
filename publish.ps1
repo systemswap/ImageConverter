@@ -67,7 +67,7 @@ $version = ([string]($props.Project.PropertyGroup.Version | Where-Object { $_ })
 function Get-PackageVersion([string]$name) {
     ($packages.Project.ItemGroup.PackageVersion | Where-Object { $_.Include -eq $name }).Version
 }
-$magickVersion = Get-PackageVersion 'Magick.NET-Q16-AnyCPU'
+$magickVersion = Get-PackageVersion 'Magick.NET-Q16-OpenMP-x64'
 $onnxVersion   = Get-PackageVersion 'Microsoft.ML.OnnxRuntime'
 
 Write-Step "ImageConverter $version"
@@ -120,7 +120,7 @@ function Copy-Notices([string]$dest) {
     $licenses = Join-Path $dest 'licenses'
     if (Test-Path $licenses) { Remove-Item $licenses -Recurse -Force }
     Copy-Item (Join-Path $root 'packaging\licenses') $licenses -Recurse
-    Copy-Item (Join-Path $nugetDir "magick.net-q16-anycpu\$magickVersion\Notice.txt") (Join-Path $dest 'Tools\ImageMagick\') -Force
+    Copy-Item (Join-Path $nugetDir "magick.net-q16-openmp-x64\$magickVersion\Notice.txt") (Join-Path $dest 'Tools\ImageMagick\') -Force
     # Windows: ONNX Runtime mit DirectML (Grafikkarte) - Lizenzen aus diesem Paket, dazu die von DirectML selbst
     $onnxTools = Join-Path $dest 'Tools\OnnxRuntime'
     $onnxPackage = if (Test-Path (Join-Path $onnxTools 'DirectML.dll')) { 'microsoft.ml.onnxruntime.directml' } else { 'microsoft.ml.onnxruntime' }
