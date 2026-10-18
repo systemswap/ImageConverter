@@ -2214,3 +2214,10 @@ Test oder Nachweis.
   Anzeige); bearbeitete Bilder weiter aus dem Verlauf, Rückfall auf ganzes Laden, wenn das Format keine Kopfdaten liefert.
   Panorama-JPEG: 0,18 → 0,09 s je Listeneintrag, Spitze 214 → 69 MB. Export und Druck selbst unverändert (laden ganz).
   Test `ImageLoaderProbeTests` (JPEG gedreht/ungedreht, PNG mit Zentimetern, TIFF; Gegenprobe ohne Drehung rot).
+- **Nachtrag 0.6.12 beta (Leistung 8, Größe ändern, Weißabgleich):** `ImageOps.ResizeInStrips` liest jeden Zeilenstreifen
+  für sich (gesperrt) statt vorab das ganze Bild zu kopieren: Panorama auf 2048 px 0,21 → 0,16 s, Spitze 1183 → 797 MB
+  über dem Bild, pixelgleich (Prüfsumme; Test `ImageOpsTests.Resize_LargeImage_InStrips_MatchesImageMagick`). Das passiert
+  bei jeder ersten Vorschau eines Bildes. `Adjust.Dehazed` gibt das Ergebnis des Weißabgleichs in den Pool zurück, sobald
+  das Entstufen ein neues Bild geliefert hat (vorher bis zur nächsten vollen Speicherbereinigung liegen). **Verworfen:** die
+  Führung von Tiefen/Lichter (`Adjust`/`LocalLaplacian.UpsampledFrom`) umzubauen — sie wird je Durchgang nur einmal
+  gerechnet, zu holen wäre weniger als eine Vergrößerung in voller Größe.

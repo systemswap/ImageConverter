@@ -347,26 +347,30 @@ public static class ImageOps
         int sw, sh;
         uint depth;
         string map;
-        ushort[] source;
         lock (image)
         {
             sw = (int)image.Width;
             sh = (int)image.Height;
             depth = image.Depth;
             map = image.HasAlpha ? "RGBA" : "RGB";
-            using var pixels = image.GetPixelsUnsafe();
-            source = pixels.ToShortArray(map) ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
         }
         var ch = map.Length;
         var (toLinear, toSrgb) = gammaCorrect ? GammaTables.Value : default;
 
-        // 1) Zeilenstreifen: nach linear, waagerecht auf die Zielbreite
+        // 1) Zeilenstreifen: nach linear, waagerecht auf die Zielbreite. Jeder Streifen liest nur seine Zeilen (gesperrt) —
+        // vorher eine Kopie des ganzen Bildes vorab (beim Panorama 168 MB, bei jeder ersten Vorschau eines Bildes)
         var wide = new ushort[(long)width * sh * ch];
         Parallel.ForEach(Strips(sh), ComputeLimits.Options, r =>
         {
-            int offset = r.Start * sw * ch, count = r.Length * sw * ch;
-            if (toLinear is not null) MapColor(source.AsSpan(offset, count), ch, toLinear);
-            var scaled = Scale(source, offset, count, sw, r.Length, width, r.Length, map, filter);
+            ushort[] rows;
+            lock (image)
+            {
+                using var pixels = image.GetPixelsUnsafe();
+                rows = pixels.ToShortArray(0, r.Start, (uint)sw, (uint)r.Length, map)
+                       ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
+            }
+            if (toLinear is not null) MapColor(rows.AsSpan(), ch, toLinear);
+            var scaled = Scale(rows, 0, rows.Length, sw, r.Length, width, r.Length, map, filter);
             scaled.CopyTo(wide, (long)r.Start * width * ch);
         });
 

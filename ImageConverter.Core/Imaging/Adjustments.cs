@@ -250,6 +250,9 @@ public static class Adjust
                 return next;
             }
             var work = Deband.Apply(source, width, height, deband * Dehaze.SourceDebandShare, seed: 0);
+            // Ergebnis des Weißabgleichs (gehört uns) wird ab hier nicht mehr gelesen — sonst blieb es bis zur nächsten
+            // vollen Speicherbereinigung liegen (Panorama: 450 MB)
+            if (!ReferenceEquals(work, source) && !ReferenceEquals(source, px)) PixelPool.Return(source);
             plan?.Next();   // Entstufen der Quelle zählt zum ersten Schritt
             if (dehaze < 0)
             {
