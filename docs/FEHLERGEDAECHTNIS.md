@@ -502,7 +502,7 @@ Test oder Nachweis.
   Luftlicht links bläulich → rechts warm, wahlweise Himmelsstreifen). Gemessen:
   ΔE (Oklab ×100) gegen die Wahrheit, Farbtonfehler auf Grün, Buntheit und
   Helligkeit relativ zur Wahrheit, geschätzte gegen wahre Dichte je Höhe,
-  Luftlicht. Dazu am echten Turmlandschaft: Farbton/Buntheit der Wiese hinten
+  Luftlicht. Dazu an der echten Turmlandschaft: Farbton/Buntheit der Wiese hinten
   gegen die Wiese vorn.
 - **Befunde (Fehler oben, Turmlandschaft mit Himmel, Regler 100):** Start 36 →
   12,5 nach Horizontregel → 11,8 nach niedrigem Fenster → 13 mit halbem
