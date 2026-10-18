@@ -2099,3 +2099,10 @@ Test oder Nachweis.
   weitergeben, ohne `Tools/OnnxRuntime/DirectML.dll` zu prüfen.
 - **Nachweis:** `published/windows-x64/Tools/OnnxRuntime/DirectML.dll` byte-gleich mit der aus dem Paket (1.15.4),
   Lizenz daneben; die Prüfung in `publish.sh` schlug vor der Behebung an.
+- **Meilenstein 0.6.0 (18.10.2026):** Stand 0.5.106 beta — Tempo der Vorschau und Bildfilter auf der Grafikkarte
+  (0.5.91–0.5.95, #70), Geschwindigkeitstest Grafikkarte/CPU samt Upscalern und Zeitschätzung nach Kachelaufwand je
+  Rechner (#73), niedrige Priorität und CPU-Obergrenze, Einstellungen neu gegliedert (Leistung, Allgemein, KI mit je
+  einer Seite pro Anwendung), ROCm-OpenCL unter Linux mit Wahl der Karte nach Recheneinheiten, Pkcs-Lücke (#72),
+  DirectML.dll in der unter Linux gebauten Windows-Fassung (#74), Orts- und Fotonamen entfernt; WebGPU gemessen und
+  verworfen (docs/KI-GRAFIKKARTE.md). Vom Benutzer als Meilenstein bestimmt. Tag `v0.6.0`, schlanke Sicherung
+  `../ImageConverter-0.6.0-Sicherung.zip`; Windows-Fassung in den vom Benutzer genannten Ordner übertragen.
