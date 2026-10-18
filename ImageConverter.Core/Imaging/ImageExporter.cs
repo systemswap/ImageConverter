@@ -98,12 +98,20 @@ public static class ImageExporter
         var noiseFirst = NoiseFirst(source, o);
         var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : basis;
         plan?.Next();
-        var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
-        if (!ReferenceEquals(start, basis)) start.Dispose();
-        var result = noiseFirst
-            ? RenderLook(resized, 0, 0, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale)
-            : RenderLook(resized, o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan, o.Grain, o.GrainScale);
-        if (!ReferenceEquals(result, resized)) resized.Dispose();
+        // Gleiche Größe und der Look rechnet ohnehin ein neues Bild: ohne Kopie weiter — RenderLook liest das Bild nur.
+        // Spart eine ganze Kopie (Panorama: 225 MB) für die Dauer der Bildkette. Ohne Look braucht es die Kopie, weil
+        // ApplyColor/ApplyMetadata das Ergebnis verändern.
+        var lookDenoise = noiseFirst ? 0 : o.Denoise;
+        var lookColorDenoise = noiseFirst ? 0 : o.ColorDenoise;
+        bool sameSize;
+        lock (start) sameSize = start.Width == o.Width && start.Height == o.Height;
+        var resized = sameSize && LookProcesses(lookDenoise, lookColorDenoise, o.Adjustments, o.SharpenAmount, o.Grain)
+            ? start
+            : ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
+        if (!ReferenceEquals(start, basis) && !ReferenceEquals(resized, start)) start.Dispose();
+        var result = RenderLook(resized, lookDenoise, lookColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan,
+            o.Grain, o.GrainScale);
+        if (!ReferenceEquals(result, resized) && !ReferenceEquals(resized, basis)) resized.Dispose();
 
         plan?.Next();
         ApplyColor(result, o.Color);
@@ -233,7 +241,7 @@ public static class ImageExporter
         var adjust = adjustments is { IsNone: false } a ? a : null;
         var noise = denoise > 0.01 || colorDenoise > 0.01;
         var grainy = grain is { IsNone: false };
-        if (!noise && adjust is null && sharpenAmount <= 0.01 && !grainy) return image;
+        if (!LookProcesses(denoise, colorDenoise, adjustments, sharpenAmount, grain)) return image;
 
         // Alles im 32-Bit-Puffer wie die Vorschau, gelesen mit voller Tiefe (Q16) und als 16-Bit-Bild zurück —
         // gerundet wird erst beim Kodieren. Profile werden übernommen.
@@ -260,6 +268,11 @@ public static class ImageExporter
         return processed;
     }
 
+    /// <summary>Rechnet <see cref="RenderLook"/> etwas (und liefert damit ein neues Bild)?</summary>
+    private static bool LookProcesses(double denoise, double colorDenoise, Adjustments? adjustments, double sharpenAmount,
+        GrainSettings? grain) =>
+        denoise > 0.01 || colorDenoise > 0.01 || adjustments is { IsNone: false } || sharpenAmount > 0.01 || grain is { IsNone: false };
+
     /// <summary>Den alten Puffer zurück in den Pool, den neuen weiterreichen (die Export-Puffer gehören nur uns).</summary>
     private static float[] Swap(float[] old, float[] next)
     {
@@ -268,9 +281,12 @@ public static class ImageExporter
     }
 
     /// <summary>Kodiert ein fertig gerechnetes Bild im Zielformat.</summary>
-    public static void Encode(MagickImage image, ExportOptions o, Stream output)
+    /// <param name="inPlace">Das Bild gehört dem Aufrufer und wird danach verworfen: ohne Kopie umstellen (Alpha, Tiefe,
+    /// Format) — spart eine ganze Kopie beim Schreiben. Sonst bleibt <paramref name="image"/> unverändert.</param>
+    public static void Encode(MagickImage image, ExportOptions o, Stream output, bool inPlace = false)
     {
-        using var img = ImageOps.CloneOf(image);
+        using var copy = inPlace ? null : ImageOps.CloneOf(image);
+        var img = copy ?? image;
 
         if (!SupportsAlpha(o.Format) && img.HasAlpha)
         {
@@ -353,7 +369,7 @@ public static class ImageExporter
             try
             {
                 using (var fs = File.Create(temp))
-                    Encode(rendered, o, fs);
+                    Encode(rendered, o, fs, inPlace: true);   // rendered wird gleich verworfen
                 File.Move(temp, path, overwrite: false);
             }
             finally

@@ -2129,3 +2129,10 @@ Test oder Nachweis.
   `RuntimeHostConfigurationOption`). Die Speicherbereinigung verdichtet öfter: beim Bearbeiten des Panoramas 2,6 → 1,2 GB,
   Spitze beim Export 7,2 → 6,2 GB, Exportzeit gleich (35 s), Pausen zusammen etwa 0,2 s mehr. Gemessen mit 0, 5 und 9
   (5: 1,4 GB / 6,9 GB). Gilt nur für das Programm, nicht für Tests und Messprogramme (dort per `DOTNET_GCConserveMemory`).
+- **Nachtrag 0.6.3 beta (Leistung 3):** Zwei ganze Bildkopien beim Export gespart (`ImageExporter`): bei gleicher Zielgröße
+  liest `RenderLook` das Bild direkt statt einer Kopie, wenn der Look ohnehin ein neues Bild rechnet (`LookProcesses`,
+  dieselbe Bedingung wie die frühe Rückkehr von `RenderLook`); `Encode(…, inPlace: true)` kodiert das gleich verworfene
+  Ergebnis ohne Kopie (nur aus `Export`; die Größenschätzung kopiert weiter, ihr Bild kann im Zwischenspeicher liegen).
+  Spitze beim Panorama 6,2 → 6,06 GB. **Nachweis:** Pixel des Exports gleich (0 abweichende Werte; nur die Zeitstempel
+  `date:*`/`png:tIME` der Datei unterscheiden sich bei jedem Export). **Nicht tun:** ohne Look die Kopie weglassen —
+  `ApplyColor`/`ApplyMetadata` würden sonst das Bild des Aufrufers verändern.
