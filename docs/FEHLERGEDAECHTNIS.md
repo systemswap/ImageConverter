@@ -2208,3 +2208,9 @@ Test oder Nachweis.
   sich gegenseitig überschreiben. Jetzt `AppSettings.Save` über Zwischendatei und Umbenennen, `AppSettings.Update` liest,
   ändert und schreibt unter einer Sperre; alle Schreibstellen nutzen `Update`. Test
   `SpeedTestTests.Settings_UpdatesFromSeveralThreads_KeepEveryChange_AndLeaveNoTempFile`.
+- **Nachtrag 0.6.11 beta (Export mehrerer Bilder, Drucken):** Die Listen luden jedes noch nicht geöffnete Bild ganz (nur für
+  Größe und Vorschaubild), der Export bzw. Druck danach noch einmal. Jetzt `ImageLoader.ProbeAsync` (Kopfdaten:
+  Größe nach EXIF-Drehung, DPI wie `LoadAsync`) und `LoadThumbnailAsync` (JPEG schon beim Entpacken verkleinert, nur für die
+  Anzeige); bearbeitete Bilder weiter aus dem Verlauf, Rückfall auf ganzes Laden, wenn das Format keine Kopfdaten liefert.
+  Panorama-JPEG: 0,18 → 0,09 s je Listeneintrag, Spitze 214 → 69 MB. Export und Druck selbst unverändert (laden ganz).
+  Test `ImageLoaderProbeTests` (JPEG gedreht/ungedreht, PNG mit Zentimetern, TIFF; Gegenprobe ohne Drehung rot).

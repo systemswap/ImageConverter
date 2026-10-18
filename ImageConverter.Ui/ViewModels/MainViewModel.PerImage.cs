@@ -196,6 +196,37 @@ public partial class MainViewModel
         return (loaded.Image, true, loaded.FileBytes, loaded.Dpi);
     }
 
+    /// <summary>
+    /// Für Listen (Export mehrerer Bilder, Drucken): Größe, DPI und Vorschaubild. Bearbeitete Bilder aus dem Verlauf;
+    /// alle anderen nur über die Kopfdaten und ein verkleinert entpacktes Vorschaubild — vorher wurde jedes ganz geladen
+    /// und beim Export noch einmal. Gelingt das nicht, ganz laden wie bisher.
+    /// </summary>
+    internal async Task<(int Width, int Height, double Dpi, byte[] Thumb, int ThumbWidth, int ThumbHeight)> GetListEntryAsync(string path,
+        int thumbSize)
+    {
+        if (!_histories.ContainsKey(path) && await ImageLoader.ProbeAsync(path) is { } probe)
+        {
+            using var small = await ImageLoader.LoadThumbnailAsync(path, thumbSize);
+            var bgra = await Task.Run(() => ImageOps.ToDisplayBgra(small));
+            return (probe.Width, probe.Height, probe.Dpi, bgra, (int)small.Width, (int)small.Height);
+        }
+        var (image, owned, _, dpi) = await GetImageAsync(path);
+        try
+        {
+            var (thumb, tw, th) = await Task.Run(() =>
+            {
+                using var t = ImageOps.CloneOf(image);
+                t.Thumbnail((uint)thumbSize, (uint)thumbSize);
+                return (ImageOps.ToDisplayBgra(t), (int)t.Width, (int)t.Height);
+            });
+            return ((int)image.Width, (int)image.Height, dpi, thumb, tw, th);
+        }
+        finally
+        {
+            if (owned) image.Dispose();
+        }
+    }
+
     /// <summary>Zielordner und Dateiname (noch ohne Kollisionsprüfung).</summary>
     internal (string Folder, string FileName) PlanOutput(string path, SettingsState s, ExportOptions o) =>
         (OutputNaming.ResolveFolder(s.OutputFolder, path),

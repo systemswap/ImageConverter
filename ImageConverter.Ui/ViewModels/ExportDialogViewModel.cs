@@ -100,31 +100,16 @@ public partial class ExportDialogViewModel : ViewModelBase
             if (_closing.IsCancellationRequested) return;
             try
             {
-                var (image, owned, _, dpi) = await _main.GetImageAsync(item.Path);
-                try
-                {
-                    var w = (int)image.Width;
-                    var h = (int)image.Height;
-                    var state = _main.SettingsFor(item.Path, w, h, dpi);
-                    var options = MainViewModel.OptionsFor(state);
-                    var (_, fileName) = _main.PlanOutput(item.Path, state, options);
+                // Kopfdaten und kleines Vorschaubild — das Bild selbst lädt erst der Export
+                var (w, h, dpi, thumb, tw, th) = await _main.GetListEntryAsync(item.Path, ThumbSize);
+                var state = _main.SettingsFor(item.Path, w, h, dpi);
+                var options = MainViewModel.OptionsFor(state);
+                var (_, fileName) = _main.PlanOutput(item.Path, state, options);
 
-                    item.Resolution = $"{options.Width} × {options.Height} px";
-                    item.UpscaleEstimate = _main.UpscaleNeededFor(item.Path, w, h, state, options);
-                    item.Details = fileName;
-
-                    var (thumb, tw, th) = await Task.Run(() =>
-                    {
-                        using var t = ImageOps.CloneOf(image);
-                        t.Thumbnail((uint)ThumbSize, (uint)ThumbSize);
-                        return (ImageOps.ToDisplayBgra(t), (int)t.Width, (int)t.Height);
-                    });
-                    item.Thumbnail = BitmapOps.FromBgra(thumb, tw, th);
-                }
-                finally
-                {
-                    if (owned) image.Dispose();
-                }
+                item.Resolution = $"{options.Width} × {options.Height} px";
+                item.UpscaleEstimate = _main.UpscaleNeededFor(item.Path, w, h, state, options);
+                item.Details = fileName;
+                item.Thumbnail = BitmapOps.FromBgra(thumb, tw, th);
             }
             catch (Exception ex)
             {

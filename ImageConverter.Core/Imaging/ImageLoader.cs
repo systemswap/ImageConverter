@@ -65,9 +65,61 @@ public static class ImageLoader
             }
         }, ct);
 
-    private static double ReadDpi(MagickImage image)
+    /// <summary>
+    /// Nur die Kopfdaten: Größe (nach der EXIF-Drehung, wie <see cref="LoadAsync"/>) und DPI — ohne die Pixel zu
+    /// entpacken. Für Listen (Export mehrerer Bilder, Drucken), die sonst jedes Bild ganz laden. Kann das Format das nicht,
+    /// null — dann ganz laden.
+    /// </summary>
+    public static Task<(int Width, int Height, double Dpi)?> ProbeAsync(string path, CancellationToken ct = default) =>
+        Task.Run<(int, int, double)?>(() =>
+        {
+            try
+            {
+                var info = new MagickImageInfo(path);
+                if (info.Width == 0 || info.Height == 0) return null;
+                var turned = info.Orientation is OrientationType.LeftTop or OrientationType.RightTop
+                    or OrientationType.RightBottom or OrientationType.LeftBottom;
+                var (w, h) = turned ? ((int)info.Height, (int)info.Width) : ((int)info.Width, (int)info.Height);
+                return (w, h, ReadDpi(info.Density));
+            }
+            catch (MagickException)
+            {
+                return null;
+            }
+        }, ct);
+
+    /// <summary>
+    /// Vorschaubild höchstens <paramref name="edge"/> Pixel, richtig herum: JPEG wird gleich beim Entpacken verkleinert
+    /// (ein Bruchteil der Arbeit und des Speichers). Nur für die Anzeige, nie für den Export.
+    /// </summary>
+    public static Task<MagickImage> LoadThumbnailAsync(string path, int edge, CancellationToken ct = default) =>
+        Task.Run(() =>
+        {
+            var settings = new MagickReadSettings();
+            settings.SetDefine(MagickFormat.Jpeg, "size", $"{edge * 2}x{edge * 2}");
+            var image = new MagickImage(path, settings);
+            try
+            {
+                image.AutoOrient();
+                if (image.ColorSpace == ColorSpace.CMYK)
+                {
+                    if (image.GetColorProfile() is not null) image.TransformColorSpace(ColorProfiles.SRGB);
+                    else image.ColorSpace = ColorSpace.sRGB;
+                }
+                image.Thumbnail((uint)edge, (uint)edge);
+                return image;
+            }
+            catch
+            {
+                image.Dispose();
+                throw;
+            }
+        }, ct);
+
+    private static double ReadDpi(MagickImage image) => ReadDpi(image.Density);
+
+    private static double ReadDpi(Density density)
     {
-        var density = image.Density;
         if (density.X <= 0) return DefaultDpi;
         return density.Units switch
         {

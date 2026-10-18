@@ -242,23 +242,11 @@ public partial class PrintDialogViewModel : ViewModelBase
         {
             try
             {
-                var (image, owned, _, dpi) = await _main.GetImageAsync(path);
-                try
-                {
-                    var state = _main.SettingsFor(path, (int)image.Width, (int)image.Height, dpi);
-                    var options = MainViewModel.OptionsFor(state);
-                    var (thumb, tw, th) = await Task.Run(() =>
-                    {
-                        using var t = ImageOps.CloneOf(image);
-                        t.Thumbnail((uint)ThumbSize, (uint)ThumbSize);
-                        return (ImageOps.ToDisplayBgra(t), (int)t.Width, (int)t.Height);
-                    });
-                    _sources.Add(new PrintSourceInfo(id++, path, options, BitmapOps.FromBgra(thumb, tw, th)));
-                }
-                finally
-                {
-                    if (owned) image.Dispose();
-                }
+                // Kopfdaten und kleines Vorschaubild — das Bild selbst lädt erst der Druck
+                var (w, h, dpi, thumb, tw, th) = await _main.GetListEntryAsync(path, ThumbSize);
+                var state = _main.SettingsFor(path, w, h, dpi);
+                var options = MainViewModel.OptionsFor(state);
+                _sources.Add(new PrintSourceInfo(id++, path, options, BitmapOps.FromBgra(thumb, tw, th)));
             }
             catch (Exception ex)
             {
