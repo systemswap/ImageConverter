@@ -9,7 +9,7 @@ Einstellungen › KI-Modelle (`AiViewModel.GpuStatus`).
 | System | Hersteller | Weg | Stand |
 |---|---|---|---|
 | Windows | AMD, NVIDIA, Intel | DirectML (DirectX 12) über das Paket `Microsoft.ML.OnnxRuntime.DirectML` | **eingebaut**, gemessen auf der Radeon des Notebook-Prozessor |
-| Linux | AMD (RX 6650 XT im Debian-Rechner) | MIGraphX (ROCm) oder WebGPU (Vulkan) | **App vorbereitet**, Laufzeit fehlt (siehe unten) |
+| Linux | AMD (RX 6650 XT im Debian-Rechner) | MIGraphX (ROCm) oder WebGPU (Vulkan) | **App vorbereitet**, Laufzeit fehlt; WebGPU gebaut und gemessen (0.5.96): lohnt hier nicht, siehe „WebGPU unter Linux“ |
 | Linux | NVIDIA | CUDA (`Microsoft.ML.OnnxRuntime.Gpu.Linux`) | **App vorbereitet**, Paket nicht eingebunden |
 | Windows | NVIDIA, schneller als DirectML | CUDA oder TensorRT-RTX | nicht nötig, DirectML reicht für den Anfang |
 
@@ -49,6 +49,7 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
    - **Weg B, WebGPU (Vulkan):** herstellerunabhängig, kein ROCm nötig (Mesa/RADV reicht). ONNX Runtime mit
      `--use_webgpu` bauen (Dawn wird mitgebaut). Neuer und weniger erprobt als MIGraphX, dafür auch für NVIDIA und Intel.
    - Zu entscheiden auf dem Debian-Rechner: erst B versuchen (weniger Abhängigkeiten), A, wenn B zu langsam ist.
+     **B versucht (18.10.2026), zu langsam** — Messungen im Abschnitt „WebGPU unter Linux“; offen ist A.
    - Danach: Bauskript `tools/OnnxRuntimeLinuxGpu.sh` und `publish.sh` so, dass die eigene Laufzeit statt der aus dem
      Paket ins `Tools/OnnxRuntime` kommt.
 2. **NVIDIA unter Linux:** Paket `Microsoft.ML.OnnxRuntime.Gpu.Linux` 1.24.4 für `linux-x64` einbinden (statt
@@ -67,6 +68,44 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
 7. **Windows später:** DirectML wird nicht weiterentwickelt. Wenn Microsoft das Paket aufgibt: Windows ML
    (`Microsoft.Windows.AI.MachineLearning`, Windows App SDK) — bringt DirectML und lädt Hersteller-Anbindungen (NVIDIA
    TensorRT-RTX, AMD MIGraphX) über Windows Update nach.
+
+## WebGPU unter Linux (gebaut und gemessen, 18.10.2026)
+
+Messplatz: Debian 13, AMD Ryzen 9 7950X3D (16 Kerne), Radeon RX 6650 XT (8 GB, Mesa/RADV), Stand 0.5.96 beta.
+Panorama-Ausschnitt 500 × 300 → 2000 × 1200 (Kachelmodelle zusätzlich 1800 × 800 → 7200 × 3200), Zeit ohne Laden.
+
+| Modell | CPU | WebGPU | Bemerkung |
+|---|---|---|---|
+| PiSA-SR fp32 | **58 s** | 69 s | je Teil allein auf der Karte 55–65 s — kein Teil profitiert |
+| PiSA-SR fp16 | — | 57,5 s, mit `validationMode=disabled` **52 s** | Grafikspeicher dauernd voll (8,4 GB), Karte 90 % ausgelastet |
+| PiSA-SR fp16, `preferredLayout=NCHW` | — | 152 s | NHWC (Vorgabe) ist viel schneller |
+| PiSA-SR fp16, `storageBufferCacheMode=disabled` | — | 76 s | lagert bis 11,8 GB in den Arbeitsspeicher aus |
+| x4v3 („KI schnell“), 7200 × 3200 | **13 s** | 29 s | |
+| UltraSharpV2 („KI mittel“) | **56 s** | Abbruch | `Conv`: Ausgabe ließ sich nicht anlegen (Grafikspeicher) |
+
+**Ergebnis:** Auf diesem Rechner ist die CPU so schnell wie oder schneller als WebGPU; die Laufzeit mit WebGPU wird
+deshalb **nicht** ausgeliefert, die App rechnet unter Linux weiter auf der CPU. Der Laptop (Notebook-Prozessor, 355 s auf der
+CPU) profitiert unter Windows weiter von DirectML. Die WebGPU-Anbindung von ONNX Runtime ist für Faltungen und die
+Aufmerksamkeit großer Kacheln (noch) nicht schnell genug; schneller wäre nur MIGraphX (Weg A, braucht ROCm).
+
+**Was beim Bauen auffiel** (falls es später neu versucht wird, z. B. auf einem Rechner mit schwächerer CPU):
+
+- Bau: `python3 tools/ci_build/build.py --build_dir ../build --config Release --build_shared_lib --parallel
+  --use_webgpu --skip_tests --compile_no_warning_as_error --cmake_generator Ninja --cmake_extra_defines
+  onnxruntime_BUILD_UNIT_TESTS=OFF` aus den Quellen von `v1.24.4`; rund 20 Minuten auf 32 Threads. Die WebGPU-Anbindung
+  steckt dann in der einen `libonnxruntime.so` (40 MB, Dawn statisch, braucht nur libstdc++/libc; Vulkan wird zur
+  Laufzeit geladen). Telemetrie ist in eigenen Bauten aus (`onnxruntime_USE_TELEMETRY` ist nur in den offiziellen an).
+- **Node.js ab 20 nötig** (erzeugt die WGSL-Vorlagen über `npm ci`) — ohne bricht CMake mit „Could not find
+  NODE_EXECUTABLE“ ab. Das offizielle Archiv von nodejs.org in den Bauordner entpacken reicht, keine Installation.
+- **Baupfade landen in der Bibliothek** (`__FILE__` in Fehlermeldungen, mit Benutzernamen). Vor einer Auslieferung mit
+  `-ffile-prefix-map=<bauordner>=/ort` bauen (`CMAKE_C_FLAGS`/`CMAKE_CXX_FLAGS`).
+- **Absturz beim Schließen** (Speicherzugriffsfehler, Exitcode 139), sobald zwei Sitzungen gleichzeitig auf der Karte
+  liegen (PiSA-SR: Encoder, UNet, Decoder): Die Rechnung läuft durch, das Schließen der Sitzungen gibt das Gerät doppelt
+  frei. Abhilfe: Anbieter-Option `preserveDevice=1` (in `OnnxSessions.GpuOptions` mitgeben, falls WebGPU je genutzt
+  wird). Zuerst sah es nach vollem Grafikspeicher aus — war es nicht (eine Sitzung allein belegt ebenso 8,4 GB und läuft).
+- Anbieter-Optionen werden ohne Präfix übergeben (`AppendExecutionProvider("WebGPU", { ["preserveDevice"] = "1" })`);
+  Liste in `onnxruntime/core/providers/webgpu/webgpu_provider_options.h`.
+- Es rechnet die RX 6650 XT (`gpu_busy_percent` der Karte 90 %, die im Prozessor eingebaute 0 %).
 
 Quellen: ONNX Runtime — Execution Providers (DirectML, ROCm „removed since 1.23“, MIGraphX, CUDA), Install-Seite
 (DirectML „sustained engineering“), Microsoft Learn „What is Windows ML?“; NuGet-Abfrage vom 14.10.2026
