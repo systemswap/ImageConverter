@@ -224,7 +224,9 @@ public partial class MainViewModel
             {
                 Directory.CreateDirectory(folder);
                 var target = OutputNaming.MakeUnique(folder, fileName);
-                return (target, ImageExporter.Export(image, options, target, progress));
+                var written = ImageExporter.Export(image, options, target, progress);
+                PixelPool.Trim(release: true);   // erst jetzt sind alle Puffer des Exports frei — Speicher zurückgeben
+                return (target, written);
             });
         }
         finally

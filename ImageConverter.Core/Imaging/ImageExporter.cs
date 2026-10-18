@@ -343,24 +343,28 @@ public static class ImageExporter
     public static long Export(MagickImage source, ExportOptions o, string path, IProgress<WorkProgress>? progress = null)
     {
         var plan = progress is null ? null : Plan(source, o, progress);
-        using var rendered = Render(source, o, plan);
-        plan?.Next();
-
-        // Erst in eine temporäre Datei, dann umbenennen: ein Abbruch hinterlässt
-        // nie eine halb geschriebene Zieldatei.
-        var temp = path + ".tmp";
-        try
+        using (var rendered = Render(source, o, plan))
         {
-            using (var fs = File.Create(temp))
-                Encode(rendered, o, fs);
-            File.Move(temp, path, overwrite: false);
-        }
-        finally
-        {
-            if (File.Exists(temp)) File.Delete(temp);
+            plan?.Next();
+
+            // Erst in eine temporäre Datei, dann umbenennen: ein Abbruch hinterlässt
+            // nie eine halb geschriebene Zieldatei.
+            var temp = path + ".tmp";
+            try
+            {
+                using (var fs = File.Create(temp))
+                    Encode(rendered, o, fs);
+                File.Move(temp, path, overwrite: false);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
         }
 
-        PixelPool.Trim(release: true);   // Puffer dieser Rechnung loslassen — sonst bleibt der Speicher belegt
+        // Freie Puffer dieser Rechnung loslassen. Den Speicher ans System zurückgeben (PixelPool.Trim(release: true)) erst
+        // der Aufrufer nach der Rückkehr: hier sind die Zwischenpuffer noch erreichbar — gemessen blieben so 2 GB belegt.
+        PixelPool.Trim();
         plan?.Done(Tr.T("Gespeichert"));
         return new FileInfo(path).Length;
     }

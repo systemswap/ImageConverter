@@ -2106,3 +2106,22 @@ Test oder Nachweis.
   DirectML.dll in der unter Linux gebauten Windows-Fassung (#74), Orts- und Fotonamen entfernt; WebGPU gemessen und
   verworfen (docs/KI-GRAFIKKARTE.md). Vom Benutzer als Meilenstein bestimmt. Tag `v0.6.0`, schlanke Sicherung
   `../ImageConverter-0.6.0-Sicherung.zip`; Windows-Fassung in den vom Benutzer genannten Ordner übertragen.
+
+## 75. Nach dem Export blieben 7 GB Arbeitsspeicher belegt (0.6.1 beta)
+
+- **Entdeckt in:** 0.6.0 (18.10.2026) bei der gezielten Speicher-Analyse (Wunsch des Benutzers, keine formelle Runde);
+  **behoben in:** 0.6.1 beta.
+- **Was:** Export des Panoramas (7895 × 3544, 28 MP) mit typischen Reglern (Dunst 9 Durchläufe, Gleiche Farbe,
+  Luminanzmaske, Licht): Spitze 7,6 GB, **danach blieben 7,0 GB belegt** — bis zum nächsten großen Schritt. Auf einem
+  Rechner mit 16 GB drängt das andere Programme in die Auslagerung.
+- **Warum:** `PixelPool.Trim(release: true)` lief schon *im* Export (Zwischenpuffer noch erreichbar) und mit einer
+  normalen Sammlung. Die gibt zugesagten Speicher nicht ans System zurück (4,1 GB „zugesagt“ bei 0,16 GB belegt), und ein
+  Teil wird erst nach Finalizern/Rückrufen frei, also bei einer zweiten Sammlung.
+- **Wie behoben:** Rückgabe erst nach der Rückkehr aus `ImageExporter.Export` (in `MainViewModel.Export` und
+  `ExportFileAsync`), mit `GCCollectionMode.Aggressive`, `WaitForPendingFinalizers` und einer zweiten Sammlung; unter
+  Linux dazu `malloc_trim(0)`. Kostet rund 0,1 s Pause je Export. Danach 1,1 GB.
+- **Nicht tun:** die große Rückgabe innerhalb einer Rechnung aufrufen; mit `GC.Collect()` ohne `Aggressive` rechnen.
+- **Wo:** `Core/Imaging/PixelPool.cs` (`Trim`), `Core/Imaging/ImageExporter.cs` (`Export`), `Ui/ViewModels/MainViewModel.Export.cs`,
+  `MainViewModel.PerImage.cs`.
+- **Nachweis:** Messprogramm im Testordner (unsichtbares Fenster, `/proc/self/status`): nach dem Export 7,0 GB → 1,1 GB.
+  Pixel unberührt (nur Speicherbereinigung).
