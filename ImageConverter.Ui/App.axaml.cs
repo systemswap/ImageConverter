@@ -93,7 +93,9 @@ public partial class App : Application
 
             var vm = new MainViewModel { CoarseWhileDragging = true };   // beim Ziehen grobe Vorschau, fein nach dem Loslassen
             desktop.MainWindow = new MainWindow { DataContext = vm };
-            // Grafikkarte für Entrauschen und Dunst im Hintergrund vorbereiten (Kernel übersetzen)
+            // Grafikkarte für Entrauschen und Dunst im Hintergrund vorbereiten (Kernel übersetzen); letzter
+            // Geschwindigkeitstest entscheidet, ob sie oder die CPU rechnet
+            Core.Imaging.GpuFilters.Measured = Core.Platform.AppSettings.Load().FilterSpeed;
             _ = Core.Imaging.GpuFilters.WarmUpAsync();
 
             // Dateien aus "Öffnen mit" bzw. der .desktop-Zeile (Exec=… %F) direkt laden

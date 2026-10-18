@@ -14,6 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.Upscale;
 using ImageConverter.Core.Imaging;
+using ImageConverter.Core.Platform;
 using ImageConverter.Imaging;
 using ImageConverter.ViewModels;
 using ImageMagick;
@@ -39,6 +40,7 @@ public partial class AiViewModel : ViewModelBase
     {
         _main = main;
         Store = AiModelStore.CreateDefault();
+        _sessions.Measured = AppSettings.Load().AiSpeed;   // letzter Geschwindigkeitstest: Grafikkarte oder CPU
         Upscalers.OnGpu = _sessions.OnGpu;
         Models = AiModelCatalog.All.Select(m => new AiModelItem(this, m)).ToList();
         ModelGroups =
@@ -66,21 +68,112 @@ public partial class AiViewModel : ViewModelBase
 
     // ------------------------------------------------------------ Grafikkarte
 
-    // Ist eine Grafikkarte da, wird sie genutzt — ohne Schalter (Wunsch des Benutzers); hier nur, was gerade gilt.
+    // Ist eine Grafikkarte da, wird sie genutzt — außer der Geschwindigkeitstest hat auf diesem Rechner die CPU schneller
+    // gemessen (Wunsch des Benutzers: testen, dann das Schnellere nehmen); hier nur, was gerade gilt.
 
     /// <summary>Was gerade genutzt wird — oder warum nicht (Einstellungen › KI-Modelle).</summary>
     public string GpuStatus =>
         OnnxSessions.GpuName is not { } name ? Tr.T("Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU.")
+        : _sessions.CpuFasterHere ? Tr.T("Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0}).", name)
         : _sessions.GpuProblem is { } problem ? Tr.T("Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}", name, problem)
         : Tr.T("Die KI-Scaler (Größe › Verfahren) rechnen auf der Grafikkarte ({0}), die übrigen Modelle (Gesichter, Entfernen, Begradigen) auf der CPU.", name);
 
     /// <summary>Worauf Entrauschen und Dunst rechnen (ILGPU: OpenCL/CUDA, unabhängig von der KI-Laufzeit).</summary>
     public string FilterGpuStatus =>
-        Core.Imaging.GpuFilters.DeviceName is { } device
-            ? Tr.T("Entrauschen und Dunst rechnen auf der Grafikkarte ({0}).", device)
-            : Core.Imaging.GpuFilters.Problem is { } problem
+        GpuFilters.DeviceName is { } device
+            ? GpuFilters.UsesGpu
+                ? Tr.T("Entrauschen und Dunst rechnen auf der Grafikkarte ({0}).", device)
+                : Tr.T("Entrauschen und Dunst rechnen auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0}).", device)
+            : GpuFilters.Problem is { } problem
                 ? Tr.T("Entrauschen und Dunst rechnen auf der CPU — {0}", problem)
                 : Tr.T("Entrauschen und Dunst nutzen die Grafikkarte, sobald eine mit OpenCL oder CUDA gefunden ist.");
+
+    // ------------------------------------------------------------ Geschwindigkeitstest
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestSpeedCommand))]
+    public partial bool IsSpeedTesting { get; set; }
+
+    [ObservableProperty] public partial string? SpeedTestProgress { get; set; }
+
+    /// <summary>Ergebnis des letzten Tests je Bereich, oder ein Hinweis, dass noch nicht getestet wurde.</summary>
+    public string SpeedTestText
+    {
+        get
+        {
+            var settings = AppSettings.Load();
+            if (settings.FilterSpeed is null && settings.AiSpeed is null)
+                return Tr.T("Noch nicht getestet — die Grafikkarte wird genutzt, wenn eine da ist.");
+            var lines = new List<string>();
+            if (settings.FilterSpeed is { } f)
+                lines.Add(Describe(Tr.T("Entrauschen und Dunst"), f, SpeedTest.FilterMachine(GpuFilters.DeviceName)));
+            if (settings.AiSpeed is { } a)
+                lines.Add(Describe(Tr.T("KI (Real-ESRGAN x4v3)"), a, SpeedTest.AiMachine(OnnxSessions.GpuProvider)));
+            return string.Join("\n", lines);
+        }
+    }
+
+    private static string Describe(string area, SpeedMeasure m, string machine)
+    {
+        var result = m.GpuSeconds is not { } gpu
+            ? Tr.T("{0}: CPU {1:0.00} s, keine Grafikkarte nutzbar → CPU", area, m.CpuSeconds)
+            : Tr.T("{0}: Grafikkarte {1:0.00} s · CPU {2:0.00} s → {3}", area, gpu, m.CpuSeconds,
+                m.CpuFaster ? Tr.T("CPU") : Tr.T("Grafikkarte"));
+        var when = Tr.T("gemessen {0:g}", m.When);
+        return m.Machine == machine
+            ? $"{result} ({when})"
+            : $"{result} ({when}, {Tr.T("gilt nicht mehr: anderer Rechner — bitte neu testen")})";
+    }
+
+    private bool CanTestSpeed => !IsSpeedTesting;
+
+    /// <summary>
+    /// Bildfilter und KI je einmal auf Grafikkarte und CPU rechnen, das Schnellere merken und ab sofort nutzen.
+    /// Die KI braucht dafür das kleine Modell x4v3 („Allround“).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanTestSpeed))]
+    private async Task TestSpeed()
+    {
+        IsSpeedTesting = true;
+        try
+        {
+            SpeedTestProgress = Tr.T("Entrauschen und Dunst werden gemessen …");
+            var filters = await Task.Run(() => SpeedTest.Filters());
+            GpuFilters.Measured = filters;
+
+            SpeedMeasure? ai = null;
+            if (OnnxSessions.GpuProvider is null)
+            {
+                SpeedTestProgress = Tr.T("KI: Diese Laufzeit kann keine Grafikkarte ansprechen — nichts zu vergleichen.");
+            }
+            else if (Store.PathOf(AiModelCatalog.Allround) is not { } path)
+            {
+                SpeedTestProgress = Tr.T("Für den Test der KI bitte erst „Allround (klein)“ herunterladen (5 MB).");
+            }
+            else
+            {
+                SpeedTestProgress = Tr.T("KI wird gemessen …");
+                ai = await Task.Run(() => SpeedTest.Ai(path, AiModelCatalog.Allround));
+                _sessions.Measured = ai;
+                SpeedTestProgress = null;
+            }
+
+            var settings = AppSettings.Load();
+            (settings with { FilterSpeed = filters, AiSpeed = ai ?? settings.AiSpeed }).Save();
+        }
+        catch (Exception e)
+        {
+            SpeedTestProgress = Tr.T("Test fehlgeschlagen: {0}", e.Message);
+            AppLog.Write("Geschwindigkeitstest fehlgeschlagen", e.ToString());
+        }
+        finally
+        {
+            IsSpeedTesting = false;
+            OnPropertyChanged(nameof(SpeedTestText));
+            OnPropertyChanged(nameof(FilterGpuStatus));
+            RefreshGpuStatus();
+        }
+    }
 
     /// <summary>Nach dem Öffnen eines Modells: Grafikkarte genutzt oder (nach einem Fehler) doch die CPU?</summary>
     internal void RefreshGpuStatus()

@@ -3,11 +3,13 @@ using System.Text.Json;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Dauerhafte Einstellungen des Benutzers (Sprache; bei „KI begradigen“, ob Schatten herausgerechnet werden) in
+/// Dauerhafte Einstellungen des Benutzers (Sprache; bei „KI begradigen“, ob Schatten herausgerechnet werden; letzter
+/// Geschwindigkeitstest Grafikkarte/CPU für Bildfilter und KI) in
 /// ~/.local/share/ImageConverter/settings.json bzw. %LOCALAPPDATA%\ImageConverter\settings.json.
 /// Fehlt die Datei oder ist sie kaputt, gelten die Voreinstellungen.
 /// </summary>
-public sealed record AppSettings(string? Language = null, bool AiRemoveShadows = true)
+public sealed record AppSettings(string? Language = null, bool AiRemoveShadows = true,
+    SpeedMeasure? FilterSpeed = null, SpeedMeasure? AiSpeed = null)
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

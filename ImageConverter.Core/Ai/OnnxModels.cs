@@ -56,8 +56,30 @@ public sealed class OnnxSessions : IDisposable
         }
     } = true;
 
+    /// <summary>
+    /// Letzter Geschwindigkeitstest (Einstellungen). War die CPU auf diesem Rechner schneller, öffnen die Modelle auf der
+    /// CPU. Ändern schließt die offenen Modelle (werden neu geöffnet).
+    /// </summary>
+    public SpeedMeasure? Measured
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            var before = PreferGpu;
+            field = value;
+            if (before != PreferGpu) Dispose();
+        }
+    }
+
+    /// <summary>Laut Test (oder ohne Test) die Grafikkarte.</summary>
+    private bool PreferGpu => SpeedMeasure.PreferGpu(Measured, SpeedTest.AiMachine(GpuProvider));
+
+    /// <summary>Laut Geschwindigkeitstest rechnet auf diesem Rechner die CPU schneller.</summary>
+    public bool CpuFasterHere => GpuProvider is not null && !PreferGpu;
+
     /// <summary>Rechnen die offenen Modelle gerade auf der Grafikkarte?</summary>
-    public bool OnGpu => UseGpu && GpuProvider is not null && GpuProblem is null;
+    public bool OnGpu => UseGpu && GpuProvider is not null && GpuProblem is null && PreferGpu;
 
     /// <summary>Warum die Grafikkarte nicht genutzt wird (Fehler beim Öffnen), sonst null.</summary>
     public string? GpuProblem { get; private set; }
@@ -94,7 +116,7 @@ public sealed class OnnxSessions : IDisposable
     /// <summary>Öffnen — mit Grafikkarte, wenn gewünscht, vorhanden und für das Modell freigegeben; scheitert das, auf der CPU.</summary>
     private InferenceSession Open(string path, bool allowGpu)
     {
-        if (allowGpu && UseGpu && GpuProvider is { } provider && GpuProblem is null)
+        if (allowGpu && UseGpu && GpuProvider is { } provider && GpuProblem is null && PreferGpu)
         {
             try
             {
@@ -110,7 +132,7 @@ public sealed class OnnxSessions : IDisposable
         return new InferenceSession(path, cpu);
     }
 
-    private static SessionOptions GpuOptions(string provider)
+    internal static SessionOptions GpuOptions(string provider)
     {
         var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
         switch (provider)
@@ -124,7 +146,8 @@ public sealed class OnnxSessions : IDisposable
             case "MIGraphXExecutionProvider": o.AppendExecutionProvider_MIGraphX(0); break;
             case "ROCMExecutionProvider": o.AppendExecutionProvider_ROCm(0); break;
             case "CUDAExecutionProvider": o.AppendExecutionProvider_CUDA(0); break;
-            case "WebGpuExecutionProvider": o.AppendExecutionProvider("WebGPU"); break;
+            // preserveDevice: sonst stürzt das Schließen ab, wenn mehrere Sitzungen auf der Karte liegen (PiSA-SR: drei)
+            case "WebGpuExecutionProvider": o.AppendExecutionProvider("WebGPU", new Dictionary<string, string> { ["preserveDevice"] = "1" }); break;
         }
         return o;
     }

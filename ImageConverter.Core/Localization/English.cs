@@ -772,6 +772,25 @@ public static class English
         ["Wird nur einmal gebraucht: PiSA-SR rechnet mit leerer Beschreibung, die die App beim Umwandeln daraus berechnet. Wird mit PiSA-SR geladen."] = "Needed only once: PiSA-SR works with an empty description, which the app computes from it during conversion. Downloaded with PiSA-SR.",
         ["Stability AI (Stable Diffusion 2.1-base), Spiegel „Manojb/stable-diffusion-2-1-base“ auf Hugging Face"] = "Stability AI (Stable Diffusion 2.1-base), mirror “Manojb/stable-diffusion-2-1-base” on Hugging Face",
 
+        // Geschwindigkeitstest Grafikkarte/CPU (Einstellungen › KI-Modelle)
+        ["Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "The AI runs on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
+        ["Entrauschen und Dunst rechnen auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "Noise reduction and haze run on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
+        ["Noch nicht getestet — die Grafikkarte wird genutzt, wenn eine da ist."] = "Not tested yet — the graphics card is used if there is one.",
+        ["Entrauschen und Dunst"] = "Noise reduction and haze",
+        ["KI (Real-ESRGAN x4v3)"] = "AI (Real-ESRGAN x4v3)",
+        ["{0}: CPU {1:0.00} s, keine Grafikkarte nutzbar → CPU"] = "{0}: CPU {1:0.00} s, no usable graphics card → CPU",
+        ["{0}: Grafikkarte {1:0.00} s · CPU {2:0.00} s → {3}"] = "{0}: graphics card {1:0.00} s · CPU {2:0.00} s → {3}",
+        ["CPU"] = "CPU",
+        ["Grafikkarte"] = "graphics card",
+        ["gemessen {0:g}"] = "measured {0:g}",
+        ["gilt nicht mehr: anderer Rechner — bitte neu testen"] = "no longer valid: different computer — please test again",
+        ["Entrauschen und Dunst werden gemessen …"] = "Measuring noise reduction and haze …",
+        ["KI: Diese Laufzeit kann keine Grafikkarte ansprechen — nichts zu vergleichen."] = "AI: this runtime cannot use a graphics card — nothing to compare.",
+        ["Für den Test der KI bitte erst „Allround (klein)“ herunterladen (5 MB)."] = "To test the AI, please download “All-round (small)” first (5 MB).",
+        ["KI wird gemessen …"] = "Measuring the AI …",
+        ["Test fehlgeschlagen: {0}"] = "Test failed: {0}",
+        ["Geschwindigkeit testen"] = "Test speed",
+        ["Rechnet Entrauschen, Dunst und ein kleines KI-Modell je einmal auf der Grafikkarte und auf der CPU (dauert einige Sekunden). Danach nutzt das Programm, was auf diesem Rechner schneller ist."] = "Runs noise reduction, haze and a small AI model once on the graphics card and once on the CPU (takes a few seconds). Afterwards the program uses whichever is faster on this computer.",
     };
 
     public static IReadOnlyDictionary<string, string> Texts => _texts;

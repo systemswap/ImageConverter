@@ -40,6 +40,29 @@ public static class GpuFilters
         public void Dispose() => CpuOnlyHere.Value = false;
     }
 
+    private static readonly AsyncLocal<bool> ForceGpuHere = new();
+
+    /// <summary>Nur in diesem Ablauf auf der Grafikkarte rechnen, auch wenn der Geschwindigkeitstest die CPU wählte.</summary>
+    internal static IDisposable GpuEvenIfSlower()
+    {
+        ForceGpuHere.Value = true;
+        return new ResetForce();
+    }
+
+    private sealed class ResetForce : IDisposable
+    {
+        public void Dispose() => ForceGpuHere.Value = false;
+    }
+
+    /// <summary>
+    /// Letzter Geschwindigkeitstest (Einstellungen). War die CPU auf diesem Rechner schneller, rechnen die Filter dort —
+    /// die Grafikkarte bleibt geöffnet, falls ein neuer Test anders ausfällt.
+    /// </summary>
+    public static SpeedMeasure? Measured { get; set; }
+
+    /// <summary>Die Grafikkarte ist offen und laut Test (oder ohne Test) die schnellere Wahl.</summary>
+    public static bool UsesGpu => Enabled && DeviceName is { } device && SpeedMeasure.PreferGpu(Measured, SpeedTest.FilterMachine(device));
+
     /// <summary>Name der Grafikkarte, sobald sie geöffnet ist; null ohne.</summary>
     public static string? DeviceName { get; private set; }
 
@@ -77,6 +100,7 @@ public static class GpuFilters
         lock (Gate)
         {
             if (Open() is not { } accelerator) return false;
+            if (!ForceGpuHere.Value && !SpeedMeasure.PreferGpu(Measured, SpeedTest.FilterMachine(DeviceName))) return false;
             try
             {
                 work(accelerator);

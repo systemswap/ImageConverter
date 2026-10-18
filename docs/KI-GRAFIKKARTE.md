@@ -69,6 +69,35 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
    (`Microsoft.Windows.AI.MachineLearning`, Windows App SDK) — bringt DirectML und lädt Hersteller-Anbindungen (NVIDIA
    TensorRT-RTX, AMD MIGraphX) über Windows Update nach.
 
+## Geschwindigkeitstest: Grafikkarte oder CPU (0.5.100 beta)
+
+Wunsch des Benutzers (18.10.2026): Nicht annehmen, dass die Grafikkarte schneller ist, sondern messen und das
+Schnellere nehmen — auf dem Debian-Rechner mit Ryzen 9 7950X3D ist die CPU oft gleich schnell oder schneller (siehe
+unten), auf dem Laptop die Grafikkarte deutlich schneller.
+
+- **Wo:** Einstellungen › KI-Modelle, Knopf „Geschwindigkeit testen“ unter den Angaben zur Grafikkarte; dort steht auch
+  das letzte Ergebnis je Bereich (Zeiten, Wahl, Datum).
+- **Was gemessen wird** (`Core/Platform/SpeedTest.cs`), je Gerät ein Aufwärmlauf, dann die beste von zwei Zeiten:
+  - **Bildfilter:** Entrauschen und Dunst an einem Testbild von 1200 × 900 (ILGPU/OpenCL gegen die CPU-Schleifen).
+  - **KI:** Real-ESRGAN x4v3 („Allround“, 5 MB) an 300 × 300 in eigenen Sitzungen — die geöffneten Modelle der App bleiben
+    unberührt. Ohne Grafikkarten-Anbindung der Laufzeit (Linux heute) wird nichts verglichen; fehlt x4v3, bittet der Test
+    darum. x4v3 steht stellvertretend für alle KI-Modelle (auf dem Laptop verhielten sich x4v3, UltraSharpV2 und PiSA-SR
+    gleich).
+- **Wirkung:** Ergebnis in `settings.json` (`FilterSpeed`, `AiSpeed`); beim Start übernommen (`GpuFilters.Measured`,
+  `OnnxSessions.Measured`). War die CPU schneller oder gleich schnell, rechnet der Bereich auf der CPU
+  (`SpeedMeasure.PreferGpu`). Ohne Test gilt wie bisher: Grafikkarte, wenn vorhanden.
+- **Neues System:** Jedes Ergebnis trägt eine Kennung des Rechners (Grafikkarte bzw. Laufzeit-Anbindung und Zahl der
+  Kerne). Passt sie nicht mehr, gilt das Ergebnis nicht (wieder Grafikkarte, wenn vorhanden), und die Anzeige bittet um
+  einen neuen Test.
+- **Test:** `SpeedTestTests` (Auswahl, anderer Rechner, Speichern, Messung der Filter; Gegenprobe: mit immer
+  „Grafikkarte“ schlägt `PreferGpu_TakesTheFasterOne_OnTheMeasuredComputer` fehl).
+- **Beobachtung auf dem Debian-Rechner:** Es ist kein OpenCL-Treiber installiert (`/etc/OpenCL/vendors` fehlt) —
+  Entrauschen und Dunst rechnen dort deshalb auf der CPU (1,2 s für das Testbild). Für AMD: Mesa-OpenCL (Debian
+  `mesa-opencl-icd`, Fedora `mesa-libOpenCL`) — Kandidat für die Prüfung beim Start.
+- **Falle beim Messen mit eigenen Testprogrammen:** In einer dateibasierten App (`dotnet run Datei.cs`) wirft
+  `ILGPU.Context` einen Fehler im Typinitialisierer, weil dort `PublishAot` voreingestellt ist — `#:property
+  PublishAot=false` setzen. Das Programm selbst ist nicht betroffen.
+
 ## WebGPU unter Linux (gebaut und gemessen, 18.10.2026)
 
 Messplatz: Debian 13, AMD Ryzen 9 7950X3D (16 Kerne), Radeon RX 6650 XT (8 GB, Mesa/RADV), Stand 0.5.96 beta.
