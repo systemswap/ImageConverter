@@ -56,6 +56,13 @@
             <_OnnxRuntimeNative Include="@(ResolvedFileToPublish)"
                                 Condition="('%(Filename)' == 'onnxruntime' Or '%(Filename)' == 'libonnxruntime' Or '%(Filename)' == 'DirectML' Or $([System.String]::Copy('%(Filename)').Contains('onnxruntime_providers_')))
                                            And ('%(Extension)' == '.dll' Or '%(Extension)' == '.so' Or '%(Extension)' == '.dylib')" />
+            <!-- Windows: DirectML.dll neben die Laufzeit. Die Bibliothek ImageConverter.Core legt sie nur bei, wenn sie selbst
+                 für Windows gebaut wird — beim Veröffentlichen kennt aber nur dieses Projekt die Plattform (-r win-x64);
+                 unter Linux gebaut fehlte die Datei, und Windows nahm seine ältere (KI nur auf der CPU). -->
+            <_OnnxRuntimeNative Include="$(NuGetPackageRoot)microsoft.ai.directml/$(DirectMLVersion)/bin/x64-win/DirectML.dll"
+                                Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win'))
+                                           And '@(_OnnxRuntimeNative->WithMetadataValue('Filename', 'DirectML'))' == ''
+                                           And Exists('$(NuGetPackageRoot)microsoft.ai.directml/$(DirectMLVersion)/bin/x64-win/DirectML.dll')" />
             <ResolvedFileToPublish Remove="@(_ImageMagickNative);@(_OnnxRuntimeNative)" />
             <ResolvedFileToPublish Include="@(_ImageMagickNative)">
                 <RelativePath>Tools/ImageMagick/%(Filename)%(Extension)</RelativePath>

@@ -175,6 +175,10 @@ publish() {
   find "$dest" -name '*.pdb' -delete
   [ -d "$dest/Tools/ImageMagick" ] && [ -d "$dest/Tools/OnnxRuntime" ] \
     || { echo "Fehler: Tools/ImageMagick oder Tools/OnnxRuntime fehlt in der Ausgabe für $rid." >&2; exit 1; }
+  # Windows: ohne passende DirectML.dll nähme Windows die ältere aus System32 — die KI liefe nur auf der CPU
+  if [ "$rid" = win-x64 ] && [ ! -f "$dest/Tools/OnnxRuntime/DirectML.dll" ]; then
+    echo "Fehler: DirectML.dll fehlt in Tools/OnnxRuntime der Windows-Ausgabe." >&2; exit 1
+  fi
 }
 
 # Paket ohne die heruntergeladenen KI-Modelle und ohne das Log.

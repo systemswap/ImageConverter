@@ -2078,3 +2078,24 @@ Test oder Nachweis.
   `Ui/Ai/AiViewModel.cs` (Start).
 - **Test:** `SpeedTestTests.UpscaleTimes_FirstMeasurementReplacesTheDefault_AndSurvivesARestart` (mit dem alten Gewicht
   läge die Schätzung bei rund 1380 statt 387 s je MP; `Learned`/`Restore` gab es nicht).
+
+## 74. Windows-Fassung vom Linux-Rechner ohne DirectML.dll (0.5.106 beta)
+
+- **Entdeckt in:** 0.5.105 beta (18.10.2026) beim ersten Windows-Bau auf dem Debian-Rechner nach dem Abgleich mit GitHub;
+  vermutlich seit DirectML (0.5.79 beta) in jeder unter Linux gebauten Windows-Fassung. **Behoben in:** 0.5.106 beta.
+- **Was:** In `Tools/OnnxRuntime` lag die Laufzeit mit DirectML, aber keine `DirectML.dll`. Windows hätte die ältere
+  aus System32 genommen, die zu dieser Laufzeit nicht passt — die KI wäre auf dem Laptop nur auf der CPU gelaufen.
+  Unter Windows gebaut (Rider, `publish.ps1`) fiel es nicht auf.
+- **Warum:** `ImageConverter.Core` legt `DirectML.dll` nur bei, wenn es selbst für Windows gebaut wird. Beim
+  Veröffentlichen (`-r win-x64`) kennt aber nur das Hauptprojekt die Plattform; die Bibliothek wird ohne Plattform gebaut
+  und richtet sich dann nach dem System, auf dem gebaut wird — unter Linux also „nicht Windows“. Die Laufzeit selbst kam
+  über die Pakete des Hauptprojekts trotzdem in der DirectML-Fassung.
+- **Wie behoben:** `ImageConverter.Desktop.csproj` (Target `ForeignNativeLibrariesBesideProgram`) ergänzt beim
+  Windows-Ziel `DirectML.dll` aus dem Paket `Microsoft.AI.DirectML` (Fassung `DirectMLVersion` in
+  `Directory.Packages.props`), wenn sie noch fehlt. `publish.sh` bricht ab, wenn sie in der Windows-Ausgabe fehlt.
+  Verworfen: den Pfad im Bibliotheksprojekt über `GeneratePathProperty` holen — die Bibliothek wird beim Veröffentlichen
+  ja gar nicht für Windows gebaut.
+- **Nicht tun:** Windows-Bestandteile an `RuntimeIdentifier` in Bibliotheksprojekten knüpfen; eine Windows-Fassung
+  weitergeben, ohne `Tools/OnnxRuntime/DirectML.dll` zu prüfen.
+- **Nachweis:** `published/windows-x64/Tools/OnnxRuntime/DirectML.dll` byte-gleich mit der aus dem Paket (1.15.4),
+  Lizenz daneben; die Prüfung in `publish.sh` schlug vor der Behebung an.
