@@ -38,8 +38,9 @@ public static class Denoiser
             return copy;   // nichts zu tun: genau dasselbe Bild, ohne Umweg über Helligkeit und Farbe
         }
 
+        // Alle Zwischenpuffer aus dem Pool (vorher je Aufruf rund 7 GB neu angelegt beim Panorama) — gleiche Rechnung
         var n = w * h;
-        float[] y = new float[n], cb = new float[n], cr = new float[n];
+        float[] y = PixelPool.Rent(n), cb = PixelPool.Rent(n), cr = PixelPool.Rent(n);
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
@@ -52,12 +53,18 @@ public static class Denoiser
 
         if (chroma > 0.005)
         {
-            ChromaDenoise(cb, y, w, h, chroma, scale);
-            ChromaDenoise(cr, y, w, h, chroma, scale);
+            // Mittelwerte der Führung (Helligkeit) hängen nur vom Radius ab — für beide Farbkanäle einmal
+            using var stats = new GuideStats(y, w, h);
+            ChromaDenoise(cb, y, w, h, chroma, scale, stats);
+            ChromaDenoise(cr, y, w, h, chroma, scale, stats);
         }
 
         if (luma > 0.005)
-            y = LumaDenoise(y, px, w, h, luma);
+        {
+            var denoised = LumaDenoise(y, px, w, h, luma);
+            if (!ReferenceEquals(denoised, y)) PixelPool.Return(y);
+            y = denoised;
+        }
 
         var result = PixelPool.Rent(px.Length);
         Parallel.For(0, h, ComputeLimits.Options, row =>
@@ -73,7 +80,48 @@ public static class Denoiser
                 result[i * 4 + 3] = px[i * 4 + 3];
             }
         });
+        PixelPool.Return(y);
+        PixelPool.Return(cb);
+        PixelPool.Return(cr);
         return result;
+    }
+
+    /// <summary>
+    /// Mittel und Mittel der Quadrate der Führung je Radius (Guided Filter), einmal gerechnet für beide Farbkanäle.
+    /// Die Führung darf sich in der Zeit nicht ändern.
+    /// </summary>
+    private sealed class GuideStats(float[] guide, int w, int h) : IDisposable
+    {
+        private readonly Dictionary<int, (float[] MeanI, float[] CorrII)> _byRadius = [];
+
+        public float[] Guide => guide;
+
+        public (float[] MeanI, float[] CorrII) For(int r)
+        {
+            if (_byRadius.TryGetValue(r, out var known)) return known;
+            var n = guide.Length;
+            var ii = PixelPool.Rent(n);
+            var tmp = PixelPool.Rent(n);
+            Parallel.For(0, h, ComputeLimits.Options, row =>
+            {
+                for (int x = 0, i = row * w; x < w; x++, i++) ii[i] = guide[i] * guide[i];
+            });
+            var meanI = BoxMean(guide, w, h, r, tmp, PixelPool.Rent(n));
+            var corrII = BoxMean(ii, w, h, r, tmp, PixelPool.Rent(n));
+            PixelPool.Return(ii);
+            PixelPool.Return(tmp);
+            return _byRadius[r] = (meanI, corrII);
+        }
+
+        public void Dispose()
+        {
+            foreach (var (meanI, corrII) in _byRadius.Values)
+            {
+                PixelPool.Return(meanI);
+                PixelPool.Return(corrII);
+            }
+            _byRadius.Clear();
+        }
     }
 
     // ------------------------------------------------------------ Farbe
@@ -82,7 +130,7 @@ public static class Denoiser
     /// Farbkanal glätten, geführt von der Helligkeit: zwei Stufen Guided Filter; die Stärke bestimmt, wie viel vom
     /// geglätteten Kanal übernommen wird und wie weit der Filter Unterschiede noch für Rauschen hält.
     /// </summary>
-    private static void ChromaDenoise(float[] c, float[] guide, int w, int h, double strength, double scale)
+    private static void ChromaDenoise(float[] c, float[] guide, int w, int h, double strength, double scale, GuideStats stats)
     {
         var sigma = NoiseSigma(c, w, h);
         // Unterschiede bis etwa zum Dreifachen des Rauschens gelten als Rauschen — mehr Stärke, mehr Toleranz
@@ -90,8 +138,8 @@ public static class Denoiser
         var r1 = Math.Max(1, (int)Math.Round(ChromaFine * scale));
         var r2 = Math.Max(r1 + 1, (int)Math.Round(ChromaCoarse * scale));
 
-        var fine = GuidedFilter(c, guide, w, h, r1, eps);
-        var coarse = GuidedFilter(fine, guide, w, h, r2, eps);
+        var fine = GuidedFilter(c, guide, w, h, r1, eps, stats);
+        var coarse = GuidedFilter(fine, guide, w, h, r2, eps, stats);
         var s = (float)Math.Clamp(strength, 0, 1);
         // feine Stufe ganz, die grobe nach und nach — kleine Werte entfernen erst die Farbpunkte, große auch Flecken
         Parallel.For(0, h, ComputeLimits.Options, row =>
@@ -99,23 +147,25 @@ public static class Denoiser
             for (int x = 0, i = row * w; x < w; x++, i++)
                 c[i] += s * (fine[i] - c[i]) + s * s * (coarse[i] - fine[i]);
         });
+        PixelPool.Return(fine);
+        PixelPool.Return(coarse);
     }
 
     /// <summary>Guided Filter (He, Sun, Tang 2010): Ausgang folgt den Kanten der Führung, glättet dazwischen.</summary>
-    private static float[] GuidedFilter(float[] p, float[] guide, int w, int h, int r, float eps)
+    private static float[] GuidedFilter(float[] p, float[] guide, int w, int h, int r, float eps, GuideStats stats)
     {
         var n = p.Length;
-        float[] ip = new float[n], ii = new float[n];
+        var ip = PixelPool.Rent(n);
+        var tmp = PixelPool.Rent(n);   // ein Zwischenpuffer für alle Kastenmittel (wird jeweils ganz überschrieben)
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
-            for (int x = 0, i = row * w; x < w; x++, i++) { ip[i] = guide[i] * p[i]; ii[i] = guide[i] * guide[i]; }
+            for (int x = 0, i = row * w; x < w; x++, i++) ip[i] = guide[i] * p[i];
         });
-        var meanI = BoxMean(guide, w, h, r);
-        var meanP = BoxMean(p, w, h, r);
-        var corrIP = BoxMean(ip, w, h, r);
-        var corrII = BoxMean(ii, w, h, r);
+        var (meanI, corrII) = stats.For(r);
+        var meanP = BoxMean(p, w, h, r, tmp, PixelPool.Rent(n));
+        var corrIP = BoxMean(ip, w, h, r, tmp, PixelPool.Rent(n));
 
-        float[] a = ip, b = ii;   // Puffer wiederverwenden
+        float[] a = ip, b = PixelPool.Rent(n);   // a überschreibt ip (wird nicht mehr gebraucht)
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
@@ -126,13 +176,14 @@ public static class Denoiser
                 b[i] = meanP[i] - a[i] * meanI[i];
             }
         });
-        var meanA = BoxMean(a, w, h, r);
-        var meanB = BoxMean(b, w, h, r);
-        var q = new float[n];
+        var meanA = BoxMean(a, w, h, r, tmp, PixelPool.Rent(n));
+        var meanB = BoxMean(b, w, h, r, tmp, PixelPool.Rent(n));
+        var q = PixelPool.Rent(n);
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++) q[i] = meanA[i] * guide[i] + meanB[i];
         });
+        foreach (var used in new[] { a, b, tmp, meanP, corrIP, meanA, meanB }) PixelPool.Return(used);
         return q;
     }
 
@@ -198,10 +249,13 @@ public static class Denoiser
     /// <summary>Rauschstärke eines Kanals (robust: Median der Abweichung vom 3 × 3-Mittel, auf Normalverteilung umgerechnet).</summary>
     private static double NoiseSigma(float[] c, int w, int h)
     {
-        var mean = BoxMean(c, w, h, 1);
+        var tmp = PixelPool.Rent(c.Length);
+        var mean = BoxMean(c, w, h, 1, tmp, PixelPool.Rent(c.Length));
         var step = Math.Max(1, c.Length / 200_000);   // Stichprobe genügt
         var diffs = new List<float>(c.Length / step + 1);
         for (var i = 0; i < c.Length; i += step) diffs.Add(Math.Abs(c[i] - mean[i]));
+        PixelPool.Return(tmp);
+        PixelPool.Return(mean);
         diffs.Sort();
         // Abweichung vom 3 × 3-Mittel hat bei weißem Rauschen die Streuung σ·√(8/9); Median |N(0,1)| = 0,6745
         return diffs[diffs.Count / 2] / 0.6745 / Math.Sqrt(8.0 / 9);
@@ -216,7 +270,7 @@ public static class Denoiser
     private static float[] LumaDenoise(float[] y, float[] px, int w, int h, double strength)
     {
         // Rauschen je Helligkeit messen (wie bei der Körnung) — auf genau diesem Bild, auch in der Vorschau
-        var rgb = new float[w * h * 3];
+        var rgb = PixelPool.Rent(w * h * 3);
         Parallel.For(0, w * h, ComputeLimits.Options, i =>
         {
             rgb[i * 3] = px[i * 4 + 2];
@@ -224,12 +278,13 @@ public static class Denoiser
             rgb[i * 3 + 2] = px[i * 4];
         });
         var profile = FaceDetails.MeasureGrain(rgb, w, h);
+        PixelPool.Return(rgb);
         if (profile.Average <= 1e-5) return y;
 
         var n = y.Length;
         var k = 0.25f + 0.75f * (float)Math.Clamp(strength, 0, 1);   // Filterbreite in Vielfachen des Rauschens
-        var sigma2 = new float[n];
-        var invH2 = new float[n];
+        var sigma2 = PixelPool.Rent(n);
+        var invH2 = PixelPool.Rent(n);
         Parallel.For(0, n, ComputeLimits.Options, i =>
         {
             var s = profile.SigmaAt(y[i]);
@@ -240,13 +295,21 @@ public static class Denoiser
 
         // Grafikkarte: dieselbe Rechnung je Punkt, alle Verschiebungen in einem Faden (gleiches Ergebnis bis auf Rundung)
         if (GpuFilters.NonLocalMeans(y, sigma2, invH2, w, h, PatchRadius, SearchRadius, (float)Math.Min(1, 1.5 * strength)) is { } fast)
+        {
+            PixelPool.Return(sigma2);
+            PixelPool.Return(invH2);
             return fast;
+        }
 
-        var sum = new float[n];
-        var weightSum = new float[n];
-        var maxWeight = new float[n];
-        var diff = new float[n];
-        float[] boxTmp = new float[n], patch = new float[n];
+        // Summen beginnen bei null (Puffer aus dem Pool sind nicht geleert); diff, boxTmp, patch werden ganz überschrieben
+        var sum = PixelPool.Rent(n);
+        var weightSum = PixelPool.Rent(n);
+        var maxWeight = PixelPool.Rent(n);
+        Array.Clear(sum);
+        Array.Clear(weightSum);
+        Array.Clear(maxWeight);
+        var diff = PixelPool.Rent(n);
+        float[] boxTmp = PixelPool.Rent(n), patch = PixelPool.Rent(n);
         for (var dy = -SearchRadius; dy <= SearchRadius; dy++)
         for (var dx = -SearchRadius; dx <= SearchRadius; dx++)
         {
@@ -277,13 +340,14 @@ public static class Denoiser
 
         // der Punkt selbst mit dem größten Gewicht seiner Nachbarn (übliche Wahl), danach mit der Stärke mischen
         var mix = (float)Math.Min(1, 1.5 * strength);
-        var result = new float[n];
+        var result = PixelPool.Rent(n);
         Parallel.For(0, n, ComputeLimits.Options, i =>
         {
             var self = Math.Max(maxWeight[i], 1e-3f);
             var filtered = (sum[i] + self * y[i]) / (weightSum[i] + self);
             result[i] = y[i] + mix * (filtered - y[i]);
         });
+        foreach (var used in new[] { sum, weightSum, maxWeight, diff, boxTmp, patch, sigma2, invH2 }) PixelPool.Return(used);
         return result;
     }
 }

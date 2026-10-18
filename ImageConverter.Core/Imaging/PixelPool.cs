@@ -14,8 +14,9 @@ namespace ImageConverter.Core.Imaging;
 /// </remarks>
 public static class PixelPool
 {
-    /// <summary>Höchstens so viele freie Puffer je Länge.</summary>
-    private const int MaxFreePerLength = 2;
+    /// <summary>Höchstens so viele freie Puffer je Länge (8: der Guided Filter des Entrauschens braucht so viele
+    /// gleichzeitig — mit 2 wurde fast alles neu angelegt; nach Vorschau und Export leert Trim den Pool).</summary>
+    private const int MaxFreePerLength = 8;
 
     private static readonly ConcurrentDictionary<int, ConcurrentBag<float[]>> Free = new();
 

@@ -2196,3 +2196,9 @@ Test oder Nachweis.
   rechnen kann.
 - **Wo:** `Core/Platform/ComputeLimits.cs`, `Ui/Ai/AiViewModel.cs` (`CpuRestartHint`), `Ui/Ai/PerformanceView.axaml`.
 - **Test:** `ComputeLimitsTests.ImageMagickThreads_AreSetOnce_NeverWhileItMayBeWorking`.
+- **Nachtrag 0.6.9 beta (Leistung 6, Entrauschen):** Alle Zwischenpuffer von `Denoiser` aus dem `PixelPool` (Guided Filter
+  mit einem gemeinsamen Zwischenpuffer für alle Kastenmittel; Mittel und Mittel der Quadrate der Helligkeit je Radius nur
+  einmal für beide Farbkanäle, `GuideStats`), Pool-Grenze 2 → 8 je Länge. Panorama (28 MP): nur Farbe 1,72 → 1,32 s,
+  zugeteilt 7,2 → 0,96 GB; Helligkeit + Farbe 2,38 → 1,90 s, Spitze 5,6 → 4,4 GB. **Pixelgleich** (Prüfsummen der
+  Ergebnisse unverändert). Summen-Puffer der Non-Local-Means auf der CPU werden vor Gebrauch geleert (aus dem Pool
+  kommen sie nicht leer). Mit Grenze 2 nur halb so viel gespart (3,3 GB zugeteilt).
