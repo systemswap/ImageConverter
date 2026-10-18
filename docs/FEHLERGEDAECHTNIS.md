@@ -2136,3 +2136,8 @@ Test oder Nachweis.
   Spitze beim Panorama 6,2 → 6,06 GB. **Nachweis:** Pixel des Exports gleich (0 abweichende Werte; nur die Zeitstempel
   `date:*`/`png:tIME` der Datei unterscheiden sich bei jedem Export). **Nicht tun:** ohne Look die Kopie weglassen —
   `ApplyColor`/`ApplyMetadata` würden sonst das Bild des Aufrufers verändern.
+- **Nachgemessen (abwechselnd, je zweimal):** 0.6.2 Spitze 6,38/6,39 GB, 0.6.3 6,23/6,17 GB — die gesparten Kopien
+  bringen rund 180 MB. **Verworfen:** den Eingangspuffer in `Adjust.Apply` freigeben, sobald der Dunst fertig ist
+  (`ownsInput`, Hinweis eines Prüfagenten: „−450 MB“): pixelgleich, aber Spitze 6,25/6,37 gegen 6,23/6,23 GB — der Puffer
+  landet im Pool und wird wiederverwendet, die Spitze bleibt. Einzelne Spitzenwerte schwanken um ±150 MB; nur
+  abwechselnde Messungen zählen.
