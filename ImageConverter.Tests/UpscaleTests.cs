@@ -73,6 +73,30 @@ public class UpscaleTests
         Assert.All(fineSum, s => Assert.Equal(1, s, 5));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Compose_InBands_IsPixelIdentical_ToOnePiece(bool alpha)
+    {
+        // 1100 Quellzeilen: drei Bänder (512, 512, 76); zufälliges Roh-Ergebnis, Treue und Details zwischen 0 und 1
+        const int w = 70, h = 1100;
+        var rng = new Random(3);
+        var ch = alpha ? 4 : 3;
+        var src = new ushort[w * h * ch];
+        for (var i = 0; i < src.Length; i++) src[i] = (ushort)rng.Next(65536);
+        using var source = ImageConverter.Core.Ai.AiEnhancer.WritePixels(src, w, h, alpha ? "RGBA" : "RGB");
+        var result = new UpscaleResult(source, src, ch);
+        for (var i = 0; i < result.Raw.Length; i++) result.Raw[i] = (ushort)rng.Next(65536);
+
+        using var bands = result.Compose(0.6, 0.7);
+        var all = new SourceRect(0, 0, w, h);
+        using var piece = ImageConverter.Core.Ai.AiEnhancer.WritePixels(result.ComposeRegion(all, 0.6, 0.7), w * 4, h * 4,
+            alpha ? "RGBA" : "RGB");
+        Assert.Equal((piece.Width, piece.Height, piece.HasAlpha, piece.Depth), (bands.Width, bands.Height, bands.HasAlpha, bands.Depth));
+        var map = alpha ? "RGBA" : "RGB";
+        Assert.Equal(piece.GetPixels().ToShortArray(map), bands.GetPixels().ToShortArray(map));
+    }
+
     [Fact]
     public void BackProject_MakesTheDownscaledResult_TheOriginal()
     {

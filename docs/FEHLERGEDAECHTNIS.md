@@ -2141,3 +2141,11 @@ Test oder Nachweis.
   (`ownsInput`, Hinweis eines Prüfagenten: „−450 MB“): pixelgleich, aber Spitze 6,25/6,37 gegen 6,23/6,23 GB — der Puffer
   landet im Pool und wird wiederverwendet, die Spitze bleibt. Einzelne Spitzenwerte schwanken um ±150 MB; nur
   abwechselnde Messungen zählen.
+- **Nachtrag 0.6.5 beta (Leistung 4, Upscaling):** ×4-Ergebnis ohne Bytekopie an ImageMagick (`AiEnhancer.WritePixels`:
+  `StorageType.Quantum` direkt aus dem `ushort[]`), Zusammensetzen in Bändern von 512 Quellzeilen direkt ins Bild
+  (`UpscaleResult.Compose`, Vielfaches der 128er-Kacheln, Rand für die Treue aus dem ganzen Ergebnis), Modell nach der
+  Rechnung schließen (`OnnxSessions.Release`; nicht beim Stapel). 12 MP ×4 mit x4v3: Spitze 9,6 → 9,0 GB, beim Export
+  7,4 → 6,9 GB; Export pixelgleich. **Mit Alphakanal bleibt es bei einem Stück:** `Extent` verrechnet ganz durchsichtige
+  Pixel mit dem Hintergrund (Farbe wird 0) — Test `UpscaleTests.Compose_InBands_IsPixelIdentical_ToOnePiece` (beide Fälle;
+  schlug mit Bändern bei Alpha an). Nicht umgesetzt (Upscaler selten benutzt, Hinweis des Benutzers): Puffer je Kachel
+  beim Zusammensetzen, Speicher-Arenen der KI-Laufzeit, Zwischenbild bei zwei Durchgängen.

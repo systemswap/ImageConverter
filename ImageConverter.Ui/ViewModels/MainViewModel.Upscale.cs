@@ -660,6 +660,8 @@ public partial class MainViewModel
 
             var took = clock.Elapsed;
             Ai.RefreshGpuStatus();
+            // Modell schließen, bevor das Ergebnis zusammengesetzt wird — Treue und Details brauchen es nicht mehr
+            if (Upscalers.ModelOf(method) is { } usedModel) Ai.Sessions.Release(usedModel.Id);
             _upscale = new UpscaleEntry(key, region, baseRegion, result, took);
             _upscaledImage = null;
             if (region is null)

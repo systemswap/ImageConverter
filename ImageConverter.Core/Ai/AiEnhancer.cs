@@ -190,10 +190,10 @@ public static class AiEnhancer
 
     internal static MagickImage WritePixels(ushort[] data, int width, int height, string mapping)
     {
-        var bytes = new byte[data.Length * 2];
-        Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length);
+        // Direkt aus dem 16-Bit-Feld (Q16: Quantum = ushort) — vorher über eine Bytekopie gleicher Größe (beim ×4-Ergebnis
+        // eines 12-MP-Fotos 1,15 GB zusätzlich)
         var image = new MagickImage();
-        image.ReadPixels(bytes, new PixelReadSettings((uint)width, (uint)height, StorageType.Short, mapping));
+        image.ReadPixels(data, new PixelReadSettings((uint)width, (uint)height, StorageType.Quantum, mapping));
         return image;
     }
 }

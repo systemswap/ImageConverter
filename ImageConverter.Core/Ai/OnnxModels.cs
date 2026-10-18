@@ -126,6 +126,23 @@ public sealed class OnnxSessions : IDisposable
         }
     }
 
+    /// <summary>
+    /// Alle offenen Dateien eines Modells schließen (nach einem Upscaling: PiSA-SR hält sonst rund 3,6 GB, während das
+    /// Ergebnis zusammengesetzt und exportiert wird). Der nächste Lauf öffnet es neu (wenige Sekunden).
+    /// </summary>
+    public void Release(string modelId)
+    {
+        lock (_lock)
+        {
+            foreach (var key in _modelOf.Where(p => p.Value == modelId).Select(p => p.Key).ToList())
+            {
+                _open[key].Dispose();
+                _open.Remove(key);
+                _modelOf.Remove(key);
+            }
+        }
+    }
+
     /// <summary>Öffnen — mit Grafikkarte, wenn gewünscht, vorhanden und für das Modell freigegeben; scheitert das, auf der CPU.</summary>
     private InferenceSession Open(string path, bool allowGpu)
     {

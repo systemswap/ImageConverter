@@ -64,12 +64,35 @@ public sealed class UpscaleResult
     /// <param name="details">0 … 1: Anteil der KI gegenüber einfachem Vergrößern (Lanczos); 1 = nur KI.</param>
     public MagickImage Compose(double fidelity, double details, CancellationToken ct = default)
     {
-        var pixels = ComposeRegion(new SourceRect(0, 0, SourceWidth, SourceHeight), fidelity, details, ct);
-        var image = AiEnhancer.WritePixels(pixels, Width, Height, HasAlpha ? "RGBA" : "RGB");
+        // In Bändern direkt ins Bild statt erst ein Feld in voller Größe (bei 192 MP 1,15 GB) und dann kopieren. Die Bänder
+        // sind ein Vielfaches der Kacheln von ComposeRegion (128 Quellzeilen) und lesen den Rand für die Treue aus dem
+        // ganzen Ergebnis (known) — jedes Pixel wird genau so gerechnet wie in einem Stück.
+        // Mit Alphakanal in einem Stück: Extent verrechnet ganz durchsichtige Pixel mit dem Hintergrund (Farbe wird 0)
+        var map = HasAlpha ? "RGBA" : "RGB";
+        var all = new SourceRect(0, 0, SourceWidth, SourceHeight);
+        var first = HasAlpha ? SourceHeight : Math.Min(BandRows, SourceHeight);
+        var image = AiEnhancer.WritePixels(ComposeRegion(all with { Height = first }, fidelity, details, ct, all), Width,
+            first * Factor, map);
+        if (first < SourceHeight)
+        {
+            // auf volle Höhe bringen (unten leer), dann die übrigen Bänder einsetzen
+            image.Extent((uint)Width, (uint)Height, Gravity.North, HasAlpha ? MagickColors.Transparent : MagickColors.Black);
+            using var pixels = image.GetPixelsUnsafe();
+            for (var y = first; y < SourceHeight; y += BandRows)
+            {
+                ct.ThrowIfCancellationRequested();
+                var rows = Math.Min(BandRows, SourceHeight - y);
+                var band = ComposeRegion(new SourceRect(0, y, SourceWidth, rows), fidelity, details, ct, all);
+                pixels.SetArea(0, y * Factor, (uint)Width, (uint)(rows * Factor), band);
+            }
+        }
         image.Density = new Density(_meta.Density.X * Factor, _meta.Density.Y * Factor, _meta.Density.Units);
         ImageExporter.CopyProfiles(_meta, image);
         return image;
     }
+
+    /// <summary>Quellzeilen je Band beim Zusammensetzen — ein Vielfaches der Kacheln (128) von <see cref="ComposeRegion"/>.</summary>
+    private const int BandRows = 512;
 
     /// <summary>
     /// Ein Ausschnitt fertig zusammengesetzt: Pixel (verschachtelt RGB bzw. RGBA, 16 Bit) für das Rechteck ×4.
