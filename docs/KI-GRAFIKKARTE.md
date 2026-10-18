@@ -98,8 +98,10 @@ unten), auf dem Laptop die Grafikkarte deutlich schneller.
   Rusticl (nur mit `RUSTICL_ENABLE=radeonsi`) OpenCL 3.0 mit OpenCL C 1.2 — ILGPU braucht OpenCL 2.0 und verwirft die
   Karte („Keine Grafikkarte mit OpenCL oder CUDA gefunden“). Für AMD stattdessen ROCm-OpenCL: Debian
   `rocm-opencl-icd` (aus Debian selbst, 5.7), Fedora `rocm-opencl`.
-- **Mehrere Grafikkarten** (eigene Karte und die im Prozessor): `GpuFilters.Open` nimmt seit 0.5.101 die mit dem meisten
-  Speicher, vorher die erste gefundene.
+- **Mehrere Grafikkarten** (eigene Karte und die im Prozessor): `GpuFilters.Open` nimmt seit 0.5.102 die mit den meisten
+  Recheneinheiten (vorher die erste gefundene). Nicht nach Speicher: mit ROCm-OpenCL meldet die eingebaute Grafik des
+  Ryzen (gfx1036) 31 GB geteilten Arbeitsspeicher, die RX 6650 XT (gfx1032) 8 GB — 0.5.101 wählte deshalb die schwache.
+  Welche Karte gewählt wurde und welche es gab, steht im Log neben dem Programm.
 - **Falle beim Messen mit eigenen Testprogrammen:** In einer dateibasierten App (`dotnet run Datei.cs`) wirft
   `ILGPU.Context` einen Fehler im Typinitialisierer, weil dort `PublishAot` voreingestellt ist — `#:property
   PublishAot=false` setzen. Das Programm selbst ist nicht betroffen.

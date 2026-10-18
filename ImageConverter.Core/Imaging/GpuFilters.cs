@@ -125,19 +125,25 @@ public static class GpuFilters
         try
         {
             _context = Context.Create(b => b.Default().EnableAlgorithms().Optimize(OptimizationLevel.O2));
-            // Echte Grafikkarte (CUDA vor OpenCL), bei mehreren die mit dem meisten Speicher — sonst nähme es neben einer
-            // eigenen Karte leicht die im Prozessor eingebaute; die CPU-Nachbildung von ILGPU ist langsamer als unsere Schleifen
-            var device = _context.Devices.Where(d => d.AcceleratorType is AcceleratorType.Cuda or AcceleratorType.OpenCL)
+            // Echte Grafikkarte (CUDA vor OpenCL), bei mehreren die mit den meisten Recheneinheiten — nicht nach Speicher:
+            // die im Prozessor eingebaute meldet den geteilten Arbeitsspeicher (31 GB gegen 8 GB der eigenen Karte).
+            // Die CPU-Nachbildung von ILGPU ist langsamer als unsere Schleifen.
+            var candidates = _context.Devices.Where(d => d.AcceleratorType is AcceleratorType.Cuda or AcceleratorType.OpenCL).ToList();
+            var device = candidates
                 .OrderBy(d => d.AcceleratorType == AcceleratorType.Cuda ? 0 : 1)
-                .ThenByDescending(d => d.MemorySize)
+                .ThenByDescending(d => d.NumMultiprocessors)
                 .FirstOrDefault();
+            var found = string.Join(", ", candidates.Select(d => $"{d.AcceleratorType} {d.Name} ({d.NumMultiprocessors} Recheneinheiten, {d.MemorySize >> 20} MB)"));
             if (device is null)
             {
-                Problem = Tr.T("Keine Grafikkarte mit OpenCL oder CUDA gefunden.");
+                Problem = Tr.T("Keine Grafikkarte mit OpenCL 2.0 oder CUDA gefunden.");
+                AppLog.Write("Bildfilter: keine Grafikkarte (OpenCL 2.0 oder CUDA) gefunden — rechnen auf der CPU",
+                    "Geräte laut ILGPU: " + string.Join(", ", _context.Devices.Select(d => $"{d.AcceleratorType} {d.Name}")));
                 return null;
             }
             _accelerator = device.CreateAccelerator(_context);
             DeviceName = device.Name;
+            AppLog.Write($"Bildfilter auf der Grafikkarte: {device.Name}", "gefunden: " + found);
             return _accelerator;
         }
         catch (Exception e)

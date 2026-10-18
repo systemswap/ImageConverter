@@ -736,7 +736,7 @@ public static class English
         ["2 Durchgänge"] = "2 passes",
         ["Entrauschen und Dunst rechnen auf der Grafikkarte ({0})."] = "Noise reduction and dehaze run on the graphics card ({0}).",
         ["Entrauschen und Dunst rechnen auf der CPU — {0}"] = "Noise reduction and dehaze run on the CPU — {0}",
-        ["Keine Grafikkarte mit OpenCL oder CUDA gefunden."] = "No graphics card with OpenCL or CUDA found.",
+        ["Keine Grafikkarte mit OpenCL 2.0 oder CUDA gefunden."] = "No graphics card with OpenCL 2.0 or CUDA found.",
         ["Entrauschen und Dunst nutzen die Grafikkarte, sobald eine mit OpenCL oder CUDA gefunden ist."] = "Noise reduction and dehaze use the graphics card as soon as one with OpenCL or CUDA is found.",
         ["Upscaling · KI-Modell wird vorbereitet (einmalig) … {0:0} %"] = "Upscaling · preparing the AI model (once) … {0:0} %",
         ["Upscaling auf der Grafikkarte · {0:0} %{1}"] = "Upscaling on the graphics card · {0:0} %{1}",
