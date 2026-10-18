@@ -48,4 +48,23 @@ public class ComputeLimitsTests
         }
         Assert.Equal(full, SpeedTest.AiMachine("DmlExecutionProvider"));
     }
+
+    [Fact]
+    public void ImageMagickThreads_AreSetOnce_NeverWhileItMayBeWorking()
+    {
+        // Ändern der Strangzahl während ImageMagick rechnet beschädigt dessen Speicher (Absturz) — nur einmal beim Start
+        ComputeLimits.SetPercent(ComputeLimits.Percent);
+        var threads = ImageMagick.ResourceLimits.Thread;
+        try
+        {
+            ComputeLimits.SetPercent(10);
+            Assert.Equal(threads, ImageMagick.ResourceLimits.Thread);
+            Assert.True(ComputeLimits.MagickNeedsRestart || ComputeLimits.MagickPercent == 10);
+        }
+        finally
+        {
+            ComputeLimits.SetPercent(100);
+        }
+        Assert.Equal(threads, ImageMagick.ResourceLimits.Thread);
+    }
 }

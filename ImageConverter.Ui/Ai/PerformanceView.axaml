@@ -36,6 +36,8 @@
                     ToolTip.Tip="{l:T 'Begrenzt, wie viele Kerne KI, Bildfilter und Umwandeln gleichzeitig nutzen. Mit der Hälfte dauert es meist nur rund ein Viertel länger, der Lüfter bleibt ruhiger.'}" />
             <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0" MinWidth="150" Text="{Binding CpuPercentLabel}" />
         </Grid>
+        <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding CpuRestartHint}"
+                   IsVisible="{Binding CpuRestartHint, Converter={x:Static ObjectConverters.IsNotNull}}" />
         <TextBlock Classes="hint" TextWrapping="Wrap"
                    Text="{l:T 'Nach einer Änderung der Obergrenze am besten neu testen – die Zeiten gelten je Einstellung.'}" />
     </StackPanel>

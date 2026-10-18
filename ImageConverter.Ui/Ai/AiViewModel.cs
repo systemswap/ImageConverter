@@ -100,8 +100,13 @@ public partial class AiViewModel : ViewModelBase
 
     /// <summary>Höchstens so viel Prozent der CPU (Regler 10 … 100).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CpuPercentLabel))]
+    [NotifyPropertyChangedFor(nameof(CpuPercentLabel), nameof(CpuRestartHint))]
     public partial double CpuPercent { get; set; } = ComputeLimits.Percent;
+
+    /// <summary>ImageMagick (Laden, Ausrichten, Umwandeln) übernimmt eine geänderte Grenze erst beim nächsten Start.</summary>
+    public string? CpuRestartHint => ComputeLimits.MagickNeedsRestart
+        ? Tr.T("Für Laden, Ausrichten und Umwandeln gilt die neue Grenze ab dem nächsten Start; KI und Bildfilter sofort.")
+        : null;
 
     partial void OnCpuPercentChanged(double value)
     {

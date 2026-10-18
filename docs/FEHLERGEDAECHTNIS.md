@@ -2174,3 +2174,25 @@ Test oder Nachweis.
   erste Lauf alte und neue Magick-Bibliotheken im Ausgabeordner — nicht sicher. Falls es wieder vorkommt: mit
   `--blame-crash` laufen lassen und die gleichzeitigen ImageMagick-Aufrufe prüfen. Fertige AppImage geprüft: lädt
   `Magick.Native-Q16-OpenMP-x64` und die `libgomp` des Systems.
+
+## 77. Absturz, wenn die CPU-Obergrenze geändert wird, während ImageMagick rechnet (0.6.8 beta)
+
+- **Entdeckt in:** 0.6.6/0.6.7 beta (18.10.2026): Testlauf im Release-Modus stürzte etwa jedes zehnte Mal ab (Testprozess
+  beendet, nach 60–112 Tests). **Behoben in:** 0.6.8 beta.
+- **Was:** Absturzbericht (`DOTNET_EnableCrashReport=1`): `free()` in `RelinquishAlignedMemory` → `ResizeImage` von
+  ImageMagick (Mehrkern-Fassung), aus `Inpainter.FillPiece` — der Speicher war schon vorher beschädigt.
+- **Warum:** `ComputeLimits.SetPercent` setzte `ResourceLimits.Thread` bei jeder Änderung. ImageMagick legt Puffer je
+  Strang nach der Grenze **zu Beginn** einer Operation an; steigt die Grenze währenddessen, schreiben die zusätzlichen
+  Stränge über das Ende hinaus. Im Testlauf schaltete `ComputeLimitsTests` die Grenze (50/10/100 %), während andere Tests
+  ImageMagick benutzten; im Programm hätte es der Regler „CPU höchstens“ während eines Exports ausgelöst. Die frühere
+  Fassung ohne OpenMP ließ sich gar nicht umstellen (immer 1) — daher fiel es nie auf.
+- **Nachweis:** Belastungstest (6 Stränge verkleinern 40 s lang, ein Strang schaltet 10 %/100 % um): vorher Absturz
+  „free(): invalid pointer“, ohne Umschalten 7251 Durchläufe fehlerfrei; nachher mit Umschalten 7416 fehlerfrei.
+  Testreihe Release danach 15 von 15 fehlerfrei.
+- **Wie behoben:** ImageMagick bekommt die Strangzahl nur einmal, beim ersten `SetPercent` (Programmstart, vor jeder
+  Bildoperation). Spätere Änderungen gelten sofort für eigene Schleifen und KI, für ImageMagick ab dem nächsten Start
+  (Hinweis unter dem Regler, `ComputeLimits.MagickNeedsRestart`).
+- **Nicht tun:** `ResourceLimits.Thread` (oder andere Grenzen von ImageMagick) ändern, während irgendwo ImageMagick
+  rechnen kann.
+- **Wo:** `Core/Platform/ComputeLimits.cs`, `Ui/Ai/AiViewModel.cs` (`CpuRestartHint`), `Ui/Ai/PerformanceView.axaml`.
+- **Test:** `ComputeLimitsTests.ImageMagickThreads_AreSetOnce_NeverWhileItMayBeWorking`.

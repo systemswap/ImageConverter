@@ -45,16 +45,30 @@ public static class ComputeLimits
         var changed = percent != Percent;
         Percent = percent;
         Options.MaxDegreeOfParallelism = threads;
-        try
+        // ImageMagick nur einmal, beim Start, bevor es rechnet: Es legt Puffer je Strang nach der Grenze zu Beginn einer
+        // Operation an — wird sie währenddessen erhöht, schreiben die zusätzlichen Stränge über das Ende hinaus
+        // (gemessen: „free(): invalid pointer“, Absturz; siehe docs/FEHLERGEDAECHTNIS.md). Spätere Änderungen gelten für
+        // ImageMagick ab dem nächsten Start.
+        if (MagickPercent is null)
         {
-            ResourceLimits.Thread = (ulong)(threads > 0 ? threads : LogicalProcessors);
-        }
-        catch (Exception e) when (e is TypeInitializationException or DllNotFoundException)
-        {
-            // ImageMagick fehlt (Tests ohne native Bibliothek)
+            try
+            {
+                ResourceLimits.Thread = (ulong)(threads > 0 ? threads : LogicalProcessors);
+                MagickPercent = percent;
+            }
+            catch (Exception e) when (e is TypeInitializationException or DllNotFoundException)
+            {
+                // ImageMagick fehlt (Tests ohne native Bibliothek)
+            }
         }
         if (changed) Changed?.Invoke(null, EventArgs.Empty);
     }
+
+    /// <summary>Grenze, mit der ImageMagick beim Start eingestellt wurde (null: noch nicht).</summary>
+    public static int? MagickPercent { get; private set; }
+
+    /// <summary>Die Grenze wurde nach dem Start geändert — für ImageMagick gilt sie erst beim nächsten Start.</summary>
+    public static bool MagickNeedsRestart => MagickPercent is { } m && m != Percent;
 
     /// <summary>Ist die niedrige Priorität gesetzt?</summary>
     public static bool LowPriority { get; private set; }
