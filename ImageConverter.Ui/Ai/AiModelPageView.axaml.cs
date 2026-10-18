@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace ImageConverter.Ai;
 
-public partial class AiModelsView : UserControl
+public partial class AiModelPageView : UserControl
 {
-    public AiModelsView()
+    public AiModelPageView()
     {
         InitializeComponent();
     }

@@ -558,8 +558,6 @@ public static class English
         ["Färben {0:0}°"] = "Tint {0:0}°",
         ["{0:0.00} · Radius {1:0.0}"] = "{0:0.00} · radius {1:0.0}",
         // KI-Modelle (Einstellungen)
-        ["KI-Modelle"] = "AI models",
-        ["Ordner:"] = "Folder:",
         ["Modelle lassen sich auch von Hand hineinlegen (je Modell ein Unterordner) — die App erkennt sie automatisch."] = "Models can also be placed there by hand (one subfolder per model) — the app detects them automatically.",
         ["Herunterladen"] = "Download",
         ["Löschen"] = "Delete",
@@ -671,7 +669,7 @@ public static class English
             "White: click the brightest spot that should be white but still has detail (not blown out). Several clicks are averaged; Esc ends.",
         ["Pipette wählen und ins Bild klicken. Eine Pipette reicht – Neutral (grau) ist meist die beste. Mit Schwarz und Weiß dazu und mit mehreren Klicks wird es genauer."] =
             "Choose an eyedropper and click into the image. One is enough – Neutral (grey) is usually the best. Adding Black and White and clicking several times makes it more accurate.",
-        // ------------------------------------------------------------ Grafikkarte (Einstellungen › KI-Modelle)
+        // ------------------------------------------------------------ Grafikkarte (Einstellungen › Leistung)
         ["Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU."] = "This runtime cannot use a graphics card — the AI runs on the CPU.",
         ["Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}"] = "The graphics card ({0}) could not be used — the AI runs on the CPU. Reason: {1}",
         ["Die KI-Scaler (Größe › Verfahren) rechnen auf der Grafikkarte ({0}), die übrigen Modelle (Gesichter, Entfernen, Begradigen) auf der CPU."] = "The AI scalers (Size › Method) run on the graphics card ({0}), the other models (faces, removal, straightening) on the CPU.",
@@ -705,7 +703,7 @@ public static class English
         ["Real-ESRGAN x4v3: entfernt Rauschen und JPEG-Blöcke und macht Kanten klar. Sekunden je Bild, erfindet kaum etwas."] = "Real-ESRGAN x4v3: removes noise and JPEG blocks and makes edges crisp. Seconds per image, invents hardly anything.",
         ["4x-UltraSharpV2: schärfer und feiner als Real-ESRGAN x4v3, bleibt nah am Original. Etwa eine Minute je Megapixel."] = "4x-UltraSharpV2: sharper and finer than Real-ESRGAN x4v3, stays close to the original. About one minute per megapixel.",
         ["PiSA-SR (Stable Diffusion): ergänzt glaubhafte feine Details wie Nadeln, Blätter, Haut — wie Referenzwerkzeug, aber lokal. Sehr langsam: rund 40 Minuten je Megapixel des Originals."] = "PiSA-SR (Stable Diffusion): adds believable fine detail such as needles, leaves, skin — like Referenzwerkzeug, but local. Very slow: about 40 minutes per megapixel of the original.",
-        ["Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI-Modelle."] = "Downloads the model into the “KI-Modelle” folder next to the program. Manage: Settings › AI models.",
+        ["Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI."] = "Downloads the model into the “KI-Modelle” folder next to the program. Manage: Settings › AI.",
         ["Herunterladen ({0})"] = "Download ({0})",
         ["Wird geladen … {0:0} % von {1}"] = "Downloading … {0:0} % of {1}",
         ["Treue"] = "Fidelity",
@@ -772,7 +770,26 @@ public static class English
         ["Wird nur einmal gebraucht: PiSA-SR rechnet mit leerer Beschreibung, die die App beim Umwandeln daraus berechnet. Wird mit PiSA-SR geladen."] = "Needed only once: PiSA-SR works with an empty description, which the app computes from it during conversion. Downloaded with PiSA-SR.",
         ["Stability AI (Stable Diffusion 2.1-base), Spiegel „Manojb/stable-diffusion-2-1-base“ auf Hugging Face"] = "Stability AI (Stable Diffusion 2.1-base), mirror “Manojb/stable-diffusion-2-1-base” on Hugging Face",
 
-        // Geschwindigkeitstest Grafikkarte/CPU (Einstellungen › KI-Modelle)
+        // Einstellungsfenster: Seiten links
+        ["Allgemein"] = "General",
+        ["Begradigen"] = "Straighten",
+        ["Bilder verbessern"] = "Improve images",
+        ["Fotografierte Blätter"] = "Photographed pages",
+        ["Gesichter · Erkennung"] = "Faces · detection",
+        ["Gesichtsmodelle"] = "Face models",
+        ["Grafikkarte oder CPU · Test"] = "Graphics card or CPU · test",
+        ["Leistung"] = "Performance",
+        ["Letztes Ergebnis"] = "Last result",
+        ["Links darunter: je Anwendung eine Seite mit ihren Modellen zum Herunterladen und Löschen."] = "Below on the left: one page per application with its models to download and delete.",
+        ["Modellordner"] = "Model folder",
+        ["Rauschen · Artefakte · Schärfe"] = "Noise · artefacts · sharpness",
+        ["Rechenintensive Schritte laufen auf der Grafikkarte oder auf der CPU – je nachdem, was auf diesem Rechner schneller ist. Der Test findet das heraus."] = "Demanding steps run on the graphics card or on the CPU – whichever is faster on this computer. The test finds out.",
+        ["Retusche / Entfernen"] = "Retouch / remove",
+        ["Upscaler"] = "Upscalers",
+        ["Vergrößern mit KI"] = "Enlarge with AI",
+        ["Wasserzeichen · Schrift"] = "Watermarks · text",
+        ["Überblick · Modellordner"] = "Overview · model folder",
+        // Geschwindigkeitstest Grafikkarte/CPU (Einstellungen › Leistung)
         ["Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "The AI runs on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
         ["Entrauschen und Dunst rechnen auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "Noise reduction and haze run on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
         ["Noch nicht getestet — die Grafikkarte wird genutzt, wenn eine da ist."] = "Not tested yet — the graphics card is used if there is one.",

@@ -539,7 +539,7 @@
                                     IsEnabled="{Binding !IsDownloadingUpscaler}"
                                     Content="{Binding UpscaleDownloadText}"
                                     Command="{Binding DownloadUpscalerCommand}"
-                                    ToolTip.Tip="{l:T 'Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI-Modelle.'}" />
+                                    ToolTip.Tip="{l:T 'Lädt das Modell in den Ordner „KI-Modelle“ neben dem Programm. Verwalten: Einstellungen › KI.'}" />
 
                             <Grid Classes="row" ColumnDefinitions="76,*,Auto"
                                   IsEnabled="{Binding AiScalerChosen}" ToolTip.ShowOnDisabled="True"

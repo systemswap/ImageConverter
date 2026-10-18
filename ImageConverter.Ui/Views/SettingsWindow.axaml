@@ -9,59 +9,152 @@
         x:DataType="vm:MainViewModel"
         Title="{l:T 'Einstellungen'}"
         Icon="/Assets/app.ico"
-        Width="720" Height="600" MinWidth="560" MinHeight="420"
+        Width="900" Height="640" MinWidth="680" MinHeight="460"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource AppBackgroundBrush}">
 
+    <Window.Styles>
+        <!-- Leiste ist breiter als im Hauptfenster: Hinweise unter den Seitennamen dürfen länger sein -->
+        <Style Selector="Border.rail TextBlock.tileHint">
+            <Setter Property="MaxWidth" Value="175" />
+        </Style>
+    </Window.Styles>
+
+    <!-- Links die Seiten (wie die Leiste im Hauptfenster): Leistung, Allgemein, KI und darunter eingerückt je Anwendung
+         eine Seite mit ihren Modellen; rechts die gewählte Seite -->
     <DockPanel>
         <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="16,10">
             <Button HorizontalAlignment="Right" Classes="subtle" Content="{l:T 'Schließen'}" Click="OnCloseClick"
                     ToolTip.Tip="{l:T 'Laufende Downloads gehen im Hintergrund weiter.'}" />
         </Border>
 
-        <TabControl Margin="12,8,12,0" Padding="4,12,4,12">
-            <TabItem Header="{l:T 'KI-Modelle'}" FontSize="14">
-                <ai:AiModelsView DataContext="{Binding Ai}" />
-            </TabItem>
-            <TabItem Header="{l:T 'Sprache'}" FontSize="14">
-                <StackPanel DataContext="{Binding Language}" x:DataType="vm:LanguageViewModel"
-                            Spacing="12" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0">
-                    <!-- Flagge + Name in der eigenen Sprache: die eigene Sprache findet man wieder,
-                         auch wenn gerade eine fremde eingestellt ist -->
-                    <ComboBox ItemsSource="{Binding Available}" SelectedItem="{Binding Selected}"
-                              MinWidth="260" FontSize="14">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="core:Language">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <c:FlagView Language="{Binding}" VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-
-                    <TextBlock Classes="hint" TextWrapping="Wrap"
-                               Text="{l:T 'Weitere Sprachen: eine JSON-Datei in den Ordner „languages“ neben dem Programm legen. Die Vorlage enthält alle Texte mit englischer Übersetzung zum Übersetzen.'}" />
-                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Folder}" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Classes="subtle" Content="{l:T 'Ordner öffnen'}" Command="{Binding OpenFolderCommand}" />
-                        <Button Classes="subtle" Content="{l:T 'Vorlage erstellen'}" Command="{Binding WriteTemplateCommand}"
-                                ToolTip.Tip="{l:T 'Schreibt _vorlage.json in den Ordner languages. Kopieren, umbenennen (z. B. fr.json), Code, Name, Flagge und Texte übersetzen.'}" />
-                    </StackPanel>
-
-                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Status}"
-                               IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                    <Border IsVisible="{Binding Problems, Converter={x:Static ObjectConverters.IsNotNull}}"
-                            Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
-                            CornerRadius="{DynamicResource RadiusControl}" Padding="10,7">
-                        <StackPanel Spacing="4">
-                            <TextBlock Classes="hint" FontWeight="SemiBold" Text="{l:T 'Nicht geladene Sprachdateien:'}" />
-                            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Problems}" />
+        <Border DockPanel.Dock="Left" Classes="rail" Width="210">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="4">
+                    <RadioButton x:Name="NavPerformance" Classes="tile" GroupName="seite" Margin="0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Leistung'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Grafikkarte oder CPU · Test'}" />
                         </StackPanel>
-                    </Border>
+                    </RadioButton>
+                    <RadioButton x:Name="NavGeneral" Classes="tile" GroupName="seite" Margin="0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Allgemein'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Sprache'}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavAi" Classes="tile" GroupName="seite" Margin="0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'KI'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Überblick · Modellordner'}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavImprove" Classes="tile" GroupName="seite" Margin="14,0,0,0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Bilder verbessern'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Rauschen · Artefakte · Schärfe'}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavFaces" Classes="tile" GroupName="seite" Margin="14,0,0,0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Gesichtsmodelle'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Gesichter · Erkennung'}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavRemove" Classes="tile" GroupName="seite" Margin="14,0,0,0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Retusche / Entfernen'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Wasserzeichen · Schrift'}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavDewarp" Classes="tile" GroupName="seite" Margin="14,0,0,0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Begradigen'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Fotografierte Blätter'}" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavUpscale" Classes="tile" GroupName="seite" Margin="14,0,0,0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Upscaler'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Vergrößern mit KI'}" />
+                        </StackPanel>
+                    </RadioButton>
                 </StackPanel>
-            </TabItem>
-        </TabControl>
+            </ScrollViewer>
+        </Border>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="20,16,20,16">
+            <Panel MaxWidth="760" HorizontalAlignment="Left">
+                <StackPanel Spacing="12" IsVisible="{Binding #NavPerformance.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Leistung'}" />
+                    <ai:PerformanceView DataContext="{Binding Ai}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavGeneral.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Allgemein'}" />
+                    <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'Sprache'}" />
+                        <StackPanel DataContext="{Binding Language}" x:DataType="vm:LanguageViewModel"
+                                    Spacing="12" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0">
+                            <!-- Flagge + Name in der eigenen Sprache: die eigene Sprache findet man wieder,
+                                 auch wenn gerade eine fremde eingestellt ist -->
+                            <ComboBox ItemsSource="{Binding Available}" SelectedItem="{Binding Selected}"
+                                      MinWidth="260" FontSize="14">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="core:Language">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <c:FlagView Language="{Binding}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
+                            <TextBlock Classes="hint" TextWrapping="Wrap"
+                                       Text="{l:T 'Weitere Sprachen: eine JSON-Datei in den Ordner „languages“ neben dem Programm legen. Die Vorlage enthält alle Texte mit englischer Übersetzung zum Übersetzen.'}" />
+                            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Folder}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="subtle" Content="{l:T 'Ordner öffnen'}" Command="{Binding OpenFolderCommand}" />
+                                <Button Classes="subtle" Content="{l:T 'Vorlage erstellen'}" Command="{Binding WriteTemplateCommand}"
+                                        ToolTip.Tip="{l:T 'Schreibt _vorlage.json in den Ordner languages. Kopieren, umbenennen (z. B. fr.json), Code, Name, Flagge und Texte übersetzen.'}" />
+                            </StackPanel>
+
+                            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Status}"
+                                       IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            <Border IsVisible="{Binding Problems, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
+                                    CornerRadius="{DynamicResource RadiusControl}" Padding="10,7">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="hint" FontWeight="SemiBold" Text="{l:T 'Nicht geladene Sprachdateien:'}" />
+                                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Problems}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavAi.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'KI'}" />
+                    <ai:ModelFolderView DataContext="{Binding Ai}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavImprove.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Bilder verbessern'}" />
+                    <ai:AiModelPageView DataContext="{Binding Ai.ImprovePage}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavFaces.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Gesichtsmodelle'}" />
+                    <ai:AiModelPageView DataContext="{Binding Ai.FacesPage}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavRemove.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Retusche / Entfernen'}" />
+                    <ai:AiModelPageView DataContext="{Binding Ai.RemovePage}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavDewarp.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Begradigen'}" />
+                    <ai:AiModelPageView DataContext="{Binding Ai.DewarpPage}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavUpscale.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Upscaler'}" />
+                    <ai:AiModelPageView DataContext="{Binding Ai.UpscalePage}" />
+                </StackPanel>
+            </Panel>
+        </ScrollViewer>
     </DockPanel>
 </Window>

@@ -63,9 +63,9 @@ public partial class RetouchViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasModels));
     }
 
-    /// <summary>Öffnet die Einstellungen (Tab „KI-Modelle“) zum Herunterladen.</summary>
+    /// <summary>Öffnet die Einstellungen auf der Seite „Entfernen“ zum Herunterladen.</summary>
     [RelayCommand]
-    private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(null);
+    private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(SettingsPage.Remove);
 
     // ------------------------------------------------------------ Pinsel
 

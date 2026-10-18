@@ -82,11 +82,11 @@ public partial class MainViewModel : ViewModelBase
         RequestEstimate();
     }
 
-    /// <summary>Von der Ansicht abonniert: öffnet das Einstellungsfenster.</summary>
-    public event Func<Task>? SettingsRequested;
+    /// <summary>Von der Ansicht abonniert: öffnet das Einstellungsfenster (auf der genannten Seite, sonst wie zuletzt).</summary>
+    public event Func<SettingsPage?, Task>? SettingsRequested;
 
     [RelayCommand]
-    private Task OpenSettings() => SettingsRequested?.Invoke() ?? Task.CompletedTask;
+    private Task OpenSettings(SettingsPage? page) => SettingsRequested?.Invoke(page) ?? Task.CompletedTask;
 
     public ObservableCollection<string> Formats { get; }
     public IReadOnlyList<FilterOption> Filters { get; }

@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:ai="using:ImageConverter.Ai"
+             x:Class="ImageConverter.Ai.ModelFolderView"
+             x:DataType="ai:AiViewModel">
+
+    <!-- Einstellungen › KI: Überblick und Modellordner; die Modelle selbst stehen auf den Seiten darunter -->
+    <StackPanel Spacing="10">
+        <TextBlock TextWrapping="Wrap"
+                   Text="{l:T 'Die Modelle laufen komplett auf deinem Rechner. Nach dem Herunterladen stehen sie in den Rubriken „KI“ und „Entfernen“ zur Auswahl.'}" />
+        <TextBlock Classes="hint" TextWrapping="Wrap"
+                   Text="{l:T 'Links darunter: je Anwendung eine Seite mit ihren Modellen zum Herunterladen und Löschen.'}" />
+
+        <TextBlock Classes="label" FontWeight="SemiBold" Margin="0,8,0,0" Text="{l:T 'Modellordner'}" />
+        <Grid ColumnDefinitions="*,Auto">
+            <SelectableTextBlock Grid.Column="0" FontSize="11.5" VerticalAlignment="Center"
+                                 Foreground="{DynamicResource TextMutedBrush}"
+                                 TextWrapping="Wrap" Text="{Binding FolderText}" />
+            <Button Grid.Column="1" Classes="subtle" Margin="8,0,0,0" Content="{l:T 'Ordner öffnen'}"
+                    Command="{Binding OpenFolderCommand}"
+                    ToolTip.Tip="{l:T 'Modelle lassen sich auch von Hand hineinlegen (je Modell ein Unterordner) — die App erkennt sie automatisch.'}" />
+        </Grid>
+    </StackPanel>
+</UserControl>

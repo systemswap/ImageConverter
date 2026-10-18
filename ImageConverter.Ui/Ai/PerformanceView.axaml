@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:ai="using:ImageConverter.Ai"
+             x:Class="ImageConverter.Ai.PerformanceView"
+             x:DataType="ai:AiViewModel">
+
+    <!-- Einstellungen › Leistung: worauf gerechnet wird, und der Test Grafikkarte gegen CPU -->
+    <StackPanel Spacing="10">
+        <TextBlock Classes="hint" TextWrapping="Wrap"
+                   Text="{l:T 'Rechenintensive Schritte laufen auf der Grafikkarte oder auf der CPU – je nachdem, was auf diesem Rechner schneller ist. Der Test findet das heraus.'}" />
+        <TextBlock TextWrapping="Wrap" Text="{Binding FilterGpuStatus}" />
+        <TextBlock TextWrapping="Wrap" Text="{Binding GpuStatus}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
+            <Button Classes="primary" Content="{l:T 'Geschwindigkeit testen'}" Command="{Binding TestSpeedCommand}"
+                    ToolTip.Tip="{l:T 'Rechnet Entrauschen, Dunst und ein kleines KI-Modell je einmal auf der Grafikkarte und auf der CPU (dauert einige Sekunden). Danach nutzt das Programm, was auf diesem Rechner schneller ist.'}" />
+            <ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" IsVisible="{Binding IsSpeedTesting}" />
+        </StackPanel>
+        <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding SpeedTestProgress}"
+                   IsVisible="{Binding SpeedTestProgress, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+        <TextBlock Classes="label" FontWeight="SemiBold" Margin="0,8,0,0" Text="{l:T 'Letztes Ergebnis'}" />
+        <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding SpeedTestText}" />
+    </StackPanel>
+</UserControl>

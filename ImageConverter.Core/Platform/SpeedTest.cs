@@ -26,7 +26,7 @@ public sealed record SpeedMeasure(double CpuSeconds, double? GpuSeconds, string 
 }
 
 /// <summary>
-/// Geschwindigkeitstest (Einstellungen › KI-Modelle): rechnet dieselbe Arbeit einmal auf der Grafikkarte und einmal auf
+/// Geschwindigkeitstest (Einstellungen › Leistung): rechnet dieselbe Arbeit einmal auf der Grafikkarte und einmal auf
 /// der CPU. Auf schnellen Prozessoren ist die CPU oft gleich schnell oder schneller (gemessen: Ryzen 9 7950X3D gegen
 /// RX 6650 XT, docs/KI-GRAFIKKARTE.md), auf Laptops die Grafikkarte deutlich schneller — deshalb messen statt annehmen.
 /// Je Gerät erst ein Aufwärmlauf (Kernel übersetzen, Modell laden), dann die beste von zwei Zeiten.

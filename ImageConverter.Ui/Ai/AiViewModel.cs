@@ -23,7 +23,8 @@ namespace ImageConverter.Ai;
 
 /// <summary>
 /// KI-Verbesserung als eigenständiges Modul: GroupBox im Hauptfenster (<see cref="AiPanel"/>)
-/// und Tab „KI-Modelle“ in den Einstellungen (<see cref="AiModelsView"/>).
+/// und die Seiten „Leistung“ und „KI-Modelle“ in den Einstellungen (<see cref="AiModelPageView"/>, <see cref="PerformanceView"/>,
+/// <see cref="ModelFolderView"/>).
 /// Entfernen: Ordner Ai/ (Ui und Core), die zwei Einbindungen in MainView/SettingsWindow,
 /// die Eigenschaft <c>MainViewModel.Ai</c> und das Paket Microsoft.ML.OnnxRuntime.
 /// </summary>
@@ -53,6 +54,12 @@ public partial class AiViewModel : ViewModelBase
             Group("UPSCALING", "Vergrößern mit KI – unter „Größe“, Liste „Verfahren“ (KI-Scaler). Real-ESRGAN x4v3 ist dieselbe Datei wie „Allround“ oben.", AiModelKind.Upscale, AiModelCatalog.Allround),
             Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR. Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
         ];
+        // Je Anwendung eine Seite in den Einstellungen; Hilfsmodelle und Teile bei der Anwendung, die sie braucht
+        ImprovePage = new([ModelGroups[0]]);
+        FacesPage = new([ModelGroups[1], ModelGroups[2]]);
+        RemovePage = new([ModelGroups[3]]);
+        DewarpPage = new([ModelGroups[4]]);
+        UpscalePage = new([ModelGroups[5], ModelGroups[6]]);
 
 
         Rescan();
@@ -71,7 +78,7 @@ public partial class AiViewModel : ViewModelBase
     // Ist eine Grafikkarte da, wird sie genutzt — außer der Geschwindigkeitstest hat auf diesem Rechner die CPU schneller
     // gemessen (Wunsch des Benutzers: testen, dann das Schnellere nehmen); hier nur, was gerade gilt.
 
-    /// <summary>Was gerade genutzt wird — oder warum nicht (Einstellungen › KI-Modelle).</summary>
+    /// <summary>Was gerade genutzt wird — oder warum nicht (Einstellungen › Leistung).</summary>
     public string GpuStatus =>
         OnnxSessions.GpuName is not { } name ? Tr.T("Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU.")
         : _sessions.CpuFasterHere ? Tr.T("Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0}).", name)
@@ -202,8 +209,15 @@ public partial class AiViewModel : ViewModelBase
     /// <summary>Alle Modelle für die Verwaltung (Einstellungen).</summary>
     public IReadOnlyList<AiModelItem> Models { get; }
 
-    /// <summary>Die Modelle in Gruppen für die Verwaltung — je Gruppe ein Kasten.</summary>
+    /// <summary>Die Modelle in Gruppen für die Verwaltung.</summary>
     public IReadOnlyList<AiModelGroup> ModelGroups { get; }
+
+    /// <summary>Seiten der Einstellungen (links „KI-Modelle“): je Anwendung eine.</summary>
+    public AiModelPage ImprovePage { get; }
+    public AiModelPage FacesPage { get; }
+    public AiModelPage RemovePage { get; }
+    public AiModelPage DewarpPage { get; }
+    public AiModelPage UpscalePage { get; }
 
     /// <param name="also">Modelle aus anderen Gruppen, die hier auch gebraucht werden (eine Datei, zwei Einträge).</param>
     private AiModelGroup Group(string title, string hint, AiModelKind kind, params AiModel[] also) =>
@@ -864,9 +878,9 @@ public partial class AiViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void Cancel() => _runCts?.Cancel();
 
-    /// <summary>Öffnet die Einstellungen (Tab „KI-Modelle“).</summary>
+    /// <summary>Öffnet die Einstellungen auf der Seite „Bilder verbessern“ (Modelle der Rubrik „KI“).</summary>
     [RelayCommand]
-    private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(null);
+    private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(SettingsPage.Improve);
 
 
     /// <summary>Fortschritt in der einen Anzeige unten mitte in der Vorschau (für alles, was rechnet).</summary>
@@ -1001,7 +1015,20 @@ public partial class AiViewModel : ViewModelBase
 }
 
 /// <summary>Eine Gruppe in der Verwaltung (Kasten mit Überschrift und kurzem Hinweis).</summary>
-public sealed record AiModelGroup(string Title, string Hint, IReadOnlyList<AiModelItem> Items);
+public sealed record AiModelGroup(string Title, string Hint, IReadOnlyList<AiModelItem> Items)
+{
+    /// <summary>Überschrift nur, wenn die Seite mehrere Gruppen zeigt (sonst steht sie schon links).</summary>
+    public bool ShowTitle { get; init; }
+}
+
+/// <summary>Eine Seite der Einstellungen mit einer oder mehreren Gruppen von Modellen.</summary>
+public sealed record AiModelPage
+{
+    public AiModelPage(IReadOnlyList<AiModelGroup> groups) =>
+        Groups = groups.Select(g => g with { ShowTitle = groups.Count > 1 }).ToList();
+
+    public IReadOnlyList<AiModelGroup> Groups { get; }
+}
 
 /// <summary>Ein Modell in der Verwaltung: vorhanden?, Download mit Fortschritt, abbrechen, löschen.</summary>
 public partial class AiModelItem : ObservableObject

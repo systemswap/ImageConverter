@@ -61,12 +61,18 @@ public partial class MainView : UserControl
     private SettingsWindow? _settings;
 
     /// <summary>Einstellungen: nicht modal — Downloads laufen weiter, während man arbeitet.</summary>
-    private Task OnSettingsRequested()
+    private Task OnSettingsRequested(SettingsPage? page)
     {
-        if (_settings is not null) { _settings.Activate(); return Task.CompletedTask; }
+        if (_settings is not null)
+        {
+            if (page is { } p) _settings.ShowPage(p);
+            _settings.Activate();
+            return Task.CompletedTask;
+        }
         if (TopLevel.GetTopLevel(this) is not Window owner || _vm is null) return Task.CompletedTask;
 
         _settings = new SettingsWindow(_vm);
+        _settings.ShowPage(page ?? SettingsPage.Performance);
         _settings.Closed += (_, _) => _settings = null;
         _settings.Show(owner);
         return Task.CompletedTask;

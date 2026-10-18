@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:ai="using:ImageConverter.Ai"
+             x:Class="ImageConverter.Ai.AiModelPageView"
+             x:DataType="ai:AiModelPage">
+
+    <!-- Eine Seite der Einstellungen unter „KI“: die Modelle einer Anwendung (Download, Fortschritt, Abbrechen, Löschen) -->
+    <ItemsControl ItemsSource="{Binding Groups}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <StackPanel Spacing="18" />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="ai:AiModelGroup">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="label" FontWeight="SemiBold" IsVisible="{Binding ShowTitle}" Text="{l:TItem Path=Title}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:TItem Path=Hint}" />
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="ai:AiModelItem">
+                                        <Border Background="{DynamicResource SurfaceBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                                                CornerRadius="{DynamicResource RadiusControl}" Padding="12,10">
+                                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                                                    <TextBlock FontWeight="SemiBold" Text="{l:TItem Path=Model.Name}" />
+                                                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding StateText}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="hint" TextWrapping="Wrap" Margin="0,3,12,0"
+                                                           Text="{l:TItem Path=Model.Description}" />
+                                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="hint" FontSize="11" Margin="0,4,12,0"
+                                                           Text="{Binding Info}"
+                                                           ToolTip.Tip="{l:TItem Path=Model.Origin}" />
+
+                                                <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" VerticalAlignment="Center"
+                                                            Orientation="Horizontal" Spacing="6">
+                                                    <Button Classes="primary" Content="{l:T 'Herunterladen'}"
+                                                            IsVisible="{Binding ShowDownload}"
+                                                            Command="{Binding DownloadCommand}" />
+                                                    <Button Classes="subtle" Content="{l:T 'Abbrechen'}"
+                                                            IsVisible="{Binding IsDownloading}"
+                                                            Command="{Binding CancelCommand}" />
+                                                    <Button Classes="subtle" Content="{l:T 'Löschen'}"
+                                                            IsVisible="{Binding IsInstalled}"
+                                                            Command="{Binding DeleteCommand}"
+                                                            ToolTip.Tip="{l:T 'Modell von der Festplatte entfernen. Es lässt sich jederzeit neu laden.'}" />
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0" Spacing="4">
+                                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsDownloading}">
+                                                        <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding Progress}"
+                                                                     VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" Classes="hint" Margin="10,0,0,0" MinWidth="40" TextAlignment="Right"
+                                                                   Text="{Binding Progress, StringFormat='{}{0:0} %'}" />
+                                                    </Grid>
+                                                    <TextBlock Classes="hint" Foreground="#C77700" TextWrapping="Wrap"
+                                                               IsVisible="{Binding Problem, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                               Text="{Binding Problem}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

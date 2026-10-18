@@ -75,8 +75,9 @@ Wunsch des Benutzers (18.10.2026): Nicht annehmen, dass die Grafikkarte schnelle
 Schnellere nehmen — auf dem Debian-Rechner mit Ryzen 9 7950X3D ist die CPU oft gleich schnell oder schneller (siehe
 unten), auf dem Laptop die Grafikkarte deutlich schneller.
 
-- **Wo:** Einstellungen › KI-Modelle, Knopf „Geschwindigkeit testen“ unter den Angaben zur Grafikkarte; dort steht auch
-  das letzte Ergebnis je Bereich (Zeiten, Wahl, Datum).
+- **Wo:** Einstellungen › Leistung (seit 0.5.103 eigene Seite links ganz oben; vorher unter „KI-Modelle“), Knopf
+  „Geschwindigkeit testen“; dort stehen auch, worauf gerade gerechnet wird, und das letzte Ergebnis je Bereich (Zeiten,
+  Wahl, Datum).
 - **Was gemessen wird** (`Core/Platform/SpeedTest.cs`), je Gerät ein Aufwärmlauf, dann die beste von zwei Zeiten:
   - **Bildfilter:** Entrauschen und Dunst an einem Testbild von 1200 × 900 (ILGPU/OpenCL gegen die CPU-Schleifen).
   - **KI:** Real-ESRGAN x4v3 („Allround“, 5 MB) an 300 × 300 in eigenen Sitzungen — die geöffneten Modelle der App bleiben
