@@ -12,6 +12,8 @@
         <InternalsVisibleTo Include="ImageConverter.Tests" />
         <PackageReference Include="Magick.NET-Q16-AnyCPU" />
         <PackageReference Include="PDFsharp" />
+        <!-- nur, um die anfällige Fassung aus PDFsharp zu ersetzen (siehe Directory.Packages.props) -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" />
         <PackageReference Include="ILGPU" />
         <PackageReference Include="ILGPU.Algorithms" />
         <PackageReference Include="System.Drawing.Common" />

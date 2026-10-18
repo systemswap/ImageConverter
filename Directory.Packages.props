@@ -21,6 +21,9 @@
 
         <!-- PDF für Druck und „Als PDF speichern" — plattformunabhängige Core-Variante, MIT -->
         <PackageVersion Include="PDFsharp" Version="6.2.4" />
+        <!-- Bringt PDFsharp mit (auch 6.5.0 verlangt noch 8.0.1, Denial of Service: CVE-2026-84008, CVE-2026-70162).
+             Behobene Fassung festgelegt; wieder entfernen, sobald PDFsharp selbst eine behobene verlangt. -->
+        <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
 
         <!-- Drucken unter Windows (Druckdienst). Wird nur unter Windows aufgerufen. -->
         <PackageVersion Include="System.Drawing.Common" Version="10.0.12" />

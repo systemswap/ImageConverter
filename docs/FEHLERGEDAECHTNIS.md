@@ -2045,3 +2045,16 @@ Test oder Nachweis.
   ziehen, malte einen Strich — und ein neuer Strich blendet die ganze Markierung wieder ein (`StrokesApplied = false`).
 - **Abhilfe:** Die Trennlinie geht vor Pinsel und Pipette, auch beim Mauszeiger (kein Pinselkreis über der Linie).
   Geprüft ohne Fenster mit simulierter Maus (`linie-probe`): Linie wandert, kein Strich; daneben malt der Pinsel.
+
+## 72. Anfällige Fassung von System.Security.Cryptography.Pkcs über PDFsharp (0.5.98 beta)
+
+- **Entdeckt in:** 0.5.96 beta (18.10.2026) als Warnung NU1902/NU1903 beim Bauen; **behoben in:** 0.5.98 beta.
+- **Was:** PDFsharp 6.2.4 (Drucken, „Als PDF speichern“) zieht `System.Security.Cryptography.Pkcs` 8.0.1 nach. Dafür gibt
+  es zwei Hinweise auf Denial of Service (CVE-2026-84008, CVE-2026-70162; behoben in 8.0.2, 9.0.21, 10.0.13). Auch
+  PDFsharp 6.5.0 verlangt noch 8.0.1 — ein Update von PDFsharp hilft also nicht.
+- **Wie behoben:** Fassung 10.0.13 zentral festgelegt (`Directory.Packages.props`) und in `ImageConverter.Core.csproj`
+  direkt eingebunden; NuGet nimmt dann die höhere statt der aus PDFsharp.
+- **Nicht tun:** den Eintrag entfernen, solange PDFsharp eine anfällige Fassung verlangt (`dotnet nuget why
+  ImageConverter.sln System.Security.Cryptography.Pkcs`).
+- **Nachweis:** `dotnet list ImageConverter.sln package --vulnerable --include-transitive` meldet nichts mehr; alle
+  Tests grün (u. a. `PrintDocumentTests`).
