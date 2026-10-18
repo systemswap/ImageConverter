@@ -2169,3 +2169,8 @@ Test oder Nachweis.
 - **Wo:** `Directory.Packages.props`, `ImageConverter.Core.csproj`, `Core/Platform/NativeLibraries.cs` (`LoadOpenMp`),
   `ImageConverter.Desktop.csproj`, `publish.sh`, `publish.ps1`.
 - **Offen:** unter Windows (Laptop) noch nicht im echten Programm geprüft.
+- **Nachtrag zu #76:** Der erste Testlauf im Release-Modus direkt nach dem Paketwechsel brach mit abgestürztem Testprozess
+  ab (nach 112 Tests); danach sechsmal hintereinander alle 410 grün (auch mit `--blame-crash`). Vermutlich mischte der
+  erste Lauf alte und neue Magick-Bibliotheken im Ausgabeordner — nicht sicher. Falls es wieder vorkommt: mit
+  `--blame-crash` laufen lassen und die gleichzeitigen ImageMagick-Aufrufe prüfen. Fertige AppImage geprüft: lädt
+  `Magick.Native-Q16-OpenMP-x64` und die `libgomp` des Systems.
