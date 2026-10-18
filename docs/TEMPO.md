@@ -65,3 +65,24 @@ Stand, `ab.sh`) und den besten von mehreren Läufen nehmen. Mehr Kerne helfen nu
 
 ILGPU braucht dort OpenCL (ROCm oder Mesa rusticl). Erwartet: deutlich mehr Gewinn als hier (eigene Grafikkarte mit
 eigenem Speicher). Ohne OpenCL rechnet die CPU — die Zeile in Einstellungen › KI-Modelle zeigt, was gilt.
+
+## Start und Ausrichten-Werkzeuge (0.6.14 beta, Debian-Rechner, 18.10.2026)
+
+Gemessen auf dem Ryzen 9 7950X3D mit der fertigen AppImage bzw. im unsichtbaren Testfenster:
+
+- **Start bis zum Fenster:** 0,51–0,56 s (drei Starts, eigene Einstellungen; Fenster über `xwininfo` erkannt).
+- **Entzerren / Gerade richten, 12-MP-Foto** (Zeit bis zum fertigen Bild):
+
+| Schritt | ohne Bildfilter | mit Dunst 9 Durchgänge, Licht |
+|---|---|---|
+| Entzerren übernehmen | 0,59 s | Bild nach 0,32 s, gefiltert nach 3,36 s |
+| Gerade richten öffnen | 0,29 s | 0,28 s / 3,20 s |
+| Gerade richten übernehmen | 0,68 s | 0,59 s / 3,29 s |
+
+  Das Ausrichten in voller Größe ist seit der Mehrkern-Fassung von ImageMagick schnell (Fehlergedächtnis #76); die
+  Sekunden danach sind der Dunst der Vorschau (9 Durchgänge), der nach jeder neuen Ausrichtung neu rechnen muss, weil er
+  vom Bildinhalt abhängt. **Bewusst nicht:** Filter in der Vorschau vor dem Ausrichten anwenden und das gefilterte Bild
+  nur drehen/zuschneiden — schneller, aber die Vorschau wiche vom Export ab (Dunst und Bereiche schätzen auf dem
+  zugeschnittenen Bild anders).
+- **Lange Sitzung:** 20 Fotos mit 12 MP zweimal durchgeblättert, je Bild Regler verstellt: 1,9 GB, ohne Wachstum
+  (vorher 4,4 GB, Fehlergedächtnis #79).
