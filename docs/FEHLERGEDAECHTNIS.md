@@ -2266,3 +2266,16 @@ Test oder Nachweis.
   (`DOTNET_EnableCrashReport`) — so wurde #77 gefunden. Vor jedem Meilenstein mit 10 Läufen. Grafikspeicher in langen
   Sitzungen geprüft: alle Puffer der Grafikfilter werden je Rechnung freigegeben (`using` in `GpuFilters`,
   `Dehaze.Gpu`).
+
+## 80. Windows-EXE enthielt 105 MB Debug-Symbole und eine Linkbibliothek (0.6.17 beta)
+
+- **Entdeckt in:** 0.6.16 beta (18.10.2026) beim Aufräumen (Frage vom Windows-Rechner, ob `onnxruntime.lib` gebraucht
+  wird); **behoben in:** 0.6.17 beta.
+- **Was:** Die Windows-Fassung packte `libSkiaSharp.pdb` (84 MB) und `libHarfBuzzSharp.pdb` (21 MB) — Debug-Symbole der
+  nativen Grafikbibliotheken aus den SkiaSharp-/HarfBuzz-Paketen — sowie `onnxruntime.lib` (Linkbibliothek für
+  C/C++-Programme) mit in die EXE; bei „einzeln“ lagen sie lose daneben. Das Programm lädt keine davon. `publish.sh`/
+  `publish.ps1` löschten nur lose `.pdb`, nicht die in der EXE.
+- **Wie behoben:** `ImageConverter.Desktop.csproj` (Target `ForeignNativeLibrariesBesideProgram`) nimmt alle `.pdb` und
+  `.lib` aus `ResolvedFileToPublish`. Geprüft mit einem losen Bau: Windows enthält außer DLLs nur noch
+  `ImageConverter.deps.json` und `.runtimeconfig.json`, Linux zusätzlich `createdump` (gehört zur .NET-Laufzeit).
+- **Nicht tun:** annehmen, dass `DebugType=None` alle Symbole entfernt — es gilt nur für die eigenen Projekte.

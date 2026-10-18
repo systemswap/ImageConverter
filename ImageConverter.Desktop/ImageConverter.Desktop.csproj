@@ -72,6 +72,11 @@
                                            And '@(_OnnxRuntimeNative->WithMetadataValue('Filename', 'DirectML'))' == ''
                                            And Exists('$(NuGetPackageRoot)microsoft.ai.directml/$(DirectMLVersion)/bin/x64-win/DirectML.dll')" />
             <ResolvedFileToPublish Remove="@(_ImageMagickNative);@(_OnnxRuntimeNative)" />
+            <!-- Was das Programm nie lädt, aus den Paketen aber mitkäme (bei „eine Datei“ in die EXE gepackt):
+                 Debug-Symbole der nativen Grafikbibliotheken (libSkiaSharp.pdb 84 MB, libHarfBuzzSharp.pdb 21 MB) und
+                 die Linkbibliothek onnxruntime.lib (nur für C/C++-Programme) -->
+            <_NotNeededAtRuntime Include="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' Or '%(Extension)' == '.lib'" />
+            <ResolvedFileToPublish Remove="@(_NotNeededAtRuntime)" />
             <ResolvedFileToPublish Include="@(_ImageMagickNative)">
                 <RelativePath>Tools/ImageMagick/%(Filename)%(Extension)</RelativePath>
                 <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
