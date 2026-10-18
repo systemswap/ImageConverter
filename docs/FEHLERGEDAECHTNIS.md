@@ -2125,3 +2125,7 @@ Test oder Nachweis.
   `MainViewModel.PerImage.cs`.
 - **Nachweis:** Messprogramm im Testordner (unsichtbares Fenster, `/proc/self/status`): nach dem Export 7,0 GB → 1,1 GB.
   Pixel unberührt (nur Speicherbereinigung).
+- **Nachtrag 0.6.2 beta (Leistung 2):** `System.GC.ConserveMemory = 9` (`ImageConverter.Desktop.csproj`,
+  `RuntimeHostConfigurationOption`). Die Speicherbereinigung verdichtet öfter: beim Bearbeiten des Panoramas 2,6 → 1,2 GB,
+  Spitze beim Export 7,2 → 6,2 GB, Exportzeit gleich (35 s), Pausen zusammen etwa 0,2 s mehr. Gemessen mit 0, 5 und 9
+  (5: 1,4 GB / 6,9 GB). Gilt nur für das Programm, nicht für Tests und Messprogramme (dort per `DOTNET_GCConserveMemory`).

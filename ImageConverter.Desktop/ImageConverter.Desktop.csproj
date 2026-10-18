@@ -13,6 +13,13 @@
         <RuntimeIdentifiers>win-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
     </PropertyGroup>
 
+    <!-- Speicherbereinigung so sparsam wie möglich (0 … 9): sie verdichtet öfter und hält den Speicher klein. Gemessen am
+         Panorama (28 MP) mit typischen Reglern: beim Bearbeiten 2,6 → 1,2 GB, Spitze beim Export 7,2 → 6,2 GB, Exportzeit
+         gleich, Pausen zusammen etwa 0,2 s mehr. Am Bild ändert das nichts. -->
+    <ItemGroup>
+        <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+    </ItemGroup>
+
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
         <!-- Self-contained Single-File fuer Portable-exe und AppImage.
              InvariantGlobalization bleibt FALSE - wir brauchen Kulturen fuer die Lokalisierung. -->
