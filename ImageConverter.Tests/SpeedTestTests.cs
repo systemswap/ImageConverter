@@ -1,3 +1,4 @@
+using ImageConverter.Core.Ai.Upscale;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Core.Platform;
 
@@ -60,5 +61,22 @@ public class SpeedTestTests
         Assert.True(m.CpuSeconds > 0);
         Assert.Equal(SpeedTest.FilterMachine(GpuFilters.DeviceName), m.Machine);
         Assert.Equal(GpuFilters.DeviceName is not null, m.GpuSeconds is not null);
+    }
+
+    [Fact]
+    public void UpscaleTimes_FirstMeasurementReplacesTheDefault_AndSurvivesARestart()
+    {
+        var before = Upscalers.Estimate(UpscaleMethod.Generative, 1000, 1000);
+        // ein schneller Rechner: 0,15 MP in 58 s (387 s je MP statt der Vorgabe vom Laptop)
+        Upscalers.Measured(UpscaleMethod.Generative, 500, 300, TimeSpan.FromSeconds(58));
+        var learned = Upscalers.Estimate(UpscaleMethod.Generative, 1000, 1000);
+        Assert.InRange(learned.TotalSeconds, 380, 395);
+        Assert.True(learned < before / 3, $"{learned} gegen Vorgabe {before}");
+
+        var saved = Upscalers.Learned();
+        Assert.True(saved.ContainsKey(Upscalers.OnGpu ? "Generative|gpu" : "Generative|cpu"));
+        Upscalers.Restore(new Dictionary<string, double> { [Upscalers.OnGpu ? "Generative|gpu" : "Generative|cpu"] = 500, ["Unsinn|cpu"] = 1, ["Fast|cpu"] = double.NaN });
+        Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 1000, 1000).TotalSeconds, 499, 501);
+        Upscalers.Restore(saved);   // für andere Tests wie vorher
     }
 }

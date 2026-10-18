@@ -43,6 +43,7 @@ public partial class AiViewModel : ViewModelBase
         Store = AiModelStore.CreateDefault();
         _sessions.Measured = AppSettings.Load().AiSpeed;   // letzter Geschwindigkeitstest: Grafikkarte oder CPU
         Upscalers.OnGpu = _sessions.OnGpu;
+        MainViewModel.RestoreUpscaleTimes();   // gemessene Zeiten dieses Rechners statt der Vorgaben vom Laptop
         Models = AiModelCatalog.All.Select(m => new AiModelItem(this, m)).ToList();
         ModelGroups =
         [

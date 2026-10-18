@@ -17,6 +17,7 @@ using ImageConverter.Ai;
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.Upscale;
 using ImageConverter.Core.Imaging;
+using ImageConverter.Core.Platform;
 using ImageConverter.Imaging;
 using ImageConverter.Models;
 using ImageMagick;
@@ -727,6 +728,7 @@ public partial class MainViewModel
         lock (source) (w, h) = ((int)source.Width, (int)source.Height);
         var result = ComputeUpscale(source, method, first, Prepare, ct, passes == 1 ? done : null);
         Upscalers.Measured(method, w, h, clock.Elapsed);
+        SaveUpscaleTimes();
         if (passes == 1) return result;
 
         MagickImage middle;
@@ -737,8 +739,23 @@ public partial class MainViewModel
             clock.Restart();
             var last = ComputeUpscale(middle, method, second, Prepare, ct, done);
             Upscalers.Measured(method, baseWidth, baseHeight, clock.Elapsed);
+            SaveUpscaleTimes();
             return last;
         }
+    }
+
+    /// <summary>Gemessene Upscaler-Zeiten für diesen Rechner speichern — die Schätzung stimmt dann auch nach einem Neustart.</summary>
+    private static void SaveUpscaleTimes()
+    {
+        var settings = AppSettings.Load();
+        (settings with { UpscaleTimes = new UpscaleTimes(SpeedTest.AiMachine(OnnxSessions.GpuProvider), Upscalers.Learned()) }).Save();
+    }
+
+    /// <summary>Beim Start: gespeicherte Upscaler-Zeiten übernehmen, wenn sie auf diesem Rechner gemessen wurden.</summary>
+    internal static void RestoreUpscaleTimes()
+    {
+        if (AppSettings.Load().UpscaleTimes is { } times && times.Machine == SpeedTest.AiMachine(OnnxSessions.GpuProvider))
+            Upscalers.Restore(times.SecondsPerMegapixel);
     }
 
     /// <summary>

@@ -32,7 +32,8 @@ public static class Upscalers
 
     // Sekunden je Megapixel des Originals (gemessen am Panorama-Ausschnitt 500 × 300 → 2000 × 1200 auf einem Ryzen 7
     // Notebook-Prozessor; CPU: x4v3 3,5 s, UltraSharpV2 2 min, PiSA-SR 6 min; Grafikkarte = dessen Radeon über DirectML). Nach jedem Lauf
-    // gilt die gemessene Zeit dieses Rechners.
+    // gilt die gemessene Zeit dieses Rechners — gespeichert (Learned/Restore), sonst schätzte ein schneller Rechner nach
+    // jedem Start wieder mit den Laptop-Werten (Ryzen 9 7950X3D: PiSA-SR etwa 6× so schnell, Anzeige 34 statt 6 min).
     private static readonly Dictionary<(UpscaleMethod, bool Gpu), double> SecondsPerMegapixel = new()
     {
         [(UpscaleMethod.Fast, false)] = 23,
@@ -80,15 +81,44 @@ public static class Upscalers
         return t;
     }
 
+    /// <summary>Werte, die auf diesem Rechner gemessen wurden (nicht die Vorgaben).</summary>
+    private static readonly HashSet<(UpscaleMethod, bool)> LearnedKeys = [];
+
     /// <summary>Gemessene Zeit eines Laufs merken (verfeinert die Schätzung; kleine Läufe zählen weniger).</summary>
     public static void Measured(UpscaleMethod method, int width, int height, TimeSpan elapsed)
     {
         var mp = width * (double)height / 1e6;
         if (method == UpscaleMethod.Filter || mp < 0.01) return;
-        var weight = Math.Min(1, mp / 0.3);
         var key = (method, OnGpu);
         lock (SecondsPerMegapixel)
+        {
+            // erste Messung dieses Rechners ersetzt die Vorgabe (die kommt von einem anderen Rechner), danach gleitend
+            var weight = LearnedKeys.Add(key) ? 1 : Math.Min(1, mp / 0.3);
             SecondsPerMegapixel[key] = SecondsPerMegapixel[key] * (1 - weight) + elapsed.TotalSeconds / mp * weight;
+        }
+    }
+
+    /// <summary>Die gemessenen Werte zum Speichern („Generative|cpu“ → Sekunden je Megapixel).</summary>
+    public static Dictionary<string, double> Learned()
+    {
+        lock (SecondsPerMegapixel)
+            return LearnedKeys.ToDictionary(k => $"{k.Item1}|{(k.Item2 ? "gpu" : "cpu")}", k => SecondsPerMegapixel[k]);
+    }
+
+    /// <summary>Gespeicherte Werte dieses Rechners übernehmen (unbekannte oder unsinnige Einträge werden übergangen).</summary>
+    public static void Restore(IReadOnlyDictionary<string, double>? saved)
+    {
+        if (saved is null) return;
+        lock (SecondsPerMegapixel)
+            foreach (var (name, seconds) in saved)
+            {
+                var parts = name.Split('|');
+                if (parts.Length != 2 || !Enum.TryParse<UpscaleMethod>(parts[0], out var method) || method == UpscaleMethod.Filter
+                    || parts[1] is not ("cpu" or "gpu") || !double.IsFinite(seconds) || seconds <= 0) continue;
+                var key = (method, parts[1] == "gpu");
+                SecondsPerMegapixel[key] = seconds;
+                LearnedKeys.Add(key);
+            }
     }
 
     /// <summary>

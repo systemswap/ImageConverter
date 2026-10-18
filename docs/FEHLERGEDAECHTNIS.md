@@ -2058,3 +2058,23 @@ Test oder Nachweis.
   ImageConverter.sln System.Security.Cryptography.Pkcs`).
 - **Nachweis:** `dotnet list ImageConverter.sln package --vulnerable --include-transitive` meldet nichts mehr; alle
   Tests grün (u. a. `PrintDocumentTests`).
+
+## 73. Upscaler-Zeitschätzung nach jedem Start wieder mit den Werten des Laptops (0.5.104 beta)
+
+- **Entdeckt in:** 0.5.103 beta (18.10.2026), Benutzer auf dem Debian-Rechner: PiSA-SR ×4 „braucht 34 Minuten“;
+  **behoben in:** 0.5.104 beta.
+- **Was:** Die Schätzung („Skalieren (≈ …)“) rechnet mit festen Sekunden je Megapixel, gemessen auf dem Notebook-Prozessor.
+  Der Ryzen 9 7950X3D ist bei PiSA-SR auf der CPU etwa 6× so schnell (58 s statt 355 s am selben Ausschnitt) — angezeigt
+  wurde also rund das Sechsfache.
+- **Warum:** `Upscalers.Measured` verfeinerte die Werte nach jedem Lauf, aber nur im Speicher; nach dem Neustart galten
+  wieder die Vorgaben. Außerdem zählte ein kleiner erster Lauf nur anteilig (0,15 MP → halbes Gewicht), obwohl die Vorgabe
+  von einem anderen Rechner stammt.
+- **Wie behoben:** Gemessene Werte in `settings.json` (`UpscaleTimes`, mit Kennung des Rechners aus
+  `SpeedTest.AiMachine`); beim Start übernommen, wenn die Kennung passt. Die erste Messung eines Rechners ersetzt die
+  Vorgabe ganz, danach gleitend wie bisher.
+- **Nicht tun:** feste Zeiten eines Rechners als einzige Grundlage nehmen; gelernte Werte nur im Speicher halten.
+- **Wo:** `Core/Ai/Upscale/Upscalers.cs` (`Measured`, `Learned`, `Restore`), `Core/Platform/AppSettings.cs`
+  (`UpscaleTimes`), `Ui/ViewModels/MainViewModel.Upscale.cs` (`SaveUpscaleTimes`, `RestoreUpscaleTimes`),
+  `Ui/Ai/AiViewModel.cs` (Start).
+- **Test:** `SpeedTestTests.UpscaleTimes_FirstMeasurementReplacesTheDefault_AndSurvivesARestart` (mit dem alten Gewicht
+  läge die Schätzung bei rund 1380 statt 387 s je MP; `Learned`/`Restore` gab es nicht).

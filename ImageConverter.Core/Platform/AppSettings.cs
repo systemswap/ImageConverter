@@ -8,8 +8,11 @@ namespace ImageConverter.Core.Platform;
 /// ~/.local/share/ImageConverter/settings.json bzw. %LOCALAPPDATA%\ImageConverter\settings.json.
 /// Fehlt die Datei oder ist sie kaputt, gelten die Voreinstellungen.
 /// </summary>
+/// <summary>Gemessene Zeiten der Upscaler (Sekunden je Megapixel) für einen Rechner (<see cref="SpeedTest.AiMachine"/>).</summary>
+public sealed record UpscaleTimes(string Machine, Dictionary<string, double> SecondsPerMegapixel);
+
 public sealed record AppSettings(string? Language = null, bool AiRemoveShadows = true,
-    SpeedMeasure? FilterSpeed = null, SpeedMeasure? AiSpeed = null)
+    SpeedMeasure? FilterSpeed = null, SpeedMeasure? AiSpeed = null, UpscaleTimes? UpscaleTimes = null)
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
