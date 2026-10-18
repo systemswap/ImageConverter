@@ -2261,3 +2261,8 @@ Test oder Nachweis.
 - **Wo:** `Ui/ViewModels/MainViewModel.Editing.cs` (`IsReferencedByHistory`, `NeedsImage`), `MainViewModel.cs`
   (`ShowFileAsync`, `ReleaseMemorySoon`).
 - **Nachweis:** Messprogramm im Testordner (unsichtbares Fenster, 20 Bilder, zwei Runden, dann zweimal Rückgängig).
+- **Nachtrag (Tests wiederholen):** `tools/tests-wiederholen.sh [Läufe]` lässt die Tests im Release-Modus mehrmals laufen,
+  hält beim ersten Fehler an und lässt bei einem Absturz einen Bericht mit Aufrufstapel schreiben
+  (`DOTNET_EnableCrashReport`) — so wurde #77 gefunden. Vor jedem Meilenstein mit 10 Läufen. Grafikspeicher in langen
+  Sitzungen geprüft: alle Puffer der Grafikfilter werden je Rechnung freigegeben (`using` in `GpuFilters`,
+  `Dehaze.Gpu`).
