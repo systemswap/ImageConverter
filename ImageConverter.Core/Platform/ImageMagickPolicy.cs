@@ -40,8 +40,20 @@ public static class ImageMagickPolicy
             var folder = Folder();
             Directory.CreateDirectory(folder);
             MagickNET.Initialize(files, folder);
+
+            // Grenzen gegen präparierte Dateien (gemessen: eine 1,5-MB-PNG mit 40000 × 40000 Pixeln wurde geladen und füllte
+            // Speicher bzw. Auslagerung). Nur hier beim Start setzen — Grenzen von ImageMagick nie ändern, während es
+            // rechnen kann (siehe docs/FEHLERGEDAECHTNIS.md #77). Die eigentliche Prüfung der Bildgröße macht
+            // ImageLoader vor dem Entpacken (ImageLoader.MaxPixels).
+            ResourceLimits.Width = MaxEdge;
+            ResourceLimits.Height = MaxEdge;
+            ResourceLimits.ListLength = 4096;                 // mehrteilige Dateien (GIF, TIFF): Bilder je Datei
+            ResourceLimits.Disk = 1024UL * 1024 * 1024;       // Auslagerung höchstens 1 GB (unter Linux oft im Arbeitsspeicher)
         }
     }
+
+    /// <summary>Größte Kantenlänge, die ImageMagick annimmt (wie JPEG).</summary>
+    public const uint MaxEdge = 65535;
 
     /// <summary>
     /// ~/.local/share/ImageConverter/ImageMagick bzw. %LOCALAPPDATA%\ImageConverter\ImageMagick;

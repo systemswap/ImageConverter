@@ -108,15 +108,21 @@ public partial class MainViewModel
     }
 
     /// <summary>Muss die Datei im Speicher bleiben, weil der Verlauf noch auf sie zeigt?</summary>
+    /// <remarks>
+    /// Nur Bild- und Ausrichtschritte brauchen das Bild im Speicher (sie tauschen Pixelbild bzw. Rezept). Reglerschritte
+    /// nicht: „Rückgängig“ wechselt zur Datei und lädt sie dabei neu, die Regler stehen je Datei in den Einstellungen.
+    /// Vorher hielt jede Reglerbewegung das Bild fest — beim Durchblättern von 20 Fotos mit 12 MP wuchs der Speicher von
+    /// 1,4 auf 4,4 GB.
+    /// </remarks>
     private bool IsReferencedByHistory(string path, EditHistory h) =>
         h.IsEdited
-        || HasFile(_undo, path)
-        || HasFile(_redo, path);
+        || NeedsImage(_undo, path)
+        || NeedsImage(_redo, path);
 
-    private static bool HasFile(Stack<Snapshot> stack, string path)
+    private static bool NeedsImage(Stack<Snapshot> stack, string path)
     {
         foreach (var s in stack)
-            if (s.FilePath == path) return true;
+            if (s.FilePath == path && (s.Image is not null || s.Recipe is not null)) return true;
         return false;
     }
 

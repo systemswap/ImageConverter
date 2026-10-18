@@ -42,4 +42,37 @@ public class ImageLoaderProbeTests : IDisposable
         Assert.True(thumb.Width <= 64 && thumb.Height <= 64);
         Assert.Equal(full.Width > full.Height, thumb.Width > thumb.Height);   // richtig herum
     }
+
+    /// <summary>PNG nur aus Kopf und leerem Inhalt, behauptet beliebige Maße (wie eine präparierte Datei).</summary>
+    private string WriteClaimingPng(int width, int height)
+    {
+        static byte[] Chunk(string type, byte[] data)
+        {
+            var t = System.Text.Encoding.ASCII.GetBytes(type);
+            var crcInput = t.Concat(data).ToArray();
+            uint crc = 0xFFFFFFFF;
+            foreach (var b in crcInput) { crc ^= b; for (var k = 0; k < 8; k++) crc = (crc >> 1) ^ (0xEDB88320u & (uint)-(int)(crc & 1)); }
+            return BigEndian(data.Length).Concat(t).Concat(data).Concat(BigEndian((int)~crc)).ToArray();
+        }
+        static byte[] BigEndian(int v) => [(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v];
+        var ihdr = BigEndian(width).Concat(BigEndian(height)).Concat(new byte[] { 8, 0, 0, 0, 0 }).ToArray();
+        var png = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }.Concat(Chunk("IHDR", ihdr)).Concat(Chunk("IDAT", [120, 156, 3, 0, 0, 0, 0, 1]))
+            .Concat(Chunk("IEND", [])).ToArray();
+        var path = Path.Combine(_dir, $"behauptet-{width}x{height}.png");
+        File.WriteAllBytes(path, png);
+        return path;
+    }
+
+    [Fact]
+    public async Task HugeClaimedSize_IsRejected_BeforeDecoding()
+    {
+        // 60000 × 60000 = 3,6 Gigapixel aus wenigen Bytes — ohne Prüfung belegte ImageMagick Speicher in dieser Größe
+        var path = WriteClaimingPng(60000, 60000);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var e = await Assert.ThrowsAsync<ImageTooLargeException>(() => ImageLoader.LoadAsync(path));
+        Assert.Contains("60000", e.Message);
+        await Assert.ThrowsAsync<ImageTooLargeException>(() => ImageLoader.LoadThumbnailAsync(path, 64));
+        Assert.True(clock.Elapsed.TotalSeconds < 2, $"{clock.Elapsed}");
+        Assert.InRange(ImageLoader.MaxPixels, 100_000_000, 2_000_000_000);
+    }
 }

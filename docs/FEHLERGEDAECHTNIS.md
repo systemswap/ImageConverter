@@ -2221,3 +2221,43 @@ Test oder Nachweis.
   das Entstufen ein neues Bild geliefert hat (vorher bis zur nächsten vollen Speicherbereinigung liegen). **Verworfen:** die
   Führung von Tiefen/Lichter (`Adjust`/`LocalLaplacian.UpsampledFrom`) umzubauen — sie wird je Durchgang nur einmal
   gerechnet, zu holen wäre weniger als eine Vergrößerung in voller Größe.
+
+## 78. Präparierte Bilddatei mit riesigen Maßen füllte Speicher bzw. Auslagerung (0.6.13 beta)
+
+- **Entdeckt in:** 0.6.12 beta (18.10.2026) beim gezielten Test mit präparierten Dateien (Wunsch des Benutzers);
+  **behoben in:** 0.6.13 beta.
+- **Was:** Eine 1,5 MB kleine PNG, die 40000 × 40000 Pixel behauptet (alles 0, stark komprimiert), wurde geladen —
+  ImageMagick belegte dafür Speicher bzw. wich auf eine Auslagerungsdatei aus (Linux standardmäßig `/tmp`, oft im
+  Arbeitsspeicher; Windows `%TEMP%` auf der Platte). Auf einem Rechner mit 16 GB legt das alles lahm.
+- **Warum:** Keine Grenzen gesetzt: Breite/Höhe unbegrenzt, Speicher = ganzer Arbeitsspeicher, Auslagerung unbegrenzt.
+- **Wie behoben:** `ImageLoader.CheckSize` liest vor dem Entpacken die Kopfdaten und lehnt Bilder über
+  `ImageLoader.MaxPixels` ab (etwa Arbeitsspeicher / 64 Byte, 100–2000 MP; 16 GB → rund 250 MP) mit verständlicher
+  Meldung („Das Bild ist zu groß für diesen Rechner …“), auch für Vorschaubilder der Listen. Beim Start (nur dort, siehe
+  #77) `ResourceLimits`: Kanten höchstens 65535, Auslagerung höchstens 1 GB, höchstens 4096 Bilder je Datei.
+- **Test mit beschädigten Dateien:** 6000 zufällig verfälschte Fassungen (Bytes, abgeschnitten, doppelt, Grenzwerte) von
+  JPEG, PNG, TIFF, WebP, GIF, BMP, AVIF, JPEG XL, ICO, PSD über `ImageLoader` (Kopfdaten, Vorschaubild, Laden,
+  Verkleinern): 2094 geladen, 3906 sauber abgelehnt, nichts hing, kein Absturz. Ein Absturz im ersten Lauf (JPEG XL,
+  „std::system_error: Resource temporarily unavailable“) kam von der Speicherbremse des Tests (`ulimit -v` verhindert
+  neue Stränge); ohne sie wird dieselbe Datei sauber abgelehnt. HEIC ließ sich als Ausgangsbild nicht schreiben (kein
+  Encoder), nur Lesen ist eingebaut.
+- **Nicht tun:** Bilder ohne Größenprüfung an ImageMagick geben; Grenzen von ImageMagick nach dem Start ändern.
+- **Wo:** `Core/Imaging/ImageLoader.cs` (`CheckSize`, `MaxPixels`, `ImageTooLargeException`),
+  `Core/Platform/ImageMagickPolicy.cs` (`Apply`).
+- **Test:** `ImageLoaderProbeTests.HugeClaimedSize_IsRejected_BeforeDecoding` (PNG behauptet 60000 × 60000).
+
+## 79. Beim Durchblättern blieb jedes Bild im Speicher, sobald ein Regler bewegt wurde (0.6.13 beta)
+
+- **Entdeckt in:** 0.6.12 beta (18.10.2026) beim Test langer Sitzungen; **behoben in:** 0.6.13 beta.
+- **Was:** 20 Fotos mit 12 MP zweimal durchgeblättert, bei jedem Dunst und Licht verstellt: Speicher 1,4 → 4,4 GB.
+- **Warum:** `IsReferencedByHistory` hielt ein Bild fest, sobald irgendein Rückgängig-Schritt zu seiner Datei gehörte —
+  auch bloße Reglerschritte. Die brauchen das Bild nicht: „Rückgängig“ wechselt zur Datei und lädt sie dabei neu, die
+  Regler stehen je Datei in den Einstellungen. Dazu gab niemand den freigewordenen Speicher ans System zurück.
+- **Wie behoben:** Nur Schritte mit Pixelbild oder Ausrichten-Rezept halten das Bild (`NeedsImage`); nach dem Freigeben
+  eines Bildes gibt `ReleaseMemorySoon` den Speicher zurück, zwei Sekunden nach dem letzten Wechsel, im Hintergrund.
+  Danach 1,9 GB nach zwei Runden, ohne weiteres Wachstum. Rückgängig über Bildwechsel geprüft (Datei neu geladen, Regler
+  zurück, keine Fehlermeldung).
+- **Nicht tun:** Bilder für reine Reglerschritte im Speicher halten; die gründliche Bereinigung bei jedem Wechsel sofort
+  im UI-Strang auslösen (kurze Pause).
+- **Wo:** `Ui/ViewModels/MainViewModel.Editing.cs` (`IsReferencedByHistory`, `NeedsImage`), `MainViewModel.cs`
+  (`ShowFileAsync`, `ReleaseMemorySoon`).
+- **Nachweis:** Messprogramm im Testordner (unsichtbares Fenster, 20 Bilder, zwei Runden, dann zweimal Rückgängig).

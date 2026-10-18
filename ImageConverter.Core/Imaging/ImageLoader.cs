@@ -1,3 +1,4 @@
+using ImageConverter.Core.Localization;
 using ImageMagick;
 
 namespace ImageConverter.Core.Imaging;
@@ -18,6 +19,9 @@ public sealed record LoadedImage(
     public void Dispose() => Image.Dispose();
 }
 
+/// <summary>Bild zu groß zum Öffnen (Maße aus den Kopfdaten, siehe <see cref="ImageLoader.MaxPixels"/>).</summary>
+public sealed class ImageTooLargeException(string message) : IOException(message);
+
 public static class ImageLoader
 {
     /// <summary>DPI, wenn die Datei keine Angabe enthält (Konvention von Referenzwerkzeug und Co.).</summary>
@@ -31,6 +35,7 @@ public static class ImageLoader
     public static Task<LoadedImage> LoadAsync(string path, CancellationToken ct = default) =>
         Task.Run(async () =>
         {
+            CheckSize(path);
             var image = new MagickImage();
             try
             {
@@ -95,6 +100,7 @@ public static class ImageLoader
     public static Task<MagickImage> LoadThumbnailAsync(string path, int edge, CancellationToken ct = default) =>
         Task.Run(() =>
         {
+            CheckSize(path);
             var settings = new MagickReadSettings();
             settings.SetDefine(MagickFormat.Jpeg, "size", $"{edge * 2}x{edge * 2}");
             var image = new MagickImage(path, settings);
@@ -115,6 +121,34 @@ public static class ImageLoader
                 throw;
             }
         }, ct);
+
+    /// <summary>
+    /// Größtes Bild, das geöffnet wird (Pixel): etwa 64 Byte je Pixel vom Arbeitsspeicher, mindestens 100, höchstens 2000
+    /// Megapixel — die Bearbeitung braucht ein Vielfaches des Bildes (Gleitkomma-Puffer). 16 GB → rund 250 MP.
+    /// </summary>
+    public static long MaxPixels { get; } = Math.Clamp(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 64, 100_000_000L, 2_000_000_000L);
+
+    /// <summary>
+    /// Vor dem Entpacken: Größe aus den Kopfdaten gegen <see cref="MaxPixels"/> prüfen. Eine präparierte Datei kann klein
+    /// sein und riesige Maße behaupten (1,5 MB für 40000 × 40000) — ohne Prüfung belegte ImageMagick Speicher bzw.
+    /// Auslagerung in dieser Größe. Liefert das Format keine Kopfdaten, entscheidet ImageMagick mit seinen Grenzen.
+    /// </summary>
+    public static void CheckSize(string path)
+    {
+        MagickImageInfo info;
+        try
+        {
+            info = new MagickImageInfo(path);
+        }
+        catch (MagickException)
+        {
+            return;   // beim Lesen meldet ImageMagick den eigentlichen Fehler
+        }
+        var pixels = (long)info.Width * info.Height;
+        if (pixels > MaxPixels || info.Width > Platform.ImageMagickPolicy.MaxEdge || info.Height > Platform.ImageMagickPolicy.MaxEdge)
+            throw new ImageTooLargeException(Tr.T("Das Bild ist zu groß für diesen Rechner ({0} × {1} Pixel, {2:0} Megapixel; höchstens {3:0} Megapixel).",
+                info.Width, info.Height, pixels / 1e6, MaxPixels / 1e6));
+    }
 
     private static double ReadDpi(MagickImage image) => ReadDpi(image.Density);
 

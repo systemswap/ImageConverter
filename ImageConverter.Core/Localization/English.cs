@@ -792,6 +792,7 @@ public static class English
         ["Upscaler „{0}“ wird gemessen …"] = "Measuring upscaler “{0}” …",
         ["Upscaler, geschätzt für ein Foto mit 12 MP: {0}"] = "Upscalers, estimated for a 12 MP photo: {0}",
         ["Rechnet Entrauschen, Dunst und ein kleines KI-Modell je einmal auf der Grafikkarte und auf der CPU und nutzt danach, was auf diesem Rechner schneller ist. Dann misst er die vorhandenen Upscaler, damit die Zeitschätzung stimmt (PiSA-SR kann einige Minuten dauern)."] = "Runs noise reduction, haze and a small AI model once on the graphics card and once on the CPU, then uses whichever is faster on this computer. Afterwards it measures the installed upscalers so the time estimate is right (PiSA-SR can take a few minutes).",
+        ["Das Bild ist zu groß für diesen Rechner ({0} × {1} Pixel, {2:0} Megapixel; höchstens {3:0} Megapixel)."] = "The image is too large for this computer ({0} × {1} pixels, {2:0} megapixels; at most {3:0} megapixels).",
         // Rechner bedienbar halten (Einstellungen › Leistung)
         ["Für Laden, Ausrichten und Umwandeln gilt die neue Grenze ab dem nächsten Start; KI und Bildfilter sofort."] = "For loading, aligning and converting the new limit applies from the next start; AI and image filters immediately.",
         ["100 % · alle {0} Kerne"] = "100 % · all {0} cores",
