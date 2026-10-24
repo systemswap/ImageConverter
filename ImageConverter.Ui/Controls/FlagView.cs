@@ -8,8 +8,8 @@ using ImageConverter.Core.Localization;
 namespace ImageConverter.Controls;
 
 /// <summary>
-/// Kleine Flagge vor dem Sprachnamen. Selbst gezeichnet, denn Windows zeigt
-/// Flaggen-Emojis nur als zwei Buchstaben an.
+/// Small flag in front of a language name. Drawn by the control itself because Windows renders
+/// flag emojis only as two letters.
 /// </summary>
 public sealed class FlagView : Control
 {
@@ -61,7 +61,7 @@ public sealed class FlagView : Control
             }
         }
 
-        // Feiner Rand, damit weiße Streifen auf hellem Grund sichtbar bleiben
+        // Thin border so that white stripes stay visible on a light background.
         context.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)), 1),
             rect.Deflate(0.5), 2, 2);
     }
@@ -79,7 +79,7 @@ public sealed class FlagView : Control
         }
     }
 
-    /// <summary>Union Jack, vereinfacht für ~22 × 15 Pixel.</summary>
+    /// <summary>Draws the Union Jack, simplified for about 22 × 15 pixels.</summary>
     private static void DrawUnionJack(DrawingContext context, Rect r)
     {
         var blue = new SolidColorBrush(Color.Parse("#012169"));
@@ -118,7 +118,7 @@ public sealed class FlagView : Control
         _image = null;
         _imagePath = path;
         try { if (path is not null) _image = new Bitmap(path); }
-        catch (Exception) { /* kaputte Bilddatei: Sprachcode zeigen */ }
+        catch (Exception) { /* broken image file: show the language code instead */ }
         return _image;
     }
 }

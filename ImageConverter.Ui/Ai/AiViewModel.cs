@@ -22,12 +22,14 @@ using ImageMagick;
 namespace ImageConverter.Ai;
 
 /// <summary>
-/// KI-Verbesserung als eigenständiges Modul: GroupBox im Hauptfenster (<see cref="AiPanel"/>)
-/// und die Seiten „Leistung“ und „KI-Modelle“ in den Einstellungen (<see cref="AiModelPageView"/>, <see cref="PerformanceView"/>,
-/// <see cref="ModelFolderView"/>).
-/// Entfernen: Ordner Ai/ (Ui und Core), die zwei Einbindungen in MainView/SettingsWindow,
-/// die Eigenschaft <c>MainViewModel.Ai</c> und das Paket Microsoft.ML.OnnxRuntime.
+/// AI enhancement and model management: the group box in the main window (<see cref="AiPanel"/>) and the
+/// "Leistung" (performance) and AI model pages in the settings (<see cref="AiModelPageView"/>,
+/// <see cref="PerformanceView"/>, <see cref="ModelFolderView"/>).
 /// </summary>
+/// <remarks>
+/// The AI code is not self-contained: <c>MainViewModel</c> (upscaling, dewarping, history), <c>CropView</c> and parts of
+/// the Core imaging code use <c>ImageConverter.Core.Ai</c> as well.
+/// </remarks>
 public partial class AiViewModel : ViewModelBase
 {
     private static readonly HttpClient Http = CreateHttp();
@@ -41,9 +43,9 @@ public partial class AiViewModel : ViewModelBase
     {
         _main = main;
         Store = AiModelStore.CreateDefault();
-        _sessions.Measured = AppSettings.Load().AiSpeed;   // letzter Geschwindigkeitstest: Grafikkarte oder CPU
+        _sessions.Measured = AppSettings.Load().AiSpeed;   // last speed test: GPU or CPU
         Upscalers.OnGpu = _sessions.OnGpu;
-        MainViewModel.RestoreUpscaleTimes();   // gemessene Zeiten dieses Rechners statt der Vorgaben vom Laptop
+        MainViewModel.RestoreUpscaleTimes();   // times measured on this computer instead of the defaults measured on a laptop
         Models = AiModelCatalog.All.Select(m => new AiModelItem(this, m)).ToList();
         ModelGroups =
         [
@@ -55,7 +57,7 @@ public partial class AiViewModel : ViewModelBase
             Group("UPSCALING", "Vergrößern mit KI – unter „Größe“, Liste „Verfahren“ (KI-Scaler). Real-ESRGAN x4v3 ist dieselbe Datei wie „Allround“ oben.", AiModelKind.Upscale, AiModelCatalog.Allround),
             Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR. Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
         ];
-        // Je Anwendung eine Seite in den Einstellungen; Hilfsmodelle und Teile bei der Anwendung, die sie braucht
+        // One settings page per use case; helper models and parts appear with the use case that needs them.
         ImprovePage = new([ModelGroups[0]]);
         FacesPage = new([ModelGroups[1], ModelGroups[2]]);
         RemovePage = new([ModelGroups[3]]);
@@ -71,22 +73,22 @@ public partial class AiViewModel : ViewModelBase
 
     internal AiModelStore Store { get; }
 
-    /// <summary>Geöffnete Modelle — mit dem Entfernen geteilt, damit nur ein großes Modell im Speicher liegt.</summary>
+    /// <summary>Opened models; shared with the removal tab so that only one large model is held in memory.</summary>
     internal OnnxSessions Sessions => _sessions;
 
-    // ------------------------------------------------------------ Grafikkarte
+    // ------------------------------------------------------------ GPU
 
-    // Ist eine Grafikkarte da, wird sie genutzt — außer der Geschwindigkeitstest hat auf diesem Rechner die CPU schneller
-    // gemessen (Wunsch des Benutzers: testen, dann das Schnellere nehmen); hier nur, was gerade gilt.
+    // If a GPU is available it is used, unless the speed test measured the CPU as faster on this computer (test first,
+    // then use the faster one); the properties here only report what currently applies.
 
-    /// <summary>Was gerade genutzt wird — oder warum nicht (Einstellungen › Leistung).</summary>
+    /// <summary>What the AI currently computes on, or why the GPU is not used (Settings › Performance).</summary>
     public string GpuStatus =>
         OnnxSessions.GpuName is not { } name ? Tr.T("Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU.")
         : _sessions.CpuFasterHere ? Tr.T("Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0}).", name)
         : _sessions.GpuProblem is { } problem ? Tr.T("Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}", name, problem)
         : Tr.T("Die KI-Scaler (Größe › Verfahren) rechnen auf der Grafikkarte ({0}), die übrigen Modelle (Gesichter, Entfernen, Begradigen) auf der CPU.", name);
 
-    /// <summary>Worauf Entrauschen und Dunst rechnen (ILGPU: OpenCL/CUDA, unabhängig von der KI-Laufzeit).</summary>
+    /// <summary>What denoising and dehazing compute on (ILGPU: OpenCL/CUDA, independent of the AI runtime).</summary>
     public string FilterGpuStatus =>
         GpuFilters.DeviceName is { } device
             ? GpuFilters.UsesGpu
@@ -96,14 +98,14 @@ public partial class AiViewModel : ViewModelBase
                 ? Tr.T("Entrauschen und Dunst rechnen auf der CPU — {0}", problem)
                 : Tr.T("Entrauschen und Dunst nutzen die Grafikkarte, sobald eine mit OpenCL oder CUDA gefunden ist.");
 
-    // ------------------------------------------------------------ Rechner bedienbar halten
+    // ------------------------------------------------------------ Keeping the computer responsive
 
-    /// <summary>Höchstens so viel Prozent der CPU (Regler 10 … 100).</summary>
+    /// <summary>Maximum CPU share in percent (slider 10 … 100, applied in steps of 5).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CpuPercentLabel), nameof(CpuRestartHint))]
     public partial double CpuPercent { get; set; } = ComputeLimits.Percent;
 
-    /// <summary>ImageMagick (Laden, Ausrichten, Umwandeln) übernimmt eine geänderte Grenze erst beim nächsten Start.</summary>
+    /// <summary>Hint shown because ImageMagick (loading, aligning, converting) applies a changed limit only after the next start.</summary>
     public string? CpuRestartHint => ComputeLimits.MagickNeedsRestart
         ? Tr.T("Für Laden, Ausrichten und Umwandeln gilt die neue Grenze ab dem nächsten Start; KI und Bildfilter sofort.")
         : null;
@@ -113,9 +115,9 @@ public partial class AiViewModel : ViewModelBase
         var percent = (int)Math.Round(value / 5) * 5;
         if (percent == ComputeLimits.Percent) return;
         ComputeLimits.SetPercent(percent);
-        var clamped = ComputeLimits.Percent;   // nach dem Begrenzen auf 10 … 100
+        var clamped = ComputeLimits.Percent;   // after clamping to 10 … 100
         AppSettings.Update(s => s with { CpuPercent = clamped });
-        // Messungen galten für die alte Grenze
+        // the measurements were made with the old limit
         OnPropertyChanged(nameof(SpeedTestText));
         OnPropertyChanged(nameof(FilterGpuStatus));
         RefreshGpuStatus();
@@ -125,7 +127,7 @@ public partial class AiViewModel : ViewModelBase
         ? Tr.T("100 % · alle {0} Kerne", ComputeLimits.PhysicalCores)
         : Tr.T("{0} % · {1} von {2} Kernen", ComputeLimits.Percent, ComputeLimits.AllowedCores, ComputeLimits.PhysicalCores);
 
-    /// <summary>Niedrige Priorität: andere Programme haben Vorrang, sonst volle Geschwindigkeit.</summary>
+    /// <summary>Low priority: other programs take precedence; otherwise full speed.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PriorityHint))]
     public partial bool LowPriority { get; set; } = AppSettings.Load().LowPriority;
@@ -137,12 +139,12 @@ public partial class AiViewModel : ViewModelBase
         else ComputeLimits.TryNormalPriority();
     }
 
-    /// <summary>Hinweis, wenn das Ausschalten erst nach einem Neustart wirkt (Linux).</summary>
+    /// <summary>Hint when switching low priority off only takes effect after a restart (Linux).</summary>
     public string? PriorityHint => !LowPriority && ComputeLimits.LowPriority
         ? Tr.T("Wird beim nächsten Start des Programms wirksam.")
         : null;
 
-    // ------------------------------------------------------------ Geschwindigkeitstest
+    // ------------------------------------------------------------ Speed test
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(TestSpeedCommand))]
@@ -150,7 +152,7 @@ public partial class AiViewModel : ViewModelBase
 
     [ObservableProperty] public partial string? SpeedTestProgress { get; set; }
 
-    /// <summary>Ergebnis des letzten Tests je Bereich, oder ein Hinweis, dass noch nicht getestet wurde.</summary>
+    /// <summary>Result of the last test per area, or a hint that no test has been run yet.</summary>
     public string SpeedTestText
     {
         get
@@ -163,7 +165,7 @@ public partial class AiViewModel : ViewModelBase
                 lines.Add(Describe(Tr.T("Entrauschen und Dunst"), f, SpeedTest.FilterMachine(GpuFilters.DeviceName)));
             if (settings.AiSpeed is { } a)
                 lines.Add(Describe(Tr.T("KI (Real-ESRGAN x4v3)"), a, SpeedTest.AiMachine(OnnxSessions.GpuProvider)));
-            // Upscaler: geschätzte Zeit für ein typisches Foto (12 MP, ×4), sobald auf diesem Rechner gemessen
+            // Upscalers: estimated time for a typical photo (12 MP, ×4), once measured on this computer
             var learned = Upscalers.Learned();
             var device = Upscalers.OnGpu ? "gpu" : "cpu";
             var times = new[] { UpscaleMethod.Fast, UpscaleMethod.Medium, UpscaleMethod.Generative }
@@ -190,8 +192,8 @@ public partial class AiViewModel : ViewModelBase
     private bool CanTestSpeed => !IsSpeedTesting;
 
     /// <summary>
-    /// Bildfilter und KI je einmal auf Grafikkarte und CPU rechnen, das Schnellere merken und ab sofort nutzen.
-    /// Die KI braucht dafür das kleine Modell x4v3 („Allround“).
+    /// Runs the image filters and the AI once each on the GPU and the CPU, stores the faster choice and uses it from now
+    /// on; then measures the upscalers. The AI test needs the small x4v3 model ("Allround").
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanTestSpeed))]
     private async Task TestSpeed()
@@ -219,9 +221,9 @@ public partial class AiViewModel : ViewModelBase
                 _sessions.Measured = ai;
                 SpeedTestProgress = null;
             }
-            RefreshGpuStatus();   // Upscalers.OnGpu nach der Wahl, bevor die Upscaler gemessen werden
+            RefreshGpuStatus();   // set Upscalers.OnGpu according to the choice before the upscalers are measured
 
-            // Upscaler mit der gewählten Recheneinheit und Obergrenze — die Zeitschätzung stimmt dann ab dem ersten Bild
+            // Measure the upscalers with the chosen device and CPU limit so that the time estimate is right from the first image.
             foreach (var method in new[] { UpscaleMethod.Fast, UpscaleMethod.Medium, UpscaleMethod.Generative })
             {
                 SpeedTestProgress = Tr.T("Upscaler „{0}“ wird gemessen …", ImageConverter.Models.UpscaleOption.Of(method).Name);
@@ -245,7 +247,7 @@ public partial class AiViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Nach dem Öffnen eines Modells: Grafikkarte genutzt oder (nach einem Fehler) doch die CPU?</summary>
+    /// <summary>Called after a model is opened: updates whether the GPU is used or, after an error, the CPU.</summary>
     internal void RefreshGpuStatus()
     {
         if (Upscalers.OnGpu != _sessions.OnGpu)
@@ -256,10 +258,13 @@ public partial class AiViewModel : ViewModelBase
         OnPropertyChanged(nameof(GpuStatus));
     }
 
-    /// <summary>Nach jedem Durchsehen des Modellordners (Download, Löschen, von Hand kopiert).</summary>
+    /// <summary>Raised after every rescan of the model folder (download, deletion, files copied by hand).</summary>
     internal event EventHandler? ModelsChanged;
 
-    /// <summary>Fortschritt in der einen Anzeige unten mitte — auch für das Entfernen.</summary>
+    /// <summary>Shows progress in the single activity display at the bottom centre; also used by the removal tab.</summary>
+    /// <param name="text">Text of the display.</param>
+    /// <param name="progress">Progress 0…100.</param>
+    /// <param name="cancel">Command of the cancel button; <c>null</c> hides it.</param>
     internal void ShowActivity(string text, double progress, System.Windows.Input.ICommand? cancel)
     {
         _main.ActivityText = text;
@@ -269,34 +274,34 @@ public partial class AiViewModel : ViewModelBase
 
     internal void HideActivity() => EndActivity();
 
-    /// <summary>Alle Modelle für die Verwaltung (Einstellungen).</summary>
+    /// <summary>All models for the model management (settings).</summary>
     public IReadOnlyList<AiModelItem> Models { get; }
 
-    /// <summary>Die Modelle in Gruppen für die Verwaltung.</summary>
+    /// <summary>The models in groups for the model management.</summary>
     public IReadOnlyList<AiModelGroup> ModelGroups { get; }
 
-    /// <summary>Seiten der Einstellungen (links „KI-Modelle“): je Anwendung eine.</summary>
+    /// <summary>Settings pages (AI models section on the left), one per use case.</summary>
     public AiModelPage ImprovePage { get; }
     public AiModelPage FacesPage { get; }
     public AiModelPage RemovePage { get; }
     public AiModelPage DewarpPage { get; }
     public AiModelPage UpscalePage { get; }
 
-    /// <param name="also">Modelle aus anderen Gruppen, die hier auch gebraucht werden (eine Datei, zwei Einträge).</param>
+    /// <param name="also">Models of other groups that are needed here as well (one file, two entries).</param>
     private AiModelGroup Group(string title, string hint, AiModelKind kind, params AiModel[] also) =>
-        new(title, hint, Models.Where(m => m.Model.Kind == kind || also.Contains(m.Model)).OrderBy(m => m.Model.Kind == kind).ToList());   // mitgenutzte zuerst (x4v3 = „KI Real-ESRGAN x4v3 · schnell“)
+        new(title, hint, Models.Where(m => m.Model.Kind == kind || also.Contains(m.Model)).OrderBy(m => m.Model.Kind == kind).ToList());   // shared models first (x4v3 = "KI Real-ESRGAN x4v3 · schnell")
 
-    /// <summary>Vorhandene, wählbare Modelle (ohne Hilfsmodelle).</summary>
+    /// <summary>Installed, selectable models (without helper models).</summary>
     public ObservableCollection<AiModel> Available { get; } = [];
 
-    /// <summary>Wo die Modelle liegen (bzw. hinkommen).</summary>
+    /// <summary>Where the models are (or will be) stored.</summary>
     public string FolderText => Store.Folders.FirstOrDefault(Directory.Exists) ?? Store.Folders[0];
 
-    /// <summary>Modellordner im Dateimanager öffnen — z. B. um Modelle von Hand hineinzulegen.</summary>
+    /// <summary>Opens the model folder in the file manager, e.g. to place models there by hand.</summary>
     [RelayCommand]
     private void OpenFolder()
     {
-        var folder = Store.DownloadFolder;   // legt ihn bei Bedarf an
+        var folder = Store.DownloadFolder;   // the folder is created below if needed
         Directory.CreateDirectory(folder);
         WatchFolders();
         if (!ImageConverter.Services.FolderOpener.TryOpen(folder))
@@ -304,7 +309,7 @@ public partial class AiViewModel : ViewModelBase
         OnPropertyChanged(nameof(FolderText));
     }
 
-    // ------------------------------------------------------------ Auswahl
+    // ------------------------------------------------------------ Selection
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEnhanceModel), nameof(ModelHint), nameof(IsFaceModel), nameof(HasFidelity), nameof(CanShowMap))]
@@ -324,20 +329,20 @@ public partial class AiViewModel : ViewModelBase
         ? Tr.T(m.Description) + (m.NonCommercial ? "\n\n" + Tr.T("Lizenz: nur für nicht-kommerzielle Nutzung.") : "")
         : null;
 
-    // ------------------------------------------------------------ Lauf
+    // ------------------------------------------------------------ Run
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(CommitCommand), nameof(DiscardCommand))]
     public partial bool IsRunning { get; set; }
 
-    /// <summary>Fortschritt 0…100.</summary>
+    /// <summary>Progress 0…100.</summary>
     [ObservableProperty] public partial double Progress { get; set; }
     [ObservableProperty] public partial string? Status { get; set; }
 
     /// <summary>
-    /// Reihenfolge von KI und Einstellungen (Dunst, Licht, Farbe, Entrauschen, Schärfe). Nie doppelt:
-    /// Entweder die KI rechnet auf dem Bild ohne sie und die Einstellungen wirken danach wie gewohnt auch auf
-    /// die Gesichter — oder sie werden vorher ins Bild gerechnet und stehen danach auf null.
+    /// Order of AI and adjustments (haze, light, colour, denoising, sharpness). The adjustments are never applied twice:
+    /// either the AI works on the image without them and the adjustments then also affect the faces as usual, or they
+    /// are rendered into the image beforehand and reset to zero afterwards.
     /// </summary>
     public IReadOnlyList<string> OrderOptions { get; } = ["Erst KI, dann Einstellungen", "Erst Einstellungen, dann KI"];
 
@@ -353,22 +358,13 @@ public partial class AiViewModel : ViewModelBase
 
     partial void OnSelectedOrderChanged(string value)
     {
-        // das offene Ergebnis gehört zur Reihenfolge, mit der es gerechnet wurde
+        // the pending result belongs to the order it was computed with
         if (HasPending) Discard();
     }
 
-    /// <summary>Wie ein Lauf aufgesetzt ist: woher er kommt, was das Modell bekommt und welcher Look danach gilt.</summary>
-    /// <param name="Base">Bildstand, den das Ergebnis ersetzt (beim Übernehmen muss er noch gelten).</param>
-    /// <param name="Input">Was das Modell bekommt: <paramref name="Base"/> oder Base mit eingerechnetem Look.</param>
-    /// <param name="Baked">Look, der in <paramref name="Input"/> steckt; null = keiner.</param>
-    /// <param name="LookAfter">Reglerstand nach dem Übernehmen; null = Regler bleiben.</param>
-    /// <param name="LookOnTop">Die Einstellungen wirken danach auf das Ergebnis — die Vorschau zeigt sie mit.</param>
-    /// <param name="Current">Das aktuelle Bild beim Rechnen — „Übernehmen“ nur, solange es noch das aktuelle ist.</param>
-    /// <param name="Turns">Vierteldrehungen, mit denen <paramref name="Input"/> gedreht ist (Gesichter aufrecht, wie angezeigt).</param>
-    /// <param name="Flip">… und ob gespiegelt. Das Ergebnis wird damit vor dem Übernehmen zurückgedreht.</param>
     /// <summary>
-    /// Nur Gesichter, deren Mitte im angezeigten Bild liegt (Zuschnitt, Entzerren …). Die Gesichtserkennung bekommt das
-    /// Pixelbild (nur gedreht/gespiegelt) — ohne diesen Filter würden auch weggeschnittene Gesichter bearbeitet und gezählt.
+    /// Keeps only faces whose centre lies in the displayed image (crop, perspective correction …). Face detection gets
+    /// the pixel image (only rotated/mirrored); without this filter, cropped-away faces would be processed and counted too.
     /// </summary>
     private static IReadOnlyList<DetectedFace> VisibleFaces(IReadOnlyList<DetectedFace> faces, RunSetup setup, GeometryRecipe recipe,
         GeometryStages stages)
@@ -385,23 +381,32 @@ public partial class AiViewModel : ViewModelBase
         }).ToList();
     }
 
+    /// <summary>How a run is set up: where it starts, what the model gets and which look applies afterwards.</summary>
+    /// <param name="Base">Image state that the result replaces (it must still be current when committing).</param>
+    /// <param name="Input">What the model gets: <paramref name="Base"/>, or Base with the look rendered in, oriented as displayed.</param>
+    /// <param name="Baked">Look contained in <paramref name="Input"/>; null = none.</param>
+    /// <param name="LookAfter">Slider values after committing; null = sliders stay as they are.</param>
+    /// <param name="LookOnTop">The adjustments apply to the result afterwards, so the preview shows them on top.</param>
+    /// <param name="Current">The current image at computation time; "Übernehmen" (commit) only works while it is still current.</param>
+    /// <param name="Turns">Quarter turns by which <paramref name="Input"/> is rotated (faces upright, as displayed).</param>
+    /// <param name="Flip">Whether <paramref name="Input"/> is also mirrored. The result is turned back with these values before committing.</param>
     private sealed record RunSetup(MagickImage Base, MagickImage Input, MainViewModel.Look? Baked,
         MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current, int Turns = 0, bool Flip = false);
 
     /// <summary>
-    /// Ergebnis des Modells, noch nicht übernommen: Stärke und Hautstruktur mischen es live neu
-    /// (<see cref="IAiRun"/>), erst „Übernehmen“ macht daraus einen Bearbeitungsschritt.
+    /// Result of the model, not yet committed: strength and skin texture re-blend it live (<see cref="IAiRun"/>);
+    /// only "Übernehmen" (commit) turns it into an editing step.
     /// </summary>
     private IAiRun? _run;
     private RunSetup? _setup;
-    private AiModel? _runModel;   // womit gerechnet wurde — Name in der Liste „Bearbeitungen“
+    private AiModel? _runModel;   // model used for the computation; its name appears in the "Bearbeitungen" (edits) list
 
-    /// <summary>Gefundene Gesichter des offenen Ergebnisses — für ein neues Rechnen mit anderer Natürlichkeit.</summary>
+    /// <summary>Faces found for the pending result, reused when recomputing with a different fidelity.</summary>
     private IReadOnlyList<DetectedFace>? _runFaces;
 
     /// <summary>
-    /// Letzter übernommener KI-Schritt: Ergebnis, Bild davor und der dabei eingerechnete Look — ein neuer Lauf
-    /// beginnt wieder vor der KI, statt auf ihrem Ergebnis aufzubauen.
+    /// Last committed AI step: result, image before it and the look rendered in, so that a new run starts again
+    /// before the AI instead of building on its result.
     /// </summary>
     private (MagickImage Result, MagickImage Base, MainViewModel.Look? Baked)? _lastAi;
 
@@ -410,38 +415,38 @@ public partial class AiViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(CanShowMap))]
     public partial bool HasPending { get; set; }
 
-    /// <summary>Die Einstellungen (Dunst …) werden gerade über das Ergebnis gelegt — Fortschritt wie beim Rechnen zeigen.</summary>
+    /// <summary>The adjustments (haze …) are being rendered over the result; progress is shown as during computation.</summary>
     [ObservableProperty]
     public partial bool IsRenderingLook { get; set; }
 
     public bool CanShowMap => IsFaceModel && HasPending;
 
-    // Vorgaben der Haut-Regler: vom Benutzer am Foto 172251 (2012) als passend befunden (0.5.20)
+    // Defaults of the skin sliders, chosen by visual comparison on a test portrait.
     private const double DefaultTexture = 69, DefaultFolds = 48, DefaultGrain = 31;
-    private const double DefaultGrainSize = 22;   // ×0,46: 2^((22 − 50) / 25)
+    private const double DefaultGrainSize = 22;   // ×0.46: 2^((22 − 50) / 25)
 
-    /// <summary>Hautstruktur 0…100 %: feine Struktur aus dem Bild davor statt der glatten Modellhaut (nur Gesichter).</summary>
+    /// <summary>Skin texture 0…100 %: fine structure from the image before instead of the smooth model skin (faces only).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TextureLabel))]
     public partial double Texture { get; set; } = DefaultTexture;
 
     public string TextureLabel => $"{Texture:0} %";
 
-    /// <summary>Falten &amp; Züge 0…100 %: was das Modell an Falten geglättet hat, aus dem Original zurück (nur Haut).</summary>
+    /// <summary>Wrinkles and features 0…100 %: restores from the original the wrinkles the model smoothed out (skin only).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FoldsLabel))]
     public partial double Folds { get; set; } = DefaultFolds;
 
     public string FoldsLabel => $"{Folds:0} %";
 
-    /// <summary>Körnung 0…200 %: 100 % = so viel Korn wie im übrigen Foto gemessen.</summary>
+    /// <summary>Grain 0…200 %: 100 % = as much grain as measured in the rest of the photo.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GrainLabel))]
     public partial double Grain { get; set; } = DefaultGrain;
 
     public string GrainLabel => $"{Grain:0} %";
 
-    /// <summary>Korngröße als Regler 0…100: Mitte = wie im Foto gemessen, je Viertel doppelt so grob bzw. fein.</summary>
+    /// <summary>Grain size as a slider 0…100: the middle = as measured in the photo; each quarter doubles or halves the size.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GrainSizeLabel))]
     public partial double GrainSize { get; set; } = DefaultGrainSize;
@@ -450,7 +455,7 @@ public partial class AiViewModel : ViewModelBase
 
     public string GrainSizeLabel => $"×{GrainFactor:0.0#}";
 
-    /// <summary>Karte statt Bild: rot, wo Falten zurückkommen; blau, was vom Modell bleibt.</summary>
+    /// <summary>Shows a map instead of the image: red where wrinkles are restored, blue where the model result remains.</summary>
     [ObservableProperty] public partial bool ShowMap { get; set; }
 
     private AiBlend CurrentBlend => new(Strength / 100, Texture / 100, Folds / 100, Grain / 100, GrainFactor);
@@ -460,7 +465,7 @@ public partial class AiViewModel : ViewModelBase
     partial void OnGrainSizeChanged(double value) => RequestPreview();
     partial void OnShowMapChanged(bool value) => RequestPreview();
 
-    /// <summary>CodeFormer: 0 = stärkste Verbesserung, 100 = möglichst nah am Original. Geht ins Modell — rechnet neu.</summary>
+    /// <summary>CodeFormer fidelity: 0 = strongest enhancement, 100 = as close to the original as possible. It is a model input, so a change requires recomputing.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FidelityLabel))]
     public partial double Fidelity { get; set; } = 60;
@@ -472,21 +477,21 @@ public partial class AiViewModel : ViewModelBase
 
     partial void OnSelectedModelChanged(AiModel? value)
     {
-        // ein offenes Ergebnis gehört zum Modell, mit dem es gerechnet wurde
+        // a pending result belongs to the model it was computed with
         if (HasPending) Discard();
     }
 
     partial void OnStrengthChanged(double value) => RequestPreview();
     partial void OnTextureChanged(double value) => RequestPreview();
 
-    private double _runFidelity;   // Natürlichkeit, mit der das offene Ergebnis gerechnet wurde
+    private double _runFidelity;   // fidelity the pending result was computed with
 
-    /// <summary>Natürlichkeit seit der Rechnung verstellt — „KI berechnen“ rechnet mit dem neuen Wert neu.</summary>
+    /// <summary>Fidelity changed since the computation; "KI berechnen" (compute) recomputes with the new value.</summary>
     private bool FidelityChangedSinceRun => HasPending && HasFidelity && Math.Abs(Fidelity - _runFidelity) > 0.01;
 
     partial void OnFidelityChanged(double value)
     {
-        // Natürlichkeit geht ins Modell — aber nicht von selbst neu rechnen (Wunsch): erst mit „KI berechnen“
+        // Fidelity is a model input, but a change does not recompute automatically; only "KI berechnen" does.
         if (FidelityChangedSinceRun && !IsRunning)
             Status = Tr.T("Natürlichkeit geändert — „KI berechnen“ rechnet mit dem neuen Wert neu.");
     }
@@ -494,30 +499,30 @@ public partial class AiViewModel : ViewModelBase
     private bool CanApply => !IsRunning && SelectedModel is not null && _main.HasImage && !_main.IsEditing;
 
     /// <summary>
-    /// Rechnet das Modell und zeigt das Ergebnis — ins Bild kommt es erst mit „Übernehmen“. Nur die Natürlichkeit verstellt:
-    /// dasselbe Eingangsbild und dieselben Gesichter, nur das Modell neu.
+    /// Runs the model and shows the result; it enters the image only with "Übernehmen" (commit). If only the fidelity was
+    /// changed, the same input image and faces are reused and only the model is run again.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanApply))]
     private Task Apply() => ComputeAsync(rerun: FidelityChangedSinceRun && _runModel == SelectedModel);
 
     /// <summary>
-    /// Ausgangsbild und Look für einen neuen Lauf. Immer vom Stand vor der KI: Ist das Bild das Ergebnis des
-    /// letzten KI-Schritts, rechnet der Lauf auf dem Bild davor — KI auf KI würde Gesichter immer glatter machen.
-    /// Der Look kommt nie doppelt ins Bild.
+    /// Chooses the start image and look for a new run, always from the state before the AI: if the image is the result
+    /// of the last AI step, the run works on the image before it, because AI on AI would make faces smoother and
+    /// smoother. The look never enters the image twice.
     /// </summary>
     private (MagickImage Base, MainViewModel.Look Apply, MainViewModel.Look? Restore) ChooseStart(MagickImage current)
     {
         var look = _main.CurrentLook();
         if (_lastAi is { } last && ReferenceEquals(current, last.Result))
         {
-            // letzter Schritt ohne eingerechneten Look: Regler gelten wie eingestellt
+            // last step without a rendered-in look: the sliders apply as set
             if (last.Baked is null) return (last.Base, look, null);
-            // mit eingerechnetem Look und Reglern noch auf null: derselbe Look, vom Bild davor aus
+            // with a rendered-in look and sliders still at zero: the same look, starting from the image before
             if (look.IsNone) return (last.Base, last.Baked, last.Baked);
         }
-        // Nach der KI gedreht oder zugeschnitten: vom Bild ohne KI aus (spätere Schritte noch einmal angewendet)
+        // Rotated or cropped after the AI: start from the image without AI (later steps applied again)
         if (_main.CurrentWithoutAi is { } clean && !ReferenceEquals(clean, current)) return (clean, look, null);
-        return (current, look, null);   // neu, oder Regler seither verstellt: vom aktuellen Bild aus
+        return (current, look, null);   // new, or sliders changed since: start from the current image
     }
 
     private async Task ComputeAsync(bool rerun)
@@ -540,7 +545,7 @@ public partial class AiViewModel : ViewModelBase
         var start = setup is null ? ChooseStart(current) : default;
         var image = setup?.Input ?? start.Base;
 
-        // Vergrößern gehört zu „Größe“ (Upscaling) — hier immer in Originalgröße (×4 gerechnet, zurückgemittelt)
+        // Enlarging belongs to "Größe" (upscaling); here always at original size (computed at ×4, averaged back down)
         const int factor = 1;
         if (model.Kind == AiModelKind.Enhance
             && !AiEnhancer.PossibleFactors(model.Scale, (int)image.Width, (int)image.Height).Contains(factor))
@@ -567,7 +572,7 @@ public partial class AiViewModel : ViewModelBase
             if (f > 0) Activity($"{f * 100:0} %{Remaining(clock.Elapsed, f)}", f * 100, cancel: true);
         });
 
-        // Zwischenstände sind im gedrehten Pixelbild — für die Anzeige zurückdrehen und mit dem Rezept zeigen
+        // Intermediate frames are in the rotated pixel image; turn them back for display and show them with the geometry recipe.
         var geometry = _main.ShownGeometry;
         var (runTurns, runFlip) = setup is { } open ? (open.Turns, open.Flip) : _main.AiOrientation;
         void Preview(AiPreviewFrame frame)
@@ -575,20 +580,20 @@ public partial class AiViewModel : ViewModelBase
             var shownFrame = MainViewModel.ShowWithGeometry(frame, runTurns, runFlip, geometry.Recipe, geometry.Stages);
             Dispatcher.UIThread.Post(() =>
             {
-                // nur zeigen, solange noch dasselbe Bild angezeigt wird
+                // show only while the same image is still displayed
                 if (IsRunning && _main.CurrentImagePath == path)
                     _main.OverrideBitmap = BitmapOps.FromBgra(shownFrame.Bgra, shownFrame.Width, shownFrame.Height);
             });
         }
 
-        MagickImage? rendered = null;   // eigens gerechnetes Eingangsbild — gehört uns, bis es ein Lauf übernimmt
+        MagickImage? rendered = null;   // input image rendered for this run; owned here until a run setup takes it over
         try
         {
             if (setup is null)
             {
                 if (lookFirst && !start.Apply.IsNone)
                 {
-                    // Erst die Einstellungen in voller Größe ins Bild, dann bekommt es das Modell
+                    // Render the adjustments into the image at full size first, then pass it to the model.
                     Activity(Tr.T("Einstellungen werden ins Bild gerechnet …"), 0, cancel: true);
                     var (from, apply) = (start.Base, start.Apply);
                     var plan = apply.Plan((int)from.Width, (int)from.Height, new Progress<WorkProgress>(p =>
@@ -607,8 +612,8 @@ public partial class AiViewModel : ViewModelBase
                 }
                 else
                 {
-                    // KI zuerst; ein eingerechneter Look des letzten Schritts kommt beim Übernehmen in die Regler zurück.
-                    // Das Modell bekommt das Bild so gedreht, wie es angezeigt wird (eigenes Bild, gehört dem Lauf).
+                    // AI first; a look rendered into the last step returns to the sliders on commit.
+                    // The model gets the image rotated as displayed (a separate image owned by the run).
                     var from = start.Base;
                     rendered = await Task.Run(() => MainViewModel.Orient(from, runTurns, runFlip), cts.Token);
                     setup = new RunSetup(start.Base, rendered ?? start.Base, null, start.Restore, LookOnTop: !lookFirst, current, runTurns, runFlip);
@@ -634,7 +639,7 @@ public partial class AiViewModel : ViewModelBase
                     var input = image;
                     faces = await Task.Run(() =>
                         AiFaces.Detect(input, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)), cts.Token);
-                    // Die KI sieht das ganze Pixelbild; Gesichter außerhalb des Zuschnitts (und anderer Ausrichtung) bleiben, wie sie sind
+                    // The AI sees the whole pixel image; faces outside the crop (and other geometry) stay as they are.
                     faces = VisibleFaces(faces, setup!, geometry.Recipe, geometry.Stages);
                 }
 
@@ -646,7 +651,7 @@ public partial class AiViewModel : ViewModelBase
 
                 Activity(faces.Count == 1 ? Tr.T("1 Gesicht gefunden …") : Tr.T("{0} Gesichter gefunden …", faces.Count), Progress, cancel: true);
                 var (found, input2, fidelity) = (faces, image, fidelityUsed / 100);
-                var parserPath = Store.PathOf(AiModelCatalog.FaceParser);   // ohne: Falten ersatzweise ohne Augen und Mund
+                var parserPath = Store.PathOf(AiModelCatalog.FaceParser);   // without it, wrinkles fall back to a mask without eyes and mouth
                 run = await Task.Run(() =>
                 {
                     var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model) { Fidelity = fidelity };
@@ -664,7 +669,7 @@ public partial class AiViewModel : ViewModelBase
                 }, cts.Token);
             }
 
-            if (_main.CurrentImagePath != path) return;   // inzwischen ein anderes Bild gewählt
+            if (_main.CurrentImagePath != path) return;   // a different image was selected meanwhile
             if (!ReferenceEquals(_main.CurrentImage, setup.Current))
             {
                 Status = Tr.T("Das Bild wurde inzwischen geändert — bitte neu berechnen.");
@@ -673,7 +678,7 @@ public partial class AiViewModel : ViewModelBase
 
             if (!ReferenceEquals(setup, _setup)) DisposeInput(_setup);
             (_run, _setup, _runFaces, _runModel, _runFidelity) = (run, setup, faces, model, fidelityUsed);
-            rendered = null;   // gehört jetzt zu _setup
+            rendered = null;   // now owned by _setup
             HasPending = true;
             Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
                 FormatDuration(clock.Elapsed));
@@ -695,18 +700,18 @@ public partial class AiViewModel : ViewModelBase
             IsRunning = false;
             EndActivity();
             AppLog.Activity(null);
-            if (HasPending) RequestPreview();   // fertiges Ergebnis (oder nach Abbruch das alte) mit den Reglern zeigen
+            if (HasPending) RequestPreview();   // show the finished result (or, after cancelling, the previous one) with the sliders
             else _main.OverrideBitmap = null;
         }
     }
 
-    /// <summary>Das eigens gerechnete Eingangsbild eines Laufs freigeben (nie das Bild aus dem Verlauf).</summary>
+    /// <summary>Disposes the input image rendered for a run (never the image from the history).</summary>
     private static void DisposeInput(RunSetup? setup)
     {
         if (setup is not null && !ReferenceEquals(setup.Input, setup.Base)) setup.Input.Dispose();
     }
 
-    // Vorschau beim Ziehen: die letzte Anforderung gewinnt, gerechnet wird nie zweimal gleichzeitig
+    // Preview while dragging: the latest request wins, and two previews are never computed at the same time.
     private bool _previewRunning, _previewDirty;
     private CancellationTokenSource? _previewCts;
     private (IAiRun Run, AiPreviewSize Size)? _beforeOf;
@@ -717,14 +722,14 @@ public partial class AiViewModel : ViewModelBase
         if (_previewRunning)
         {
             _previewDirty = true;
-            _previewCts?.Cancel();   // veraltete Rechnung (Dunst …) zwischen zwei Schritten abbrechen
+            _previewCts?.Cancel();   // cancel the outdated computation (haze …) between two steps
             return;
         }
 
         _ = ShowPreviewAsync();
     }
 
-    /// <summary>Welcher Look über dem Ergebnis liegt: bei „erst KI“ die Regler (bzw. der Look, der zurückkommt).</summary>
+    /// <summary>Look rendered over the result: with "AI first" the sliders (or the look that is restored); otherwise none.</summary>
     private MainViewModel.Look? PreviewLook(RunSetup setup) =>
         setup.LookOnTop ? setup.LookAfter ?? _main.CurrentLook() : null;
 
@@ -740,8 +745,8 @@ public partial class AiViewModel : ViewModelBase
                 var (blend, look, map) = (CurrentBlend, PreviewLook(setup), ShowMap ? run as FaceRun : null);
                 var geometry = _main.ShownGeometry;
                 var shaped = (geometry.Recipe.Present & geometry.Stages) != 0 || setup.Turns != 0 || setup.Flip;
-                // wie die normale Vorschau: ohne Look und Größenänderung das Bild selbst, sonst verkleinert; mit Ausrichten
-                // verkleinert im Format des Pixelbilds (gedreht/zugeschnitten wird danach)
+                // Like the normal preview: without look and size change the image itself, otherwise downscaled; with
+                // geometry, downscaled in the format of the pixel image (rotation/cropping is applied afterwards).
                 var (grain, targetWidth) = (_main.CurrentGrain(), _main.CurrentLook().TargetWidth);
                 var size = !shaped && look is not { IsNone: false } && grain is null && _main.TargetIsImageSize
                     ? new AiPreviewSize(run.Width, run.Height)
@@ -749,7 +754,7 @@ public partial class AiViewModel : ViewModelBase
                         ? AiPreviewSize.Fit(run.Width, run.Height, Math.Max(_main.PreviewSize().Width, _main.PreviewSize().Height))
                         : _main.PreviewSize();
 
-                // Einstellungen über dem Ergebnis (Dunst in mehreren Durchläufen …): Schritt im Label zeigen
+                // Adjustments over the result (haze in several passes …): show the current step in the label.
                 using var cts = _previewCts = new CancellationTokenSource();
                 var plan = map is null && look is { IsNone: false }
                     ? look.Plan(size.Width, size.Height, new Progress<WorkProgress>(p =>
@@ -768,7 +773,7 @@ public partial class AiViewModel : ViewModelBase
                         IsRenderingLook = true;
                     }
                     var (turns, flip) = (setup.Turns, setup.Flip);
-                    // Körnung immer obenauf — gleich, ob der Look davor ins Bild kam oder darüber liegt (Ausgabegröße: targetWidth)
+                    // Grain always on top, whether the look was rendered in before or lies on top (output size: targetWidth)
                     shown = await Task.Run(() => map is not null
                         ? Render(MainViewModel.ShowWithGeometry(map.Map(blend, size), turns, flip, geometry.Recipe, geometry.Stages), null, null)
                         : Render(MainViewModel.ShowWithGeometry(run.Preview(blend, size), turns, flip, geometry.Recipe, geometry.Stages), look, plan,
@@ -776,7 +781,7 @@ public partial class AiViewModel : ViewModelBase
                 }
                 catch (OperationCanceledException)
                 {
-                    continue;   // neuere Reglerstellung wartet schon
+                    continue;   // a newer slider position is already waiting
                 }
                 finally
                 {
@@ -790,12 +795,12 @@ public partial class AiViewModel : ViewModelBase
                     _main.OverrideBitmap = BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
                 }
 
-                // Vorher-Seite für „Vorher / Nachher“: das Bild vor der KI, ohne Einstellungen — so zeigt der Vergleich
-                // links das Original und rechts KI samt allen Einstellungen
+                // "Before" side of the before/after comparison: the image before the AI, without adjustments, so that the
+                // comparison shows the original on the left and the AI result with all adjustments on the right.
                 if (_beforeOf is not { } b || !ReferenceEquals(b.Run, run) || b.Size != size)
                 {
                     var origin = setup.Base;
-                    // Vorher ist das ungedrehte Pixelbild: Größe passend zur gedrehten Vorschau, dann mit Rezept zeigen
+                    // "Before" is the unrotated pixel image: size matching the rotated preview, then shown with the recipe
                     var baseSize = setup.Turns % 2 == 1 ? size with { Width = size.Height, Height = size.Width } : size;
                     var before = await Task.Run(() =>
                         MainViewModel.ShowWithGeometry(Original(origin, baseSize), 0, false, geometry.Recipe, geometry.Stages));
@@ -823,7 +828,7 @@ public partial class AiViewModel : ViewModelBase
         new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look, plan,
             grain, targetWidth > 0 ? (double)frame.Width / targetWidth : 1), frame.Width, frame.Height);
 
-    /// <summary>Das Bild vor der KI in Vorschaugröße, ohne Einstellungen (für die Vorher-Seite).</summary>
+    /// <summary>The image before the AI at preview size, without adjustments (for the "before" side).</summary>
     private static AiPreviewFrame Original(MagickImage image, AiPreviewSize size)
     {
         using var small = ImageOps.Resize(image, size.Width, size.Height, size.Filter, size.GammaCorrect);
@@ -835,14 +840,14 @@ public partial class AiViewModel : ViewModelBase
 
     private bool CanCommit => HasPending && !IsRunning && !_main.IsEditing;
 
-    /// <summary>Ergebnis mit den aktuellen Reglern in voller Größe ins Bild — ein Schritt, rückgängig mit Strg+Z.</summary>
+    /// <summary>Writes the result with the current sliders into the image at full size, as one step that Ctrl+Z undoes.</summary>
     [RelayCommand(CanExecute = nameof(CanCommit))]
     private async Task Commit()
     {
         if (_run is not { } run || _setup is not { } setup) return;
         var blend = CurrentBlend;
 
-        // Inzwischen anders bearbeitet (Zuschnitt, Rückgängig …)? Dann passt das Ergebnis nicht mehr.
+        // Edited differently meanwhile (crop, undo …)? Then the result no longer fits.
         if (!ReferenceEquals(_main.CurrentImage, setup.Current))
         {
             ClearRun();
@@ -852,16 +857,17 @@ public partial class AiViewModel : ViewModelBase
 
         Status = Tr.T("Wird übernommen …");
 
-        // Gerechnet wurde auf dem Stand vor der KI — das Ergebnis ersetzt das aktuelle Bild, statt darauf aufzubauen.
-        // Steckt der Look im Ergebnis, gehen die Regler im selben Schritt auf null (nichts doppelt).
-        // Mit Haut & Details auch die Fassung ohne sie behalten — so lassen sie sich in der Liste „Bearbeitungen“ ausschalten
+        // The computation used the state before the AI; the result replaces the current image instead of building on it.
+        // If the look is contained in the result, the sliders go to zero in the same step (nothing applied twice).
+        // With skin and details, the version without them is kept as well so they can be switched off in the
+        // "Bearbeitungen" (edits) list.
         var details = run.SupportsDetails && (blend.Texture > 0 || blend.Folds > 0 || blend.Grain > 0);
         var plainBlend = blend with { Texture = 0, Folds = 0, Grain = 0 };
         bool ok;
         _committing = true;
         try
         {
-            // Zurückgedreht ins Pixelbild (das Modell bekam es gedreht, wie es angezeigt wurde)
+            // Turned back into the pixel image (the model got it rotated as displayed).
             MagickImage Upright(MagickImage img)
             {
                 if (MainViewModel.Unorient(img, setup.Turns, setup.Flip) is not { } back) return img;
@@ -881,7 +887,7 @@ public partial class AiViewModel : ViewModelBase
     }
 
 
-    /// <summary>Neue Bilder: alles wie nach dem Programmstart (erstes vorhandenes Modell, Vorgaben der Regler).</summary>
+    /// <summary>New images: resets everything as after program start (first installed model, default slider values).</summary>
     private void ResetToStart()
     {
         if (HasPending) Discard();
@@ -899,13 +905,13 @@ public partial class AiViewModel : ViewModelBase
     }
 
 
-    /// <summary>Name des KI-Schritts in der Liste „Bearbeitungen“.</summary>
+    /// <summary>Name of the AI step in the "Bearbeitungen" (edits) list.</summary>
     private string StepLabel() => Tr.T("KI: {0}", _runModel is { } m ? Tr.T(m.Name) : "");
 
-    /// <summary>Kurzinfo zum KI-Schritt (Zeile „KI“).</summary>
+    /// <summary>Short info for the AI step ("KI" row).</summary>
     private static string StepDetail(AiBlend blend) => Tr.T("Stärke {0:0} %", blend.Strength * 100);
 
-    /// <summary>Kurzinfo zur Zeile „Haut &amp; Details“.</summary>
+    /// <summary>Short info for the "Haut &amp; Details" (skin and details) row.</summary>
     private static string SkinDetail(AiBlend blend)
     {
         var parts = new List<string>();
@@ -915,10 +921,10 @@ public partial class AiViewModel : ViewModelBase
         return string.Join(" · ", parts);
     }
 
-    private bool _committing;   // eigenes Übernehmen ändert das Bild — kein Grund zum Verwerfen
+    private bool _committing;   // committing changes the image itself; that is no reason to discard
     private bool CanDiscard => HasPending && !IsRunning;
 
-    /// <summary>Ergebnis verwerfen: das Bild bleibt, wie es war.</summary>
+    /// <summary>Discards the result; the image stays as it was.</summary>
     [RelayCommand(CanExecute = nameof(CanDiscard))]
     private void Discard()
     {
@@ -928,7 +934,7 @@ public partial class AiViewModel : ViewModelBase
 
     private void ClearRun()
     {
-        if (IsRunning) _runCts?.Cancel();   // ein Neurechnen benutzt das Eingangsbild noch — dann gibt es der GC frei
+        if (IsRunning) _runCts?.Cancel();   // a recomputation still uses the input image; the GC releases it in that case
         else DisposeInput(_setup);
         _previewCts?.Cancel();
         (_run, _setup, _runFaces, _beforeOf, _runModel) = (null, null, null, null, null);
@@ -941,12 +947,12 @@ public partial class AiViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void Cancel() => _runCts?.Cancel();
 
-    /// <summary>Öffnet die Einstellungen auf der Seite „Bilder verbessern“ (Modelle der Rubrik „KI“).</summary>
+    /// <summary>Opens the settings on the "Bilder verbessern" (enhance images) page with the models of the AI tab.</summary>
     [RelayCommand]
     private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(SettingsPage.Improve);
 
 
-    /// <summary>Fortschritt in der einen Anzeige unten mitte in der Vorschau (für alles, was rechnet).</summary>
+    /// <summary>Shows progress in the single activity display at the bottom centre of the preview (used for all computations).</summary>
     private void Activity(string text, double progress, bool cancel)
     {
         _main.ActivityText = Tr.T("KI · {0}", text);
@@ -978,8 +984,8 @@ public partial class AiViewModel : ViewModelBase
             CommitCommand.NotifyCanExecuteChanged();
         }
 
-        // Bild selbst geändert (Drehen, Zuschnitt, Rückgängig), während ein Ergebnis offen ist: Es passt nicht mehr —
-        // sonst läge es im alten Format über dem neuen Bild (schmal, Gesichter an falscher Stelle)
+        // Image itself changed (rotation, crop, undo) while a result is pending: the result no longer fits; otherwise it
+        // would lie over the new image in the old format (narrow, faces in the wrong place).
         if (e.PropertyName == nameof(MainViewModel.FullBitmap) && HasPending && !_committing
             && _setup is { } open && !ReferenceEquals(_main.CurrentImage, open.Current))
         {
@@ -988,11 +994,11 @@ public partial class AiViewModel : ViewModelBase
             return;
         }
 
-        // Regler oder Zielgröße verstellt, während ein Ergebnis offen ist: Vorschau mitziehen (bei „erst KI“ liegt der Look darüber)
+        // Sliders or target size changed while a result is pending: update the preview (with "AI first" the look lies on top).
         if (e.PropertyName is nameof(MainViewModel.AdjustedBitmap) or nameof(MainViewModel.FullBitmap) && _setup is not null)
             RequestPreview();
 
-        // anderes Bild gewählt: Zwischenstand und offenes Ergebnis gehören nicht dazu
+        // different image selected: intermediate frame and pending result do not belong to it
         if (e.PropertyName == nameof(MainViewModel.CurrentFileName))
         {
             if (HasPending) Discard();
@@ -1000,9 +1006,9 @@ public partial class AiViewModel : ViewModelBase
         }
     }
 
-    // ------------------------------------------------------------ Modelle verwalten
+    // ------------------------------------------------------------ Model management
 
-    /// <summary>Welche Modelle liegen da? Auch von Hand in den Ordner kopierte werden erkannt.</summary>
+    /// <summary>Rescans which models are installed; models copied into the folder by hand are detected as well.</summary>
     public void Rescan()
     {
         foreach (var item in Models) item.Refresh();
@@ -1024,19 +1030,19 @@ public partial class AiViewModel : ViewModelBase
 
     internal async Task DownloadAsync(AiModelItem item)
     {
-        // Gesichtsmodelle brauchen die Gesichtserkennung — gleich mitladen
+        // Face models need face detection (and other required models); download them along with it.
         foreach (var id in item.Model.Requires)
             if (Models.FirstOrDefault(m => m.Model.Id == id) is { IsInstalled: false, IsDownloading: false } required)
                 _ = required.DownloadCommand.ExecuteAsync(null);
 
         await Store.DownloadAsync(item.Model, Http, item.ProgressReporter, item.Token);
         Rescan();
-        WatchFolders();   // Ordner gibt es evtl. erst jetzt
+        WatchFolders();   // the folder may only exist now
     }
 
     internal void Delete(AiModelItem item)
     {
-        _sessions.Dispose();   // geöffnete Modelle freigeben, sonst ist die Datei gesperrt
+        _sessions.Dispose();   // release opened models; otherwise the file is locked
         Store.Delete(item.Model);
         Rescan();
     }
@@ -1044,7 +1050,7 @@ public partial class AiViewModel : ViewModelBase
     internal bool IsBusy => IsRunning || _main.IsUpscaling || BusyElsewhere?.Invoke() == true;
 
 
-    /// <summary>Rechnet gerade das Entfernen? (Modelle dann nicht löschen.)</summary>
+    /// <summary>Reports whether the removal tab is computing (models must not be deleted then).</summary>
     internal Func<bool>? BusyElsewhere { get; set; }
 
     private void WatchFolders()
@@ -1061,7 +1067,7 @@ public partial class AiViewModel : ViewModelBase
             }
             catch
             {
-                // ohne Überwachung: erkannt wird dann beim nächsten Öffnen der Einstellungen
+                // without a watcher, changes are detected the next time the settings are opened
             }
         }
     }
@@ -1077,14 +1083,14 @@ public partial class AiViewModel : ViewModelBase
     }
 }
 
-/// <summary>Eine Gruppe in der Verwaltung (Kasten mit Überschrift und kurzem Hinweis).</summary>
+/// <summary>A group in the model management (box with heading and short hint).</summary>
 public sealed record AiModelGroup(string Title, string Hint, IReadOnlyList<AiModelItem> Items)
 {
-    /// <summary>Überschrift nur, wenn die Seite mehrere Gruppen zeigt (sonst steht sie schon links).</summary>
+    /// <summary>Whether the heading is shown: only when the page shows several groups (otherwise it already appears on the left).</summary>
     public bool ShowTitle { get; init; }
 }
 
-/// <summary>Eine Seite der Einstellungen mit einer oder mehreren Gruppen von Modellen.</summary>
+/// <summary>A settings page with one or more groups of models.</summary>
 public sealed record AiModelPage
 {
     public AiModelPage(IReadOnlyList<AiModelGroup> groups) =>
@@ -1093,7 +1099,7 @@ public sealed record AiModelPage
     public IReadOnlyList<AiModelGroup> Groups { get; }
 }
 
-/// <summary>Ein Modell in der Verwaltung: vorhanden?, Download mit Fortschritt, abbrechen, löschen.</summary>
+/// <summary>A model in the model management: installed state, download with progress, cancel, delete.</summary>
 public partial class AiModelItem : ObservableObject
 {
     private readonly AiViewModel _owner;
@@ -1126,7 +1132,7 @@ public partial class AiModelItem : ObservableObject
     [ObservableProperty] public partial double Progress { get; set; }
     [ObservableProperty] public partial string? Problem { get; set; }
 
-    /// <summary>Herunterladen anbieten — nicht für Modelle ohne Adresse (die Datei wird von Hand abgelegt).</summary>
+    /// <summary>Whether to offer a download; not for models without a URL (their file is placed by hand).</summary>
     public bool ShowDownload => !IsInstalled && !IsDownloading && Model.Url.Length > 0;
 
     public string StateText => IsDownloading ? Tr.T("wird geladen …") : IsInstalled ? Tr.T("✓ vorhanden") : Tr.T("nicht geladen");

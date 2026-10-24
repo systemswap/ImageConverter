@@ -4,9 +4,14 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Models;
 
 /// <summary>
-/// Ein Skalierungsfilter mit kurzer, laienverständlicher Erklärung für den Tooltip. <paramref name="Down"/> und
-/// <paramref name="Up"/>: in der Liste „Verfahren“ beim Verkleinern bzw. Vergrößern angeboten.
+/// A resampling filter with a short explanation for the tooltip that needs no expert knowledge.
 /// </summary>
+/// <param name="Name">Name shown in the list.</param>
+/// <param name="Filter">The filter used for resampling.</param>
+/// <param name="Description">German text (translation key) describing what the filter does.</param>
+/// <param name="BestFor">German text (translation key) naming what the filter is good for.</param>
+/// <param name="Down">Offered in the "Verfahren" (method) list when downscaling.</param>
+/// <param name="Up">Offered in the "Verfahren" (method) list when upscaling.</param>
 public sealed record FilterOption(string Name, ResampleFilter Filter, string Description, string BestFor, bool Down = true, bool Up = true)
 {
     public override string ToString() => Name;

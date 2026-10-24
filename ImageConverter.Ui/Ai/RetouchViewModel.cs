@@ -15,12 +15,12 @@ using ImageMagick;
 namespace ImageConverter.Ai;
 
 /// <summary>
-/// Tab „Entfernen“: mit dem Pinsel markieren, was verschwinden soll (Wasserzeichen, Schrift, Störendes), dann füllt
-/// ein Modell (LaMa, MI-GAN) die Stellen passend zur Umgebung. Jedes Entfernen ist ein Schritt mit Rückgängig.
+/// "Entfernen" (remove) tab: the brush marks what is to disappear (watermarks, text, distracting objects), then a model
+/// (LaMa, MI-GAN) fills these areas to match their surroundings. Each removal is an undoable step.
 /// </summary>
 /// <remarks>
-/// Die Markierung bleibt nach dem Entfernen stehen: Ein neuer Versuch (anderes Modell, Markierung ergänzt) rechnet
-/// wieder vom Bild davor, statt auf dem ersten Ergebnis aufzubauen. Erst „Neue Markierung“ beginnt beim aktuellen Bild.
+/// The mark remains after a removal: a new attempt (different model, extended mark) starts again from the image before
+/// the removal instead of building on the first result. Only "Neue Markierung" (new mark) starts from the current image.
 /// </remarks>
 public partial class RetouchViewModel : ViewModelBase
 {
@@ -39,9 +39,9 @@ public partial class RetouchViewModel : ViewModelBase
         Rescan();
     }
 
-    // ------------------------------------------------------------ Modelle
+    // ------------------------------------------------------------ Models
 
-    /// <summary>Vorhandene Füllmodelle.</summary>
+    /// <summary>Installed inpainting models.</summary>
     public ObservableCollection<AiModel> Available { get; } = [];
 
     public bool HasModels => Available.Count > 0;
@@ -63,13 +63,13 @@ public partial class RetouchViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasModels));
     }
 
-    /// <summary>Öffnet die Einstellungen auf der Seite „Entfernen“ zum Herunterladen.</summary>
+    /// <summary>Opens the settings on the "Entfernen" page for downloading models.</summary>
     [RelayCommand]
     private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(SettingsPage.Remove);
 
-    // ------------------------------------------------------------ Pinsel
+    // ------------------------------------------------------------ Brush
 
-    /// <summary>Tab „Entfernen“ ist gewählt — dann malt die Maus in der Vorschau.</summary>
+    /// <summary>Whether the "Entfernen" tab is selected; the mouse then paints in the preview.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBrushing))]
     public partial bool IsTabActive { get; set; }
@@ -77,28 +77,28 @@ public partial class RetouchViewModel : ViewModelBase
     partial void OnIsTabActiveChanged(bool value)
     {
         if (!value) return;
-        // Gemalt wird auf dem ungedrehten Bild — Drehen, Entzerren und Pipette schließen
+        // Painting happens on the unrotated image: close the rotation, perspective and dewarp tools and the eyedropper.
         _main.RotationTool = false;
         _main.PerspectiveTool = false;
         _main.DewarpTool = false;
         _main.IsPicking = false;
     }
 
-    /// <summary>Pinsel aktiv: Tab gewählt, ein Bild da, nichts rechnet.</summary>
+    /// <summary>Whether the brush is active: tab selected, an image loaded, no computation running.</summary>
     public bool IsBrushing
     {
         get => IsTabActive && _main.HasImage && !IsRunning;
-        set { }   // Esc in der Vorschau beendet den Pinsel nicht — dafür gibt es den Tab
+        set { }   // Esc in the preview does not end the brush; the tab does that
     }
 
-    /// <summary>Pinselgröße als Durchmesser in Bildschirmpixeln — beim Zoomen bleibt der Pinsel gleich groß.</summary>
+    /// <summary>Brush size as a diameter in screen pixels, so the brush keeps its on-screen size when zooming.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BrushSizeLabel))]
     public partial double BrushSize { get; set; } = 40;
 
     public string BrushSizeLabel => $"{BrushSize:0} px";
 
-    /// <summary>Die Markierung: alle Striche, älteste zuerst (für die Vorschau als neue Liste je Änderung).</summary>
+    /// <summary>The mark: all strokes, oldest first (a new list on every change so that the preview updates).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStrokes))]
     [NotifyCanExecuteChangedFor(nameof(RemoveCommand), nameof(UndoStrokeCommand), nameof(ClearStrokesCommand))]
@@ -106,10 +106,10 @@ public partial class RetouchViewModel : ViewModelBase
 
     public bool HasStrokes => Strokes.Count > 0;
 
-    /// <summary>Markierung schon entfernt — in der Vorschau ausgeblendet (das Ergebnis soll frei zu sehen sein), bis etwas dazukommt.</summary>
+    /// <summary>The mark has already been removed; it is hidden in the preview (so the result is unobstructed) until something is added.</summary>
     [ObservableProperty] public partial bool StrokesApplied { get; set; }
 
-    /// <summary>Ein Strich aus der Vorschau (Maus losgelassen).</summary>
+    /// <summary>Adds a stroke from the preview (mouse released).</summary>
     [RelayCommand]
     private void AddStroke(BrushStroke stroke)
     {
@@ -127,7 +127,7 @@ public partial class RetouchViewModel : ViewModelBase
         StrokesApplied = false;
     }
 
-    /// <summary>Markierung löschen — das nächste Entfernen baut auf dem aktuellen Bild auf.</summary>
+    /// <summary>Clears the mark; the next removal builds on the current image.</summary>
     [RelayCommand(CanExecute = nameof(CanEditStrokes))]
     private void ClearStrokes()
     {
@@ -137,7 +137,7 @@ public partial class RetouchViewModel : ViewModelBase
         Status = null;
     }
 
-    // ------------------------------------------------------------ Entfernen
+    // ------------------------------------------------------------ Removal
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBrushing))]
@@ -147,8 +147,8 @@ public partial class RetouchViewModel : ViewModelBase
     [ObservableProperty] public partial string? Status { get; set; }
 
     /// <summary>
-    /// Letztes Entfernen: Ergebnis und Bild davor. Ist das Ergebnis noch das aktuelle Bild und die Markierung nicht
-    /// gelöscht, rechnet ein neuer Versuch vom Bild davor — nichts häuft sich an.
+    /// Last removal: its result and the image before it. If the result is still the current image and the mark has not
+    /// been cleared, a new attempt starts from the image before, so that nothing accumulates.
     /// </summary>
     private (MagickImage Result, MagickImage Base)? _last;
 
@@ -166,7 +166,7 @@ public partial class RetouchViewModel : ViewModelBase
 
         var again = _last is { } last && ReferenceEquals(current, last.Result);
         var start = again ? _last!.Value.Base : current;
-        // Gemalt wurde im angezeigten Bild (gedreht, zugeschnitten …) — gefüllt wird im Pixelbild
+        // The strokes were painted on the displayed image (rotated, cropped …); filling happens in the pixel image.
         var strokes = Strokes.Select(ToPixels).ToArray();
         using var cts = new CancellationTokenSource();
         _runCts = cts;
@@ -212,7 +212,7 @@ public partial class RetouchViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void Cancel() => _runCts?.Cancel();
 
-    /// <summary>Strich aus dem angezeigten Bild ins Pixelbild — Punkte und Radius (beim Entzerren je Stelle verschieden).</summary>
+    /// <summary>Maps a stroke from the displayed image to the pixel image: points and radius (the radius varies by position when the image is dewarped).</summary>
     private BrushStroke ToPixels(BrushStroke s)
     {
         var points = s.Points.Select(p => _main.ShownToPixels(p.X, p.Y)).ToArray();
@@ -220,7 +220,7 @@ public partial class RetouchViewModel : ViewModelBase
         return new BrushStroke(points, radius);
     }
 
-    // ------------------------------------------------------------ Bildwechsel
+    // ------------------------------------------------------------ Image change
 
     private void ClearAll()
     {
@@ -242,12 +242,12 @@ public partial class RetouchViewModel : ViewModelBase
                 RemoveCommand.NotifyCanExecuteChanged();
                 break;
             case nameof(MainViewModel.CurrentFileName):
-                // anderes Bild: die Markierung gehört zum vorigen
+                // different image: the mark belongs to the previous one
                 if (!IsRunning) ClearAll();
                 break;
             case nameof(MainViewModel.DocumentSize):
-                // Angezeigtes Format geändert (Zuschnitt, Drehen, Werkzeug-Ansicht, Rückgängig davon): die Markierung
-                // liegt im angezeigten Bild und passt nicht mehr
+                // Displayed dimensions changed (crop, rotation, tool view, or undoing them): the mark lies in the
+                // displayed image and no longer fits.
                 var now = (_main.DocumentSize.Width, _main.DocumentSize.Height);
                 if (!IsRunning && _size is { } size && size != now) ClearAll();
                 _size = now;

@@ -6,7 +6,7 @@ namespace ImageConverter.Views;
 
 public partial class SettingsWindow : Window
 {
-    // Für den XAML-Designer
+    // For the XAML designer.
     public SettingsWindow()
     {
         InitializeComponent();
@@ -15,7 +15,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow(MainViewModel vm) : this()
     {
         DataContext = vm;
-        // Von Hand in den Modellordner kopierte Dateien gleich erkennen
+        // Detect files copied into the model folder by hand right away.
         Opened += (_, _) =>
         {
             vm.Ai.Rescan();
@@ -23,7 +23,8 @@ public partial class SettingsWindow : Window
         };
     }
 
-    /// <summary>Die genannte Seite links auswählen (z. B. „Entfernen“ aus dem Knopf „Modelle laden …“).</summary>
+    /// <summary>Selects the given page in the navigation on the left (e.g. "Entfernen" from the "Modelle laden …" button).</summary>
+    /// <param name="page">Page to show; unknown values select the performance page.</param>
     public void ShowPage(SettingsPage page)
     {
         var button = page switch

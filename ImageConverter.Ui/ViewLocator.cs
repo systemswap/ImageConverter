@@ -9,6 +9,7 @@ namespace ImageConverter;
 /// <summary>
 /// Given a view model, returns the corresponding view if possible.
 /// </summary>
+/// <remarks>The view type name is the view model's full type name with "ViewModel" replaced by "View".</remarks>
 [RequiresUnreferencedCode(
     "Default implementation of ViewLocator involves reflection which may be trimmed away.",
     Url = "https://docs.avaloniaui.net/docs/concepts/view-locator")]

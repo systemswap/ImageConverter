@@ -7,11 +7,14 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Controls;
 
 /// <summary>
-/// Eine nachgezeichnete Linie im Werkzeug „Gewölbtes Blatt“: Punkte in Bildpixeln der Ansicht, Richtung auf dem Blatt.
-/// <paramref name="KindChosen"/>: Richtung von Hand gewählt (Rechtsklick) — sonst wird sie aus dem Verlauf geraten.
-/// <paramref name="Suggested"/>: automatisch vorgeschlagen (gestrichelt); jede Änderung (Punkt ziehen, weiterzeichnen,
-/// Richtung, Pfeiltasten) macht ihn zur eigenen Linie, und „Vorschlagen“ ersetzt nur unberührte Vorschläge.
+/// A traced line in the curved-page tool: points in image pixels of the view, plus the line's direction on the page.
 /// </summary>
+/// <param name="Kind">Direction of the line on the page.</param>
+/// <param name="Points">Traced points in image pixels of the view.</param>
+/// <param name="KindChosen">The direction was chosen by hand (right-click); otherwise it is guessed from the course of
+/// the line.</param>
+/// <param name="Suggested">Suggested automatically (drawn dashed). Any change (dragging a point, continuing the line,
+/// direction, arrow keys) turns it into a user line, and "Suggest" replaces only untouched suggestions.</param>
 public sealed record WarpLineShape(WarpLineKind Kind, IReadOnlyList<Point> Points, bool KindChosen = false,
     bool Suggested = false)
 {
@@ -21,10 +24,15 @@ public sealed record WarpLineShape(WarpLineKind Kind, IReadOnlyList<Point> Point
 
     public override int GetHashCode() => HashCode.Combine(Kind, KindChosen, Suggested, Points.Count);
 
-    /// <summary>Zählt für das Geradeziehen: mindestens zwei Punkte.</summary>
+    /// <summary>Whether the line is used for straightening, i.e. it has at least two points.</summary>
     public bool Counts => Points.Count >= 2;
 
-    /// <summary>Richtung aus dem Verlauf: eher quer = waagerecht, eher hoch = senkrecht (ein Falz nur von Hand).</summary>
+    /// <summary>
+    /// Guesses the direction from the course of the line: wider than tall = horizontal, otherwise vertical (a fold is
+    /// only set by hand).
+    /// </summary>
+    /// <returns>This line unchanged if the direction was chosen by hand or it has fewer than two points; otherwise a
+    /// copy with the guessed direction.</returns>
     public WarpLineShape WithGuessedKind()
     {
         if (KindChosen || Points.Count < 2) return this;
@@ -33,7 +41,8 @@ public sealed record WarpLineShape(WarpLineKind Kind, IReadOnlyList<Point> Point
         return this with { Kind = dx >= dy ? WarpLineKind.Horizontal : WarpLineKind.Vertical };
     }
 
-    /// <summary>Rechtsklick: waagerecht → senkrecht → Falz → waagerecht.</summary>
+    /// <summary>Cycles the direction on right-click: horizontal → vertical → fold → horizontal.</summary>
+    /// <returns>A copy with the next direction, marked as chosen by hand.</returns>
     public WarpLineShape NextKind() => this with
     {
         Kind = Kind switch
@@ -45,14 +54,18 @@ public sealed record WarpLineShape(WarpLineKind Kind, IReadOnlyList<Point> Point
         KindChosen = true,
     };
 
-    /// <summary>Ein Vorschlag wird zur eigenen Linie (Richtung bleibt).</summary>
+    /// <summary>Turns a suggestion into a user line; the direction is kept.</summary>
+    /// <returns>A copy that is no longer a suggestion and whose direction counts as chosen by hand.</returns>
     public WarpLineShape Adopted() => this with { Suggested = false, KindChosen = true };
 
     /// <summary>
-    /// Liegt diese Linie (fast) auf <paramref name="other"/>? Mindestens 60 % der Punkte der einen höchstens
-    /// <paramref name="tolerance"/> Pixel vom Verlauf der anderen — in einer der beiden Richtungen, damit auch eine kurze
-    /// eigene Linie auf einem langen Vorschlag zählt.
+    /// Determines whether this line lies (almost) on <paramref name="other"/>: at least 60 % of the points of one line
+    /// are at most <paramref name="tolerance"/> pixels from the path of the other. Checked in both directions so that a
+    /// short user line on a long suggestion also counts.
     /// </summary>
+    /// <param name="other">The line to compare with.</param>
+    /// <param name="tolerance">Maximum distance in image pixels.</param>
+    /// <returns><c>true</c> if the lines overlap; <c>false</c> if they do not or either has fewer than two points.</returns>
     public bool Overlaps(WarpLineShape other, double tolerance)
     {
         if (Points.Count < 2 || other.Points.Count < 2) return false;

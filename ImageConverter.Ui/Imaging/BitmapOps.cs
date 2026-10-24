@@ -6,15 +6,19 @@ using Avalonia.Platform;
 namespace ImageConverter.Imaging;
 
 /// <summary>
-/// Brücke von ImageMagick-Pixeln zur Avalonia-Anzeige. Alle eigentlichen
-/// Bildoperationen liegen im Core (ImageOps) und laufen auf dem echten Bild.
+/// Bridge from ImageMagick pixels to Avalonia display bitmaps. All actual image operations live
+/// in the Core (ImageOps) and run on the full-resolution image.
 /// </summary>
 public static class BitmapOps
 {
     /// <summary>
-    /// Baut aus rohen 8-Bit-BGRA-Pixeln (nicht vormultipliziert, wie ImageMagick sie
-    /// liefert) eine anzeigbare Bitmap.
+    /// Creates a displayable bitmap from raw 8-bit BGRA pixels (not premultiplied, as delivered by
+    /// ImageMagick).
     /// </summary>
+    /// <param name="bgra">Pixel data, 4 bytes per pixel, rows without padding (stride = <paramref name="width"/> × 4).</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <returns>A new 96-dpi bitmap owned by the caller.</returns>
     public static Bitmap FromBgra(byte[] bgra, int width, int height)
     {
         var bitmap = new WriteableBitmap(
@@ -29,7 +33,7 @@ public static class BitmapOps
         }
         else
         {
-            // Zeilen können im Zielpuffer aufgefüllt sein
+            // Rows in the target buffer may be padded.
             for (var y = 0; y < height; y++)
                 Marshal.Copy(bgra, y * stride, fb.Address + y * fb.RowBytes, stride);
         }

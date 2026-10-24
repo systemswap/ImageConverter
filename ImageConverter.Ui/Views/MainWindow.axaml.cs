@@ -12,8 +12,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Version kommt aus Directory.Build.props, z. B. "ImageConverter 0.4.1" — mit Zusatz
-        // ("0.4.41-beta" → "0.4.41 beta"); die Angabe hinter "+" ist der Commit
+        // The version comes from Directory.Build.props, e.g. "ImageConverter 0.4.1", including a suffix
+        // ("0.4.41-beta" → "0.4.41 beta"); the part after "+" is the commit and is dropped.
         var info = typeof(MainWindow).Assembly
             .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
@@ -25,10 +25,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Rückgängig/Wiederholen fensterweit. Bewusst per OnKeyDown statt KeyBindings:
-    /// ausgewertet wird die beschriftete Taste (wichtig für QWERTZ mit vertauschtem
-    /// Y/Z), und Textfelder, die ihr eigenes Strg+Z schon behandelt haben, kommen
-    /// hier gar nicht erst an.
+    /// Window-wide undo/redo (and Ctrl+P for printing). Deliberately handled in OnKeyDown instead of
+    /// KeyBindings: the labelled key is evaluated (important for QWERTZ layouts with Y and Z swapped),
+    /// and text boxes that already handled their own Ctrl+Z never reach this point.
     /// </summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {

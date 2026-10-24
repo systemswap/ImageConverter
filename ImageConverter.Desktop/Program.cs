@@ -6,16 +6,15 @@ namespace ImageConverter.Desktop;
 
 sealed class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
+    // Entry point. Do not use Avalonia, third-party APIs or SynchronizationContext-dependent
+    // code before AppMain is called: they are not initialised yet.
     [STAThread]
     public static void Main(string[] args)
     {
-        // Vor allem anderen: ImageMagick und ONNX Runtime liegen in Tools/ neben dem Programm,
-        // und die ONNX Runtime darf keine Nutzungsdaten senden.
+        // Must run before anything else: ImageMagick and ONNX Runtime are loaded from Tools/ next to
+        // the program, and ONNX Runtime telemetry is switched off before the runtime is first used.
         NativeLibraries.Configure();
-        // Eigenes Log neben dem Programm (Abstürze, auch die vom letzten Mal)
+        // Own log file next to the program; also records crashes of the previous run.
         AppLog.Start();
         try
         {
@@ -27,14 +26,14 @@ sealed class Program
         }
     }
 
-    // Avalonia configuration, don't remove; also used by visual designer.
+    // Avalonia configuration; do not remove, the visual designer uses it as well.
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
-            // Linux: Die Leiste (GNOME, KDE …) ordnet ein Fenster über WM_CLASS seiner
-            // .desktop-Datei zu und zeigt deren Icon. Muss zu StartupWMClass in
-            // packaging/linux/ImageConverter.desktop passen.
+            // Linux: the panel (GNOME, KDE …) matches a window to its .desktop file via WM_CLASS and
+            // shows that file's icon. Must match StartupWMClass in
+            // packaging/linux/ImageConverter.desktop.
             .With(new X11PlatformOptions { WmClass = "ImageConverter" })
             .LogToTrace();
 }

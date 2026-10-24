@@ -21,12 +21,12 @@ public partial class MainView : UserControl
     {
         InitializeComponent();
 
-        // Das ganze Fenster nimmt Dateien an, nicht nur die Bildfläche.
+        // The whole window accepts dropped files, not only the image area.
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDrop);
-        // Maustaste gedrückt (Regler ziehen …): die Vorschau rechnet solange gröber, nach dem Loslassen fein
+        // While a mouse button is pressed (dragging a slider …) the preview is computed coarser; full quality after release.
         AddHandler(PointerPressedEvent, (_, _) => _vm?.SetPointerDown(true), RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerReleasedEvent, (_, _) => _vm?.SetPointerDown(false), RoutingStrategies.Tunnel, handledEventsToo: true);
     }
@@ -60,7 +60,7 @@ public partial class MainView : UserControl
 
     private SettingsWindow? _settings;
 
-    /// <summary>Einstellungen: nicht modal — Downloads laufen weiter, während man arbeitet.</summary>
+    /// <summary>Shows the settings window non-modally so that downloads continue while working in the main window.</summary>
     private Task OnSettingsRequested(SettingsPage? page)
     {
         if (_settings is not null)
@@ -78,7 +78,7 @@ public partial class MainView : UserControl
         return Task.CompletedTask;
     }
 
-    /// <summary>Rückfrage mit mehreren Antworten (modal).</summary>
+    /// <summary>Shows a modal prompt with several answers and returns the chosen index, −1 if none was chosen.</summary>
     private async Task<int> OnChoiceRequested(ChoiceRequest request)
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return -1;
@@ -93,7 +93,7 @@ public partial class MainView : UserControl
         await new PrintWindow(dialogVm).ShowDialog(owner);
     }
 
-    /// <summary>Export mehrerer Bilder: eigenes Fenster mit Liste, modal über dem Hauptfenster.</summary>
+    /// <summary>Export of several images: a separate window with a list, modal over the main window.</summary>
     private async Task OnMultiExportRequested(ExportDialogViewModel dialogVm)
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
@@ -102,21 +102,21 @@ public partial class MainView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Sobald ein Rahmen aufgezogen wird, die Zuschnitt-Gruppe links ins
-        // Bild holen — sonst liegt sie bei kleineren Fenstern unter dem Rand.
-        // Nur beim Übergang "keine Auswahl -> Auswahl", nicht bei jedem Mausschritt.
+        // As soon as a crop frame is drawn, scroll the crop group on the left into view; otherwise
+        // it lies below the edge in smaller windows. Only on the transition "no selection ->
+        // selection", not on every pointer move.
         if (e.PropertyName != nameof(MainViewModel.HasCropSelection) || _vm is null) return;
 
         var has = _vm.HasCropSelection;
         if (has && !_hadSelection)
         {
-            TabStandard.IsChecked = true;   // Zuschnitt liegt in der Rubrik Standard
+            TabStandard.IsChecked = true;   // cropping is on the Standard tab
             Dispatcher.UIThread.Post(() => CropGroup.BringIntoView());
         }
         _hadSelection = has;
     }
 
-    // ------------------------------------------------------- Drag & Drop
+    // ------------------------------------------------------- Drag and drop
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
@@ -164,12 +164,12 @@ public partial class MainView : UserControl
     {
         if (_vm?.LastExportFolder is not { } folder || !System.IO.Directory.Exists(folder)) return;
 
-        // Dateimanager des Systems: Explorer, Nautilus, Dolphin … über die Standard-Zuordnung
+        // System file manager (Explorer, Nautilus, Dolphin …) via the default association.
         if (!ImageConverter.Services.FolderOpener.TryOpen(folder))
             _vm.ErrorMessage = Tr.T("Kein Dateimanager gefunden. Der Ordner ist: {0}", folder);
     }
 
-    // ------------------------------------------------------- Dateidialog
+    // ------------------------------------------------------- File dialog
 
     private async void OnOpenFilesClick(object? sender, RoutedEventArgs e)
     {
@@ -183,7 +183,7 @@ public partial class MainView : UserControl
             [
                 new FilePickerFileType(Tr.T("Bilder"))
                 {
-                    // Linux-Dialoge unterscheiden Groß-/Kleinschreibung (Kameras schreiben .JPG)
+                    // Linux dialogs are case-sensitive (cameras write .JPG).
                     Patterns = ImageFormats.ReadableExtensions
                         .SelectMany(x => new[] { "*" + x, "*" + x.ToUpperInvariant() })
                         .ToList(),

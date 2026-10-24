@@ -8,7 +8,7 @@ namespace ImageConverter.Views;
 
 public partial class PrintWindow : Window
 {
-    // Für den XAML-Designer
+    // For the XAML designer.
     public PrintWindow()
     {
         InitializeComponent();

@@ -5,7 +5,7 @@ using ImageConverter.Core.Ai.Upscale;
 
 namespace ImageConverter.Models;
 
-/// <summary>Ein Eintrag der Auswahl „Upscaling“ unter „Größe“.</summary>
+/// <summary>An entry of the "Upscaling" choice under "Größe" (size).</summary>
 public sealed record UpscaleOption(UpscaleMethod Method)
 {
     public static IReadOnlyList<UpscaleOption> All { get; } =
@@ -15,7 +15,7 @@ public sealed record UpscaleOption(UpscaleMethod Method)
 
     public AiModel? Model => Upscalers.ModelOf(Method);
 
-    /// <summary>Name in der Liste: „KI“, das Verfahren, dahinter wie schnell — so sieht man, was gerechnet hat.</summary>
+    /// <summary>Name in the list: "KI" (AI), the method and its speed, so that it is visible which method produced the result.</summary>
     public string Name => Method switch
     {
         UpscaleMethod.Fast => Tr.T("KI Real-ESRGAN x4v3 · schnell"),

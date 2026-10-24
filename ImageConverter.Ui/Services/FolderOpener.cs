@@ -4,13 +4,15 @@ using System.Diagnostics;
 namespace ImageConverter.Services;
 
 /// <summary>
-/// Öffnet einen Ordner im Dateimanager des Systems (Explorer, Nautilus, Dolphin …).
-/// Fehlt das Hilfsprogramm (z. B. xdg-open auf einem schlanken Linux), meldet es das,
-/// statt das Programm abstürzen zu lassen.
+/// Opens a folder in the system file manager (Explorer, Nautilus, Dolphin …). If the helper
+/// program is missing (e.g. xdg-open on a minimal Linux system), it reports this instead of
+/// crashing the program.
 /// </summary>
 public static class FolderOpener
 {
-    /// <returns>false, wenn kein Dateimanager gestartet werden konnte.</returns>
+    /// <summary>Tries to open <paramref name="folder"/> in the file manager.</summary>
+    /// <param name="folder">Path of the folder to open.</param>
+    /// <returns><c>false</c> if no file manager could be started.</returns>
     public static bool TryOpen(string folder)
     {
         foreach (var (file, args) in Candidates(folder))
@@ -24,7 +26,7 @@ public static class FolderOpener
             }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
             {
-                // nicht vorhanden oder nicht startbar — nächsten Weg versuchen
+                // not present or not startable: try the next candidate
             }
         }
         return false;

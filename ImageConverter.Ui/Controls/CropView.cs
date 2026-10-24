@@ -17,23 +17,23 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Controls;
 
 /// <summary>
-/// Bildvorschau mit Referenzwerkzeug-artigem Auswahlrahmen.
+/// Image preview with a Referenzwerkzeug-style selection frame.
 ///
-/// Der Rahmen ist anfangs unsichtbar und entsteht erst, wenn man mit gedrückter
-/// linker Maustaste über das Bild zieht. Danach: Ecken und Kantenmitten ziehen
-/// = Größe ändern, Innenfläche ziehen = verschieben, Klick neben die Auswahl
-/// oder Esc = Auswahl aufheben, Pfeiltasten = 1 px (Shift: 10 px) verschieben.
+/// The frame is initially invisible and appears only when the left mouse button is
+/// dragged over the image. Then: dragging corners and edge midpoints resizes, dragging
+/// the interior moves, a click outside the selection or Esc clears it, arrow keys move
+/// it by 1 px (Shift: 10 px).
 ///
-/// Die Auswahl wird in Bildpixeln gehalten, nicht in Bildschirmkoordinaten —
-/// sonst verschiebt sie sich, sobald sich Fenstergröße oder Zoom ändern.
+/// The selection is held in image pixels, not in screen coordinates; otherwise it
+/// would shift whenever the window size or zoom changes.
 /// </summary>
 public sealed class CropView : Control
 {
     public static readonly StyledProperty<Bitmap?> SourceProperty =
         AvaloniaProperty.Register<CropView, Bitmap?>(nameof(Source));
 
-    /// <summary>Neu zeichnen, wenn sich der Wert ändert — für Bitmaps, deren Pixel sich an Ort und Stelle ändern
-    /// (Upscaling: fertige Kacheln kommen in dieselbe Bitmap).</summary>
+    /// <summary>Redraws when the value changes; for bitmaps whose pixels change in place
+    /// (upscaling writes finished tiles into the same bitmap).</summary>
     public static readonly StyledProperty<object?> RedrawTokenProperty =
         AvaloniaProperty.Register<CropView, object?>(nameof(RedrawToken));
 
@@ -43,14 +43,14 @@ public sealed class CropView : Control
         set => SetValue(RedrawTokenProperty, value);
     }
 
-    /// <summary>Auswahl in Bildpixeln; null = keine Auswahl.</summary>
+    /// <summary>Selection in image pixels; null = no selection.</summary>
     public static readonly StyledProperty<Rect?> SelectionProperty =
         AvaloniaProperty.Register<CropView, Rect?>(nameof(Selection),
             defaultBindingMode: BindingMode.TwoWay);
 
     /// <summary>
-    /// Auswahlwerkzeug an (Vorgabe): Ziehen mit links zieht einen Ausschnitt auf. Aus: Ziehen mit links
-    /// verschiebt das Bild (Hand). Strg + Ziehen verschiebt in beiden Fällen.
+    /// Selection tool on (default): dragging with the left button draws a selection. Off: dragging with the left
+    /// button pans the image (hand tool). Ctrl + drag pans in both cases.
     /// </summary>
     public static readonly StyledProperty<bool> SelectionEnabledProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(SelectionEnabled), defaultValue: true);
@@ -62,11 +62,11 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Noch nicht übernommene freie Drehung in Grad (positiv = im Uhrzeigersinn); 0 = keine.
-    /// Die Vorschau zeigt das Bild gedreht. Jede Änderung setzt den Rahmen auf das größte Rechteck im
-    /// Seitenverhältnis des Bildes, das ganz im gedrehten Bild liegt; danach lässt er sich verschieben und
-    /// in der Größe ändern, stößt aber an die schrägen Kanten — es entstehen nie leere Ecken. Der Rahmen
-    /// gilt im ungedrehten Koordinatensystem um die Bildmitte (<see cref="RotationGeometry"/>).
+    /// Free rotation in degrees that has not been applied yet (positive = clockwise); 0 = none.
+    /// The preview shows the image rotated. Every change sets the frame to the largest rectangle with the
+    /// image's aspect ratio that lies entirely inside the rotated image; afterwards it can be moved and
+    /// resized but stops at the slanted edges, so empty corners never appear. The frame is expressed in
+    /// the unrotated coordinate system around the image centre (<see cref="RotationGeometry"/>).
     /// </summary>
     public static readonly StyledProperty<double> RotationAngleProperty =
         AvaloniaProperty.Register<CropView, double>(nameof(RotationAngle), defaultBindingMode: BindingMode.TwoWay);
@@ -80,10 +80,11 @@ public sealed class CropView : Control
     private bool IsRotated => Math.Abs(RotationAngle) > 1e-9;
 
     /// <summary>
-    /// Entzerren: Rahmen mit vier frei verschiebbaren Ecken (oben links, oben rechts, unten rechts, unten
-    /// links) in Bildpixeln; null = aus. Außen abgedunkelt wie beim Zuschnitt — man sieht gleich, wo die
-    /// Ränder des Ergebnisses liegen. Griffe an Ecken und Kantenmitten, Innenfläche verschiebt das Ganze,
-    /// beim Ziehen einer Ecke eine Lupe. Pfeiltasten: zuletzt gezogene Ecke 1 px (Umschalt: 10 px).
+    /// Perspective correction: frame with four freely movable corners (top left, top right, bottom right,
+    /// bottom left) in image pixels; null = off. The outside is darkened as when cropping, so the edges of
+    /// the result are visible immediately. Handles at corners and edge midpoints, the interior moves the
+    /// whole frame, a magnifier appears while a corner is dragged. Arrow keys move the most recently
+    /// dragged corner by 1 px (Shift: 10 px).
     /// </summary>
     public static readonly StyledProperty<IReadOnlyList<Point>?> QuadProperty =
         AvaloniaProperty.Register<CropView, IReadOnlyList<Point>?>(nameof(Quad), defaultBindingMode: BindingMode.TwoWay);
@@ -97,11 +98,12 @@ public sealed class CropView : Control
     private bool QuadMode => Quad is { Count: 4 };
 
     /// <summary>
-    /// Gewölbtes Blatt: nachgezeichnete Linien in Bildpixeln; null = aus. Ein Klick setzt einen Punkt auf die aktive
-    /// Linie (ohne aktive Linie beginnt eine neue), Enter oder Doppelklick beendet sie. Punkte lassen sich ziehen (mit
-    /// Lupe), ein Klick auf eine Linie fügt dort einen Punkt ein und macht sie wieder aktiv, Rechtsklick wechselt die
-    /// Richtung (waagerecht → senkrecht → Falz). Entf löscht den Punkt, Umschalt+Entf die Linie, Pfeiltasten
-    /// verschieben ihn um 1 px (Umschalt: 10 px). Esc beendet die Linie, ohne aktive Linie das Werkzeug.
+    /// Curved page: traced lines in image pixels; null = off. In drawing mode (<see cref="DrawLines"/>) a click adds a
+    /// point to the active line (without an active line a new one starts), Enter or double-click ends it. Points can be
+    /// dragged (with magnifier), a click on a line inserts a point there (drawing mode) or continues drawing on it, the
+    /// × next to a line removes it, right-click cycles the direction (horizontal → vertical → fold). Delete or Backspace
+    /// removes the selected point, with Shift the whole line; arrow keys move the point by 1 px (Shift: 10 px). Esc ends
+    /// drawing or clears the selection, but never leaves the tool.
     /// </summary>
     public static readonly StyledProperty<IReadOnlyList<WarpLineShape>?> WarpLinesProperty =
         AvaloniaProperty.Register<CropView, IReadOnlyList<WarpLineShape>?>(nameof(WarpLines), defaultBindingMode: BindingMode.TwoWay);
@@ -113,8 +115,8 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Gewölbtes Blatt, Zeichenmodus: jeder Klick setzt einen Punkt, Enter oder Doppelklick beginnt die nächste Linie, Esc
-    /// verlässt den Modus. Aus (Vorgabe): Ziehen verschiebt das Bild, Ziehen an einem Punkt den Punkt.
+    /// Curved page, drawing mode: every click adds a point, Enter or double-click starts the next line, Esc leaves the
+    /// mode. Off (default): dragging pans the image, dragging a point moves the point.
     /// </summary>
     public static readonly StyledProperty<bool> DrawLinesProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(DrawLines), defaultBindingMode: BindingMode.TwoWay);
@@ -127,7 +129,7 @@ public sealed class CropView : Control
 
     private bool LinesMode => WarpLines is not null;
 
-    /// <summary>Pipette aktiv (Weißabgleich): Ein Klick ins Bild misst, statt einen Rahmen aufzuziehen; beim Zeigen eine Lupe mit Messfeld. Esc beendet.</summary>
+    /// <summary>Eyedropper active (white balance): a click into the image samples instead of drawing a frame; while hovering, a magnifier shows the sampling area. Esc ends it.</summary>
     public static readonly StyledProperty<bool> PickActiveProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(PickActive), defaultBindingMode: BindingMode.TwoWay);
 
@@ -137,7 +139,7 @@ public sealed class CropView : Control
         set => SetValue(PickActiveProperty, value);
     }
 
-    /// <summary>Wird mit der Stelle in Bildpixeln (<see cref="Point"/>) ausgeführt, wenn mit aktiver Pipette geklickt wird.</summary>
+    /// <summary>Executed with the position in image pixels (<see cref="Point"/>) when clicking with the eyedropper active.</summary>
     public static readonly StyledProperty<ICommand?> PickCommandProperty =
         AvaloniaProperty.Register<CropView, ICommand?>(nameof(PickCommand));
 
@@ -147,7 +149,7 @@ public sealed class CropView : Control
         set => SetValue(PickCommandProperty, value);
     }
 
-    /// <summary>Messstellen, die als kleine Markierung im Bild stehen.</summary>
+    /// <summary>Sampling points shown as small markers in the image.</summary>
     public static readonly StyledProperty<IReadOnlyList<PickMarker>?> PickMarkersProperty =
         AvaloniaProperty.Register<CropView, IReadOnlyList<PickMarker>?>(nameof(PickMarkers));
 
@@ -157,9 +159,9 @@ public sealed class CropView : Control
         set => SetValue(PickMarkersProperty, value);
     }
 
-    private Point? _pickHover;   // Bildpunkt unter dem Mauszeiger, solange die Pipette misst
+    private Point? _pickHover;   // image point under the pointer while the eyedropper is active
 
-    /// <summary>Pinsel aktiv (Entfernen): Ziehen malt eine Markierung, statt einen Rahmen aufzuziehen.</summary>
+    /// <summary>Brush active (removal): dragging paints a mark instead of drawing a frame.</summary>
     public static readonly StyledProperty<bool> BrushActiveProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(BrushActive));
 
@@ -169,7 +171,7 @@ public sealed class CropView : Control
         set => SetValue(BrushActiveProperty, value);
     }
 
-    /// <summary>Pinseldurchmesser in Bildschirmpixeln.</summary>
+    /// <summary>Brush diameter in screen pixels.</summary>
     public static readonly StyledProperty<double> BrushSizeProperty =
         AvaloniaProperty.Register<CropView, double>(nameof(BrushSize), 40);
 
@@ -179,7 +181,7 @@ public sealed class CropView : Control
         set => SetValue(BrushSizeProperty, value);
     }
 
-    /// <summary>Die bisherigen Striche (Bildpixel) — rot über dem Bild.</summary>
+    /// <summary>The strokes painted so far (image pixels), drawn in red over the image.</summary>
     public static readonly StyledProperty<IReadOnlyList<BrushStroke>?> BrushStrokesProperty =
         AvaloniaProperty.Register<CropView, IReadOnlyList<BrushStroke>?>(nameof(BrushStrokes));
 
@@ -189,7 +191,7 @@ public sealed class CropView : Control
         set => SetValue(BrushStrokesProperty, value);
     }
 
-    /// <summary>Striche schon entfernt: ausblenden, bis ein neuer Strich dazukommt (dann wieder alle).</summary>
+    /// <summary>The strokes have already been removed: hide them until a new stroke is added (then all are shown again).</summary>
     public static readonly StyledProperty<bool> BrushDimProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(BrushDim));
 
@@ -199,7 +201,7 @@ public sealed class CropView : Control
         set => SetValue(BrushDimProperty, value);
     }
 
-    /// <summary>Wird mit dem fertigen Strich (<see cref="BrushStroke"/>) ausgeführt, wenn die Maus losgelassen wird.</summary>
+    /// <summary>Executed with the finished stroke (<see cref="BrushStroke"/>) when the mouse button is released.</summary>
     public static readonly StyledProperty<ICommand?> BrushCommandProperty =
         AvaloniaProperty.Register<CropView, ICommand?>(nameof(BrushCommand));
 
@@ -209,17 +211,17 @@ public sealed class CropView : Control
         set => SetValue(BrushCommandProperty, value);
     }
 
-    private List<Point>? _brushPoints;   // Strich, der gerade gemalt wird (Bildpixel)
-    private Point? _brushHover;          // Mauszeiger auf dem Bildschirm, solange der Pinsel aktiv ist
+    private List<Point>? _brushPoints;   // stroke currently being painted (image pixels)
+    private Point? _brushHover;          // pointer position on screen while the brush is active
 
-    /// <summary>Seitenverhältnis Breite/Höhe; 0 = frei.</summary>
+    /// <summary>Aspect ratio width/height; 0 = free.</summary>
     public static readonly StyledProperty<double> AspectRatioProperty =
         AvaloniaProperty.Register<CropView, double>(nameof(AspectRatio));
 
     /// <summary>
-    /// Eckenradius der Auswahl in Bildpixeln. Reicht bis zur halben längsten Seite:
-    /// über die halbe kürzere Seite hinaus werden die Ecken elliptisch, am Maximum
-    /// wird aus der Auswahl eine Ellipse — bei 1:1 ein Kreis.
+    /// Corner radius of the selection in image pixels. Ranges up to half the longest side:
+    /// beyond half the shorter side the corners become elliptical, at the maximum the
+    /// selection becomes an ellipse (a circle at 1:1).
     /// </summary>
     public static readonly StyledProperty<double> SelectionRadiusProperty =
         AvaloniaProperty.Register<CropView, double>(nameof(SelectionRadius));
@@ -230,7 +232,7 @@ public sealed class CropView : Control
         set => SetValue(SelectionRadiusProperty, value);
     }
 
-    /// <summary>Wird bei Enter oder Doppelklick in die Auswahl ausgelöst (wie in Referenzwerkzeug).</summary>
+    /// <summary>Executed on Enter or a double-click inside the selection (as in Referenzwerkzeug).</summary>
     public static readonly StyledProperty<ICommand?> CropCommandProperty =
         AvaloniaProperty.Register<CropView, ICommand?>(nameof(CropCommand));
 
@@ -240,7 +242,7 @@ public sealed class CropView : Control
         set => SetValue(CropCommandProperty, value);
     }
 
-    /// <summary>Wird ausgelöst, wenn eine Geste am Rahmen endet (Maus losgelassen) — ein Rückgängig-Schritt.</summary>
+    /// <summary>Executed when a gesture on the frame ends (mouse button released); this forms one undo step.</summary>
     public static readonly StyledProperty<ICommand?> GestureCompletedCommandProperty =
         AvaloniaProperty.Register<CropView, ICommand?>(nameof(GestureCompletedCommand));
 
@@ -256,8 +258,8 @@ public sealed class CropView : Control
             cmd.Execute(null);
     }
 
-    /// <summary>Echte Bildgröße in Pixeln; die Auswahl rechnet damit, auch wenn
-    /// <see cref="Source"/> nur eine verkleinerte Vorschau ist.</summary>
+    /// <summary>Actual image size in pixels; the selection is computed in it even when
+    /// <see cref="Source"/> is only a downscaled preview.</summary>
     public static readonly StyledProperty<PixelSize> DocumentSizeProperty =
         AvaloniaProperty.Register<CropView, PixelSize>(nameof(DocumentSize));
 
@@ -267,10 +269,9 @@ public sealed class CropView : Control
         set => SetValue(DocumentSizeProperty, value);
     }
 
-    /// <summary>Jede Änderung passt die Ansicht neu ein (neues Bild, Zuschnitt …).</summary>
     /// <summary>
-    /// Größe des Ergebnisses (Zielgröße). Darauf beziehen sich Zoom-Anzeige, „100 %"
-    /// und Einpassen. Leer = wie <see cref="DocumentSize"/>.
+    /// Size of the result (target size). The zoom display, "100 %" and fit-to-view refer to it.
+    /// Empty = same as <see cref="DocumentSize"/>.
     /// </summary>
     public static readonly StyledProperty<PixelSize> OutputSizeProperty =
         AvaloniaProperty.Register<CropView, PixelSize>(nameof(OutputSize));
@@ -281,10 +282,11 @@ public sealed class CropView : Control
         set => SetValue(OutputSizeProperty, value);
     }
 
-    /// <summary>Ergebnis-Pixel je Bild-Pixel (Breite): 800 aus 4000 → 0,2.</summary>
+    /// <summary>Result pixels per image pixel (width): 800 from 4000 → 0.2.</summary>
     private double OutputRatio =>
         OutputSize.Width > 0 && ImageSize.Width > 0 ? (double)OutputSize.Width / ImageSize.Width : 1;
 
+    /// <summary>Every change fits the view anew (new image, crop …).</summary>
     public static readonly StyledProperty<object?> ViewResetTokenProperty =
         AvaloniaProperty.Register<CropView, object?>(nameof(ViewResetToken));
 
@@ -294,7 +296,7 @@ public sealed class CropView : Control
         set => SetValue(ViewResetTokenProperty, value);
     }
 
-    /// <summary>Bildgröße des Platzhalters, solange kein Bild geladen ist.</summary>
+    /// <summary>Image size of the placeholder while no image is loaded.</summary>
     public static readonly StyledProperty<PixelSize> PlaceholderSizeProperty =
         AvaloniaProperty.Register<CropView, PixelSize>(nameof(PlaceholderSize), new PixelSize(4000, 3000));
 
@@ -302,9 +304,9 @@ public sealed class CropView : Control
         AvaloniaProperty.RegisterDirect<CropView, int>(nameof(DisplayPercent), o => o.DisplayPercent);
 
     /// <summary>
-    /// Vorher-Bild für den Vergleich; null = kein Vergleich. Gesetzt, liegt es links der
-    /// Trennlinie über <see cref="Source"/> (Nachher) — die Linie lässt sich mit der Maus
-    /// über das Bild ziehen. Wie <see cref="Source"/> auf die Bildfläche gestreckt.
+    /// "Before" image for the comparison; null = no comparison. When set, it lies left of the
+    /// divider over <see cref="Source"/> ("after"); the divider can be dragged across the image
+    /// with the mouse. Stretched to the image area like <see cref="Source"/>.
     /// </summary>
     public static readonly StyledProperty<Bitmap?> CompareSourceProperty =
         AvaloniaProperty.Register<CropView, Bitmap?>(nameof(CompareSource));
@@ -315,7 +317,7 @@ public sealed class CropView : Control
         set => SetValue(CompareSourceProperty, value);
     }
 
-    /// <summary>Beschriftung der linken Seite beim Vergleich (übersetzt, aus der Oberfläche).</summary>
+    /// <summary>Label of the left side in the comparison (translated, supplied by the UI).</summary>
     public static readonly StyledProperty<string?> BeforeLabelProperty =
         AvaloniaProperty.Register<CropView, string?>(nameof(BeforeLabel));
 
@@ -325,7 +327,7 @@ public sealed class CropView : Control
         set => SetValue(BeforeLabelProperty, value);
     }
 
-    /// <summary>Beschriftung der rechten Seite beim Vergleich.</summary>
+    /// <summary>Label of the right side in the comparison.</summary>
     public static readonly StyledProperty<string?> AfterLabelProperty =
         AvaloniaProperty.Register<CropView, string?>(nameof(AfterLabel));
 
@@ -335,7 +337,7 @@ public sealed class CropView : Control
         set => SetValue(AfterLabelProperty, value);
     }
 
-    /// <summary>Trennlinie als Anteil der Bildbreite (0 = alles Nachher, 1 = alles Vorher); bleibt beim Bildwechsel.</summary>
+    /// <summary>Divider as a fraction of the image width (0 = all "after", 1 = all "before"); kept when the image changes.</summary>
     private double _split = 0.5;
 
     public Bitmap? Source
@@ -364,21 +366,21 @@ public sealed class CropView : Control
 
     private int _displayPercent = 100;
 
-    /// <summary>Aktueller Anzeigemaßstab in Prozent (für die Zoom-Anzeige).</summary>
+    /// <summary>Current display scale in percent (for the zoom display).</summary>
     public int DisplayPercent
     {
         get => _displayPercent;
         private set => SetAndRaise(DisplayPercentProperty, ref _displayPercent, value);
     }
 
-    // ------------------------------------------------------------------ Zustand
+    // ------------------------------------------------------------------ State
 
     [Flags]
     private enum Edge { None = 0, Left = 1, Top = 2, Right = 4, Bottom = 8 }
 
     private enum DragMode { None, Create, Move, Resize, Pan, Split, QuadCorner, QuadEdge, QuadMove, Brush, WarpPoint }
 
-    // Oben mehr Luft: dort schwebt der Bedienhinweis über dem Bild.
+    // More room at the top: the usage hint floats above the image there.
     private static readonly Thickness ViewPadding = new(28, 50, 28, 28);
     private const double HandleSize = 9;
     private const double HandleHitRadius = 9;
@@ -390,14 +392,14 @@ public sealed class CropView : Control
     private Point _anchorImage;
     private Rect _startSelection;
     private Rect? _selectionBeforeCreate;
-    private Point _dragImage;   // Bildpunkt unter der Maus beim Aufziehen und Ziehen am Rahmen (für die Lupe)
+    private Point _dragImage;   // image point under the pointer while drawing or dragging the frame (for the magnifier)
     private Vector _moveOffset;
 
-    private Rect _imageRect;   // Bild auf dem Bildschirm
+    private Rect _imageRect;   // image rectangle on screen
     private Rect _panStartRect;
-    private double _scale = 1; // Bildschirm-px pro Bildpixel
+    private double _scale = 1; // screen px per image pixel
 
-    // ------------------------------------------------------------------ Optik
+    // ------------------------------------------------------------------ Appearance
 
     private static readonly IBrush ShadeBrush = new ImmutableSolidColorBrush(Color.FromArgb(0x96, 0, 0, 0));
     private static readonly IBrush HandleFill = new ImmutableSolidColorBrush(Colors.White);
@@ -480,13 +482,13 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Bildgröße für Auswahl und Zoom. Die angezeigte Bitmap kann kleiner sein
-    /// (Vorschau) — sie wird dann auf diese Fläche gestreckt.
+    /// Image size for selection and zoom. The displayed bitmap may be smaller
+    /// (preview); it is then stretched to this area.
     /// </summary>
     private PixelSize ImageSize =>
         DocumentSize is { Width: > 0, Height: > 0 } doc ? doc : Source?.PixelSize ?? PlaceholderSize;
 
-    // ------------------------------------------------------------ Geometrie
+    // ------------------------------------------------------------ Geometry
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -494,16 +496,16 @@ public sealed class CropView : Control
 
         if (change.Property == ViewResetTokenProperty)
         {
-            // Neuer Bildstand (Laden, Zuschnitt, Drehen, Rückgängig): neu einpassen
+            // New image state (load, crop, rotation, undo): fit the view again
             _fitMode = true;
             UpdateGeometry();
             InvalidateVisual();
         }
         else if (change.Property == DrawLinesProperty)
         {
-            // Zeichnen an (Knopf, N): immer eine neue Linie — weiterzeichnen an einer Linie geht per Klick auf sie
-            // (BeginDrawingOn). Aus (Esc, Knopf): aktive Linie fertig und keine mehr markiert, sonst ginge es beim
-            // nächsten Einschalten an ihr weiter.
+            // Drawing on (button, N): always a new line; continuing an existing line works by clicking on it
+            // (BeginDrawingOn). Off (Esc, button): finish the active line and deselect everything; otherwise drawing
+            // would continue on that line the next time the mode is switched on.
             if (!DrawLines)
             {
                 EndActiveLine();
@@ -515,7 +517,7 @@ public sealed class CropView : Control
         }
         else if (change.Property == WarpLinesProperty)
         {
-            // von außen geändert (Zurücksetzen, Werkzeug neu): aktive Linie und Auswahl nur, wenn es sie noch gibt
+            // changed from outside (reset, tool restarted): keep the active line and selection only if they still exist
             var count = WarpLines?.Count ?? 0;
             if (_activeLine >= count) _activeLine = -1;
             if (_hoverLine >= count) _hoverLine = -1;
@@ -527,8 +529,8 @@ public sealed class CropView : Control
                  || change.Property == OutputSizeProperty
                  || change.Property == PlaceholderSizeProperty)
         {
-            // Nur die Vorschau-Bitmap gewechselt (z. B. Schärfe-Regler): Zoom und
-            // Auswahl bleiben, wo sie sind.
+            // Only the preview bitmap changed (e.g. sharpness slider): zoom and
+            // selection stay where they are.
             UpdateGeometry();
         }
 
@@ -547,21 +549,21 @@ public sealed class CropView : Control
         {
             if (IsRotated)
             {
-                // Bei jedem Winkel neu: erst kleiner, ab 45° wieder größer, bei 180° das ganze Bild
+                // Recomputed for every angle: smaller at first, larger again from 45°, the whole image at 180°
                 Selection = AutoFrame();
                 ShowGridBriefly();
             }
             else if (Math.Abs(change.GetOldValue<double>()) > 1e-9 && Selection is not null)
             {
-                // Zurück auf 0° geschoben: der Rahmen wieder über das ganze Bild (Verwerfen setzt ihn danach auf null)
+                // Moved back to 0°: the frame covers the whole image again (discarding then sets it to null)
                 Selection = new Rect(0, 0, ImageSize.Width, ImageSize.Height);
             }
         }
     }
 
-    // ------------------------------------------------------------ Frei drehen
+    // ------------------------------------------------------------ Free rotation
 
-    /// <summary>Drehung um die Mitte der Bildfläche auf dem Bildschirm (wie ImageMagick: positiv = Uhrzeigersinn).</summary>
+    /// <summary>Rotation around the centre of the on-screen image area (as in ImageMagick: positive = clockwise).</summary>
     private Matrix RotationMatrix()
     {
         var c = _imageRect.Center;
@@ -571,8 +573,8 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Größtes Rechteck im Seitenverhältnis des Bildes, das ganz im gedrehten Bild liegt — mit 1 px
-    /// Abstand, denn die Kantenpixel sind beim Drehen mit dem leeren Hintergrund geglättet.
+    /// Largest rectangle with the image's aspect ratio that lies entirely inside the rotated image, with a 1 px
+    /// margin, because rotation blends the edge pixels with the empty background.
     /// </summary>
     private Rect AutoFrame()
     {
@@ -582,12 +584,12 @@ public sealed class CropView : Control
         return RoundInside(new Rect(x + 1, y + 1, Math.Max(1, w - 2), Math.Max(1, h - 2)));
     }
 
-    /// <summary>Liegt das Rechteck ganz im (gedrehten) Bild?</summary>
+    /// <summary>Whether the rectangle lies entirely inside the (rotated) image.</summary>
     private bool InsideRotated(Rect r) =>
         !IsRotated || RotationGeometry.ContainsRect(ImageSize.Width, ImageSize.Height, RotationAngle,
             r.X, r.Y, r.Width, r.Height);
 
-    /// <summary>Liegt der Bildschirmpunkt auf dem (gedrehten) Bild?</summary>
+    /// <summary>Whether the screen point lies on the (rotated) image.</summary>
     private bool OnImage(Point screen)
     {
         if (!IsRotated) return _imageRect.Contains(screen);
@@ -596,8 +598,8 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Gewünschter Rahmen, aber nicht über die schrägen Kanten hinaus: Von einem gültigen Rahmen aus
-    /// so weit in Richtung des gewünschten, wie es geht — der Rahmen „stößt an“.
+    /// The requested frame, but not beyond the slanted edges: starting from a valid frame, it goes as far
+    /// towards the requested one as possible, so the frame stops at the edge.
     /// </summary>
     private Rect KeepInRotated(Rect requested, Rect valid)
     {
@@ -610,9 +612,9 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Verschieben: wie <see cref="KeepInRotated"/>, aber die Größe bleibt. Gerundet wird nur die Position, und
-    /// zwar zurück zur gültigen Lage — dazwischen liegt alles im (konvexen) gedrehten Bild. Nach innen runden
-    /// würde den Rahmen bei jedem Mausschritt an der Kante um ein Pixel schmaler machen.
+    /// Moving: like <see cref="KeepInRotated"/>, but the size is kept. Only the position is rounded, and towards
+    /// the valid position; everything in between lies inside the (convex) rotated image. Rounding inwards would
+    /// make the frame one pixel narrower at the edge on every pointer move.
     /// </summary>
     private Rect MoveInRotated(Rect requested, Rect valid)
     {
@@ -626,7 +628,7 @@ public sealed class CropView : Control
         return InsideRotated(best) ? best : valid;
     }
 
-    /// <summary>Größter Anteil 0 … 1 auf dem Weg von <paramref name="valid"/> zu <paramref name="requested"/>, der im Bild bleibt.</summary>
+    /// <summary>Largest fraction 0 … 1 of the way from <paramref name="valid"/> to <paramref name="requested"/> that stays inside the image (bisection).</summary>
     private double FurthestInside(Rect valid, Rect requested)
     {
 
@@ -640,7 +642,7 @@ public sealed class CropView : Control
         return lo;
     }
 
-    /// <summary>Um die Mitte verkleinern, bis der Rahmen im gedrehten Bild liegt (neues Seitenverhältnis).</summary>
+    /// <summary>Shrinks around the centre until the frame lies inside the rotated image (after an aspect ratio change).</summary>
     private Rect ShrinkIntoRotated(Rect r)
     {
         var (x, y, w, h) = RotationGeometry.ShrinkInside(ImageSize.Width, ImageSize.Height, RotationAngle,
@@ -652,7 +654,7 @@ public sealed class CropView : Control
         new Point(a.Left + (b.Left - a.Left) * t, a.Top + (b.Top - a.Top) * t),
         new Point(a.Right + (b.Right - a.Right) * t, a.Bottom + (b.Bottom - a.Bottom) * t));
 
-    /// <summary>Auf ganze Pixel nach innen runden — bleibt so sicher im gedrehten Bild.</summary>
+    /// <summary>Rounds inwards to whole pixels so that the frame stays inside the rotated image.</summary>
     private static Rect RoundInside(Rect r)
     {
         var x0 = Math.Ceiling(r.X - 1e-6);
@@ -662,7 +664,7 @@ public sealed class CropView : Control
         return new Rect(x0, y0, Math.Max(1, x1 - x0), Math.Max(1, y1 - y0));
     }
 
-    // Hilfsgitter beim Drehen: nach der letzten Winkeländerung noch kurz sichtbar
+    // Guide grid while rotating: stays visible briefly after the last angle change
     private static readonly TimeSpan GridTime = TimeSpan.FromSeconds(1.2);
     private DateTime _gridUntil;
     private DispatcherTimer? _gridTimer;
@@ -681,9 +683,9 @@ public sealed class CropView : Control
 
     private static readonly IPen GridPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x60, 255, 255, 255)), 1);
     private static readonly IPen GridShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x40, 0, 0, 0)), 1);
-    private const double GridSpacing = 32;   // Bildschirmpixel
+    private const double GridSpacing = 32;   // screen pixels
 
-    /// <summary>Feines, waagerechtes/senkrechtes Gitter über dem gedrehten Bild — zum Ausrichten von Horizont und Kanten.</summary>
+    /// <summary>Draws a fine horizontal/vertical grid over the rotated image for aligning the horizon and edges.</summary>
     private void RenderGrid(DrawingContext context, Geometry imageArea)
     {
         var area = imageArea.Bounds.Intersect(new Rect(Bounds.Size));
@@ -710,15 +712,15 @@ public sealed class CropView : Control
 
     // ------------------------------------------------------------ Zoom
 
-    private const double MaxScale = 32;       // 3200 % — einzelne Pixel prüfen
-    private const double WheelZoomStep = 1.2; // pro Rastung
+    private const double MaxScale = 32;       // 3200 %, for inspecting individual pixels
+    private const double WheelZoomStep = 1.2; // per wheel notch
 
-    /// <summary>true = Bild wird ins Fenster eingepasst; false = freier Zoom.</summary>
+    /// <summary>true = the image is fitted into the window; false = free zoom.</summary>
     private bool _fitMode = true;
 
     private Rect ViewArea => new Rect(Bounds.Size).Deflate(ViewPadding);
 
-    /// <summary>Maßstab, bei dem das Bild genau hineinpasst (kleine Bilder max. 100 %).</summary>
+    /// <summary>Scale at which the image fits exactly (small images at most 100 % of the result size).</summary>
     private double FitScale
     {
         get
@@ -726,7 +728,7 @@ public sealed class CropView : Control
             var size = ImageSize;
             var area = ViewArea;
             if (size.Width <= 0 || size.Height <= 0 || area.Width <= 0 || area.Height <= 0) return 1;
-            // Einpassen, aber das Ergebnis nicht über 100 % aufblasen
+            // fit, but do not enlarge the result beyond 100 %
             return Math.Min(OutputRatio, Math.Min(area.Width / size.Width, area.Height / size.Height));
         }
     }
@@ -741,7 +743,7 @@ public sealed class CropView : Control
             return;
         }
 
-        if (_fitMode || _scale < FitScale - 1e-9)   // eingepasst, aber verschoben (_fitMode aus): Lage bleibt
+        if (_fitMode || _scale < FitScale - 1e-9)   // fitted scale but panned (_fitMode off): the position is kept (else branch)
         {
             _fitMode = true;
             _scale = FitScale;
@@ -751,14 +753,14 @@ public sealed class CropView : Control
         }
         else
         {
-            // Fenstergröße geändert im Zoom: Maßstab halten, nur in den Rahmen zwingen
+            // window size changed while zoomed: keep the scale, only clamp the position
             _imageRect = ClampPan(_imageRect);
         }
 
         DisplayPercent = (int)Math.Round(_scale / OutputRatio * 100);
     }
 
-    /// <summary>Zoomt auf <paramref name="newScale"/>; der Bildpunkt unter <paramref name="anchor"/> bleibt stehen.</summary>
+    /// <summary>Zooms to <paramref name="newScale"/>; the image point under <paramref name="anchor"/> stays in place.</summary>
     private void ZoomAt(Point anchor, double newScale)
     {
         if (_imageRect.Width <= 0) return;
@@ -786,8 +788,8 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Wie weit sich das Bild schieben lässt: so weit, dass jede Stelle bis zur Mitte der Vorschau kommt — so erreicht man
-    /// auch Ränder, über denen gerade eine Leiste (Werkzeug, Bearbeitungen) liegt. Weiter nicht, sonst ginge das Bild verloren.
+    /// How far the image can be panned: far enough for every point to reach the centre of the preview, so that edges
+    /// covered by a panel (tool, edits) can be reached as well. No further, otherwise the image could be lost off screen.
     /// </summary>
     private Rect ClampPan(Rect r)
     {
@@ -797,7 +799,7 @@ public sealed class CropView : Control
         return new Rect(x, y, r.Width, r.Height);
     }
 
-    /// <summary>Bild wieder ganz ins Fenster einpassen.</summary>
+    /// <summary>Fits the whole image into the window again.</summary>
     public void FitToView()
     {
         _fitMode = true;
@@ -805,7 +807,8 @@ public sealed class CropView : Control
         InvalidateVisual();
     }
 
-    /// <summary>Der sichtbare Teil des Bildes in Bildpixeln (ganzes Bild, wenn eingepasst); leer ohne Bild.</summary>
+    /// <summary>Returns the visible part of the image in image pixels.</summary>
+    /// <returns>The visible area (the whole image when fitted); an empty rectangle when no image is laid out.</returns>
     public Rect VisibleImageRect()
     {
         if (_imageRect.Width <= 0 || _scale <= 0) return default;
@@ -814,7 +817,7 @@ public sealed class CropView : Control
         return new Rect(a, b).Intersect(new Rect(0, 0, ImageSize.Width, ImageSize.Height));
     }
 
-    /// <summary>Originalgröße (100 %), um die Mitte der Ansicht.</summary>
+    /// <summary>Zooms to actual size (100 % of the result size) around the centre of the view.</summary>
     public void ZoomToActualSize() => ZoomAt(ViewArea.Center, OutputRatio);
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -824,7 +827,7 @@ public sealed class CropView : Control
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            // Strg + Mausrad: zoomen um den Mauszeiger
+            // Ctrl + mouse wheel: zoom around the pointer
             ZoomAt(e.GetPosition(this), _scale * Math.Pow(WheelZoomStep, e.Delta.Y));
             e.Handled = true;
         }
@@ -849,7 +852,7 @@ public sealed class CropView : Control
             Math.Max(1, Math.Round(r.Bottom) - y));
     }
 
-    // ------------------------------------------------------------ Hit-Test
+    // ------------------------------------------------------------ Hit testing
 
     private Edge HitTestHandles(Point p, Rect s)
     {
@@ -875,7 +878,7 @@ public sealed class CropView : Control
         _ => CursorNorthSouth,
     };
 
-    // ------------------------------------------------------------ Maus
+    // ------------------------------------------------------------ Mouse
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -883,9 +886,9 @@ public sealed class CropView : Control
         var props = e.GetCurrentPoint(this).Properties;
         var p = e.GetPosition(this);
 
-        // Verschieben im Zoom: Strg + links, ohne Auswahlwerkzeug links allein
+        // Panning: Ctrl + left button; without the selection tool the left button alone
         var panKey = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        if (props.IsLeftButtonPressed && panKey)   // auch eingepasst: das Bild lässt sich über den Rand hinaus schieben
+        if (props.IsLeftButtonPressed && panKey)   // also when fitted: the image can be pushed beyond the edge
         {
             Focus();
             _mode = DragMode.Pan;
@@ -897,7 +900,7 @@ public sealed class CropView : Control
             return;
         }
 
-        // Gewölbtes Blatt: Rechtsklick auf eine Linie wechselt ihre Richtung
+        // Curved page: right-clicking a line cycles its direction
         if (LinesMode && props.IsRightButtonPressed)
         {
             if (HitWarpPoint(p) is { } hp) ChangeWarpLine(hp.Line, l => l.NextKind());
@@ -911,8 +914,8 @@ public sealed class CropView : Control
         Focus();
         _pressScreen = p;
 
-        // Vergleich: die Trennlinie geht vor — auch vor Pinsel und Pipette (sonst malte der Versuch, sie zu ziehen, beim
-        // Entfernen einen Strich, und die schon entfernte Markierung erschien wieder)
+        // Comparison: the divider takes precedence, also over brush and eyedropper (otherwise an attempt to drag it would
+        // paint a stroke in the removal tab, and the already removed mark would reappear)
         if (OnSplitLine(p))
         {
             _mode = DragMode.Split;
@@ -922,7 +925,7 @@ public sealed class CropView : Control
             return;
         }
 
-        // Pinsel: malen statt aufziehen
+        // Brush: paint instead of drawing a frame
         if (BrushActive && !IsRotated)
         {
             if (OnImage(p))
@@ -936,7 +939,7 @@ public sealed class CropView : Control
             return;
         }
 
-        // Pipette: messen statt aufziehen
+        // Eyedropper: sample instead of drawing a frame
         if (PickActive)
         {
             if (OnImage(p) && PickCommand is { } pick)
@@ -948,14 +951,14 @@ public sealed class CropView : Control
             return;
         }
 
-        // Gewölbtes Blatt: Punkte setzen und ziehen
+        // Curved page: add and drag points
         if (LinesMode)
         {
             PressWarp(e, p);
             return;
         }
 
-        // Entzerren: Ecken, Kantenmitten oder das ganze Viereck ziehen
+        // Perspective correction: drag corners, edge midpoints or the whole quadrilateral
         if (QuadMode)
         {
             if (e.ClickCount >= 2 && InsideQuad(p))
@@ -979,7 +982,7 @@ public sealed class CropView : Control
                 return;
             }
 
-            _mode = DragMode.Pan;   // daneben: im Zoom verschieben
+            _mode = DragMode.Pan;   // outside: pan
             _panStartRect = _imageRect;
             Cursor = CursorGrab;
             e.Pointer.Capture(this);
@@ -987,7 +990,7 @@ public sealed class CropView : Control
             return;
         }
 
-        // Auswahlwerkzeug aus: Ziehen verschiebt das Bild (auch eingepasst — über den Rand hinaus)
+        // Selection tool off: dragging pans the image (also when fitted, beyond the edge)
         if (!SelectionEnabled)
         {
             _mode = DragMode.Pan;
@@ -1032,8 +1035,8 @@ public sealed class CropView : Control
 
         if (OnImage(p))
         {
-            // Neue Auswahl beginnt erst, wenn die Maus sich ein Stück bewegt —
-            // ein reiner Klick hebt die bestehende Auswahl nur auf (beim Drehen bleibt sie).
+            // A new selection starts only once the pointer has moved a little; a plain
+            // click only clears the existing selection (while rotating, it is kept).
             var anchor = ClampToImage(ToImage(p));
             if (IsRotated && !InsideRotated(new Rect(anchor, new Size(0, 0)))) return;
             _mode = DragMode.Create;
@@ -1054,7 +1057,7 @@ public sealed class CropView : Control
             case DragMode.None:
                 if ((BrushActive && !IsRotated || PickActive) && OnSplitLine(p))
                 {
-                    // über der Trennlinie: ziehen statt malen/messen — kein Pinselkreis
+                    // over the divider: drag instead of paint/sample, no brush circle
                     _brushHover = null;
                     _pickHover = null;
                     Cursor = CursorWestEast;
@@ -1110,7 +1113,7 @@ public sealed class CropView : Control
             }
 
             case DragMode.Pan:
-                _fitMode = false;   // verschoben: beim nächsten Neuzeichnen nicht wieder einpassen
+                _fitMode = false;   // panned: do not fit again on the next layout update
                 _imageRect = ClampPan(_panStartRect.Translate(p - _pressScreen));
                 InvalidateVisual();
                 break;
@@ -1132,8 +1135,8 @@ public sealed class CropView : Control
             {
                 if (!_warpMoved)
                 {
-                    // erst ab ein paar Pixeln Bewegung ziehen: ein Klick auf einen Punkt verschiebt ihn nicht (und macht
-                    // einen Vorschlag nicht zur eigenen Linie), er zeichnet an der Linie weiter
+                    // Start dragging only after a few pixels of movement: a click on a point does not move it (and does
+                    // not turn a suggestion into a user line); instead drawing continues on that line.
                     if (_warpSel.Point < 0 || Point.Distance(p, _pressScreen) < WarpDragThreshold) break;
                     _warpMoved = true;
                 }
@@ -1155,7 +1158,7 @@ public sealed class CropView : Control
 
             case DragMode.Brush when _brushPoints is { } points:
             {
-                // Neuer Punkt erst ab etwa einem Bildschirmpixel Abstand — sonst wächst der Strich ohne Nutzen
+                // Add a point only at a distance of about 1.5 screen pixels; otherwise the stroke grows without benefit.
                 var ip = ClampToImage(ToImage(p));
                 if (Point.Distance(ip, points[^1]) * _scale >= 1.5) points.Add(ip);
                 _brushHover = p;
@@ -1192,17 +1195,17 @@ public sealed class CropView : Control
         {
             var d = e.GetPosition(this) - _pressScreen;
             if (Math.Abs(d.X) < CreateThreshold && Math.Abs(d.Y) < CreateThreshold)
-                Selection = IsRotated ? _selectionBeforeCreate : null;   // beim Drehen gehört der Rahmen dazu
+                Selection = IsRotated ? _selectionBeforeCreate : null;   // while rotating, the frame belongs to the rotation and is kept
         }
 
         if (_mode == DragMode.Pan && LinesMode) ReleaseWarpClick(e.GetPosition(this));
 
-        // Klick auf einen Punkt ohne Ziehen (nicht beim Zeichnen): an dieser Linie weiterzeichnen
+        // Click on a point without dragging (not in drawing mode): continue drawing on that line
         if (_mode == DragMode.WarpPoint && !_warpMoved && !DrawLines && _warpSel.Line >= 0) BeginDrawingOn(_warpSel.Line);
 
         var wasEdit = _mode is not (DragMode.Pan or DragMode.Split);
         _mode = DragMode.None;
-        InvalidateVisual();   // Lupe weg, aktive Ecke zeigen
+        InvalidateVisual();   // hide the magnifier, show the active corner
         e.Pointer.Capture(null);
         UpdateHoverCursor(e.GetPosition(this), e.KeyModifiers);
         if (wasEdit && GestureCompletedCommand is { } done && done.CanExecute(null))
@@ -1215,12 +1218,12 @@ public sealed class CropView : Control
         base.OnPointerExited(e);
         if (_hoverLine >= 0 || _drawHover is not null)
         {
-            _hoverLine = -1;   // Löschknopf weg, wenn die Maus die Vorschau verlässt
+            _hoverLine = -1;   // hide the delete button when the pointer leaves the preview
             _drawHover = null;
             InvalidateVisual();
         }
         if (_pickHover is null && _brushHover is null) return;
-        _pickHover = null;   // Lupe weg, wenn die Maus die Vorschau verlässt
+        _pickHover = null;   // hide the magnifier when the pointer leaves the preview
         _brushHover = null;
         InvalidateVisual();
     }
@@ -1247,8 +1250,8 @@ public sealed class CropView : Control
 
         if (LinesMode)
         {
-            // Linie unter der Maus: an ihr erscheint der Löschknopf (×); über dem Knopf bleibt sie die angezeigte
-            // Zeichnen: die Lupe folgt der Maus schon vor dem Klick
+            // Line under the pointer: its delete button (×) appears; over the button that line stays the shown one.
+            // Drawing mode: the magnifier follows the pointer even before the click.
             var draw = DrawLines && OnImage(p) && HitDeleteHandle(p) is null ? ToImage(p) : (Point?)null;
             if (draw != _drawHover)
             {
@@ -1256,7 +1259,7 @@ public sealed class CropView : Control
                 InvalidateVisual();
             }
             var hover = HitDeleteHandle(p) ?? HitWarpPoint(p)?.Line ?? HitWarpSegment(p)?.Line ?? -1;
-            // auf dem Weg von der Linie zu ihrem × bleibt das × stehen (sonst verschwände es, bevor man es erreicht)
+            // on the way from the line to its ×, the × stays visible (otherwise it would disappear before it is reached)
             if (hover < 0 && _hoverLine >= 0 && DeleteHandle(_hoverLine) is { } handle && Point.Distance(handle, p) <= DeleteHandleRadius + 22)
                 hover = _hoverLine;
             if (hover != _hoverLine)
@@ -1267,7 +1270,7 @@ public sealed class CropView : Control
             Cursor = HitDeleteHandle(p) is not null ? CursorHand
                 : HitWarpPoint(p) is not null ? CursorMove
                 : DrawLines ? (OnImage(p) ? CursorCross : CursorHand)
-                : CursorHand;   // ansehen: Ziehen verschiebt das Bild
+                : CursorHand;   // viewing: dragging pans the image
             return;
         }
 
@@ -1299,18 +1302,18 @@ public sealed class CropView : Control
         Cursor = OnImage(p) ? CursorCross : Cursor.Default;
     }
 
-    // ------------------------------------------------------------ Vergleich
+    // ------------------------------------------------------------ Comparison
 
     private const double SplitHitRadius = 8;
     private const double SplitKnobRadius = 13;
 
-    /// <summary>Trennlinie auf dem Bildschirm — innerhalb des sichtbaren Teils des Bildes.</summary>
+    /// <summary>Screen x position of the divider.</summary>
     private double SplitX => _imageRect.X + _imageRect.Width * _split;
 
-    /// <summary>Sichtbarer Teil des Bildes (im Zoom ragt es über die Ansicht hinaus).</summary>
+    /// <summary>Visible part of the image (when zoomed, the image extends beyond the view).</summary>
     private Rect VisibleImage => _imageRect.Intersect(new Rect(Bounds.Size));
 
-    /// <summary>Griff mittig auf der Linie, im sichtbaren Teil.</summary>
+    /// <summary>Handle in the middle of the divider, within the visible part.</summary>
     private Point SplitKnob => new(SplitX, VisibleImage.Center.Y);
 
     private bool OnSplitLine(Point p) =>
@@ -1323,7 +1326,7 @@ public sealed class CropView : Control
     private static readonly IBrush KnobFill = new ImmutableSolidColorBrush(Color.FromArgb(0xE6, 255, 255, 255));
     private static readonly IBrush KnobArrow = new ImmutableSolidColorBrush(Color.FromArgb(0xD0, 0x30, 0x30, 0x30));
 
-    /// <summary>Vorher links der Linie über das Nachher, dazu Linie, Griff und Beschriftung.</summary>
+    /// <summary>Draws "before" left of the divider over "after", plus the divider, handle and labels.</summary>
     private void RenderCompare(DrawingContext context, Bitmap before)
     {
         var visible = VisibleImage;
@@ -1339,7 +1342,7 @@ public sealed class CropView : Control
         context.DrawLine(SplitShadowPen, top, bottom);
         context.DrawLine(SplitPen, top, bottom);
 
-        // Griff: Kreis mit zwei Pfeilspitzen ◂ ▸
+        // Handle: circle with two arrowheads ◂ ▸
         var knob = SplitKnob;
         context.DrawEllipse(KnobFill, HandlePen, knob, SplitKnobRadius, SplitKnobRadius);
         var arrows = new StreamGeometry();
@@ -1355,7 +1358,7 @@ public sealed class CropView : Control
         }
         context.DrawGeometry(KnobArrow, null, arrows);
 
-        // Beschriftung oben in den Ecken der jeweiligen Seite, nur wenn Platz ist
+        // Labels in the top corners of each side, only if there is room
         DrawTag(context, BeforeLabel, new Point(Math.Max(visible.Left, _imageRect.Left) + 8, visible.Top + 8), x, alignRight: false);
         DrawTag(context, AfterLabel, new Point(Math.Min(visible.Right, _imageRect.Right) - 8, visible.Top + 8), x, alignRight: true);
     }
@@ -1368,13 +1371,13 @@ public sealed class CropView : Control
         var pad = new Thickness(7, 3);
         var box = new Size(text.Width + pad.Left + pad.Right, text.Height + pad.Top + pad.Bottom);
         var bx = alignRight ? anchor.X - box.Width : anchor.X;
-        // Nur auf der eigenen Seite der Linie
+        // only on its own side of the divider
         if (alignRight ? bx < splitX + 4 : bx + box.Width > splitX - 4) return;
         context.DrawRectangle(LabelBack, null, new RoundedRect(new Rect(new Point(bx, anchor.Y), box), 4));
         context.DrawText(text, new Point(bx + pad.Left, anchor.Y + pad.Top));
     }
 
-    /// <summary>Bitmap auf die Bildfläche gestreckt; ab 200 % Pixel hart (zum Prüfen), darunter weich.</summary>
+    /// <summary>Draws the bitmap stretched to the image area; from 2 screen pixels per bitmap pixel without interpolation (for inspection), below that smoothly.</summary>
     private void DrawBitmap(DrawingContext context, Bitmap bmp)
     {
         using (context.PushRenderOptions(new RenderOptions
@@ -1388,7 +1391,7 @@ public sealed class CropView : Control
         }
     }
 
-    // ------------------------------------------------------------ Entzerren (Viereck)
+    // ------------------------------------------------------------ Perspective correction (quadrilateral)
 
     private const double QuadCornerHit = 14;
     private const double QuadEdgeHit = 11;
@@ -1410,7 +1413,7 @@ public sealed class CropView : Control
 
     private static IReadOnlyList<(double X, double Y)> Tuples(IReadOnlyList<Point> q) => q.Select(p => (p.X, p.Y)).ToArray();
 
-    /// <summary>Was liegt unter dem Mauszeiger: Ecke, Kantenmitte, Innenfläche — oder nichts.</summary>
+    /// <summary>Determines what lies under the pointer: corner, edge midpoint, interior, or nothing.</summary>
     private (DragMode Kind, int Index) HitQuad(Point screen)
     {
         if (Quad is not { Count: 4 } q) return (DragMode.None, -1);
@@ -1428,7 +1431,7 @@ public sealed class CropView : Control
     private bool InsideQuad(Point screen) =>
         Quad is { Count: 4 } q && QuadGeometry(q.Select(ToScreenPoint).ToArray()).FillContains(screen);
 
-    /// <summary>Einige Ecken gemeinsam verschieben, aber nicht über den Bildrand hinaus.</summary>
+    /// <summary>Moves several corners together, but not beyond the image edge.</summary>
     private Point[] ShiftQuad(int[] indices, Vector delta)
     {
         var q = _quadStart.ToArray();
@@ -1458,7 +1461,7 @@ public sealed class CropView : Control
 
         if (e.Key == Key.Escape)
         {
-            Quad = null;   // Werkzeug aus — nichts übernommen
+            Quad = null;   // tool off, nothing applied
             e.Handled = true;
         }
         else if (e.Key is Key.Enter or Key.Return)
@@ -1486,7 +1489,7 @@ public sealed class CropView : Control
         return g;
     }
 
-    /// <summary>Viereck: außen abgedunkelt, Drittel-Gitter perspektivisch richtig, Griffe, Zielgröße, beim Ziehen die Lupe.</summary>
+    /// <summary>Draws the quadrilateral: darkened outside, perspective-correct thirds grid, handles, target size, and the magnifier while dragging.</summary>
     private void RenderQuad(DrawingContext context)
     {
         var q = Quad!;
@@ -1503,7 +1506,7 @@ public sealed class CropView : Control
 
         if (valid)
         {
-            // Wo im Ergebnis die Drittel liegen — so sieht man, wie gerade es wird
+            // Where the thirds lie in the result, so it is visible how straight it will become
             foreach (var t in new[] { 1 / 3.0, 2 / 3.0 })
             {
                 Line(PerspectiveGeometry.PointAt(tuples, t, 0), PerspectiveGeometry.PointAt(tuples, t, 1));
@@ -1514,7 +1517,7 @@ public sealed class CropView : Control
         context.DrawGeometry(null, QuadShadowPen, outline);
         context.DrawGeometry(null, valid ? FramePen : QuadInvalidPen, outline);
 
-        // Kantenmitten (klein, eckig) und Ecken (rund, die aktive blau)
+        // Edge midpoints (small, square) and corners (round, the active one blue)
         for (var i = 0; i < 4; i++)
         {
             var mid = (pts[i] + pts[(i + 1) % 4]) / 2;
@@ -1552,7 +1555,7 @@ public sealed class CropView : Control
             });
         }
 
-        // Hell mit dunklem Schatten: auf hellem Papier wie auf dunklem Grund zu sehen
+        // Light with a dark shadow: visible on light paper as well as on a dark background
         void Line((double X, double Y) a, (double X, double Y) b)
         {
             var (pa, pb) = (ToScreenPoint(new Point(a.X, a.Y)), ToScreenPoint(new Point(b.X, b.Y)));
@@ -1562,8 +1565,8 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Lupe neben einem Bildpunkt: Bild vergrößert, Fadenkreuz; <paramref name="overlay"/> zeichnet darüber (mit der
-    /// Umrechnung Bildpunkt → Lupe), z. B. die Kanten an einer Ecke oder das Messfeld der Pipette.
+    /// Magnifier next to an image point: enlarged image and crosshair; <paramref name="overlay"/> draws on top (given the
+    /// mapping image point → magnifier), e.g. the edges at a corner or the sampling area of the eyedropper.
     /// </summary>
     private void DrawLoupe(DrawingContext context, Point corner, Action<Func<Point, Point>>? overlay)
     {
@@ -1575,11 +1578,11 @@ public sealed class CropView : Control
         var center = new Point(cx, cy);
         var dest = new Rect(cx - LoupeRadius, cy - LoupeRadius, 2 * LoupeRadius, 2 * LoupeRadius);
 
-        // Bildpunkt → Lupe
+        // image point → magnifier
         var zoom = _scale * LoupeZoom;
         Point ToLoupe(Point image) => new(cx + (image.X - corner.X) * zoom, cy + (image.Y - corner.Y) * zoom);
 
-        // Ausschnitt der Bitmap, auf die Bitmap begrenzt (Stellen am Bildrand)
+        // Section of the bitmap, clipped to the bitmap (points at the image edge)
         var bmpPerImage = bmp.PixelSize.Width / (double)ImageSize.Width;
         var half = LoupeRadius / zoom;
         var srcImage = new Rect(corner.X - half, corner.Y - half, 2 * half, 2 * half)
@@ -1598,8 +1601,8 @@ public sealed class CropView : Control
             }
 
             overlay?.Invoke(ToLoupe);
-            // Fadenkreuz in der Negativfarbe des Bildes darunter — auf weißem Papier dunkel, auf dunklem Grund hell; mit
-            // dünnem Schatten, damit es auch auf mittlerem Grau zu sehen ist
+            // Crosshair in the inverse colour of the image below (dark on white paper, light on a dark background), with
+            // a thin shadow so that it is visible on medium grey as well.
             var cross = new ImmutablePen(new ImmutableSolidColorBrush(CrossColor(bmp, new Point(corner.X * bmpPerImage, corner.Y * bmpPerImage))), 1.5);
             foreach (var pen in new[] { LoupeCrossShadowPen, cross })
             {
@@ -1616,8 +1619,8 @@ public sealed class CropView : Control
     private static readonly IPen LoupeCrossShadowPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)), 3.5);
 
     /// <summary>
-    /// Negativfarbe des Bildes um eine Stelle (Mittel über 5 × 5 Pixel der Bitmap). Liegt die Stelle fast mittelgrau, wäre das
-    /// Negativ ebenso grau — dann Schwarz oder Weiß, je nachdem, was mehr absticht.
+    /// Inverse colour of the image around a point (mean over 5 × 5 bitmap pixels). If the point is almost medium grey, the
+    /// inverse would be just as grey; then black or white, whichever contrasts more.
     /// </summary>
     private static Color CrossColor(Bitmap bmp, Point at)
     {
@@ -1641,19 +1644,19 @@ public sealed class CropView : Control
         }
         catch (Exception)
         {
-            return Colors.Magenta;   // Bitmap nicht lesbar: auffällige Farbe statt gar keiner
+            return Colors.Magenta;   // bitmap not readable: a conspicuous colour rather than none
         }
     }
 
-    // ------------------------------------------------------------ Gewölbtes Blatt (Linien)
+    // ------------------------------------------------------------ Curved page (lines)
 
     private const double WarpPointHit = 9;
     private const double WarpSegmentHit = 6;
 
-    private int _activeLine = -1;                    // Linie, die gerade wächst
-    private (int Line, int Point) _warpSel = (-1, -1); // zuletzt angefasster Punkt (Tastatur, Lupe)
+    private int _activeLine = -1;                    // line currently being extended
+    private (int Line, int Point) _warpSel = (-1, -1); // most recently touched point (keyboard, magnifier)
 
-    // Farben je Richtung: waagerecht blau, senkrecht orange, Falz pink — hell, mit dunklem Schatten darunter
+    // Colours per direction: horizontal blue, vertical orange, fold pink; light, with a dark shadow below
     private static readonly Color[] WarpColors = [Color.FromRgb(0x3F, 0xA9, 0xF5), Color.FromRgb(0xFF, 0xA6, 0x30), Color.FromRgb(0xFF, 0x4F, 0xA3)];
     private static readonly IPen[] WarpPens = WarpColors.Select(c => (IPen)new ImmutablePen(new ImmutableSolidColorBrush(c), 1.8)).ToArray();
     private static readonly IPen[] WarpActivePens = WarpColors.Select(c => (IPen)new ImmutablePen(new ImmutableSolidColorBrush(c), 2.6)).ToArray();
@@ -1703,20 +1706,20 @@ public sealed class CropView : Control
         var next = lines.ToArray();
         var old = next[index];
         var changed = change(old);
-        // jede Änderung an einem Vorschlag (Punkt, Richtung) macht ihn zur eigenen Linie — „Vorschlagen“ lässt ihn dann stehen
+        // any change to a suggestion (point, direction) turns it into a user line, which "Suggest" then leaves alone
         if (old.Suggested && changed.Suggested && (changed.Kind != old.Kind || !changed.Points.SequenceEqual(old.Points)))
             changed = changed.Adopted();
         next[index] = changed;
         WarpLines = next;
     }
 
-    // ------------------------------------------------------------ Löschknopf an der Linie
+    // ------------------------------------------------------------ Delete button at the line
 
     private const double DeleteHandleRadius = 8;
-    private int _hoverLine = -1;   // Linie unter der Maus
-    private Point? _drawHover;     // Zeichenmodus: Bildpunkt unter der Maus (Lupe schon vor dem Klick)
+    private int _hoverLine = -1;   // line under the pointer
+    private Point? _drawHover;     // drawing mode: image point under the pointer (magnifier even before the click)
 
-    /// <summary>Linien, die gerade einen Löschknopf zeigen: unter der Maus, die aktive und die zuletzt angefasste.</summary>
+    /// <summary>Lines currently showing a delete button: the one under the pointer, the active one and the most recently touched one.</summary>
     private IEnumerable<int> DeleteCandidates()
     {
         var count = WarpLines?.Count ?? 0;
@@ -1724,8 +1727,8 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Wo der Löschknopf einer Linie sitzt (Bildschirm): neben der Mitte ihres Verlaufs, etwas abgesetzt (über einer
-    /// waagerechten, links einer senkrechten Linie) — so verdeckt er weder die Linie noch ihre Punkte.
+    /// Screen position of a line's delete button: next to the midpoint of its path, slightly offset (above a horizontal
+    /// line, left of a vertical one), so that it covers neither the line nor its points.
     /// </summary>
     private Point? DeleteHandle(int line)
     {
@@ -1778,23 +1781,23 @@ public sealed class CropView : Control
     }
 
     /// <summary>
-    /// Linker Klick im Werkzeug. Ansehen (Vorgabe): Ziehen an einem Punkt verschiebt den Punkt, sonst verschiebt Ziehen das
-    /// Bild; ein Klick ohne Ziehen auf eine Linie (oder einen ihrer Punkte) schaltet das Zeichnen ein, und die Linie wächst
-    /// am näheren Ende weiter (das × an ihr entfernt sie). Zeichnen (<see cref="DrawLines"/>): jeder Klick setzt einen Punkt
-    /// auf die aktive Linie (oder beginnt eine), ein Klick auf eine Linie fügt dort einen Punkt ein und macht sie zur aktiven,
-    /// Doppelklick oder Enter beendet die Linie.
+    /// Left click in the tool. Viewing (default): dragging a point moves the point, otherwise dragging pans the image; a
+    /// click without dragging on a line (or one of its points) switches drawing on, and the line grows at its nearer end
+    /// (the × next to it removes it). Drawing (<see cref="DrawLines"/>): every click adds a point to the active line (or
+    /// starts one), a click on a line inserts a point there and makes it the active line, double-click or Enter ends the
+    /// line.
     /// </summary>
     private void PressWarp(PointerPressedEventArgs e, Point p)
     {
         e.Handled = true;
         if (HitDeleteHandle(p) is { } doomed)
         {
-            RemoveWarpLine(doomed);   // × neben der Linie: ganze Linie weg (auch einen Vorschlag)
+            RemoveWarpLine(doomed);   // × next to the line: remove the whole line (also a suggestion)
             return;
         }
         if (DrawLines && e.ClickCount >= 2)
         {
-            EndActiveLine();   // Doppelklick: der erste Klick hat den letzten Punkt schon gesetzt; der nächste beginnt eine neue
+            EndActiveLine();   // double-click: the first click already added the last point; the next click starts a new line
             return;
         }
 
@@ -1806,7 +1809,7 @@ public sealed class CropView : Control
 
         if (!DrawLines)
         {
-            // Ansehen: verschieben; ob es ein Klick auf eine Linie war, zeigt sich beim Loslassen
+            // Viewing: pan; whether it was a click on a line is decided on release
             _lineClick = HitWarpSegment(p)?.Line ?? -1;
             StartWarpPan(e, p);
             return;
@@ -1814,7 +1817,7 @@ public sealed class CropView : Control
 
         if (HitWarpSegment(p) is { } hs)
         {
-            // Punkt einfügen (ein Vorschlag wird dabei zur eigenen Linie), die Linie wird die aktive
+            // Insert a point (a suggestion becomes a user line); the line becomes the active one
             var line = WarpLines![hs.Line];
             var pts = line.Points.ToList();
             pts.Insert(hs.Segment + 1, ClampToImage(ToImage(p)));
@@ -1824,7 +1827,7 @@ public sealed class CropView : Control
         }
         if (!OnImage(p))
         {
-            StartWarpPan(e, p);   // daneben: verschieben
+            StartWarpPan(e, p);   // outside: pan
             return;
         }
 
@@ -1839,8 +1842,8 @@ public sealed class CropView : Control
         }
         else
         {
-            // an das nähere Ende — so lässt sich eine Linie nach vorn wie nach hinten verlängern (ein Vorschlag wird dabei
-            // zur normalen Linie)
+            // at the nearer end, so that a line can be extended at either end (a suggestion becomes a normal
+            // line)
             var line = lines[_activeLine].Suggested ? lines[_activeLine].Adopted() : lines[_activeLine];
             var atStart = line.Points.Count >= 2 && Point.Distance(at, line.Points[0]) < Point.Distance(at, line.Points[^1]);
             lines[_activeLine] = (line with { Points = atStart ? [at, .. line.Points] : [.. line.Points, at] }).WithGuessedKind();
@@ -1850,7 +1853,7 @@ public sealed class CropView : Control
         StartWarpDrag(e, _activeLine, index);
     }
 
-    // Linie unter dem Klick beim Verschieben: ohne Bewegung losgelassen = Klick auf die Linie
+    // Line under the click while panning: released without movement = click on the line
     private int _lineClick = -1;
 
     private void StartWarpPan(PointerPressedEventArgs e, Point p)
@@ -1862,7 +1865,7 @@ public sealed class CropView : Control
         e.Pointer.Capture(this);
     }
 
-    /// <summary>Losgelassen ohne zu verschieben: Klick auf eine Linie (dort weiterzeichnen) oder daneben (Markierung weg).</summary>
+    /// <summary>Released without panning: a click on a line (continue drawing there) or outside (clear the selection).</summary>
     private void ReleaseWarpClick(Point p)
     {
         var line = _lineClick;
@@ -1877,16 +1880,16 @@ public sealed class CropView : Control
         BeginDrawingOn(line);
     }
 
-    /// <summary>Zeichnen einschalten und an dieser Linie weitermachen (jeder Klick kommt an ihr näheres Ende).</summary>
+    /// <summary>Switches drawing on and continues on this line (each click goes to its nearer end).</summary>
     private void BeginDrawingOn(int line)
     {
-        _warpSel = (line, -1);   // markiert: das × bleibt an ihr
+        _warpSel = (line, -1);   // selected: the × stays at it
         DrawLines = true;
         _activeLine = line;
         InvalidateVisual();
     }
 
-    // Erst ab so vielen Bildschirmpixeln Bewegung wird ein Punkt gezogen — darunter ist es ein Klick
+    // A point is dragged only after this many screen pixels of movement; below that it is a click.
     private const double WarpDragThreshold = 3;
     private bool _warpMoved;
 
@@ -1895,12 +1898,12 @@ public sealed class CropView : Control
         _mode = DragMode.WarpPoint;
         _warpMoved = false;
         _warpSel = (line, point);
-        if (DrawLines) _activeLine = line;   // beim Zeichnen wächst die angefasste Linie weiter
+        if (DrawLines) _activeLine = line;   // in drawing mode, the touched line keeps growing
         e.Pointer.Capture(this);
         InvalidateVisual();
     }
 
-    /// <summary>Aktive Linie fertig; eine Linie mit nur einem Punkt fällt weg (sie zeigt keine Richtung).</summary>
+    /// <summary>Finishes the active line; a line with only one point is removed (it indicates no direction).</summary>
     private void EndActiveLine()
     {
         if (WarpLines is { } lines && _activeLine >= 0 && _activeLine < lines.Count && lines[_activeLine].Points.Count < 2)
@@ -1920,13 +1923,14 @@ public sealed class CropView : Control
         switch (e.Key)
         {
             case Key.Enter or Key.Return:
-                if (_activeLine >= 0) EndActiveLine();   // beim Zeichnen: die nächste Linie beginnt mit dem nächsten Klick
+                if (_activeLine >= 0) EndActiveLine();   // while drawing: the next line starts with the next click
                 else RequestCrop();
                 e.Handled = true;
                 return;
             case Key.Escape:
-                // Zeichnen beenden (Linie fertig, Markierung weg), sonst nur die Markierung weg. Das Werkzeug verlässt Esc
-                // nie — mehrmals gedrückt wären sonst alle Linien weg; verlassen nur über das Symbol oben.
+                // End drawing (line finished, selection cleared), otherwise only clear the selection. Esc never leaves
+                // the tool; otherwise pressing it several times would lose all lines. The tool is left only via the
+                // icon at the top.
                 if (DrawLines) DrawLines = false;
                 else if (_activeLine >= 0) EndActiveLine();
                 else if (_warpSel.Line >= 0) { _warpSel = (-1, -1); InvalidateVisual(); }
@@ -1934,7 +1938,7 @@ public sealed class CropView : Control
                 return;
             case Key.N:
                 EndActiveLine();
-                DrawLines = true;   // neue Linie zeichnen
+                DrawLines = true;   // draw a new line
                 e.Handled = true;
                 return;
             case Key.Delete or Key.Back when _warpSel.Line >= 0 && _warpSel.Line < lines.Count:
@@ -1942,7 +1946,7 @@ public sealed class CropView : Control
                 var (li, pi) = _warpSel;
                 var keep = lines.ToList();
                 var pts = keep[li].Points.ToList();
-                if (!keep[li].Suggested && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && pi >= 0 && pi < pts.Count) pts.RemoveAt(pi);   // Vorschlag: ganz weg
+                if (!keep[li].Suggested && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && pi >= 0 && pi < pts.Count) pts.RemoveAt(pi);   // suggestion: remove entirely
                 else pts.Clear();
                 if (pts.Count == 0)
                 {
@@ -1972,14 +1976,14 @@ public sealed class CropView : Control
         };
         if (delta == default || _warpSel.Line < 0 || _warpSel.Line >= lines.Count) return;
         var target = lines[_warpSel.Line];
-        if (_warpSel.Point < 0 || _warpSel.Point >= target.Points.Count) return;   // ganze Linie gewählt: nichts zu verschieben
+        if (_warpSel.Point < 0 || _warpSel.Point >= target.Points.Count) return;   // whole line selected: nothing to move
         var moved = target.Points.ToArray();
         moved[_warpSel.Point] = ClampToImage(moved[_warpSel.Point] + delta);
         ChangeWarpLine(_warpSel.Line, _ => (target with { Points = moved }).WithGuessedKind());
         e.Handled = true;
     }
 
-    /// <summary>Linien in der Farbe ihrer Richtung, die aktive kräftiger; Punkte; beim Ziehen die Lupe.</summary>
+    /// <summary>Draws the lines in the colour of their direction (the active one bolder), their points, and the magnifier while dragging.</summary>
     private void RenderWarpLines(DrawingContext context)
     {
         var lines = WarpLines!;
@@ -1991,7 +1995,7 @@ public sealed class CropView : Control
             var pts = line.Points.Select(ToScreenPoint).ToArray();
             if (pts.Length >= 2)
             {
-                // glatt durch die Punkte (Catmull-Rom als Bézier) — eine gebogene Zeile sieht sonst eckig und daneben aus
+                // smooth through the points (Catmull-Rom as Bézier); otherwise a curved text line looks angular and off
                 var g = new StreamGeometry();
                 using (var c = g.Open())
                 {
@@ -2009,7 +2013,7 @@ public sealed class CropView : Control
             for (var j = 0; j < pts.Length; j++)
             {
                 var selected = _warpSel == (i, j);
-                // Vorschläge: kleine Punkte
+                // suggestions: small points
                 var r = selected ? 6 : line.Suggested ? 3 : 4.5;
                 var fill = active ? HandleFill : WarpFills[kind];
                 context.DrawEllipse(fill, HandlePen, pts[j], r, r);
@@ -2017,9 +2021,9 @@ public sealed class CropView : Control
             }
         }
 
-        if (_mode != DragMode.WarpPoint) RenderDeleteHandles(context);   // beim Ziehen nicht (die Lupe ist wichtiger)
+        if (_mode != DragMode.WarpPoint) RenderDeleteHandles(context);   // not while dragging (the magnifier matters more)
 
-        // Zeichnen: Lupe schon vor dem Klick, dazu gestrichelt das nächste Stück der aktiven Linie (vom näheren Ende)
+        // Drawing: magnifier even before the click, plus the next piece of the active line dashed (from the nearer end)
         if (_mode == DragMode.None && DrawLines && _drawHover is { } hv)
         {
             Point? from = null;
@@ -2037,7 +2041,7 @@ public sealed class CropView : Control
         }
 
         if (_mode == DragMode.WarpPoint && _warpSel.Line >= 0 && _warpSel.Line < lines.Count
-            && _warpSel.Point >= 0 && _warpSel.Point < lines[_warpSel.Line].Points.Count)   // −1: Linie angeklickt, kein Punkt
+            && _warpSel.Point >= 0 && _warpSel.Point < lines[_warpSel.Line].Points.Count)   // −1: line clicked, no point
         {
             var line = lines[_warpSel.Line];
             var j = _warpSel.Point;
@@ -2053,7 +2057,7 @@ public sealed class CropView : Control
     private static readonly IBrush MarkerBlack = new ImmutableSolidColorBrush(Color.FromRgb(0x14, 0x14, 0x14));
     private static readonly IBrush MarkerWhite = new ImmutableSolidColorBrush(Colors.White);
 
-    /// <summary>Messstellen der Pipetten: kleiner Kreis mit N, S oder W.</summary>
+    /// <summary>Draws the eyedropper sampling points: a small circle with N, S or W.</summary>
     private void RenderPickMarkers(DrawingContext context)
     {
         if (PickMarkers is not { Count: > 0 } markers) return;
@@ -2077,7 +2081,7 @@ public sealed class CropView : Control
     private static readonly IBrush BrushFill = new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0x30, 0x30));
     private static readonly IPen BrushRingPen = new ImmutablePen(Brushes.White, 1.5);
 
-    /// <summary>Markierung zum Entfernen: Striche rot und halb durchsichtig (Überlappungen nicht dunkler), dazu der Pinselkreis.</summary>
+    /// <summary>Draws the removal mark: strokes in semi-transparent red (overlaps not darker), plus the brush circle.</summary>
     private void RenderBrush(DrawingContext context)
     {
         var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius)).ToList() ?? [];
@@ -2115,7 +2119,7 @@ public sealed class CropView : Control
         }
     }
 
-    // ------------------------------------------------------------ Tastatur
+    // ------------------------------------------------------------ Keyboard
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
@@ -2167,7 +2171,7 @@ public sealed class CropView : Control
 
         if (e.Key == Key.Escape)
         {
-            // Beim Drehen: Drehung verwerfen — der Rahmen gehört zu ihr
+            // While rotating: discard the rotation, the frame belongs to it
             if (IsRotated) RotationAngle = 0;
             Selection = null;
             e.Handled = true;
@@ -2187,7 +2191,7 @@ public sealed class CropView : Control
         }
     }
 
-    // ------------------------------------------------------------ Rechnen
+    // ------------------------------------------------------------ Calculations
 
     private Rect Resize(Point pt)
     {
@@ -2207,14 +2211,14 @@ public sealed class CropView : Control
 
         if (horizontal && vertical)
         {
-            // Ecke: gegenüberliegende Ecke bleibt fest
+            // corner: the opposite corner stays fixed
             var anchor = new Point(
                 _edges.HasFlag(Edge.Left) ? s.Right : s.Left,
                 _edges.HasFlag(Edge.Top) ? s.Bottom : s.Top);
             return ConstrainFromAnchor(anchor, pt, AspectRatio);
         }
 
-        // Kante: andere Dimension wächst symmetrisch um die Mitte
+        // edge: the other dimension grows symmetrically around the centre
         var img = ImageSize;
         if (horizontal)
         {
@@ -2240,7 +2244,7 @@ public sealed class CropView : Control
         }
     }
 
-    /// <summary>Rechteck vom Anker zur Maus, auf Seitenverhältnis gezwungen und im Bild gehalten.</summary>
+    /// <summary>Rectangle from the anchor to the pointer, forced to the aspect ratio and kept inside the image.</summary>
     private Rect ConstrainFromAnchor(Point anchor, Point free, double ratio)
     {
         var img = ImageSize;
@@ -2262,7 +2266,7 @@ public sealed class CropView : Control
         return new Rect(x, y, Math.Max(1, w), Math.Max(1, h));
     }
 
-    /// <summary>Bestehende Auswahl auf ein neues Verhältnis bringen, Mitte bleibt.</summary>
+    /// <summary>Reshapes the existing selection to a new aspect ratio; the centre stays.</summary>
     private Rect ReshapeAroundCenter(Rect sel, double ratio)
     {
         var img = ImageSize;
@@ -2276,13 +2280,13 @@ public sealed class CropView : Control
         return new Rect(c.X - w / 2, c.Y - h / 2, w, h);
     }
 
-    // ------------------------------------------------------------ Zeichnen
+    // ------------------------------------------------------------ Rendering
 
     public override void Render(DrawingContext context)
     {
         if (_imageRect.Width <= 0) return;
 
-        // Frei drehen: Bild, Schachbrett und Bildkante gedreht um die Mitte; Rahmen und Gitter bleiben gerade
+        // Free rotation: image, checkerboard and image edge rotated around the centre; frame and grid stay upright
         var rotated = IsRotated && Source is not null;
         var turn = rotated ? RotationMatrix() : Matrix.Identity;
         Geometry imageArea = rotated
@@ -2293,8 +2297,8 @@ public sealed class CropView : Control
         {
             if (Source is { } bmp)
             {
-                // Schachbrett unter dem Bild: sichtbar nur, wo das Bild transparent ist
-                // (z. B. die Ecken nach einem gerundeten Zuschnitt).
+                // Checkerboard below the image: visible only where the image is transparent
+                // (e.g. the corners after a rounded crop).
                 context.FillRectangle(CheckerBrush, _imageRect);
                 DrawBitmap(context, bmp);
             }
@@ -2304,7 +2308,7 @@ public sealed class CropView : Control
             context.DrawRectangle(null, ImageEdgePen, _imageRect);
         }
 
-        // Vorher/Nachher nur ungedreht — die Trennlinie gehört zum geraden Bild
+        // Before/after only when not rotated; the divider belongs to the upright image
         if (!rotated && !QuadMode && !LinesMode && Source is not null && CompareSource is { } before)
             RenderCompare(context, before);
 
@@ -2318,7 +2322,7 @@ public sealed class CropView : Control
             var r = WhiteBalance.SampleRadius(ImageSize.Width, ImageSize.Height);
             DrawLoupe(context, hover, toLoupe =>
             {
-                // Messfeld: so groß wird gemittelt
+                // sampling area: the region that is averaged
                 var box = new Rect(toLoupe(new Point(Math.Floor(hover.X) - r, Math.Floor(hover.Y) - r)),
                     toLoupe(new Point(Math.Floor(hover.X) + r + 1, Math.Floor(hover.Y) + r + 1)));
                 context.DrawRectangle(null, QuadShadowPen, box);
@@ -2343,17 +2347,17 @@ public sealed class CropView : Control
 
         var s = ToScreen(sel);
 
-        // Radius pro Achse: kreisrunde Ecken, bis die kürzere Seite aufgebraucht
-        // ist; danach wachsen sie elliptisch weiter bis zur vollen Ellipse.
+        // Radius per axis: circular corners until the shorter side is used up;
+        // after that they grow elliptically up to the full ellipse.
         var radius = Math.Max(0, SelectionRadius) * _scale;
         var rx = Math.Min(radius, s.Width / 2);
         var ry = Math.Min(radius, s.Height / 2);
         var rounded = rx > 0.5 && ry > 0.5;
 
-        // Außenbereich abdunkeln: eine Fläche mit Loch statt vier Streifen —
-        // Streifen hinterlassen bei krummen Koordinaten helle Nahtlinien.
-        // Bei runden Ecken sind die Zwickel außerhalb der Rundung mit
-        // abgedunkelt, denn genau die werden später transparent.
+        // Darken the outside: one area with a hole instead of four strips, because
+        // strips leave light seams at fractional coordinates. With rounded
+        // corners, the gussets outside the rounding are darkened too, because
+        // exactly those become transparent later.
         var hole = rounded
             ? new RectangleGeometry(s) { RadiusX = rx, RadiusY = ry }
             : new RectangleGeometry(s);
@@ -2364,7 +2368,7 @@ public sealed class CropView : Control
         };
         context.DrawGeometry(ShadeBrush, null, shade);
 
-        // Drittel-Raster
+        // rule-of-thirds grid
         for (var i = 1; i <= 2; i++)
         {
             var x = s.Left + s.Width * i / 3;
@@ -2375,7 +2379,7 @@ public sealed class CropView : Control
 
         if (rounded)
         {
-            // Begrenzungsrahmen dünn (Griffe sitzen weiter darauf), Form kräftig
+            // bounding frame thin (the handles stay on it), shape bold
             context.DrawRectangle(null, BoundsPen, s);
             context.DrawGeometry(null, FramePen, new RectangleGeometry(s) { RadiusX = rx, RadiusY = ry });
         }
@@ -2384,7 +2388,7 @@ public sealed class CropView : Control
             context.DrawRectangle(null, FramePen, s);
         }
 
-        // 8 Griffe
+        // 8 handles
         foreach (var hp in new[]
                  {
                      s.TopLeft, new Point(s.Center.X, s.Top), s.TopRight,
@@ -2396,7 +2400,7 @@ public sealed class CropView : Control
             context.DrawRectangle(HandleFill, HandlePen, h);
         }
 
-        // Maßanzeige
+        // size label
         var text = new FormattedText(
             $"{(int)sel.Width} × {(int)sel.Height} px",
             CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
@@ -2409,10 +2413,10 @@ public sealed class CropView : Control
         context.DrawRectangle(LabelBack, null, new RoundedRect(new Rect(new Point(bx, by), box), 4));
         context.DrawText(text, new Point(bx + pad.Left, by + pad.Top));
 
-        // Lupe beim Aufziehen und beim Ziehen an Ecken und Kanten (nicht beim Frei drehen: dort liegt das Bild gedreht)
+        // Magnifier while drawing and while dragging corners and edges (not during free rotation, where the image is rotated)
         if (!rotated && _mode is DragMode.Create or DragMode.Resize)
         {
-            // die gezogene Ecke bzw. die Stelle der gezogenen Kante unter der Maus
+            // the dragged corner, or the point of the dragged edge under the pointer
             var at = _mode == DragMode.Create
                 ? _dragImage
                 : new Point(
@@ -2420,7 +2424,7 @@ public sealed class CropView : Control
                     _edges.HasFlag(Edge.Top) ? sel.Top : _edges.HasFlag(Edge.Bottom) ? sel.Bottom : Math.Clamp(_dragImage.Y, sel.Top, sel.Bottom));
             DrawLoupe(context, at, toLoupe =>
             {
-                // die Kanten des Rahmens in der Lupe
+                // the frame edges in the magnifier
                 var (tl, br) = (toLoupe(sel.TopLeft), toLoupe(sel.BottomRight));
                 context.DrawRectangle(null, LoupeEdgePen, new Rect(tl, br));
             });

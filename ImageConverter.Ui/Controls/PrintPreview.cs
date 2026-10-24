@@ -10,8 +10,8 @@ using ImageConverter.Core.Printing;
 namespace ImageConverter.Controls;
 
 /// <summary>
-/// Vorschau einer Druckseite: Blatt, Rand (gestrichelt), Bilder an ihrer Position
-/// in mm — gedrehte Bilder gedreht — und optional die Schnittmarken. Maßstabsgetreu.
+/// Preview of a print page: the sheet, the margin (dashed), the images at their positions in mm
+/// (rotated images rotated) and optionally the cut marks. Drawn to scale.
 /// </summary>
 public sealed class PrintPreview : Control
 {
@@ -53,7 +53,7 @@ public sealed class PrintPreview : Control
     {
         if (Page is not { } page || Bounds.Width < 20 || Bounds.Height < 20) return;
 
-        // Blatt mittig einpassen, mit etwas Luft für den Schatten
+        // Fit the sheet centred, with some room for the shadow.
         const double pad = 24;
         var scale = Math.Min((Bounds.Width - 2 * pad) / page.WidthMm, (Bounds.Height - 2 * pad) / page.HeightMm);
         if (scale <= 0) return;
@@ -78,7 +78,7 @@ public sealed class PrintPreview : Control
             {
                 if (p.Rotated)
                 {
-                    // Im gedrehten Koordinatensystem zeichnen: 90° um die Mitte des Platzes
+                    // Draw in a rotated coordinate system: 90° around the centre of the slot.
                     var c = r.Center;
                     using (context.PushTransform(Matrix.CreateTranslation(-c.X, -c.Y)
                                                  * Matrix.CreateRotation(Math.PI / 2)
@@ -104,7 +104,7 @@ public sealed class PrintPreview : Control
             DrawCutMarks(context, page, Mm);
     }
 
-    // Wie im PDF: Eckmarken außerhalb des Bildes, nicht bis zum Nachbarn
+    // Same as in the PDF (PrintDocument.DrawCutMarks): corner marks outside the image that never reach the neighbouring image.
     private void DrawCutMarks(DrawingContext context, LayoutPage page, Func<double, double, double, double, Rect> mm)
     {
         const double offset = 0.6;

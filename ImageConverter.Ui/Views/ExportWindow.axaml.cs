@@ -7,7 +7,7 @@ namespace ImageConverter.Views;
 
 public partial class ExportWindow : Window
 {
-    // Für den XAML-Designer
+    // For the XAML designer.
     public ExportWindow()
     {
         InitializeComponent();

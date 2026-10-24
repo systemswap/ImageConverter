@@ -6,14 +6,14 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Views;
 
 /// <summary>
-/// Kleine Rückfrage mit mehreren Antworten untereinander (z. B. „Ganzes Bild (≈ 12 min)“, „Nur Ausschnitt“, „Abbrechen“).
-/// Ergebnis: Nummer der Antwort, −1 beim Schließen über das Fenster.
+/// Small prompt with several answers stacked vertically (e.g. "Whole image (≈ 12 min)", "Selection only", "Cancel").
+/// Result: index of the chosen answer, −1 if the window is closed without an answer.
 /// </summary>
 public partial class ChoiceWindow : Window
 {
     private int _result = -1;
 
-    // Für den XAML-Designer
+    // For the XAML designer.
     public ChoiceWindow()
     {
         InitializeComponent();
@@ -30,7 +30,7 @@ public partial class ChoiceWindow : Window
             var index = i;
             var button = new Button
             {
-                // Lange Antworten (Dauer, Uhrzeit) umbrechen statt abschneiden
+                // Wrap long answers (duration, time of day) instead of truncating them.
                 Content = new TextBlock { Text = request.Choices[i], TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center },
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Center,

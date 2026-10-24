@@ -14,12 +14,12 @@ public partial class App : Application
 {
     public override void Initialize()
     {
-        // Tooltips über dem Element statt am Mauszeiger: Dort lagen sie auf Reglern und
-        // Knöpfen, man klickte ständig auf den Tooltip statt aufs Element. Für alle
-        // Steuerelemente auf einmal, ohne Stil, der jedes Element prüfen müsste. Für Control
-        // selbst ist die Vorgabe schon gesetzt (Avalonia lässt sie dort nicht überschreiben) —
-        // darum für die Arten, die Tooltips tragen: alle Bedienelemente (TemplatedControl),
-        // Texte, Rahmen und Flächen.
+        // Tooltips above the element instead of at the pointer: at the pointer they covered sliders
+        // and buttons, and clicks landed on the tooltip instead of the element. Applied to all
+        // controls at once, without a style that would have to be evaluated for every element.
+        // Control itself already has a default that Avalonia does not allow to be overridden, so
+        // the default is overridden for the types that carry tooltips: all interactive controls
+        // (TemplatedControl), text blocks, borders, panels and images.
         TooltipAbove<TemplatedControl>();
         TooltipAbove<TextBlock>();
         TooltipAbove<Border>();
@@ -35,17 +35,17 @@ public partial class App : Application
     private static void TooltipAbove<T>() where T : Control
     {
         ToolTip.PlacementProperty.OverrideDefaultValue<T>(PlacementMode.Top);
-        ToolTip.VerticalOffsetProperty.OverrideDefaultValue<T>(-6);   // kleiner Abstand nach oben
+        ToolTip.VerticalOffsetProperty.OverrideDefaultValue<T>(-6);   // small gap upwards
     }
 
-    // Tooltip, der gerade offen ist, und ob eine Maustaste gedrückt ist (nur UI-Thread)
+    // Currently open tooltip and whether a mouse button is pressed (UI thread only).
     private static Control? _openTip;
     private static bool _buttonDown;
 
     /// <summary>
-    /// Tooltips nur, wenn keine Maustaste gedrückt ist, und immer nur einer: Wer einen Regler mit gedrückter Taste zog und
-    /// dabei über den nächsten rutschte, hatte beide Tooltips offen. Ein Druck auf eine Maustaste schließt den offenen,
-    /// solange sie gedrückt ist, geht keiner auf; öffnet ein neuer, schließt der alte. Für alle Fenster auf einmal.
+    /// Shows tooltips only while no mouse button is pressed, and only one at a time; otherwise dragging a slider
+    /// across the next one left both tooltips open. Pressing a mouse button closes the open tooltip, none opens while
+    /// a button is held, and opening a new one closes the previous one. Applies to all windows at once.
     /// </summary>
     private static void TooltipsOnlyWhenIdle()
     {
@@ -85,25 +85,25 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Desktop-only: die Single-View-Lifetimes (Android/iOS/Browser) sind entfallen.
+        // Desktop only; there are no single-view lifetimes (Android/iOS/browser).
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Sprache vor dem ersten Fenster: gespeicherte Wahl, sonst Systemsprache
+            // Language before the first window: the saved choice, otherwise the system language.
             LanguageViewModel.ApplyAtStartup();
 
-            var vm = new MainViewModel { CoarseWhileDragging = true };   // beim Ziehen grobe Vorschau, fein nach dem Loslassen
+            var vm = new MainViewModel { CoarseWhileDragging = true };   // coarse preview while dragging, full quality after release
             desktop.MainWindow = new MainWindow { DataContext = vm };
-            // Rechner bedienbar halten: CPU-Obergrenze und niedrige Priorität (Einstellungen › Leistung), vor allem Rechnen
+            // Keep the computer responsive: CPU limit and low priority (Settings › Performance), applied before any computation
             var settings = Core.Platform.AppSettings.Load();
             Core.Platform.ComputeLimits.SetPercent(settings.CpuPercent);
             if (settings.LowPriority) Core.Platform.ComputeLimits.LowerPriority();
 
-            // Grafikkarte für Entrauschen und Dunst im Hintergrund vorbereiten (Kernel übersetzen); letzter
-            // Geschwindigkeitstest entscheidet, ob sie oder die CPU rechnet
+            // Prepare the GPU for denoising and dehazing in the background (compile the kernels); the last
+            // speed test decides whether the GPU or the CPU computes.
             Core.Imaging.GpuFilters.Measured = settings.FilterSpeed;
             _ = Core.Imaging.GpuFilters.WarmUpAsync();
 
-            // Dateien aus "Öffnen mit" bzw. der .desktop-Zeile (Exec=… %F) direkt laden
+            // Load files passed via "Open with" or the .desktop line (Exec=… %F) right away.
             if (desktop.Args is { Length: > 0 } args)
                 _ = vm.OpenAsync(args);
         }

@@ -9,12 +9,12 @@ using ImageConverter.Core.Localization;
 namespace ImageConverter.Localization;
 
 /// <summary>
-/// Übersetzter Text in XAML: <c>Text="{l:T 'Bilder hierher ziehen'}"</c>. Der deutsche Text
-/// ist der Schlüssel (<see cref="Tr"/>). Gebunden an <see cref="Tr.Version"/> — beim
-/// Sprachwechsel wechselt der Text sofort.
+/// Translated text in XAML: <c>Text="{l:T 'Bilder hierher ziehen'}"</c>. The German text is the
+/// key (<see cref="Tr"/>). Bound to <see cref="Tr.Version"/>, so the text changes immediately when
+/// the language changes.
 /// </summary>
 /// <remarks>
-/// Texte mit geschweiften Klammern (z. B. „{name}“) als Element schreiben:
+/// Write texts containing curly braces (e.g. "{name}") as an element:
 /// <c>&lt;ToolTip.Tip&gt;&lt;l:T Text="Platzhalter: {name} …" /&gt;&lt;/ToolTip.Tip&gt;</c>.
 /// </remarks>
 public sealed class T : MarkupExtension
@@ -41,9 +41,9 @@ public sealed class T : MarkupExtension
 }
 
 /// <summary>
-/// Übersetzt einen gebundenen deutschen Text — für Listeneinträge, deren Wert der deutsche
-/// Text ist: <c>&lt;TextBlock Text="{l:TItem}" /&gt;</c> (der Eintrag selbst) oder
-/// <c>{l:TItem Path=Description}</c>. Wechselt ebenfalls sofort mit der Sprache.
+/// Translates a bound German text, for list entries whose value is the German text:
+/// <c>&lt;TextBlock Text="{l:TItem}" /&gt;</c> (the entry itself) or
+/// <c>{l:TItem Path=Description}</c>. Also changes immediately with the language.
 /// </summary>
 public sealed class TItem : MarkupExtension
 {
