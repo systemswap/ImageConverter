@@ -2286,3 +2286,30 @@ Test oder Nachweis.
   Kopfdaten, Windows-Test vom anderen Rechner, Projekt aufgeräumt. Vor dem Meilenstein 10 Testläufe im Release-Modus
   fehlerfrei. Tag `v0.6.18`, schlanke Sicherung `../ImageConverter-0.6.18-Sicherung.zip`, Windows-Fassung in den vom
   Benutzer genannten Ordner übertragen.
+
+## 81. Historie: Orts- und Fotonamen in alten Ständen (24.10.2026)
+
+- **Entdeckt:** 24.10.2026 bei der Prüfung der ganzen Historie vor einer Veröffentlichung, Stand 0.6.18
+  (Commit a06f066 nach dem Umschreiben).
+- **Wie bemerkt:** Prüfskript über alle Zweige und Tags (Werkzeug aus den gemeinsamen Vorlagen unter
+  „Linux Progs“) – gesperrte Begriffe aus `.git/blocked-words`.
+- **Was:** Die Orts- und Fotonamen, die 0.5.99-beta aus Doku, Kommentaren und Abnahme entfernt hatte,
+  standen weiter in den älteren Commits und in zwei Commit-Nachrichten – auch auf GitHub.
+- **Warum:** 0.5.99-beta änderte nur den aktuellen Stand; die Historie blieb, wie sie war.
+- **Lösung:** Historie mit `git filter-branch` umgeschrieben: in allen Commits, Nachrichten und Tags
+  dieselben neutralen Namen wie seit 0.5.99-beta (Panorama, Turmlandschaft, Berglandschaft,
+  KombiPanorama, NutzerPanorama, KombiTurm). Die Ersetzungsliste ist persönlich und liegt nur lokal.
+  Behoben am 24.10.2026 ohne eigenen Commit – **alle Commit-IDs ab dem ersten betroffenen Commit
+  sind neu**, die Tags zeigen auf die neuen Commits.
+- **Warum so:** Neu beginnen hätte die Geschichte des Codes und die Tags verloren; `git filter-repo` ist
+  nicht installiert, `filter-branch` gehört zu Git. Vorher an einer Kopie geprüft.
+- **Nachweis:** Dateibaum des aktuellen Stands unverändert (gleiche Prüfsumme); alle 178 Commits
+  zeilenweise mit den alten verglichen – geändert sind nur Zeilen mit den Namen; Historienprüfung danach
+  ohne Fund. Der Kommentar zum Lösungsverfahren für Tridiagonalsysteme in `Dewarp.cs` trägt den
+  Namen des Verfahrens; genau diese Stelle ist in `.git/allowed-words` erlaubt.
+- **Sicherung des alten Stands:** `~/.cache/imageconverter-build/vor-bereinigung-2026-10-24_1233.bundle`.
+- **Auf GitHub:** dort liegt die alte Historie, bis der Nutzer sie überschreibt (`git push --force-with-lease
+  origin main` und `git push --force origin --tags`). Der zweite Rechner muss danach neu klonen (vorher
+  dort nicht gepushte Commits und die lokalen Notizen sichern).
+- **Nicht tun:** echte Orts-, Foto- oder Personennamen in Doku, Kommentare, Tests oder Nachrichten
+  schreiben – neutral beschreiben; neue Namen in `.git/blocked-words` eintragen.
