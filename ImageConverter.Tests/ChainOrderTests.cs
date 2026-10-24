@@ -5,22 +5,22 @@ using ImageMagick;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Reihenfolge der Kette für die beste Qualität: Weißabgleich (Gleiche Farbe) vor der Kontrastkurve; beim Vergrößern
-/// erst entrauschen, dann vergrößern.
+/// Tests the processing order that gives the best quality: white balance („Gleiche Farbe“) before the contrast curve;
+/// when enlarging, denoise first, then enlarge.
 /// </summary>
 public class ChainOrderTests
 {
     [Fact]
     public void Neutralize_BeforeContrast_LeavesGreyNeutral()
     {
-        // Grau mit Farbstich (rötlich-gelb), dazu kräftiger Kontrast
+        // Grey with a reddish-yellow colour cast, plus strong contrast
         const int w = 64, h = 48;
         var px = new float[w * h * 4];
         for (var i = 0; i < w * h; i++) (px[i * 4], px[i * 4 + 1], px[i * 4 + 2], px[i * 4 + 3]) = (0.40f, 0.48f, 0.58f, 1);
 
         var result = Adjust.Apply(px, w, h, new Adjustments(Contrast: 60, Neutralize: 100));
 
-        // Stich weg, bevor der Kontrast ihn spreizen konnte: R, G, B fast gleich
+        // The cast is removed before the contrast can spread it: R, G, B almost equal.
         var (b, g, r) = (result[0], result[1], result[2]);
         Assert.True(Math.Abs(r - b) < 0.02 && Math.Abs(r - g) < 0.02, $"R {r:0.000}, G {g:0.000}, B {b:0.000}");
     }

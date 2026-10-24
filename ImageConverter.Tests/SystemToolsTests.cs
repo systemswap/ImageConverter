@@ -6,17 +6,17 @@ using ImageConverter.Services;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Aufrufe externer Programme: Dateimanager und Druckdienst. Fehlt ein Programm oder hängt
-/// es, darf ImageConverter weder abstürzen noch einfrieren.
+/// Calls to external programs: file manager and print service. If a program is missing or
+/// hangs, ImageConverter must neither crash nor freeze.
 /// </summary>
 [Collection(nameof(SystemToolsTests))]
-[CollectionDefinition(nameof(SystemToolsTests), DisableParallelization = true)]   // ändert PATH
+[CollectionDefinition(nameof(SystemToolsTests), DisableParallelization = true)]   // changes PATH
 public class SystemToolsTests
 {
     [Fact]
     public void OpenFolder_WithoutFileManager_ReportsInsteadOfCrashing()
     {
-        if (OperatingSystem.IsWindows()) return;   // explorer.exe findet Windows auch ohne PATH im Systemordner
+        if (OperatingSystem.IsWindows()) return;   // Windows finds explorer.exe in the system folder even without PATH
 
         var path = Environment.GetEnvironmentVariable("PATH");
         var empty = Directory.CreateTempSubdirectory("ic-leer-").FullName;
@@ -24,7 +24,7 @@ public class SystemToolsTests
         {
             Environment.SetEnvironmentVariable("PATH", empty);
 
-            // So stürzte „Ordner öffnen“ bis 0.4.20 ab:
+            // Without handling, this exception would crash "Open folder":
             if (!OperatingSystem.IsWindows())
                 Assert.Throws<Win32Exception>(() => Process.Start(new ProcessStartInfo("xdg-open", "/tmp") { UseShellExecute = false }));
 
@@ -40,7 +40,7 @@ public class SystemToolsTests
     [Fact]
     public void PrintService_Hanging_TimesOutAndIsStopped()
     {
-        if (OperatingSystem.IsWindows()) return;   // CUPS-Weg; sleep gibt es nur unter Unix
+        if (OperatingSystem.IsWindows()) return;   // CUPS path; sleep exists only on Unix
 
         var clock = Stopwatch.StartNew();
         Assert.Throws<TimeoutException>(() => SystemPrinters.RunWithExit("sleep", ["30"], timeoutMs: 300));

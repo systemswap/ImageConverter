@@ -3,7 +3,7 @@ using ImageMagick;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Kopfdaten für Listen: gleiche Größe und DPI wie das ganze Laden, Vorschaubild richtig herum.</summary>
+/// <summary>Tests header probing for lists: same size and DPI as a full load, thumbnail the right way up.</summary>
 public class ImageLoaderProbeTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "ic-probe-" + Guid.NewGuid().ToString("N"));
@@ -40,10 +40,10 @@ public class ImageLoaderProbeTests : IDisposable
 
         using var thumb = await ImageLoader.LoadThumbnailAsync(path, 64);
         Assert.True(thumb.Width <= 64 && thumb.Height <= 64);
-        Assert.Equal(full.Width > full.Height, thumb.Width > thumb.Height);   // richtig herum
+        Assert.Equal(full.Width > full.Height, thumb.Width > thumb.Height);   // the right way up
     }
 
-    /// <summary>PNG nur aus Kopf und leerem Inhalt, behauptet beliebige Maße (wie eine präparierte Datei).</summary>
+    /// <summary>Writes a PNG consisting only of a header and empty content that claims arbitrary dimensions (like a crafted file).</summary>
     private string WriteClaimingPng(int width, int height)
     {
         static byte[] Chunk(string type, byte[] data)
@@ -66,7 +66,7 @@ public class ImageLoaderProbeTests : IDisposable
     [Fact]
     public async Task HugeClaimedSize_IsRejected_BeforeDecoding()
     {
-        // 60000 × 60000 = 3,6 Gigapixel aus wenigen Bytes — ohne Prüfung belegte ImageMagick Speicher in dieser Größe
+        // 60000 × 60000 = 3.6 gigapixels from a few bytes; without the check, ImageMagick would allocate memory of this size
         var path = WriteClaimingPng(60000, 60000);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var e = await Assert.ThrowsAsync<ImageTooLargeException>(() => ImageLoader.LoadAsync(path));

@@ -4,7 +4,7 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Geschwindigkeitstest Grafikkarte/CPU: Auswahl des Schnelleren und die Messung der Bildfilter.</summary>
+/// <summary>Speed test graphics card/CPU: choice of the faster device and the measurement of the image filters.</summary>
 public class SpeedTestTests
 {
     private const string Here = "Testkarte · 16";
@@ -23,17 +23,17 @@ public class SpeedTestTests
         var equal = new SpeedMeasure(CpuSeconds: 1.0, GpuSeconds: 1.0, Here, DateTime.Now);
         Assert.False(SpeedMeasure.PreferGpu(cpuFaster, Here));
         Assert.True(SpeedMeasure.PreferGpu(gpuFaster, Here));
-        Assert.False(SpeedMeasure.PreferGpu(equal, Here));   // gleich schnell: CPU, die Grafikkarte bleibt frei
+        Assert.False(SpeedMeasure.PreferGpu(equal, Here));   // equally fast: CPU, so that the graphics card stays free
     }
 
     [Fact]
     public void PreferGpu_IgnoresAResultFromAnotherComputer_OrWithoutGraphicsCard()
     {
         var cpuFaster = new SpeedMeasure(1.0, 2.0, Here, DateTime.Now);
-        Assert.True(SpeedMeasure.PreferGpu(cpuFaster, "Andere Karte · 16"));   // neues System: erst wieder testen
+        Assert.True(SpeedMeasure.PreferGpu(cpuFaster, "Andere Karte · 16"));   // different system: test again first
         Assert.True(SpeedMeasure.PreferGpu(cpuFaster, "Testkarte · 8"));
         var noGpu = new SpeedMeasure(1.0, null, Here, DateTime.Now);
-        Assert.True(SpeedMeasure.PreferGpu(noGpu, Here));   // ohne Grafikkarte gemessen: nichts zu entscheiden
+        Assert.True(SpeedMeasure.PreferGpu(noGpu, Here));   // measured without a graphics card: nothing to decide
     }
 
     [Fact]
@@ -71,14 +71,14 @@ public class SpeedTestTests
         try
         {
             var before = Upscalers.Estimate(UpscaleMethod.Generative, 500, 300);
-            // ein schneller Rechner: ein Sechstel der geltenden Vorgabe (Laptop: CPU 355 s, Grafikkarte 97 s — welche gilt,
-            // hängt davon ab, ob ein anderer Test schon die Grafikkarte geöffnet hat; unter Windows mit DirectML oft ja)
+            // a fast computer: one sixth of the applicable default (laptop: CPU 355 s, graphics card 97 s — which one applies
+            // depends on whether another test has already opened the graphics card; on Windows with DirectML this is often the case)
             var fast = before.TotalSeconds / 6;
             Upscalers.Measured(UpscaleMethod.Generative, 500, 300, TimeSpan.FromSeconds(fast), replace: true);
             Assert.InRange(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300).TotalSeconds, fast * 0.999, fast * 1.001);
             Assert.True(Upscalers.Estimate(UpscaleMethod.Generative, 500, 300) < before / 3);
 
-            // große Bilder nach dem Aufwand der Kacheln, nicht nach der Fläche
+            // large images by the work of the tiles, not by the area
             var big = Upscalers.Estimate(UpscaleMethod.Generative, 4000, 3000).TotalSeconds;
             var ratio = Upscalers.Work(UpscaleMethod.Generative, 4000, 3000) / Upscalers.Work(UpscaleMethod.Generative, 500, 300);
             Assert.InRange(big / fast, ratio * 0.999, ratio * 1.001);
@@ -90,15 +90,15 @@ public class SpeedTestTests
         }
         finally
         {
-            Upscalers.Restore(saved);   // für andere Tests wie vorher
+            Upscalers.Restore(saved);   // restore the previous state for other tests
         }
     }
 
     [Fact]
     public void Work_SmallImagesOverlapMore_ThanTheirArea()
     {
-        // Aufwand je Megapixel ist bei kleinen Bildern höher (Kacheln überlappen anteilig mehr) — die Fläche allein
-        // unterschätzte große und überschätzte kleine Bilder
+        // Work per megapixel is higher for small images (tiles overlap proportionally more) — the area alone
+        // would underestimate large images and overestimate small ones
         double PerMp(int w, int h) => Upscalers.Work(UpscaleMethod.Generative, w, h) / (w * (double)h);
         Assert.True(PerMp(256, 256) > PerMp(4000, 3000));
         Assert.Equal(1, UpscaleEngine.TileCount(100, 100, 128));
@@ -113,7 +113,7 @@ public class SpeedTestTests
         try
         {
             var m = new SpeedMeasure(0.5, 0.25, Here, new DateTime(2026, 10, 18, 12, 0, 0));
-            // gleichzeitig verschiedene Felder ändern: keins darf das andere überschreiben
+            // change different fields concurrently: none may overwrite another
             Parallel.For(0, 40, i =>
             {
                 if (i % 2 == 0) AppSettings.Update(s => s with { FilterSpeed = m }, file);

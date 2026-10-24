@@ -4,15 +4,18 @@ using ImageMagick.Configuration;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Sicherheitsrichtlinie für ImageMagick: keine Netzzugriffe, keine externen Programme.
-/// Ohne sie lädt ImageMagick bei einem Pfad wie „https://…“ über eine DNS-Anfrage und das
-/// externe Programm curl nach (siehe docs/FEHLERGEDAECHTNIS.md). ImageConverter braucht weder
-/// das eine noch das andere — alle Bildformate sind in ImageMagick eingebaut.
-/// <para>
-/// Zusätzlich zur Standardrichtlinie von Magick.NET (MVG, MSL, EPHEMERAL, @- und |-Pfade gesperrt):
-/// die Netz-Formate HTTP, HTTPS, FTP, URL und alle Delegates (externe Programme).
-/// </para>
+/// Security policy for ImageMagick: no network access and no external programs.
 /// </summary>
+/// <remarks>
+/// Without this policy, ImageMagick resolves a path such as "https://…" with a DNS query and
+/// downloads it with the external program curl (see docs/FEHLERGEDAECHTNIS.md, No. 4).
+/// ImageConverter needs neither; all image formats are built into ImageMagick.
+/// <para>
+/// In addition to the default policy of Magick.NET (which blocks MVG, MSL, EPHEMERAL and paths
+/// starting with @ or |), this policy blocks the network coders HTTP, HTTPS, FTP and URL and all
+/// delegates (external programs).
+/// </para>
+/// </remarks>
 public static class ImageMagickPolicy
 {
     internal const string ExtraRules =
@@ -23,10 +26,13 @@ public static class ImageMagickPolicy
     private static bool _applied;
 
     /// <summary>
-    /// Muss vor dem ersten Zugriff auf ImageMagick laufen (<see cref="NativeLibraries.Configure"/>).
-    /// ImageMagick liest seine Konfiguration aus Dateien; sie kommen in einen eigenen Ordner
-    /// und werden bei jedem Start neu geschrieben.
+    /// Initialises ImageMagick with the restricted policy and the resource limits.
     /// </summary>
+    /// <remarks>
+    /// Must run before the first use of ImageMagick (<see cref="NativeLibraries.Configure"/>).
+    /// ImageMagick reads its configuration from files; they are written to a dedicated folder
+    /// (<see cref="Folder"/>) on every start. Thread-safe; only the first call has an effect.
+    /// </remarks>
     public static void Apply()
     {
         lock (Gate)
@@ -41,27 +47,31 @@ public static class ImageMagickPolicy
             Directory.CreateDirectory(folder);
             MagickNET.Initialize(files, folder);
 
-            // Grenzen gegen präparierte Dateien (gemessen: eine 1,5-MB-PNG mit 40000 × 40000 Pixeln wurde geladen und füllte
-            // Speicher bzw. Auslagerung). Nur hier beim Start setzen — Grenzen von ImageMagick nie ändern, während es
-            // rechnen kann (siehe docs/FEHLERGEDAECHTNIS.md #77). Die eigentliche Prüfung der Bildgröße macht
-            // ImageLoader vor dem Entpacken (ImageLoader.MaxPixels).
+            // Limits against crafted files (measured: a 1.5 MB PNG with 40000 × 40000 pixels was loaded and filled memory
+            // or swap). Set them only here at start-up; never change ImageMagick limits while it may be processing
+            // (see docs/FEHLERGEDAECHTNIS.md, No. 77). The actual check of the image size is done by ImageLoader before
+            // decoding (ImageLoader.MaxPixels).
             ResourceLimits.Width = MaxEdge;
             ResourceLimits.Height = MaxEdge;
-            ResourceLimits.ListLength = 4096;                 // mehrteilige Dateien (GIF, TIFF): Bilder je Datei
-            ResourceLimits.Disk = 1024UL * 1024 * 1024;       // Auslagerung höchstens 1 GB (unter Linux oft im Arbeitsspeicher)
+            ResourceLimits.ListLength = 4096;                 // multi-frame files (GIF, TIFF): images per file
+            ResourceLimits.Disk = 1024UL * 1024 * 1024;       // at most 1 GB of disk cache (on Linux often located in RAM)
         }
     }
 
-    /// <summary>Größte Kantenlänge, die ImageMagick annimmt (wie JPEG).</summary>
+    /// <summary>Largest edge length in pixels that ImageMagick accepts (the same as the JPEG limit).</summary>
     public const uint MaxEdge = 65535;
 
     /// <summary>
-    /// ~/.local/share/ImageConverter/ImageMagick bzw. %LOCALAPPDATA%\ImageConverter\ImageMagick;
-    /// liefert .NET keinen Benutzerordner (z. B. fehlendes XDG-Verzeichnis), der Temp-Ordner.
+    /// Folder for the ImageMagick configuration files: ~/.local/share/ImageConverter/ImageMagick or
+    /// %LOCALAPPDATA%\ImageConverter\ImageMagick; below the temporary folder if .NET returns no user
+    /// folder (for example when the XDG directory is missing).
     /// </summary>
     internal static string Folder() => Path.Combine(UserDataRoot(), "ImageMagick");
 
-    /// <summary>Benutzerordner des Programms: ~/.local/share/ImageConverter bzw. %LOCALAPPDATA%\ImageConverter.</summary>
+    /// <summary>
+    /// User data folder of the program: ~/.local/share/ImageConverter or %LOCALAPPDATA%\ImageConverter
+    /// (below the temporary folder if .NET returns no user folder).
+    /// </summary>
     internal static string UserDataRoot()
     {
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

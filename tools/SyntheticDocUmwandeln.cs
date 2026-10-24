@@ -1,10 +1,10 @@
 #:project ../ImageConverter.Core/ImageConverter.Core.csproj
-// SyntheticDoc-Checkpoint (PyTorch, z. B. selbst trainiert) → ONNX für die App, mit Probelauf. Ohne Python.
-// Aufruf (Bauausgabe außerhalb des Projekts, sonst entstehen bin/ und obj/ in ImageConverter.Core):
+// Converts a SyntheticDoc checkpoint (PyTorch, e.g. self-trained) to ONNX for the app, with a test run. No Python needed.
+// Usage (build output outside the project, otherwise bin/ and obj/ are created in ImageConverter.Core):
 //   dotnet run tools/SyntheticDocUmwandeln.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <checkpoint.ckpt> [ausgabe.onnx] [--schatten]
-// Ohne Ausgabe: syntheticdoc.onnx neben den Checkpoint, mit --schatten syntheticdoc-schatten.onnx (Schattenkarte
-// dazu, doppelte Rechenzeit) — die App baut beide selbst.
+// Without an output path: syntheticdoc.onnx next to the checkpoint, with --schatten syntheticdoc-schatten.onnx (adds the
+// shadow map, twice the computing time) — the app builds both itself.
 using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.SyntheticDoc;
 using Microsoft.ML.OnnxRuntime;
@@ -27,12 +27,12 @@ Console.WriteLine($"Checkpoint: {ckpt.StateDict.Count} Gewichte, Epoche {ckpt.Ge
 File.WriteAllBytes(target, SyntheticDocNet.ToOnnx(ckpt, shadow));
 Console.WriteLine($"ONNX: {target} ({new FileInfo(target).Length / 1_000_000.0:0.0} MB) in {clock.ElapsedMilliseconds} ms");
 
-// Probelauf auf einem grauen Bild in der trainierten Größe: Gitter muss in −1 … 1 liegen und von links nach rechts laufen
+// Test run on a grey image at the trained size: the grid must lie within −1 … 1 and run from left to right
 using var session = new InferenceSession(target);
 var input = Enumerable.Repeat(0.4f, 3 * ih * iw).ToArray();
 using var value = OrtValue.CreateTensorValueFromMemory(input, [1, 3, ih, iw]);
 clock.Restart();
-using var runOptions = new RunOptions();   // am Leben halten, bis die Rechnung fertig ist
+using var runOptions = new RunOptions();   // keep alive until the run has finished
 using var outputs = session.Run(runOptions, ["image"], [value], ["bm_map"]);
 var bm = outputs[0].GetTensorDataAsSpan<float>().ToArray();
 var ok = bm.All(v => v is >= -1 and <= 1) && bm[(rows / 2) * cols] < bm[(rows / 2) * cols + cols - 1];

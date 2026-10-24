@@ -4,8 +4,8 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Rückgängig für Einstellungen. Jede Änderung zählt hier sofort als eigener Bedienvorgang;
-/// <see cref="MainViewModel.CommitPendingSettings"/> schließt den offenen Schritt ab.
+/// Undo for settings. In these tests every change immediately counts as a separate user action
+/// (<c>DeferHistoryTurns = false</c>); <see cref="MainViewModel.CommitPendingSettings"/> closes the open step.
 /// </summary>
 public class SettingsUndoTests
 {
@@ -48,19 +48,19 @@ public class SettingsUndoTests
     {
         var vm = Create();
         for (var v = 0.0; v <= 2.0; v += 0.05)
-            vm.SharpenAmount = v;     // viele Zwischenwerte wie beim Ziehen
+            vm.SharpenAmount = v;     // many intermediate values, as when dragging
         vm.CommitPendingSettings();
 
         await vm.UndoCommand.ExecuteAsync(null);
 
         Assert.Equal(0, vm.SharpenAmount);
-        Assert.False(vm.CanUndo);     // genau ein Schritt
+        Assert.False(vm.CanUndo);     // exactly one step
     }
 
     [Fact]
     public async Task UncommittedChange_IsUndoneDirectly()
     {
-        // Strg+Z noch während des Zeitfensters: die offene Änderung zählt sofort
+        // Ctrl+Z while the time window is still open: the pending change counts immediately
         var vm = Create();
         vm.SelectedFormat = "JPEG";
         Assert.True(vm.CanUndo);
@@ -146,7 +146,7 @@ public class SettingsUndoTests
         vm.CommitPendingSettings();
 
         await vm.UndoCommand.ExecuteAsync(null);
-        vm.CommitPendingSettings();   // darf nichts Neues ablegen
+        vm.CommitPendingSettings();   // must not record anything new
 
         Assert.False(vm.CanUndo);
         Assert.True(vm.CanRedo);
@@ -172,7 +172,7 @@ public class SettingsUndoTests
     [Fact]
     public async Task SameSlider_SeveralDrags_StayOneStep()
     {
-        // Ziehen, loslassen, nachdenken, nochmal ziehen — ein Schritt
+        // Drag, release, pause, drag again — one step
         var vm = Create();
         vm.SharpenAmount = 1;
         vm.SharpenAmount = 1.5;
@@ -189,8 +189,8 @@ public class SettingsUndoTests
     {
         var vm = Create();
         vm.Quality = 50;
-        vm.SharpenAmount = 1;      // ohne Pause — trotzdem zwei Schritte
-        vm.Quality = 60;           // wieder Qualität: neuer Schritt, nicht der erste
+        vm.SharpenAmount = 1;      // without a pause — still two steps
+        vm.Quality = 60;           // quality again: a new step, not the first one
         vm.CommitPendingSettings();
 
         await vm.UndoCommand.ExecuteAsync(null);
@@ -224,9 +224,9 @@ public class SettingsUndoTests
     {
         var vm = Create();
         vm.CropSelection = new Rect(10, 10, 100, 100);
-        vm.CropSelection = new Rect(10, 10, 200, 150);   // Ziehen
-        vm.CommitSettingsStepCommand.Execute(null);        // Maus los
-        vm.CropSelection = new Rect(50, 40, 200, 150);   // verschieben
+        vm.CropSelection = new Rect(10, 10, 200, 150);   // dragging
+        vm.CommitSettingsStepCommand.Execute(null);        // mouse released
+        vm.CropSelection = new Rect(50, 40, 200, 150);   // moving
         vm.CommitSettingsStepCommand.Execute(null);
 
         await vm.UndoCommand.ExecuteAsync(null);

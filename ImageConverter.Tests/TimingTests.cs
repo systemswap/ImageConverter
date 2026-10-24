@@ -4,8 +4,8 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Zeitmessungen brauchen einen ruhigen Rechner: diese Sammlung läuft nie
-/// parallel zu anderen Tests (die Schätzungstests belasten sonst alle Kerne).
+/// Timing measurements need an idle machine: this collection never runs in
+/// parallel with other tests (the estimation tests would otherwise load all cores).
 /// </summary>
 [CollectionDefinition("Timing", DisableParallelization = true)]
 public class TimingCollection;
@@ -16,14 +16,14 @@ public class TimingTests
     [Fact]
     public void IsFastEnough_ForLivePreview()
     {
-        // 2048 × 1365 ≈ Vorschaugröße. Ziel: deutlich unter 100 ms (großzügig wegen CI/Debug).
+        // 2048 × 1365 ≈ preview size. Target: well below 100 ms; the 250 ms limit is generous for CI and Debug builds.
         const int w = 2048, h = 1365;
         var src = new byte[w * h * 4];
         new Random(1).NextBytes(src);
-        Sharpen.UnsharpMask(src, w, h, 1, 2); // aufwärmen
+        Sharpen.UnsharpMask(src, w, h, 1, 2); // warm-up
 
-        // Bester von drei Läufen: eine einzelne Messung schwankt, wenn der Rechner
-        // gerade anderweitig beschäftigt ist (z. B. direkt nach dem Build).
+        // Best of three runs: a single measurement fluctuates when the machine is busy
+        // with something else (e.g. directly after the build).
         var best = long.MaxValue;
         for (var i = 0; i < 3; i++)
         {

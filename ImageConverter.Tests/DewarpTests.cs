@@ -4,23 +4,23 @@ using Xunit.Abstractions;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Gewölbtes Blatt gerade ziehen: künstliche Blätter mit bekannter Form (wie die Testbilder aus Woelbung.cs), daraus
-/// Punkte auf Linien wie beim Nachzeichnen — nach dem Geradeziehen müssen die Linien gerade sein, auch zwischen den
-/// gesetzten Punkten, und das Seitenverhältnis muss stimmen.
+/// Tests flattening a curved sheet: synthetic sheets with a known shape provide points on lines as when tracing them by
+/// hand. After flattening, the lines must be straight, also between the given points, and the aspect ratio must be
+/// right.
 /// </summary>
 public class DewarpTests(ITestOutputHelper output)
 {
     private const int W = 1800, H = 2400;
 
-    /// <summary>Blatt im Raum, schräg fotografiert: Bogenlänge 0 … Seiten, Höhe 0 … aspect.</summary>
+    /// <summary>Sheet in space, photographed at an angle: arc length 0 … pages, height 0 … aspect.</summary>
     private sealed class Sheet
     {
         public double Aspect = Math.Sqrt(2);
         public bool Double;
         public double RotX = 24, RotY = -12, RotZ = 4, Dist = 1.85;
         public Func<double, double> Height = c => 0.16 * Math.Sin(Math.PI * c) + 0.06 * Math.Pow(c, 5);
-        public Func<double, double, double>? Wave;   // zusätzlich (c, t) → z, nicht abwickelbar
-        public int ImageW = W, ImageH = H;   // Doppelseite quer
+        public Func<double, double, double>? Wave;   // additional (c, t) → z, not developable
+        public int ImageW = W, ImageH = H;   // landscape for a double page
         public double Focal = 1.15 * W;
 
         private double[]? _arc;
@@ -54,7 +54,7 @@ public class DewarpTests(ITestOutputHelper output)
             return (a + (arc[b] > arc[a] ? (s - arc[a]) / (arc[b] - arc[a]) : 0)) / (arc.Length - 1);
         }
 
-        /// <summary>Blattpunkt (Bogenlänge s, Höhe t) → Bild, relativ (x / Breite, y / Höhe).</summary>
+        /// <summary>Maps a sheet point (arc length s, height t) to the image, in relative coordinates (x / width, y / height).</summary>
         public (double X, double Y) Image(double s, double t)
         {
             Prepare();
@@ -95,8 +95,8 @@ public class DewarpTests(ITestOutputHelper output)
         new(kind, Enumerable.Range(0, points).Select(i => sheet.Image(s, (0.03 + 0.94 * i / (points - 1)) * sheet.Aspect)).ToArray());
 
     /// <summary>
-    /// Größte Abweichung von der Geraden im Ergebnis, in Tausendsteln der Ergebnisbreite — an vielen Stellen der echten
-    /// Linie, nicht nur an den gesetzten Punkten.
+    /// Largest deviation from a straight line in the result, in thousandths of the result width, sampled at many points
+    /// of the real line, not only at the given points.
     /// </summary>
     private static double Bend(DewarpMap map, Func<double, (double X, double Y)> along)
     {
@@ -120,13 +120,13 @@ public class DewarpTests(ITestOutputHelper output)
     public void CurvedSheet_TextLinesBecomeStraight()
     {
         var sheet = new Sheet();
-        // vier Textzeilen mit je 9 Punkten, dazu zwei Seitenkanten
+        // four text lines with 9 points each, plus two side edges
         var map = Solve(sheet,
             Horizontal(sheet, 0.12, 9), Horizontal(sheet, 0.35, 9), Horizontal(sheet, 0.6, 9), Horizontal(sheet, 0.88, 9),
             Vertical(sheet, 0.02, 5), Vertical(sheet, 0.98, 5));
         Assert.True(map.Modelled);
 
-        foreach (var t in new[] { 0.12, 0.25, 0.5, 0.75, 0.88 })   // auch Zeilen, die nicht nachgezeichnet sind
+        foreach (var t in new[] { 0.12, 0.25, 0.5, 0.75, 0.88 })   // including lines that were not traced
         {
             var bend = Bend(map, f => sheet.Image(0.05 + 0.9 * f, t * sheet.Aspect));
             output.WriteLine($"Zeile {t}: {bend:0.00} ‰");
@@ -145,7 +145,7 @@ public class DewarpTests(ITestOutputHelper output)
         Assert.True(map.Din);
         Assert.Equal(Math.Sqrt(2), map.PageAspect!.Value, 6);
 
-        // kein DIN-Format: nicht einrasten, aber gut schätzen
+        // not a DIN format: do not snap, but estimate well
         var odd = new Sheet { Aspect = 1.2, RotX = 18, RotY = 10 };
         var other = Solve(odd, Horizontal(odd, 0.0, 9, 0, 1), Horizontal(odd, 1.0, 9, 0, 1), Vertical(odd, 0, 6), Vertical(odd, 1, 6),
             Horizontal(odd, 0.5, 9, 0, 1));
@@ -210,8 +210,8 @@ public class DewarpTests(ITestOutputHelper output)
         Assert.Equal(GeometryStages.Dewarp | GeometryStages.Orient, r.Present);
 
         var (fw, fh) = r.FlatSize(W, H);
-        Assert.Equal((fh, fw), r.SizeFor(W, H));                                  // erst gerade ziehen, dann drehen
-        Assert.Equal((H, W), r.SizeFor(W, H, GeometryStages.All & ~GeometryStages.Dewarp));   // Stufe aus: nur gedreht
+        Assert.Equal((fh, fw), r.SizeFor(W, H));                                  // flatten first, then rotate
+        Assert.Equal((H, W), r.SizeFor(W, H, GeometryStages.All & ~GeometryStages.Dewarp));   // stage off: rotated only
 
         foreach (var (x, y) in new[] { (900.0, 1200.0), (700.0, 900.0), (1100.0, 1500.0) })
         {
@@ -220,7 +220,7 @@ public class DewarpTests(ITestOutputHelper output)
             Assert.True(Math.Abs(bx - x) < 0.5 && Math.Abs(by - y) < 0.5, $"{x},{y} → {rx:0.0},{ry:0.0} → {bx:0.0},{by:0.0}");
         }
 
-        // Anwenden: Größe wie geplant (auch auf einer kleinen Fassung — die Linien sind relativ)
+        // Applying gives the planned size (also on a small version, because the lines are relative).
         using var small = new ImageMagick.MagickImage(ImageMagick.MagickColors.LightGray, W / 5, H / 5);
         using var result = r.Apply(small)!;
         Assert.Equal(r.SizeFor(W / 5, H / 5), ((int)result.Width, (int)result.Height));
@@ -230,7 +230,7 @@ public class DewarpTests(ITestOutputHelper output)
     public void Outliers_OnlyWrongSuggestionsAreDeselected()
     {
         var sheet = new Sheet();
-        // eine „Kante“, die in der Mitte 30 px nach oben ausbeult — so erkennt man manchmal einen unregelmäßigen Rand
+        // an „edge“ that bulges 30 px upwards in the middle, as an irregular border is sometimes detected
         var bumped = new WarpLine(WarpLineKind.Horizontal, Enumerable.Range(0, 9).Select(i =>
         {
             var (x, y) = sheet.Image(0.03 + 0.94 * i / 8.0, 0.95 * sheet.Aspect);
@@ -246,7 +246,7 @@ public class DewarpTests(ITestOutputHelper output)
         var keep = Dewarp.RejectOutliers(spec, lines.Select(_ => true).ToArray(), W, H);
         Assert.Equal([true, true, true, true, true, true, false], keep);
 
-        // von Hand gesetzt (kein Vorschlag): bleibt, auch wenn sie nicht passt
+        // set by hand (not a suggestion): kept even though it does not fit
         var manual = Dewarp.RejectOutliers(spec, lines.Select((_, i) => i < 6).ToArray(), W, H);
         Assert.All(manual, Assert.True);
     }

@@ -3,25 +3,39 @@ using System.Text.Json;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Dauerhafte Einstellungen des Benutzers (Sprache; bei „KI begradigen“, ob Schatten herausgerechnet werden; letzter
-/// Geschwindigkeitstest Grafikkarte/CPU für Bildfilter und KI; Obergrenze der CPU und niedrige Priorität) in
-/// ~/.local/share/ImageConverter/settings.json bzw. %LOCALAPPDATA%\ImageConverter\settings.json.
-/// Fehlt die Datei oder ist sie kaputt, gelten die Voreinstellungen.
+/// Measured times of the upscalers on one machine.
 /// </summary>
-/// <summary>
-/// Gemessene Zeiten der Upscaler (Sekunden je Aufwandseinheit, <see cref="Ai.Upscale.Upscalers.Work"/>) für einen Rechner
-/// (<see cref="SpeedTest.AiMachine"/>).
-/// </summary>
+/// <param name="Machine">Identifier of the machine the times were measured on (<see cref="SpeedTest.AiMachine"/>).</param>
+/// <param name="SecondsPerWork">
+/// Seconds per unit of work (<see cref="Ai.Upscale.Upscalers.Work"/>), keyed by upscaling method and
+/// device ("&lt;method&gt;|gpu" or "&lt;method&gt;|cpu").
+/// </param>
 public sealed record UpscaleTimes(string Machine, Dictionary<string, double> SecondsPerWork);
 
+/// <summary>
+/// Persistent settings, stored in ~/.local/share/ImageConverter/settings.json or
+/// %LOCALAPPDATA%\ImageConverter\settings.json.
+/// </summary>
+/// <remarks>If the file is missing or cannot be read, the defaults apply.</remarks>
+/// <param name="Language">Code of the user interface language; <see langword="null"/> if none has been chosen.</param>
+/// <param name="AiRemoveShadows">Whether the AI dewarping also removes shadows.</param>
+/// <param name="FilterSpeed">Last speed test of graphics card versus CPU for the image filters.</param>
+/// <param name="AiSpeed">Last speed test of graphics card versus CPU for the AI models.</param>
+/// <param name="UpscaleWork">Measured upscaler times, see <see cref="UpscaleTimes"/>.</param>
+/// <param name="CpuPercent">Upper limit of CPU usage in percent.</param>
+/// <param name="LowPriority">Whether the program lowers its process priority.</param>
 public sealed record AppSettings(string? Language = null, bool AiRemoveShadows = true,
     SpeedMeasure? FilterSpeed = null, SpeedMeasure? AiSpeed = null, UpscaleTimes? UpscaleWork = null,
     int CpuPercent = 100, bool LowPriority = true)
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
+    /// <summary>Path of the settings file in the user data folder.</summary>
     public static string DefaultFile => Path.Combine(ImageMagickPolicy.UserDataRoot(), "settings.json");
 
+    /// <summary>Reads the settings.</summary>
+    /// <param name="file">Settings file; <see langword="null"/> for <see cref="DefaultFile"/>.</param>
+    /// <returns>The stored settings, or the defaults if the file is missing, unreadable or invalid.</returns>
     public static AppSettings Load(string? file = null)
     {
         try
@@ -37,9 +51,15 @@ public sealed record AppSettings(string? Language = null, bool AiRemoveShadows =
     private static readonly Lock Gate = new();
 
     /// <summary>
-    /// Lesen, ändern, schreiben in einem Zug — zwei Stellen, die gleichzeitig speichern (Upscaler im Hintergrund, ein
-    /// Regler), überschreiben sich sonst gegenseitig.
+    /// Reads, changes and writes the settings in one locked step.
     /// </summary>
+    /// <remarks>
+    /// Two callers that save at the same time (an upscaler in the background, a slider) would otherwise
+    /// overwrite each other's changes.
+    /// </remarks>
+    /// <param name="change">Returns the changed settings from the current ones.</param>
+    /// <param name="file">Settings file; <see langword="null"/> for <see cref="DefaultFile"/>.</param>
+    /// <returns>The settings as saved.</returns>
     public static AppSettings Update(Func<AppSettings, AppSettings> change, string? file = null)
     {
         lock (Gate)
@@ -51,9 +71,15 @@ public sealed record AppSettings(string? Language = null, bool AiRemoveShadows =
     }
 
     /// <summary>
-    /// Speichern: erst in eine Zwischendatei, dann umbenennen — ein Absturz mitten im Schreiben hinterlässt nie eine halbe
-    /// Datei (die beim nächsten Start still durch die Vorgaben ersetzt würde, samt Geschwindigkeitstest).
+    /// Saves the settings: first to a temporary file, which is then renamed.
     /// </summary>
+    /// <remarks>
+    /// A crash during writing therefore never leaves a partial file, which would otherwise be replaced by
+    /// the defaults on the next start, including the speed test results. If the file cannot be written
+    /// (for example because it is read-only), the settings apply only until the program exits; no
+    /// exception is thrown.
+    /// </remarks>
+    /// <param name="file">Settings file; <see langword="null"/> for <see cref="DefaultFile"/>.</param>
     public void Save(string? file = null)
     {
         file ??= DefaultFile;
@@ -68,7 +94,7 @@ public sealed record AppSettings(string? Language = null, bool AiRemoveShadows =
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Nicht speicherbar (schreibgeschützt …): gilt dann nur bis zum Beenden
+                // Cannot be saved (read-only …): the settings apply only until the program exits.
                 try { File.Delete(temp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
         }

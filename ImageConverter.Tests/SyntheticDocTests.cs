@@ -9,14 +9,14 @@ using Xunit.Abstractions;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// SyntheticDoc ohne Python: PyTorch-Checkpoint lesen, ONNX schreiben, das Netz nachbauen. Die volle Umwandlung prüft gegen
-/// den echten Checkpoint, wenn er auf dem Rechner liegt (sonst nur der Hinweis in der Ausgabe).
+/// SyntheticDoc without Python: reading the PyTorch checkpoint, writing ONNX, rebuilding the network. The full conversion is
+/// checked against the real checkpoint if it is present on the machine (otherwise only a note is written to the output).
 /// </summary>
 public class SyntheticDocTests(ITestOutputHelper output)
 {
     /// <summary>
-    /// Mit torch.save geschrieben (PyTorch 2.14): Lightning-artig, mit state_dict, hyper_parameters und epoch; darin ein
-    /// nicht zusammenhängender Tensor (transponiert) und ein Ausschnitt.
+    /// Written with torch.save (PyTorch 2.14): Lightning-style, with state_dict, hyper_parameters and epoch; it contains a
+    /// non-contiguous tensor (transposed) and a slice.
     /// </summary>
     private const string SmallCheckpoint =
         "UEsDBAAACAgAAAAAAAAAAAAAAAAAAAAAAAAOABQAa2xlaW4vZGF0YS5wa2xGQhAAWlpaWlpaWlpaWlpaWlpaWoACfXEAKFgFAAAA" +
@@ -71,8 +71,8 @@ public class SyntheticDocTests(ITestOutputHelper output)
         Assert.Equal([2, 3], sd["model.a.weight"].Shape);
         Assert.Equal([0f, 1, 2, 3, 4, 5], sd["model.a.weight"].Data);
         Assert.Equal([0.5f, -1.5f], sd["model.a.bias"].Data);
-        Assert.Equal([7f], sd["model.bn.num_batches_tracked"].Data);   // int64, Form ()
-        // t = arange(12).reshape(3, 4); transponiert (4 × 3, Schritte 1, 4) — zusammenhängend gelesen
+        Assert.Equal([7f], sd["model.bn.num_batches_tracked"].Data);   // int64, shape ()
+        // t = arange(12).reshape(3, 4); transposed (4 × 3, strides 1, 4) — read as contiguous
         Assert.Equal([4, 3], sd["model.t.weight"].Shape);
         Assert.Equal([0f, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11], sd["model.t.weight"].Data);
         Assert.Equal([5f, 6, 9, 10], sd["model.s.weight"].Data);
@@ -81,7 +81,7 @@ public class SyntheticDocTests(ITestOutputHelper output)
     [Fact]
     public void OnnxGraph_RunsInOnnxRuntime()
     {
-        // 1 × 1 × 3 × 3 Eingabe, Faltung 1 → 2 Kanäle (Kern 1, Gewichte 2 und −1, Bias 1), dann Relu
+        // 1 × 1 × 3 × 3 input, convolution 1 → 2 channels (kernel 1, weights 2 and −1, bias 1), then Relu
         var g = new OnnxGraph();
         var x = g.Input("x", 1, 1, "h", "w");
         var conv = g.Node("Conv", [x, g.Weight([2f, -1f], 2, 1, 1, 1), g.Weight([1f, 1f], 2)],
@@ -112,14 +112,14 @@ public class SyntheticDocTests(ITestOutputHelper output)
         Assert.Equal(345, ckpt.StateDict.Count);
         using var session = new InferenceSession(SyntheticDocNet.ToOnnx(ckpt, shadow: false));
         Assert.Equal(["bm_map"], session.OutputNames);
-        // offene Eingabegröße: ein grober Lauf auf 720 × 512; ein gleichmäßig graues Bild gibt ein Gitter in −1 … 1
+        // dynamic input size: a coarse run at 720 × 512; a uniformly grey image yields a grid in −1 … 1
         var input = Enumerable.Repeat(0.4f, 3 * 720 * 512).ToArray();
         using var value = OrtValue.CreateTensorValueFromMemory(input, [1, 3, 720, 512]);
         using var outs = session.Run(new RunOptions(), ["image"], [value], ["bm_map"]);
         var bm = outs[0].GetTensorDataAsSpan<float>().ToArray();
         Assert.Equal(2 * 121 * 177, bm.Length);
         Assert.All(bm, v => Assert.InRange(v, -1f, 1f));
-        // das Gitter läuft von links nach rechts: x-Werte der ersten Spalte kleiner als die der letzten
+        // the grid runs from left to right: x values of the first column are smaller than those of the last
         Assert.True(bm[60 * 177] < bm[60 * 177 + 176]);
     }
 
@@ -130,9 +130,9 @@ public class SyntheticDocTests(ITestOutputHelper output)
     }.FirstOrDefault(File.Exists);
 
     /// <summary>
-    /// Ganzer Lauf mit Schattenkarte: ein weißes Blatt mit Textzeilen auf dunklem Grund, die rechte Hälfte des Fotos im
-    /// Schatten (60 % Licht, weicher Übergang). Die Karte muss rechts dunkler sein als links, und das Ergebnis mit
-    /// „Schatten entfernen“ rechts heller als ohne.
+    /// Full run with shadow map: a white sheet with lines of text on a dark background, the right half of the photo in
+    /// shadow (60 % light, soft transition). The map must be darker on the right than on the left, and the result with
+    /// "remove shadows" must be brighter on the right than without.
     /// </summary>
     [Fact]
     public void RealModel_FindsTheShadow_AndRenderLightensIt()
@@ -150,7 +150,7 @@ public class SyntheticDocTests(ITestOutputHelper output)
             var page = x is >= 120 and < 780 && y is >= 100 and < 1100;
             var ink = page && y >= 180 && y < 1020 && (y - 180) % 40 < 8 && x >= 170 && x < 730;
             double v = !page ? 0.25 : ink ? 0.1 : 0.95;
-            var light = 1 - 0.4 / (1 + Math.Exp(-(x - 450) / 25.0));   // links 1, rechts 0,6
+            var light = 1 - 0.4 / (1 + Math.Exp(-(x - 450) / 25.0));   // 1 on the left, 0.6 on the right
             var k = (y * w + x) * 3;
             px[k] = px[k + 1] = px[k + 2] = (byte)Math.Round(255 * v * light);
         }
@@ -177,7 +177,7 @@ public class SyntheticDocTests(ITestOutputHelper output)
         output.WriteLine($"Licht links {left:0.000}, rechts {right:0.000}, Stärke {shading.Strength:0.00}");
         Assert.True(right < left - 0.1, $"Schatten rechts nicht erkannt: links {left:0.000}, rechts {right:0.000}");
 
-        // Rendern: rechts auf dem Papier mit Schattenentfernung heller als ohne
+        // Rendering: on the right of the paper, brighter with shadow removal than without
         double PaperRight(DewarpGrid g)
         {
             using var img = Dewarp.MapFor(new DewarpSpec([], Grid: g), w, h)!.Render(photo);
@@ -187,7 +187,7 @@ public class SyntheticDocTests(ITestOutputHelper output)
             for (var y = ih / 5; y < 4 * ih / 5; y++)
             for (var x = 3 * iw / 4; x < 9 * iw / 10; x++) values.Add(rgb[(y * iw + x) * 3 + 1] / 65535.0);
             values.Sort();
-            return values[(int)(values.Count * 0.9)];   // Papier, nicht Tinte
+            return values[(int)(values.Count * 0.9)];   // paper, not ink
         }
         double with = PaperRight(result), without = PaperRight(result with { Shading = shading with { On = false } });
         output.WriteLine($"Papier rechts: ohne {without:0.000}, mit Schattenentfernung {with:0.000}");

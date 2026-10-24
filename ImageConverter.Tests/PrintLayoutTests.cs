@@ -15,14 +15,14 @@ public class PrintLayoutTests(ITestOutputHelper output)
     private static List<PrintItem> Many(int count, double w, double h) =>
         Enumerable.Range(1, count).Select(i => new PrintItem(i, w, h)).ToList();
 
-    // ------------------------------------------------------------ konkrete Fälle
+    // ------------------------------------------------------------ Specific cases
 
     [Theory]
     [InlineData(PackingMode.CutFriendly)]
     [InlineData(PackingMode.Dense)]
     public void FourPhotos9x13_FitOnOneA4(PackingMode mode)
     {
-        // 200 × 287 mm bedruckbar: 2 nebeneinander (90+3+90), 2 untereinander (130+3+130)
+        // 200 × 287 mm printable: 2 side by side (90+3+90), 2 one above the other (130+3+130)
         var r = PrintLayout.Arrange(Many(4, 90, 130), Options(mode));
 
         Assert.Single(r.Pages);
@@ -32,7 +32,7 @@ public class PrintLayoutTests(ITestOutputHelper output)
     [Fact]
     public void FourPhotos10x15_AutoOrientation_TwoPerPage()
     {
-        // Hochformat: nur 1 pro Seite (100+3+100 > 200). Querformat (287 × 200): 2 nebeneinander.
+        // Portrait: only 1 per page (100+3+100 > 200). Landscape (287 × 200): 2 side by side.
         var r = PrintLayout.Arrange(Many(4, 100, 150), Options(PackingMode.CutFriendly));
 
         Assert.Equal(2, r.Pages.Count);
@@ -65,7 +65,7 @@ public class PrintLayoutTests(ITestOutputHelper output)
         var r = PrintLayout.Arrange(items, Options(PackingMode.OnePerPage));
 
         Assert.Equal(3, r.Pages.Count);
-        Assert.True(r.Pages[1].WidthMm > r.Pages[1].HeightMm);   // Querbild → Querseite
+        Assert.True(r.Pages[1].WidthMm > r.Pages[1].HeightMm);   // landscape image → landscape page
         foreach (var page in r.Pages)
         {
             var p = Assert.Single(page.Placements);
@@ -77,13 +77,13 @@ public class PrintLayoutTests(ITestOutputHelper output)
     [Fact]
     public void Gap_IsRespected_EvenWhenItWouldOtherwiseFit()
     {
-        // Ohne Abstand passten 2 × 100 mm genau in 200 mm — mit 3 mm Abstand nicht mehr
+        // Without a gap, 2 × 100 mm would fit exactly into 200 mm — with a 3 mm gap they no longer do
         var r = PrintLayout.Arrange(Many(2, 100, 280), Options(PackingMode.CutFriendly, PageOrientation.Portrait));
 
         Assert.Equal(2, r.Pages.Count);
     }
 
-    // ------------------------------------------------------------ Massentest
+    // ------------------------------------------------------------ Bulk test
 
     public static IEnumerable<object[]> RandomCases()
     {
@@ -112,7 +112,7 @@ public class PrintLayoutTests(ITestOutputHelper output)
             var r = PrintLayout.Arrange(items, o);
             totalPages += r.Pages.Count;
 
-            // Jedes Bild genau einmal — platziert oder als „passt nicht" gemeldet
+            // Every image exactly once — placed or reported as "does not fit"
             var placedIds = r.Pages.SelectMany(p => p.Placements).Select(p => p.ItemId).ToList();
             Assert.Equal(count, placedIds.Count + r.NotPlaced.Count);
             Assert.Equal(count, placedIds.Concat(r.NotPlaced).Distinct().Count());
@@ -129,13 +129,13 @@ public class PrintLayoutTests(ITestOutputHelper output)
                     if (!o.ShrinkToFit) Assert.Equal(1, p.Scale, 9);
                     if (!rotate) Assert.False(p.Rotated);
 
-                    // Innerhalb des Rands
+                    // Inside the margin
                     Assert.True(p.X >= margin - Eps && p.Y >= margin - Eps, "ragt links/oben in den Rand");
                     Assert.True(p.X + p.Width <= page.WidthMm - margin + Eps, "ragt rechts in den Rand");
                     Assert.True(p.Y + p.Height <= page.HeightMm - margin + Eps, "ragt unten in den Rand");
                 }
 
-                // Keine Überlappung, Mindestabstand zwischen allen Paaren
+                // No overlap, minimum gap between all pairs
                 for (var i = 0; i < rects.Count; i++)
                 for (var j = i + 1; j < rects.Count; j++)
                     Assert.True(Separated(rects[i], rects[j], gap),
@@ -166,15 +166,15 @@ public class PrintLayoutTests(ITestOutputHelper output)
         Assert.True(dense <= cut, $"dicht {dense} > schneidefreundlich {cut}");
     }
 
-    // ------------------------------------------------------------ Prüfhelfer
+    // ------------------------------------------------------------ Check helpers
 
     private static bool Separated(Placement a, Placement b, double gap) =>
         a.X + a.Width + gap <= b.X + Eps || b.X + b.Width + gap <= a.X + Eps ||
         a.Y + a.Height + gap <= b.Y + Eps || b.Y + b.Height + gap <= a.Y + Eps;
 
     /// <summary>
-    /// Lässt sich die Menge mit einem durchgehenden senkrechten oder waagerechten Schnitt
-    /// in zwei nicht-leere Teile trennen, die jeweils wieder so zerlegbar sind?
+    /// Determines whether the set can be split by a continuous vertical or horizontal cut
+    /// into two non-empty parts that can each be split in the same way again.
     /// </summary>
     private static bool IsGuillotine(List<Placement> rects)
     {
@@ -182,7 +182,7 @@ public class PrintLayoutTests(ITestOutputHelper output)
 
         foreach (var cut in rects.Select(r => r.X + r.Width).Distinct())
         {
-            if (rects.Any(r => r.X < cut - Eps && r.X + r.Width > cut + Eps)) continue;   // Schnitt träfe ein Bild
+            if (rects.Any(r => r.X < cut - Eps && r.X + r.Width > cut + Eps)) continue;   // the cut would hit an image
             var left = rects.Where(r => r.X + r.Width <= cut + Eps).ToList();
             var right = rects.Where(r => r.X >= cut - Eps).ToList();
             if (left.Count > 0 && right.Count > 0 && left.Count + right.Count == rects.Count

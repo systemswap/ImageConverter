@@ -4,20 +4,20 @@ using ImageMagick.Drawing;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Entzerren: Viereck auf etwas Rechteckigem → gerades Rechteck.</summary>
+/// <summary>Perspective correction: quadrilateral on something rectangular → upright rectangle.</summary>
 public class PerspectiveTests
 {
-    // Schräg fotografiertes „Blatt“: oben schmaler als unten
+    // "Sheet" photographed at an angle: narrower at the top than at the bottom
     private static readonly (double X, double Y)[] Trapezoid = [(150, 60), (330, 80), (370, 260), (90, 240)];
 
     [Fact]
     public void IsValid_AcceptsTrapezoid_RejectsCrossedMirroredConcaveAndTiny()
     {
         Assert.True(PerspectiveGeometry.IsValid(Trapezoid));
-        Assert.False(PerspectiveGeometry.IsValid([(150, 60), (370, 260), (330, 80), (90, 240)]));   // überkreuzt
-        Assert.False(PerspectiveGeometry.IsValid([(330, 80), (150, 60), (90, 240), (370, 260)]));   // gespiegelt
-        Assert.False(PerspectiveGeometry.IsValid([(0, 0), (100, 0), (40, 30), (0, 100)]));          // eingedellt
-        Assert.False(PerspectiveGeometry.IsValid([(0, 0), (2, 0), (2, 2), (0, 2)]));                // zu klein
+        Assert.False(PerspectiveGeometry.IsValid([(150, 60), (370, 260), (330, 80), (90, 240)]));   // crossed
+        Assert.False(PerspectiveGeometry.IsValid([(330, 80), (150, 60), (90, 240), (370, 260)]));   // mirrored
+        Assert.False(PerspectiveGeometry.IsValid([(0, 0), (100, 0), (40, 30), (0, 100)]));          // concave
+        Assert.False(PerspectiveGeometry.IsValid([(0, 0), (2, 0), (2, 2), (0, 2)]));                // too small
     }
 
     [Fact]
@@ -48,10 +48,10 @@ public class PerspectiveTests
         new Drawables().FillColor(MagickColors.Red)
             .Polygon(Trapezoid.Select(p => new PointD(p.X, p.Y)))
             .Draw(img);
-        // Grüne Markierung in der Ecke oben links des Blatts
+        // Green mark in the top-left corner of the sheet
         var mark = PerspectiveGeometry.PointAt(Trapezoid, 0.12, 0.15);
         new Drawables().FillColor(MagickColors.Lime).Circle(mark.X, mark.Y, mark.X + 9, mark.Y).Draw(img);
-        img.Alpha(AlphaOption.Off);   // Zeichnen legt einen Alphakanal an — wie ein Foto ohne Transparenz
+        img.Alpha(AlphaOption.Off);   // drawing creates an alpha channel — remove it, like a photo without transparency
         return img;
     }
 
@@ -74,20 +74,20 @@ public class PerspectiveTests
         Assert.Equal(((uint)w, (uint)h), (result.Width, result.Height));
         Assert.False(result.HasAlpha);
 
-        // Ecken (knapp innen) und Mitte: Blatt (rot), kein Hintergrund (blau)
+        // Corners (just inside) and centre: sheet (red), no background (blue)
         foreach (var (fx, fy) in new[] { (0.03, 0.03), (0.97, 0.03), (0.03, 0.97), (0.97, 0.97), (0.5, 0.5) })
         {
             var (b, _, r) = Pixel(result, fx, fy);
             Assert.True(r > 200 && b < 60, $"Stelle ({fx},{fy}) ist nicht das Blatt: R{r} B{b}");
         }
 
-        // Markierung oben links, nicht oben rechts oder unten
+        // Mark at the top left, not at the top right or bottom
         Assert.True(Pixel(result, 0.12, 0.15).G > 200, "Markierung fehlt oben links");
         Assert.True(Pixel(result, 0.88, 0.15).G < 100);
         Assert.True(Pixel(result, 0.12, 0.85).G < 100);
     }
 
-    /// <summary>Gegenprobe: Ein zu großes Viereck nimmt Hintergrund mit — der Test oben würde das merken.</summary>
+    /// <summary>Counter-check: a quadrilateral that is too large includes background — the test above would detect that.</summary>
     [Fact]
     public void Straighten_TooLargeQuad_ContainsBackground()
     {

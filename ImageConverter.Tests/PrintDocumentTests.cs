@@ -18,7 +18,7 @@ public class PrintDocumentTests
     [Fact]
     public void PrintSize_IsPixelsDividedByDpi()
     {
-        var item = PrintDocument.ToItem(1, Opt(1181, 1772, dpi: 300));   // 10 × 15 cm bei 300 DPI
+        var item = PrintDocument.ToItem(1, Opt(1181, 1772, dpi: 300));   // 10 × 15 cm at 300 DPI
 
         Assert.Equal(100, item.WidthMm, 0);
         Assert.Equal(150, item.HeightMm, 0);
@@ -30,8 +30,8 @@ public class PrintDocumentTests
         using var photo = new MagickImage(MagickColors.SkyBlue, 1181, 1772);              // 10 × 15 cm
         using var square = new MagickImage(MagickColors.Orange, 709, 709);                // 6 × 6 cm
         using var transparent = new MagickImage(MagickColors.Transparent, 472, 472);      // 4 × 4 cm, PNG
-        using var photo2 = new MagickImage(MagickColors.SeaGreen, 1181, 1772);            // zweites Foto
-        // (gleiche Bilder bettet PDFsharp nur einmal ein — deshalb vier verschiedene)
+        using var photo2 = new MagickImage(MagickColors.SeaGreen, 1181, 1772);            // second photo
+        // (PDFsharp embeds identical images only once — hence four different ones)
         var sources = new Dictionary<int, (MagickImage Image, ExportOptions Options)>
         {
             [1] = (photo, Opt(1181, 1772)),

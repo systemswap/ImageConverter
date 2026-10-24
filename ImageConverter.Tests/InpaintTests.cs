@@ -4,10 +4,10 @@ using ImageMagick;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Entfernen: Maske, Stücke, Einsetzen — mit einem Ersatzmodell statt LaMa/MI-GAN.</summary>
+/// <summary>Tests object removal (mask, pieces, compositing) with a stand-in model instead of LaMa/MI-GAN.</summary>
 public class InpaintTests
 {
-    /// <summary>Malt alles Markierte in einer festen Farbe und zählt die Aufrufe.</summary>
+    /// <summary>Paints everything marked in a fixed colour and counts the calls.</summary>
     private sealed class PaintModel((float R, float G, float B) colour) : IInpaintModel
     {
         public int Size => 64;
@@ -25,7 +25,7 @@ public class InpaintTests
 
     private static MagickImage Gradient()
     {
-        // Verlauf mit 16-Bit-Werten: jeder Pixel anders, damit „unverändert“ wirklich geprüft wird
+        // Gradient with 16-bit values: every pixel differs, so that „unchanged“ is really verified
         var img = new MagickImage(MagickColors.Black, 400, 300) { Depth = 16 };
         using var pixels = img.GetPixelsUnsafe();
         var data = new ushort[400 * 300 * 3];
@@ -57,14 +57,14 @@ public class InpaintTests
 
         var before = Rgb(img);
         var after = Rgb(result);
-        var hole = Inpainter.Rasterize([stroke], 400, 300, Inpainter.Grow(400, 300) + 7);   // mit weichem Rand (zweimal ±2 px, diagonal bis knapp 6 px)
+        var hole = Inpainter.Rasterize([stroke], 400, 300, Inpainter.Grow(400, 300) + 7);   // including the soft border (twice ±2 px, diagonally almost 6 px)
         for (var p = 0; p < 400 * 300; p++)
         {
             if (hole[p] == 1) continue;
             Assert.True(before[p * 3] == after[p * 3] && before[p * 3 + 1] == after[p * 3 + 1] && before[p * 3 + 2] == after[p * 3 + 2],
                 $"Pixel {p % 400},{p / 400} außerhalb verändert: {before[p * 3]},{before[p * 3 + 1]},{before[p * 3 + 2]} → {after[p * 3]},{after[p * 3 + 1]},{after[p * 3 + 2]}");
         }
-        // Mitten im Strich: ganz vom Modell
+        // In the middle of the stroke: entirely from the model
         var c = (105 * 400 + 130) * 3;
         Assert.True(after[c] > 60000 && after[c + 1] < 2000 && after[c + 2] < 2000, $"innen: {after[c]} {after[c + 1]} {after[c + 2]}");
         Assert.Equal(1, model.Calls);
@@ -72,8 +72,8 @@ public class InpaintTests
     }
 
     /// <summary>
-    /// Langer Strich in mehreren Stücken: Jeder markierte Pixel wird gefüllt — auch dort, wo ein Ausschnitt endet
-    /// (vorher blieben an den Stückgrenzen schmale Streifen offen, die MI-GAN als Rest weitermalte).
+    /// Long stroke in several pieces: every marked pixel is filled, also where a crop ends. Otherwise narrow strips stay
+    /// open at the piece boundaries, which MI-GAN then continues painting as leftovers.
     /// </summary>
     [Fact]
     public void LongStroke_InPieces_FillsEveryMarkedPixel()
@@ -95,24 +95,24 @@ public class InpaintTests
     public void InnerPart_KeepsDistanceToCropEdges_ButNotToImageEdges()
     {
         var inner = Inpainter.InnerPart(new Inpainter.Box(100, 0, 200, 200), 1000, 800);
-        Assert.Equal((50, 0, 100, 150), (inner.X, inner.Y, inner.Width, inner.Height));   // oben Bildrand: kein Abstand
+        Assert.Equal((50, 0, 100, 150), (inner.X, inner.Y, inner.Width, inner.Height));   // top is the image edge: no distance
     }
 
     [Fact]
     public void Pieces_JoinNearbyStrokes_AndSplitLongOnes()
     {
-        // Zwei Striche dicht nebeneinander: ein Stück
+        // Two strokes close together: one piece
         var near = Inpainter.Pieces([new BrushStroke([(100, 100)], 10), new BrushStroke([(125, 100)], 10)], 1000, 1000, 3);
         Assert.Single(near);
-        // Weit auseinander: zwei Stücke
+        // Far apart: two pieces
         var far = Inpainter.Pieces([new BrushStroke([(100, 100)], 10), new BrushStroke([(800, 800)], 10)], 1000, 1000, 3);
         Assert.Equal(2, far.Count);
-        // Langer, schmaler Schriftzug am unteren Rand: in Stücke geteilt, keins viel länger als doppelt so breit
+        // Long, narrow lettering at the bottom edge: split into pieces, none much wider than twice its height
         var line = Inpainter.Pieces([new BrushStroke([(50, 950), (1950, 950)], 20)], 2000, 1000, 3);
         Assert.True(line.Count >= 4, $"{line.Count} Stücke");
         Assert.All(line, b => Assert.True(b.Width <= 2.2 * Math.Max(b.Height, 96)));
         Assert.Equal(line.Min(b => b.X), line[0].X);
-        Assert.Equal(line.Sum(b => b.Width), line.Max(b => b.Right) - line.Min(b => b.X));   // lückenlos
+        Assert.Equal(line.Sum(b => b.Width), line.Max(b => b.Right) - line.Min(b => b.X));   // without gaps
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class InpaintTests
         Assert.Equal(200, crop.Width);
         Assert.Equal(200, crop.Height);
         Assert.True(crop.X >= 0 && crop.Right <= 1100 && crop.Y >= 0 && crop.Bottom <= 900);
-        // Kleines Bild: höchstens das ganze Bild
+        // Small image: at most the whole image
         var small = Inpainter.CropAround(new Inpainter.Box(10, 10, 150, 150), 160, 120);
         Assert.Equal((0, 0, 160, 120), (small.X, small.Y, small.Width, small.Height));
     }
@@ -130,7 +130,7 @@ public class InpaintTests
     [Fact]
     public void ShrinkMask_KeepsThinLines()
     {
-        // Eine 1 Pixel dünne Linie in 640 px Breite: auf 64 verkleinert muss sie erhalten bleiben
+        // A 1-pixel line across 640 px width must survive shrinking to 64
         var mask = new byte[640 * 640];
         for (var x = 0; x < 640; x++) mask[333 * 640 + x] = 1;
         var small = Inpainter.ShrinkMask(mask, 640, 640, 64);

@@ -5,23 +5,33 @@ using Microsoft.ML.OnnxRuntime;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Fremde native Bibliotheken stecken nicht in der Programmdatei, sondern liegen daneben in
-/// eigenen Ordnern: Tools/ImageMagick und Tools/OnnxRuntime (siehe ImageConverter.Desktop.csproj).
-/// <see cref="Configure"/> muss vor dem ersten Zugriff auf Magick.NET oder die ONNX Runtime
-/// laufen. Fehlt ein Ordner (Start aus der IDE, Tests), gilt die normale Suche im
-/// Ausgabeordner (runtimes/&lt;rid&gt;/native).
+/// Loads the third-party native libraries from their own folders next to the program.
 /// </summary>
+/// <remarks>
+/// The libraries are not part of the program file; they are stored in Tools/ImageMagick and
+/// Tools/OnnxRuntime (see ImageConverter.Desktop.csproj). <see cref="Configure"/> must run before the
+/// first use of Magick.NET or the ONNX Runtime. If a folder is missing (start from the IDE, tests), the
+/// normal search in the output folder (runtimes/&lt;rid&gt;/native) applies.
+/// </remarks>
 public static class NativeLibraries
 {
+    /// <summary>Folder name of ImageMagick below the tools folder (<see cref="AppLocations.ToolFolder"/>).</summary>
     public const string ImageMagickFolder = "ImageMagick";
+
+    /// <summary>Folder name of the ONNX Runtime below the tools folder (<see cref="AppLocations.ToolFolder"/>).</summary>
     public const string OnnxRuntimeFolder = "OnnxRuntime";
 
-    /// <summary>Schalter der ONNX Runtime gegen ihre Telemetrie (siehe <see cref="DisableOnnxTelemetry"/>).</summary>
+    /// <summary>Environment variable that disables the telemetry of the ONNX Runtime (see <see cref="DisableOnnxTelemetry"/>).</summary>
     public const string OnnxTelemetryVariable = "ORT_DISABLE_TELEMETRY";
 
     private static readonly Lock Gate = new();
     private static bool _configured;
 
+    /// <summary>
+    /// Disables the ONNX Runtime telemetry, registers the library resolvers and applies the ImageMagick
+    /// policy (<see cref="ImageMagickPolicy.Apply"/>).
+    /// </summary>
+    /// <remarks>Thread-safe; only the first call has an effect.</remarks>
     public static void Configure()
     {
         lock (Gate)
@@ -31,8 +41,8 @@ public static class NativeLibraries
 
             DisableOnnxTelemetry();
 
-            // MagickNET.SetNativeLibraryDirectory wirkt unter .NET (Core) nicht — eigener Resolver.
-            // Die Bibliothek heißt je nach System Magick.Native-Q16-x64.dll(.so/.dylib).
+            // MagickNET.SetNativeLibraryDirectory has no effect on .NET (Core), hence a custom resolver.
+            // Depending on the system, the library is named Magick.Native-Q16-x64.dll (.so/.dylib).
             var magick = AppLocations.ToolFolder(ImageMagickFolder);
             if (Directory.Exists(magick))
             {
@@ -50,27 +60,27 @@ public static class NativeLibraries
             var onnx = Path.Combine(AppLocations.ToolFolder(OnnxRuntimeFolder), OnnxLibraryFileName);
             if (File.Exists(onnx))
             {
-                // Windows: DirectML.dll (Grafikkarte) aus demselben Ordner zuerst laden — sonst nähme die Laufzeit die
-                // ältere aus System32
+                // Windows: load DirectML.dll (graphics card) from the same folder first; otherwise the runtime would use
+                // the older one from System32.
                 var directMl = Path.Combine(Path.GetDirectoryName(onnx)!, "DirectML.dll");
                 if (OperatingSystem.IsWindows() && File.Exists(directMl)) NativeLibrary.Load(directMl);
 
-                // Eigener Resolver statt dem eingebauten der ONNX Runtime; den abschalten,
-                // sonst meldet er, dass schon einer registriert ist.
+                // Custom resolver instead of the built-in one of the ONNX Runtime; the built-in one must be
+                // disabled, otherwise it reports that a resolver is already registered.
                 OrtEnv.DisableDllImportResolver = true;
                 NativeLibrary.SetDllImportResolver(typeof(OrtEnv).Assembly, (name, _, _) =>
                     name is "onnxruntime" or "libonnxruntime" ? NativeLibrary.Load(onnx) : IntPtr.Zero);
             }
 
-            // Nach dem Resolver (lädt ImageMagick), vor jedem anderen Zugriff darauf.
+            // After the resolver (this loads ImageMagick), before any other use of it.
             ImageMagickPolicy.Apply();
         }
     }
 
     /// <summary>
-    /// ImageMagick ist in der Mehrkern-Fassung (OpenMP) eingebunden und braucht dessen Laufzeit: unter Windows
-    /// vcomp140.dll aus demselben Ordner (vorher laden, sonst sucht Windows sie nur neben dem Programm und im System),
-    /// unter Linux libgomp.so.1 — zuerst die des Systems, sonst die mitgelieferte.
+    /// Loads the OpenMP runtime that the multi-core build of ImageMagick requires: on Windows vcomp140.dll from
+    /// the same folder (loaded in advance, otherwise Windows searches only next to the program and in the system
+    /// folders), on Linux libgomp.so.1, preferring the system copy over the bundled one.
     /// </summary>
     private static void LoadOpenMp(string folder)
     {
@@ -89,7 +99,7 @@ public static class NativeLibraries
         }
         catch (Exception e) when (e is DllNotFoundException or BadImageFormatException)
         {
-            // ImageMagick meldet dann selbst, was fehlt
+            // ImageMagick then reports itself what is missing.
         }
     }
 
@@ -99,16 +109,19 @@ public static class NativeLibraries
         : "libonnxruntime.so";
 
     /// <summary>
-    /// Die offiziellen Builds der ONNX Runtime senden unter Linux und macOS Nutzungsdaten an
-    /// Microsoft (1DS, mit dauerhafter Geräte-Kennung), unter Windows über ETW. Abgeschaltet
-    /// wird das über die Umgebungsvariable ORT_DISABLE_TELEMETRY=1, bevor die Laufzeit startet,
-    /// und zusätzlich über die API (<see cref="OnnxSessions"/>).
-    /// <para>
-    /// Environment.SetEnvironmentVariable ändert unter Linux nur die Kopie von .NET, nicht die
-    /// Umgebung des Prozesses, die die native Bibliothek mit getenv liest — deshalb setenv.
-    /// Die AppImage setzt die Variable zusätzlich schon in AppRun.
-    /// </para>
+    /// Disables the telemetry of the ONNX Runtime.
     /// </summary>
+    /// <remarks>
+    /// The official builds of the ONNX Runtime send usage data to Microsoft on Linux and macOS (1DS, with a
+    /// persistent device identifier) and via ETW on Windows. This is disabled with the environment variable
+    /// ORT_DISABLE_TELEMETRY=1 before the runtime starts, and additionally through the API
+    /// (<see cref="OnnxSessions"/>).
+    /// <para>
+    /// On Linux, Environment.SetEnvironmentVariable changes only the copy held by .NET, not the process
+    /// environment that the native library reads with getenv; hence setenv. The AppImage also sets the
+    /// variable in AppRun.
+    /// </para>
+    /// </remarks>
     internal static void DisableOnnxTelemetry()
     {
         Environment.SetEnvironmentVariable(OnnxTelemetryVariable, "1");
@@ -116,7 +129,7 @@ public static class NativeLibraries
             _ = setenv(OnnxTelemetryVariable, "1", 1);
     }
 
-    /// <summary>Wert einer Variablen in der Umgebung des Prozesses (nicht der Kopie von .NET).</summary>
+    /// <summary>Value of a variable in the process environment (not the copy held by .NET).</summary>
     internal static string? NativeEnvironmentVariable(string name) =>
         OperatingSystem.IsWindows()
             ? Environment.GetEnvironmentVariable(name)

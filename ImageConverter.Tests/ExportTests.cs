@@ -24,14 +24,14 @@ public sealed class ExportTests : IDisposable
 
     private string Out(string name) => Path.Combine(_dir, name);
 
-    /// <summary>Waagerechter Verlauf mit 16 Bit: Werte zwischen den 8-Bit-Stufen.</summary>
+    /// <summary>Builds a horizontal 16-bit gradient whose values lie between the 8-bit levels.</summary>
     private static MagickImage Gradient16(int w = 512, int h = 64)
     {
         var data = new ushort[w * h * 3];
         for (var y = 0; y < h; y++)
         for (var x = 0; x < w; x++)
         {
-            var v = (ushort)(20000 + x * 37);   // 37/257 ≈ 0,14 Stufe je Pixel
+            var v = (ushort)(20000 + x * 37);   // 37/257 ≈ 0.14 of an 8-bit level per pixel
             data[(y * w + x) * 3] = data[(y * w + x) * 3 + 1] = data[(y * w + x) * 3 + 2] = v;
         }
         var img = new MagickImage();
@@ -41,8 +41,8 @@ public sealed class ExportTests : IDisposable
     }
 
     /// <summary>
-    /// 32-Bit-Kette (0.4.49): Eine 16-Bit-Quelle bleibt auch mit Tools-Reglern 16 Bit — früher ging
-    /// sie für die Tools durch 8 Bit. Die Zwischenwerte bleiben erhalten.
+    /// 32-bit processing chain: a 16-bit source stays 16-bit even with the Tools sliders in use, instead of being
+    /// reduced to 8 bits for the tools. The values between the 8-bit levels are preserved.
     /// </summary>
     [Fact]
     public void SixteenBitSource_StaysSixteenBit_ThroughTheTools()
@@ -59,12 +59,12 @@ public sealed class ExportTests : IDisposable
         Assert.True(between > 400, $"nur {between} von 512 Werten zwischen den 8-Bit-Stufen");
     }
 
-    /// <summary>Ein unbearbeitetes 8-Bit-Bild bleibt beim Speichern pixelgenau — der Dither lässt exakte Stufen stehen.</summary>
+    /// <summary>An unedited 8-bit image is saved pixel-exact because the dithering leaves exact levels untouched.</summary>
     [Fact]
     public void EightBitSource_WithoutChanges_StaysExact()
     {
         using var photo = Photo();
-        using var src = ImageOps.FromBgra(ImageOps.ToBgra(photo), 400, 300);   // echte 8-Bit-Werte wie ein JPEG
+        using var src = ImageOps.FromBgra(ImageOps.ToBgra(photo), 400, 300);   // real 8-bit values, like a JPEG
         var path = Out("gleich.png");
         ImageExporter.Export(src, Options(OutputFormat.Png, 400, 300), path);
 
@@ -74,7 +74,7 @@ public sealed class ExportTests : IDisposable
         Assert.Null(result.GetAttribute("imageconverter:source-depth"));
     }
 
-    /// <summary>Haken „16 Bit je Kanal“: auch eine 8-Bit-Quelle wird mit 16 Bit gespeichert; JPEG bleibt 8 Bit.</summary>
+    /// <summary>Check box „16 Bit je Kanal“: an 8-bit source is also saved with 16 bits; JPEG stays 8-bit.</summary>
     [Fact]
     public void HighBitDepth_OnlyWhereTheFormatCan()
     {
@@ -89,7 +89,7 @@ public sealed class ExportTests : IDisposable
         using (var j = new MagickImage(jpg)) Assert.Equal(8u, j.Depth);
     }
 
-    /// <summary>Meldet sofort im selben Thread (Progress&lt;T&gt; liefe über den UI-Kontext).</summary>
+    /// <summary>Records progress immediately on the same thread (<see cref="Progress{T}"/> would post to the UI context).</summary>
     private sealed class Collect : IProgress<WorkProgress>
     {
         public readonly List<WorkProgress> Reports = [];
@@ -97,9 +97,9 @@ public sealed class ExportTests : IDisposable
     }
 
     /// <summary>
-    /// Fortschritt beim Speichern: ein Balken, der einmal von 0 bis 100 % läuft (vorher lief eine
-    /// Endlos-Animation ohne Text), jeder Schritt einmal gemeldet — Größe, Rauschen, 3 Dunst-Durchläufe,
-    /// Tiefen/Lichter, Licht und Farbe, Schärfen, Farbprofil, Datei schreiben — und am Ende „fertig“.
+    /// Progress while saving: one bar that runs once from 0 to 100 % instead of an endless animation without text;
+    /// every step is reported once (size, noise, 3 dehaze passes, shadows/highlights, light and colour, sharpening,
+    /// colour profile, writing the file) and „done“ at the end.
     /// </summary>
     [Fact]
     public void Export_ReportsEveryStep_InOneSteadyRun()
@@ -218,7 +218,7 @@ public sealed class ExportTests : IDisposable
         Assert.Equal("Testkamera", back.GetExifProfile()?.GetValue(ExifTag.Make)?.Value);
     }
 
-    // ------------------------------------------------------------ Metadaten
+    // ------------------------------------------------------------ Metadata
 
     private static MagickImage PhotoWithGps()
     {
@@ -264,10 +264,10 @@ public sealed class ExportTests : IDisposable
 
         using var back = new MagickImage(path);
         Assert.Null(back.GetExifProfile());
-        Assert.NotNull(back.GetColorProfile());   // sRGB bleibt — sonst stimmen die Farben nicht
+        Assert.NotNull(back.GetColorProfile());   // sRGB stays, otherwise the colours would be wrong
     }
 
-    // ------------------------------------------------------------ Farbe
+    // ------------------------------------------------------------ Colour
 
     private static MagickImage AdobeRgbPhoto()
     {
@@ -303,8 +303,8 @@ public sealed class ExportTests : IDisposable
     [Fact]
     public void Color_ConvertToSrgb_Png_UsesCompactSrgbChunk()
     {
-        // PNG kennt einen eigenen, winzigen sRGB-Baustein statt des ~3 KB großen
-        // Profils — ImageMagick nutzt ihn, das ist standardkonform.
+        // PNG has its own tiny sRGB chunk instead of the ~3 KB profile; ImageMagick
+        // uses it, which conforms to the standard.
         using var src = AdobeRgbPhoto();
         var path = Out("srgb.png");
         ImageExporter.Export(src, Options(OutputFormat.Png) with { Color = ColorMode.ConvertToSrgb }, path);
@@ -336,7 +336,7 @@ public sealed class ExportTests : IDisposable
         Assert.NotEqual(ImageOps.ToBgra(loaded.Image), ImageOps.ToDisplayBgra(loaded.Image));
     }
 
-    // ------------------------------------------------------------ Dateinamen
+    // ------------------------------------------------------------ File names
 
     [Fact]
     public void Naming_ReplacesPlaceholders()

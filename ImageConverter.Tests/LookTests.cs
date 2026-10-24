@@ -6,8 +6,8 @@ using ImageMagick.Drawing;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Der Bildlook als eigener Schritt (für „Erst Einstellungen, dann KI“): gleich wie in der Export-Kette,
-/// und neutral heißt wirklich ohne Wirkung — sonst käme er doppelt ins Bild.
+/// The image look as a separate step (for "settings first, then AI"): identical to the export chain,
+/// and neutral really means no effect — otherwise the look would be applied to the image twice.
 /// </summary>
 public class LookTests
 {
@@ -60,7 +60,7 @@ public class LookTests
     [Fact]
     public void SharpenRadius_ScalesWithTheImageWidth()
     {
-        // Export auf 1000 px, Look ins Bild mit 4000 px gerechnet: Radius viermal so groß, wirkt im Export gleich
+        // Export at 1000 px, look computed on the 4000 px image: radius four times as large, same effect in the export
         var look = new MainViewModel.Look(0, Adjustments.None, 1, 1.5, 1000);
         Assert.Equal(6.0, look.SharpenSigma(4000), 6);
     }

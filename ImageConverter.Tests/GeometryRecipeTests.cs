@@ -4,10 +4,10 @@ using ImageMagick.Drawing;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Ausrichten als Rezept: Reihenfolge, Vierteldrehungen, Umrechnen der Punkte, Werkzeug-Ansichten.</summary>
+/// <summary>Tests alignment as a recipe: order of stages, quarter turns, point mapping and tool views.</summary>
 public class GeometryRecipeTests
 {
-    /// <summary>Unsymmetrisches Testbild: grau mit farbigen Ecken — jede Drehung/Spiegelung sieht anders aus.</summary>
+    /// <summary>Asymmetric test image, grey with coloured corners, so that every rotation and flip looks different.</summary>
     private static MagickImage Pattern(int w = 120, int h = 80)
     {
         var img = new MagickImage(new MagickColor(30000, 30000, 30000), (uint)w, (uint)h);
@@ -28,7 +28,7 @@ public class GeometryRecipeTests
     {
         var r = GeometryRecipe.None.Rotated(true).Rotated(true).Rotated(true);
         Assert.Equal(3, r.NormalTurns);
-        Assert.Equal(GeometryRecipe.None, r.Rotated(true) with { Turns = 0 });   // vier Drehungen: nichts
+        Assert.Equal(GeometryRecipe.None, r.Rotated(true) with { Turns = 0 });   // four turns: nothing
 
         using var src = Pattern();
         using var viaRecipe = r.Apply(src)!;
@@ -42,7 +42,7 @@ public class GeometryRecipeTests
     public void TurnsAndFlips_InAnyOrder_MatchDoingThemOneAfterAnother()
     {
         using var src = Pattern();
-        // rechts, spiegeln, rechts, links, spiegeln, rechts — wie nacheinander auf die Pixel
+        // right, flip, right, left, flip, right, compared with applying them to the pixels one after another
         var recipe = GeometryRecipe.None;
         var pixels = ImageOps.CloneOf(src);
         foreach (var action in new[] { "R", "F", "R", "L", "F", "R" })
@@ -86,13 +86,13 @@ public class GeometryRecipeTests
     public void Mapping_HitsTheMarkedPixel_InTheRenderedResult()
     {
         using var src = new MagickImage(new MagickColor(20000, 20000, 20000), 300, 200);
-        new Drawables().FillColor(MagickColors.Red).Circle(150, 100, 153, 100).Draw(src);   // Punkt bei (150, 100)
+        new Drawables().FillColor(MagickColors.Red).Circle(150, 100, 153, 100).Draw(src);   // dot at (150, 100)
         src.Alpha(AlphaOption.Off);
         var r = Busy() with { Crop = new RelRect(0.1, 0.1, 0.7, 0.7) };
         using var result = r.Apply(src)!;
         Assert.Equal(r.SizeFor(300, 200), ((int)result.Width, (int)result.Height));
 
-        // Schwerpunkt der roten Pixel im Ergebnis
+        // centroid of the red pixels in the result
         var rgb = Rgb(result);
         double sx = 0, sy = 0, n = 0;
         for (var y = 0; y < result.Height; y++)
@@ -111,14 +111,14 @@ public class GeometryRecipeTests
     public void HidingAStage_KeepsTheOthers()
     {
         var r = Busy();
-        Assert.Equal(GeometryStages.All & ~GeometryStages.Dewarp, r.Present);   // alles außer der Wölbung
+        Assert.Equal(GeometryStages.All & ~GeometryStages.Dewarp, r.Present);   // everything except dewarping
         var noStraighten = r.PlanFor(120, 80, GeometryStages.All & ~GeometryStages.Straighten);
         Assert.Null(noStraighten.QuadPixels);
         Assert.Equal(1, noStraighten.Turns);
-        Assert.NotNull(noStraighten.Rect);                   // Zuschnitt bleibt (relativ zum Bild ohne Entzerren)
+        Assert.NotNull(noStraighten.Rect);                   // crop stays (relative to the image without perspective correction)
         var noOrient = r.SizeFor(120, 80, GeometryStages.All & ~GeometryStages.Orient);
         var all = r.SizeFor(120, 80);
-        Assert.Equal((noOrient.Height, noOrient.Width), all); // nur die Vierteldrehung fehlt
+        Assert.Equal((noOrient.Height, noOrient.Width), all); // only the quarter turn is missing
     }
 
     [Fact]
@@ -128,29 +128,29 @@ public class GeometryRecipeTests
         var r = new GeometryRecipe(Angle: 10);
         using var result = r.Apply(src)!;
         using var px = result.GetPixelsUnsafe();
-        // Ecken des Ergebnisses sind Bild, nicht leer (keine Transparenz, kein Schwarz)
+        // The corners of the result are image content, not empty (no transparency, no black).
         foreach (var (x, y) in new[] { (0, 0), ((int)result.Width - 1, 0), (0, (int)result.Height - 1), ((int)result.Width - 1, (int)result.Height - 1) })
         {
             var c = px.GetPixel(x, y).ToColor()!;
             Assert.True(c.A > 65000 && c.R + c.G + c.B > 20000, $"leere Ecke bei {x},{y}: {c}");
         }
-        Assert.True(result.Width < 200 && result.Height < 100);   // kleiner als das Bild: der Rahmen liegt innen
+        Assert.True(result.Width < 200 && result.Height < 100);   // smaller than the image: the frame lies inside
     }
 
     [Fact]
     public void CropInResult_OnATurnedImage_CutsTheShownRegion()
     {
         using var src = Pattern(120, 80);
-        var r = GeometryRecipe.None.Rotated(true);           // angezeigt hochkant 80 × 120
-        // oben rechts im gedrehten Bild liegt die rote Ecke (vorher oben links)
+        var r = GeometryRecipe.None.Rotated(true);           // shown in portrait as 80 × 120
+        // the red corner is at the top right of the turned image (top left in the source)
         var cropped = r.CroppedInResult(50, 0, 30, 30, 0, 120, 80, GeometryStages.All);
         using var result = cropped.Apply(src)!;
         Assert.Equal((30, 30), ((int)result.Width, (int)result.Height));
         using var px = result.GetPixelsUnsafe();
-        var corner = px.GetPixel(25, 5).ToColor()!;          // rote Ecke rechts oben im Ausschnitt
+        var corner = px.GetPixel(25, 5).ToColor()!;          // red corner at the top right of the crop
         Assert.True(corner.R > 60000 && corner.G < 5000, $"{corner}");
 
-        // Zweiter Zuschnitt schneidet enger, im ersten
+        // A second crop cuts tighter, within the first one.
         var again = cropped.CroppedInResult(10, 0, 20, 10, 0, 120, 80, GeometryStages.All);
         Assert.Equal((20, 10), again.SizeFor(120, 80));
     }

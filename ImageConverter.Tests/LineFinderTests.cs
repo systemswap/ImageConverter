@@ -4,24 +4,24 @@ using Xunit.Abstractions;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Linien vorschlagen: künstliche Seite (Blatt als Viereck auf braunem Grund, gebogene Zeilen aus „Buchstaben“ mit Ober- und
-/// Unterlängen, ohne Schriftart), Grundlinien, Blattkanten und Falz bekannt.
+/// Tests line suggestions on a synthetic page (sheet as a quadrilateral on a brown background, curved lines of „letters“
+/// with ascenders and descenders, no font) whose baselines, sheet edges and fold are known.
 /// </summary>
 public class LineFinderTests(ITestOutputHelper output)
 {
     private const int W = 1200, H = 900;
-    private const double Letter = 14;   // Buchstabenhöhe in Pixeln
+    private const double Letter = 14;   // letter height in pixels
 
     private sealed class Page
     {
         public (double X, double Y)[] Corners = [(180, 90), (1030, 120), (1060, 820), (150, 800)];
-        public double FoldX = double.NaN;      // Doppelseite: Falz bei x
-        public bool Whole;                     // Blatt füllt das ganze Bild (kein Rand zu sehen)
-        public double Bend = 18;               // Zeilen nach unten gebogen (Pixel in der Mitte)
-        public bool Frame;                     // gezeichneter Rahmen (2 px) bei x 230 … 990, y 160 … 760, dazu eine Spalte bei x 610
-        public bool Boxes;                     // grauer Überschriftenbalken (x 230 … 990, y 140 … 176) und hellgrüner Kasten mit
-                                               // schwachem Karoraster (x 240 … 980, y 480 … 720, Linien alle 20 px; der Text läuft hindurch)
-        public List<double> Rows = [];         // Grundlinien (y am Zeilenanfang)
+        public double FoldX = double.NaN;      // double page: fold at x
+        public bool Whole;                     // sheet fills the whole image (no border visible)
+        public double Bend = 18;               // lines bent downwards (pixels in the middle)
+        public bool Frame;                     // drawn frame (2 px) at x 230 … 990, y 160 … 760, plus a column rule at x 610
+        public bool Boxes;                     // grey heading bar (x 230 … 990, y 140 … 176) and light green box with a
+                                               // faint square grid (x 240 … 980, y 480 … 720, lines every 20 px; the text runs through it)
+        public List<double> Rows = [];         // baselines (y at the start of the line)
 
         public double Baseline(double row, double x) => row + Bend * Math.Sin(Math.PI * Math.Clamp((x - 260) / 700, 0, 1));
     }
@@ -85,7 +85,7 @@ public class LineFinderTests(ITestOutputHelper output)
             for (var x = 260; x < 980; x += 20) Fill(x, 480, x + 1, 720, 0.80f, 0.86f, 0.72f);
         }
 
-        // Zeilen: Wörter aus Kästchen, zwischen x 260 und 960 (bzw. nur bis vor den Falz und danach)
+        // Lines: words made of boxes between x 260 and 960 (leaving out the area around the fold)
         for (var row = 0; row < 9; row++)
         {
             var y0 = 200 + row * 62.0;
@@ -126,8 +126,8 @@ public class LineFinderTests(ITestOutputHelper output)
         foreach (var line in text)
         {
             Assert.Equal(WarpLineKind.Horizontal, line.Kind);
-            // alle Punkte auf derselben echten Grundlinie, höchstens 1 px daneben (gemessen 0,4 px; die Kästchen sind flach,
-            // die Linie gebogen — ±1 px liegen schon im Testbild; Unterlängen dürfen sich häufen)
+            // All points on the same true baseline, at most 1 px off (measured 0.4 px; the boxes are flat while the
+            // line is curved, so ±1 px is already in the test image; descenders may cluster).
             var row = page.Rows.MinBy(r => Math.Abs(page.Baseline(r, line.Points[0].X) - line.Points[0].Y));
             var worst = line.Points.Max(p => Math.Abs(page.Baseline(row, p.X) - p.Y));
             output.WriteLine($"Zeile {row}: {line.Points.Count} Punkte, höchstens {worst:0.0} px daneben");
@@ -148,7 +148,7 @@ public class LineFinderTests(ITestOutputHelper output)
         var c = page.Corners;
         foreach (var e in edges)
         {
-            // Abstand jedes Punkts zur nächsten echten Kante
+            // distance of each point to the nearest true edge
             var worst = e.Points.Max(p => Enumerable.Range(0, 4).Min(k => Distance(p, c[k], c[(k + 1) % 4])));
             Assert.True(worst < 2, $"Kante {e.Kind}: {worst:0.0} px daneben");
         }
@@ -183,13 +183,13 @@ public class LineFinderTests(ITestOutputHelper output)
         var ruled = found.Where(f => f.Source == FoundLineSource.Ruled).ToList();
         output.WriteLine(string.Join("; ", ruled.Select(r => $"{r.Kind} {r.Points.Average(p => p.X):0},{r.Points.Average(p => p.Y):0}")));
 
-        // die drei senkrechten Striche (Rahmen links, rechts, Spalte), auf ± 1,5 px ihrer Mitte
+        // the three vertical rules (frame left, right, column), within ± 1.5 px of their centre
         foreach (var x in new[] { 231.0, 610.0, 989.0 })
         {
             var line = Assert.Single(ruled, r => r.Kind == WarpLineKind.Vertical && Math.Abs(r.Points.Average(p => p.X) - x) < 6);
             Assert.All(line.Points, p => Assert.InRange(p.X, x - 1.5, x + 1.5));
         }
-        // Ober- und Unterkante des Rahmens
+        // top and bottom edge of the frame
         foreach (var y in new[] { 161.0, 759.0 })
             Assert.Contains(ruled, r => r.Kind == WarpLineKind.Horizontal && r.Points.All(p => Math.Abs(p.Y - y) < 1.5));
     }
@@ -204,15 +204,15 @@ public class LineFinderTests(ITestOutputHelper output)
         output.WriteLine("Flächen: " + string.Join("; ", boxes.Select(r => $"{r.Kind} {r.Points.Average(p => p.X):0},{r.Points.Average(p => p.Y):0}")));
         output.WriteLine("Striche: " + string.Join("; ", ruled.Select(r => $"{r.Kind} {r.Points.Average(p => p.X):0},{r.Points.Average(p => p.Y):0}")));
 
-        // Balken oben und unten, Kasten oben und unten (Pixelkanten bei 140, 176, 480, 720), auf ± 1,5 px — die Seiten des
-        // Kastens sind zu kurz für den Balken, beim Kasten können sie mit dem Raster zusammenfallen (dann zählt das Raster)
+        // Bar top and bottom, box top and bottom (pixel edges at 140, 176, 480, 720), within ± 1.5 px. The sides of the bar
+        // are too short; for the box they may coincide with the grid (then the grid line counts).
         foreach (var y in new[] { 140.0, 176.0, 480.0, 720.0 })
             Assert.Contains(found, f => f.Source is FoundLineSource.Box or FoundLineSource.Ruled && f.Kind == WarpLineKind.Horizontal
                                         && f.Points.All(p => Math.Abs(p.Y - y) < 1.5));
         foreach (var x in new[] { 240.0, 980.0 })
             Assert.Contains(found, f => f.Source is FoundLineSource.Box or FoundLineSource.Ruled && f.Kind == WarpLineKind.Vertical
                                         && f.Points.All(p => Math.Abs(p.X - x) < 1.5));
-        // das schwache Raster: mindestens 3 waagerechte und 3 senkrechte Striche auf einer Rasterlinie (Mitte bei 20 k + 0,5)
+        // the faint grid: at least 3 horizontal and 3 vertical rules on a grid line (centre at 20 k + 0.5)
         Assert.True(ruled.Count(r => r.Kind == WarpLineKind.Horizontal && r.Points.All(p => Math.Abs((p.Y - 0.5) % 20) < 1.5)) >= 3, "Raster waagerecht");
         Assert.True(ruled.Count(r => r.Kind == WarpLineKind.Vertical && r.Points.All(p => Math.Abs((p.X - 0.5) % 20) < 1.5)) >= 3, "Raster senkrecht");
     }
@@ -220,7 +220,7 @@ public class LineFinderTests(ITestOutputHelper output)
     [Fact]
     public void Refine_PutsAnEdgeOnTheStepInFullResolution()
     {
-        // Sprung von dunkel nach hell bei x = 300,25 (Unterpixel), vorgeschlagen 3 px daneben
+        // Step from dark to bright at x = 300.25 (subpixel), suggested 3 px away
         const int w = 600, h = 400;
         var gray = new float[w * h];
         for (var y = 0; y < h; y++)

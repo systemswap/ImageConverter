@@ -1,11 +1,11 @@
 #:project ../ImageConverter.Core/ImageConverter.Core.csproj
-// Upscaler der App an einem Bild messen: Zeit, und — wenn das wahre große Bild dabei ist — wie nah das Ergebnis daran
-// liegt (PSNR), roh und mit Treue-Sicherung. Schreibt <name>-roh.png und <name>-treu.png in den Ausgabeordner.
-// Aufruf (Bauausgabe außerhalb des Projekts):
+// Measures an upscaler of the app on one image: time and — if the true large image is given — how close the result
+// is to it (PSNR), raw and with fidelity protection. Writes <name>-roh.png and <name>-treu.png to the output folder.
+// Usage (build output outside the project):
 //   dotnet run tools/UpscaleMessen.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <pisasr|onnx-datei> <modellordner|-> <bild> <ausgabeordner> [<wahres-bild>] [--gpu]
-// --gpu: auf der Grafikkarte (Windows: DirectML). --fp16: PiSA-SR in halber Genauigkeit (Dateien „-fp16“).
-// pisasr: die drei ONNX-Dateien im Modellordner; sonst eine ×4-Kachelmodell-Datei (Real-ESRGAN x4v3, UltraSharpV2).
+// --gpu: on the graphics card (Windows: DirectML). --fp16: PiSA-SR in half precision (files "-fp16").
+// pisasr: the three ONNX files in the model folder; otherwise a ×4 tile model file (Real-ESRGAN x4v3, UltraSharpV2).
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.Upscale;
 using ImageMagick;

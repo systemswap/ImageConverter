@@ -1,11 +1,11 @@
 #:project ../ImageConverter.Core/ImageConverter.Core.csproj
-// Zwei SyntheticDoc-Checkpoints vergleichen (z. B. bisher gegen neue Gewichte der Autoren oder ein eigenes Training):
-// je Bild „KI begradigen“ wie die App, Ergebnis alt | neu nebeneinander als JPEG, dazu wie weit die Gitter
-// auseinanderliegen und die Rechenzeit. Ohne Python; schreibt nichts neben die Checkpoints.
-// Aufruf (Bauausgabe außerhalb des Projekts, sonst entstehen bin/ und obj/ in ImageConverter.Core):
+// Compares two SyntheticDoc checkpoints (e.g. the weights in use against new weights from the authors or an own training):
+// for each image, AI dewarping as in the app, the results old | new side by side as JPEG, plus how far the grids
+// differ and the computing time. No Python needed; writes nothing next to the checkpoints.
+// Usage (build output outside the project, otherwise bin/ and obj/ are created in ImageConverter.Core):
 //   dotnet run tools/SyntheticDocVergleich.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <alt.ckpt> <neu.ckpt> <ausgabeordner> <bild> [<bild> …]
-// Bewertung: docs/KI-BEGRADIGEN.md, Abschnitt „Updates des Originals“.
+// Assessment: see docs/KI-BEGRADIGEN.md, section "Updates des Originals".
 using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.SyntheticDoc;
 using ImageConverter.Core.Imaging;
@@ -47,7 +47,7 @@ foreach (var file in args.Skip(3))
     var b = SyntheticDocDewarp.Run(neu.Grid, neu.Shadow, img, focal, true, CancellationToken.None);
     var tb = clock.ElapsedMilliseconds;
 
-    // Abstand: je Gitterpunkt, in Pixeln des Fotos — wie stark sich das Ergebnis ändert (nicht, welches besser ist)
+    // Distance: per grid point, in pixels of the photo — how much the result changes (not which one is better)
     double sum = 0, max = 0;
     for (var k = 0; k < a.Sx.Length; k++)
     {

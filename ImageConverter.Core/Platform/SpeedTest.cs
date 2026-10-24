@@ -8,47 +8,68 @@ using Microsoft.ML.OnnxRuntime;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Ergebnis des Geschwindigkeitstests für einen Bereich (Bildfilter oder KI): beste Zeit auf der CPU und auf der
-/// Grafikkarte (null: keine nutzbar). <see cref="Machine"/> beschreibt, worauf gemessen wurde — passt es nicht mehr zum
-/// Rechner (andere Grafikkarte, anderer Prozessor), gilt das Ergebnis nicht.
+/// Result of the speed test for one area (image filters or AI): the best time on the CPU and on the graphics card.
 /// </summary>
+/// <remarks>
+/// <see cref="Machine"/> describes what the measurement was taken on; if it no longer matches the computer
+/// (different graphics card, different processor, different CPU limit), the result does not apply.
+/// </remarks>
+/// <param name="CpuSeconds">Best time on the CPU in seconds.</param>
+/// <param name="GpuSeconds">Best time on the graphics card in seconds; <see langword="null"/> if none was usable.</param>
+/// <param name="Machine">Identifier from <see cref="SpeedTest.FilterMachine"/> or <see cref="SpeedTest.AiMachine"/>.</param>
+/// <param name="When">Local time of the measurement.</param>
 public sealed record SpeedMeasure(double CpuSeconds, double? GpuSeconds, string Machine, DateTime When)
 {
-    /// <summary>Die Grafikkarte war im Test langsamer (oder gleich schnell) als die CPU.</summary>
+    /// <summary>Whether the graphics card was slower than (or as fast as) the CPU in the test.</summary>
     public bool CpuFaster => GpuSeconds is { } gpu && gpu >= CpuSeconds;
 
     /// <summary>
-    /// Auf der Grafikkarte rechnen? Ohne gültiges Ergebnis ja (Grafikkarte, wenn vorhanden — wie vor dem Test); mit
-    /// Ergebnis für genau diesen Rechner das Schnellere.
+    /// Decides whether to process on the graphics card.
     /// </summary>
+    /// <param name="measure">Stored result; may be <see langword="null"/>.</param>
+    /// <param name="machine">Identifier of the current computer.</param>
+    /// <returns>
+    /// Without a valid result <see langword="true"/> (the graphics card if available, as without a test); with a
+    /// result for exactly this computer, whether the graphics card was the faster device.
+    /// </returns>
     public static bool PreferGpu(SpeedMeasure? measure, string machine) =>
         measure is null || measure.Machine != machine || !measure.CpuFaster;
 }
 
 /// <summary>
-/// Geschwindigkeitstest (Einstellungen › Leistung): rechnet dieselbe Arbeit einmal auf der Grafikkarte und einmal auf
-/// der CPU. Auf schnellen Prozessoren ist die CPU oft gleich schnell oder schneller (gemessen: Ryzen 9 7950X3D gegen
-/// RX 6650 XT, docs/KI-GRAFIKKARTE.md), auf Laptops die Grafikkarte deutlich schneller — deshalb messen statt annehmen.
-/// Je Gerät erst ein Aufwärmlauf (Kernel übersetzen, Modell laden), dann die beste von zwei Zeiten.
+/// Speed test (Settings › Performance): runs the same work once on the graphics card and once on the CPU.
 /// </summary>
+/// <remarks>
+/// On fast processors the CPU is often as fast or faster (measured: Ryzen 9 7950X3D against RX 6650 XT, see
+/// docs/KI-GRAFIKKARTE.md), on laptops the graphics card is considerably faster; hence the speed is measured
+/// instead of assumed. Each device first gets a warm-up run (compiling kernels, loading the model), then the best
+/// of two times counts.
+/// </remarks>
 public static class SpeedTest
 {
-    /// <summary>Größe des Testbildes für die Bildfilter (etwa 1 MP).</summary>
+    /// <summary>Size of the test image for the image filters in pixels (about 1 MP).</summary>
     internal const int FilterWidth = 1200, FilterHeight = 900;
 
-    /// <summary>Größe des Testbildes für die KI (x4v3: 3 × 3 Kacheln).</summary>
+    /// <summary>Edge length of the square test image for the AI in pixels (x4v3: 3 × 3 tiles).</summary>
     internal const int AiSize = 300;
 
-    /// <summary>Kennung des Rechners für die Bildfilter: Grafikkarte (ILGPU), Zahl der Kerne und CPU-Obergrenze.</summary>
+    /// <summary>Returns the computer identifier for the image filters.</summary>
+    /// <param name="device">Name of the graphics card (ILGPU); <see langword="null"/> if none.</param>
+    /// <returns>Graphics card, number of logical processors and CPU limit.</returns>
     public static string FilterMachine(string? device) => $"{device ?? "-"} · {Environment.ProcessorCount}{Limit}";
 
-    /// <summary>Kennung des Rechners für die KI: Anbindung der Laufzeit (DirectML …), Zahl der Kerne und CPU-Obergrenze.</summary>
+    /// <summary>Returns the computer identifier for the AI.</summary>
+    /// <param name="provider">Execution provider of the runtime (DirectML …); <see langword="null"/> if none.</param>
+    /// <returns>Execution provider, number of logical processors and CPU limit.</returns>
     public static string AiMachine(string? provider) => $"{provider ?? "-"} · {Environment.ProcessorCount}{Limit}";
 
-    // Andere Obergrenze, andere CPU-Zeiten — dann gelten Messungen nicht mehr (100 % ohne Zusatz wie bisher)
+    // A different limit gives different CPU times, so measurements no longer apply. At 100 % there is no suffix, so
+    // that identifiers stored without a limit remain valid.
     private static string Limit => ComputeLimits.Percent >= 100 ? "" : $" · {ComputeLimits.Percent} %";
 
-    /// <summary>Entrauschen und Dunst an einem Testbild, Grafikkarte und CPU.</summary>
+    /// <summary>Measures denoising and dehazing of a test image on the graphics card and on the CPU.</summary>
+    /// <param name="ct">Cancels the test between runs.</param>
+    /// <returns>The measurement for <see cref="FilterMachine"/>.</returns>
     public static SpeedMeasure Filters(CancellationToken ct = default)
     {
         var px = TestPixels(FilterWidth, FilterHeight);
@@ -56,7 +77,7 @@ public static class SpeedTest
         using (GpuFilters.GpuEvenIfSlower())
         {
             var seconds = Best(() => FilterWork(px), ct);
-            if (GpuFilters.DeviceName is not null && GpuFilters.Problem is null) gpu = seconds;   // sonst lief es auf der CPU
+            if (GpuFilters.DeviceName is not null && GpuFilters.Problem is null) gpu = seconds;   // otherwise it ran on the CPU
         }
         double cpu;
         using (GpuFilters.CpuOnly()) cpu = Best(() => FilterWork(px), ct);
@@ -70,12 +91,16 @@ public static class SpeedTest
     }
 
     /// <summary>
-    /// Ein ×4-Kachelmodell (x4v3) an einem Testbild, Grafikkarte und CPU — eigene Sitzungen, die geöffneten Modelle der
-    /// App bleiben unberührt.
+    /// Measures a ×4 tile model (x4v3) on a test image on the graphics card and on the CPU.
     /// </summary>
+    /// <remarks>Uses its own sessions; the models opened by the application are not affected.</remarks>
+    /// <param name="modelPath">Path of the ONNX model file.</param>
+    /// <param name="model">Description of the model.</param>
+    /// <param name="ct">Cancels the test between runs.</param>
+    /// <returns>The measurement for <see cref="AiMachine"/>; the GPU time is <see langword="null"/> if the graphics card was not usable.</returns>
     public static SpeedMeasure Ai(string modelPath, AiModel model, CancellationToken ct = default)
     {
-        var provider = OnnxSessions.GpuProvider;   // schaltet auch die Telemetrie der Laufzeit ab
+        var provider = OnnxSessions.GpuProvider;   // also disables the telemetry of the runtime
         using var source = new MagickImage(new MagickColor(30000, 32000, 28000), AiSize, AiSize);
         source.AddNoise(NoiseType.Gaussian, 1.5);
         source.Alpha(AlphaOption.Off);
@@ -105,7 +130,7 @@ public static class SpeedTest
         return new SpeedMeasure(cpu, gpu, AiMachine(provider), DateTime.Now);
     }
 
-    /// <summary>Ein Aufwärmlauf, dann die beste von zwei Zeiten in Sekunden.</summary>
+    /// <summary>One warm-up run, then the best of two times in seconds.</summary>
     private static double Best(Action work, CancellationToken ct)
     {
         work();
@@ -120,7 +145,7 @@ public static class SpeedTest
         return best;
     }
 
-    /// <summary>Verrauschter Verlauf mit etwas Dunst — gibt Entrauschen und Dunst echte Arbeit.</summary>
+    /// <summary>Noisy gradient with some haze, so that denoising and dehazing have real work to do.</summary>
     private static float[] TestPixels(int w, int h)
     {
         var px = new float[w * h * 4];

@@ -1,11 +1,11 @@
-// App-Icon für ImageConverter.
+// App icon for ImageConverter.
 //
-// Abgerundetes Quadrat im App-Blau, darin eine Landschaft mit Sonne („Bild") und
-// zwei weiße Zuschnitt-Ecken („bearbeiten"). Gezeichnet in 1024 px und mit Lanczos
-// verkleinert — so bleiben auch 16 px sauber.
+// Rounded square in the app blue, containing a landscape with a sun ("image") and
+// two white crop corners ("edit"). Drawn at 1024 px and downscaled with Lanczos
+// so that even 16 px stays clean.
 //
-// Ausgabe nach ImageConverter.Ui/Assets:
-//   app.ico   — 16 bis 256 px in einer Datei (exe und Fenster unter Windows)
+// Output to ImageConverter.Ui/Assets:
+//   app.ico   — 16 to 256 px in one file (exe and window on Windows)
 //   Icon.png  — 256 px (Linux: .desktop, AppImage)
 
 using ImageConverter.Core.Imaging;
@@ -16,16 +16,16 @@ var root = FindRepoRoot();
 var assets = Path.Combine(root, "ImageConverter.Ui", "Assets");
 
 const int S = 1024;
-const int Inset = 40;                 // etwas Luft zum Rand, wie bei Systemicons
+const int Inset = 40;                 // some space to the edge, as with system icons
 const int Box = S - 2 * Inset;
 
-// Hintergrund: diagonaler Verlauf im App-Blau, als „Squircle"-artiges Rundrechteck
-// Verlauf größer erzeugen, drehen und aus der Mitte schneiden — ein gedrehtes
-// Quadrat der Seite L enthält mittig ein ungedrehtes der Seite L/√2.
+// Background: diagonal gradient in the app blue, as a squircle-like rounded rectangle.
+// The gradient is created larger, rotated and cut from the centre — a rotated
+// square of side L contains, centred, an unrotated one of side L/√2.
 const int Big = (int)(Box * 1.5);
 using var bg = new MagickImage("gradient:#4C8DFF-#1D4ED8", Big, Big);
 bg.Rotate(-45);
-bg.ResetPage();   // sonst rechnet der Ausschnitt vom verschobenen Ursprung der Drehung aus
+bg.ResetPage();   // otherwise the crop is measured from the shifted origin of the rotation
 bg.Crop(new MagickGeometry((int)(bg.Width - Box) / 2, (int)(bg.Height - Box) / 2, Box, Box));
 bg.ResetPage();
 using var rounded = ImageOps.Crop(bg, 0, 0, Box, Box, radius: Box * 0.23);
@@ -35,27 +35,27 @@ icon.Composite(rounded, Inset, Inset, CompositeOperator.Over);
 
 var white = new MagickColor("#FFFFFF");
 var sun = new MagickColor("#FFD166");
-var mountainBack = new MagickColor("#FFFFFF8C");   // halbtransparent: Tiefe (Hex gilt unabhängig von Q8/Q16)
+var mountainBack = new MagickColor("#FFFFFF8C");   // semi-transparent: depth (hex notation is independent of Q8/Q16)
 
 new Drawables()
-    // Sonne
+    // sun
     .FillColor(sun).StrokeColor(MagickColors.Transparent)
     .Circle(668, 360, 668 + 74, 360)
-    // hinterer Berg (halbtransparent), vorderer Berg (weiß)
+    // rear mountain (semi-transparent), front mountain (white)
     .FillColor(mountainBack)
     .Polygon(new PointD(470, 740), new PointD(640, 500), new PointD(800, 740))
     .FillColor(white)
     .Polygon(new PointD(224, 740), new PointD(420, 450), new PointD(620, 740))
-    // Zuschnitt-Ecken oben links und unten rechts
+    // crop corners top left and bottom right
     .StrokeColor(white).StrokeWidth(46).StrokeLineCap(LineCap.Round).StrokeLineJoin(LineJoin.Round)
     .FillColor(MagickColors.Transparent)
     .Polyline(new PointD(196, 352), new PointD(196, 196), new PointD(352, 196))
     .Polyline(new PointD(672, 828), new PointD(828, 828), new PointD(828, 672))
     .Draw(icon);
 
-// ICO: alle Größen in EINER Datei. Eine MagickImageCollection schriebe hier jede
-// Größe als eigene Datei (app-0.ico …) — die Anweisung auto-resize erzeugt die
-// Größen beim Schreiben selbst, wie beim Export (ImageExporter, Format ICO).
+// ICO: all sizes in ONE file. A MagickImageCollection would write each size as a
+// separate file here (app-0.ico …) — the auto-resize define creates the sizes
+// itself while writing, as in the export (ImageExporter, ICO format).
 using (var ico = (MagickImage)icon.Clone())
 {
     ico.FilterType = FilterType.Lanczos;
@@ -69,7 +69,7 @@ png.FilterType = FilterType.Lanczos;
 png.Resize(256, 256);
 png.Write(Path.Combine(assets, "Icon.png"), MagickFormat.Png32);
 
-// Vorschau in Originalgröße zum Ansehen
+// preview at original size for viewing
 icon.Write(Path.Combine(root, "tools", "IconGenerator", "icon-1024.png"), MagickFormat.Png32);
 
 Console.WriteLine($"Icon geschrieben nach {assets}");

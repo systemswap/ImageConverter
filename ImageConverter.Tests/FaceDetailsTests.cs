@@ -4,12 +4,12 @@ using ImageMagick;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Detailregler nach der KI: „Falten &amp; Züge“ holt geglättete Struktur aus dem Original zurück (nur Haut),
-/// „Körnung“ misst das Korn des Fotos und legt es gleich stark ins Gesicht.
+/// Tests the detail sliders applied after the AI face model: „Falten &amp; Züge“ brings smoothed structure back from the
+/// original (skin only), „Körnung“ measures the grain of the photo and adds grain of the same strength to the face.
 /// </summary>
 public class FaceDetailsTests
 {
-    /// <summary>Gesichtsmodell, das glättet (Mittel über 9 × 9) — bügelt Falten weg.</summary>
+    /// <summary>Face model that smooths (9 × 9 box mean) and thereby removes wrinkles.</summary>
     private sealed class SmoothFace : IFaceModel
     {
         public int Size => 128;
@@ -32,7 +32,7 @@ public class FaceDetailsTests
         }
     }
 
-    /// <summary>Gesichtsmodell, das nichts ändert.</summary>
+    /// <summary>Face model that changes nothing.</summary>
     private sealed class IdentityFace : IFaceModel
     {
         public int Size => 128;
@@ -42,7 +42,7 @@ public class FaceDetailsTests
     private static readonly DetectedFace Face =
         new(100, 100, 200, 200, 0.9, [(130, 130), (170, 130), (150, 150), (135, 172), (165, 172)]);
 
-    /// <summary>Graues Bild aus Werten 0…1 (eine Ebene, auf RGB verteilt).</summary>
+    /// <summary>Builds a grey image from values 0…1 (one plane, copied to R, G and B).</summary>
     private static MagickImage Gray(int w, int h, Func<int, int, float> value)
     {
         var data = new ushort[w * h * 3];
@@ -75,24 +75,24 @@ public class FaceDetailsTests
     [Fact]
     public void Folds_BringBackSmoothedLines_OnSkin_ButNotAtTheEyes()
     {
-        // Falten: waagerechte Linien alle 8 Pixel
+        // Wrinkles: horizontal lines every 8 pixels
         using var src = Gray(300, 300, (x, y) => 0.55f + 0.08f * MathF.Sin(y * MathF.PI / 4));
         var run = AiFaces.Run(src, [Face], new SmoothFace(), null, null, default);
 
         using var smooth = run.Compose(new AiBlend());
         using var folds = run.Compose(new AiBlend(Folds: 1));
 
-        // Haut zwischen Augen und Mund: deutlich näher am Original
+        // Skin between eyes and mouth: clearly closer to the original
         var (before, after) = (Distance(src, smooth, 145, 138, 156, 148), Distance(src, folds, 145, 138, 156, 148));
         Assert.True(after < before * 0.7, $"ohne {before:0.0000}, mit Falten {after:0.0000}");
 
-        // am Auge: bleibt vom Modell
+        // at the eye: the model output stays
         Assert.True(Distance(smooth, folds, 127, 127, 134, 134) < 0.002);
     }
 
     [Theory]
-    [InlineData(0.0, 0.0, 0.5)]    // weißes Rauschen: Korngröße klein
-    [InlineData(1.5, 1.0, 2.0)]    // grobes Korn
+    [InlineData(0.0, 0.0, 0.5)]    // white noise: small grain size
+    [InlineData(1.5, 1.0, 2.0)]    // coarse grain
     public void MeasureGrain_FindsStrengthAndSize(double sigma, double minSize, double maxSize)
     {
         const int w = 512, h = 384;
@@ -101,7 +101,7 @@ public class FaceDetailsTests
         for (var y = 0; y < h; y++)
         for (var x = 0; x < w; x++)
         {
-            var v = 0.1f + 0.8f * x / w + 0.02f * noise[y * w + x];   // Verlauf + Korn mit Streuung 0,02
+            var v = 0.1f + 0.8f * x / w + 0.02f * noise[y * w + x];   // gradient + grain with standard deviation 0.02
             image[(y * w + x) * 3] = image[(y * w + x) * 3 + 1] = image[(y * w + x) * 3 + 2] = v;
         }
 
@@ -121,16 +121,16 @@ public class FaceDetailsTests
         using var clean = run.Compose(new AiBlend());
         using var grainy = run.Compose(new AiBlend(Grain: 1));
 
-        // Gesichtsmitte: das Modell hat geglättet, Körnung 100 % bringt es auf das Korn des Fotos
+        // Face centre: the model has smoothed it, „Körnung“ at 100 % brings it back to the grain of the photo
         var (photo, smooth, filled) = (Noise(src), Noise(clean), Noise(grainy));
         Assert.True(smooth < photo * 0.5, $"geglättet {smooth:0.0000}, Foto {photo:0.0000}");
         Assert.InRange(filled / photo, 0.8, 1.25);
 
-        // außerhalb der Gesichter: nichts
+        // outside the faces: no change
         Assert.True(Distance(clean, grainy, 0, 0, 40, 40) == 0);
     }
 
-    /// <summary>Gesichtsmodell, das selbst feine Struktur erfindet (kräftiges Rauschen).</summary>
+    /// <summary>Face model that invents fine structure itself (strong noise).</summary>
     private sealed class NoisyFace : IFaceModel
     {
         public int Size => 128;
@@ -155,7 +155,7 @@ public class FaceDetailsTests
         Assert.True(Distance(clean, grainy, 140, 140, 160, 160) < 0.002);
     }
 
-    /// <summary>Feine Struktur in der Gesichtsmitte: Pixel minus Mittel der 8 Nachbarn, Streuung (0…1).</summary>
+    /// <summary>Fine structure in the face centre: standard deviation (0…1) of each pixel minus the mean of its 8 neighbours.</summary>
     private static double Noise(MagickImage image)
     {
         var p = AiEnhancer.ReadPixels(image, "RGB");

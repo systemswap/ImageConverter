@@ -8,7 +8,7 @@ namespace ImageConverter.Tests;
 
 public class UpscaleTests
 {
-    /// <summary>Ersatzmodell ×4: nächster Nachbar, dazu ein Versatz (wie ein Modell, das Helligkeit verschiebt).</summary>
+    /// <summary>Stand-in ×4 model: nearest neighbour plus an offset (like a model that shifts brightness).</summary>
     private sealed class BlockyModel(float shift = 0, int tile = 32) : ITileModel
     {
         public int Scale => 4;
@@ -36,7 +36,7 @@ public class UpscaleTests
         for (var x = 0; x < w; x++)
         {
             var i = (y * w + x) * (alpha ? 4 : 3);
-            // weicher Verlauf mit etwas Struktur
+            // smooth gradient with some structure
             px[i] = (ushort)(32768 + 20000 * Math.Sin(x * 0.3) * Math.Cos(y * 0.2));
             px[i + 1] = (ushort)(10000 + 400 * x + rng.Next(3000));
             px[i + 2] = (ushort)(50000 - 300 * y);
@@ -78,7 +78,8 @@ public class UpscaleTests
     [InlineData(true)]
     public void Compose_InBands_IsPixelIdentical_ToOnePiece(bool alpha)
     {
-        // 1100 Quellzeilen: drei Bänder (512, 512, 76); zufälliges Roh-Ergebnis, Treue und Details zwischen 0 und 1
+        // 1100 source rows: three bands (512, 512, 76) without alpha, one piece with alpha; random raw result, fidelity and
+        // details between 0 and 1
         const int w = 70, h = 1100;
         var rng = new Random(3);
         var ch = alpha ? 4 : 3;
@@ -103,7 +104,7 @@ public class UpscaleTests
         const int w = 24, h = 20;
         var rng = new Random(1);
         var s = Enumerable.Range(0, 3 * w * h).Select(_ => (float)rng.NextDouble()).ToArray();
-        // Schlechte Vergrößerung: Blöcke, dazu zu hell
+        // Poor enlargement: blocks, and too bright
         var e = new float[3 * 16 * w * h];
         for (var c = 0; c < 3; c++)
         for (var y = 0; y < 4 * h; y++)
@@ -136,7 +137,7 @@ public class UpscaleTests
         Assert.Equal(70 * 45, area);
         Assert.Equal((280, 180), (result.Width, result.Height));
 
-        // Roh (ohne Treue, nur KI): nächster Nachbar des Originals
+        // Raw (no fidelity, AI only): nearest neighbour of the original
         using var raw = result.Compose(0, 1);
         var src = image.GetPixels().ToShortArray("RGB")!;
         var up = raw.GetPixels().ToShortArray("RGB")!;
@@ -171,7 +172,7 @@ public class UpscaleTests
         using var image = Pattern(300, 140, alpha: true);
         var result = UpscaleEngine.RunTiles(image, new BlockyModel(shift: 0.05f, tile: 48), null, CancellationToken.None);
         var whole = result.ComposeRegion(new SourceRect(0, 0, 300, 140), 1, 0.7);
-        var region = new SourceRect(131, 37, 90, 61);   // über Kachelgrenzen der Zusammensetzung (128)
+        var region = new SourceRect(131, 37, 90, 61);   // across tile boundaries of the composition (128)
         var part = result.ComposeRegion(region, 1, 0.7);
         var maxDiff = 0;
         for (var y = 0; y < region.Height * 4; y++)
@@ -182,7 +183,7 @@ public class UpscaleTests
             var b = part[((y * region.Width * 4) + x) * 4 + c];
             maxDiff = Math.Max(maxDiff, Math.Abs(a - b));
         }
-        // Rückprojektion mit begrenztem Rand: winzige Abweichungen dürfen sein (unter 1/1000)
+        // Back-projection with a limited margin: tiny deviations are allowed (below 1/1000)
         Assert.True(maxDiff < 65, $"größte Abweichung {maxDiff}");
     }
 
@@ -198,7 +199,7 @@ public class UpscaleTests
         Assert.Same(image, ImageExporter.ResizeBasis(image, options with { Width = 40, Height = 30 }));
         Assert.Same(image, ImageExporter.ResizeBasis(image, options with { Upscaled = null }));
 
-        // Ergebnis in Zielgröße kommt aus dem Bild ×4 (hier pixelgleich zum zusammengesetzten Bild)
+        // The result at target size comes from the ×4 image (here pixel-identical to the composed image)
         using var rendered = ImageExporter.Render(image, options);
         Assert.Equal((160u, 120u), (rendered.Width, rendered.Height));
     }
@@ -233,8 +234,8 @@ public class UpscaleTests
     }
 
     /// <summary>
-    /// Über 4× zwei Durchgänge: das Zwischenbild wird auf ein Viertel des Ziels gebracht (höchstens ×4), damit der zweite
-    /// Durchgang genau beim Ziel landet; bis 4× oder abgewählt bleibt es bei einem. Die Zeit zählt beide Durchgänge.
+    /// Beyond 4×, two passes: the intermediate image is brought to a quarter of the target (at most ×4) so that the second
+    /// pass lands exactly on the target; up to 4× or when deselected, one pass. The time estimate counts both passes.
     /// </summary>
     [Fact]
     public void Plan_TwoPassesOnlyBeyondFour_BaseIsQuarterOfTarget()
@@ -242,16 +243,16 @@ public class UpscaleTests
         Assert.Equal(new UpscalePlan(2, 1000, 600), Upscalers.Plan(300, 180, 4000, 2400, twice: true));
         Assert.Equal(new UpscalePlan(1, 300, 180), Upscalers.Plan(300, 180, 4000, 2400, twice: false));
         Assert.Equal(new UpscalePlan(1, 300, 180), Upscalers.Plan(300, 180, 1200, 720, twice: true));
-        Assert.Equal(new UpscalePlan(2, 1200, 720), Upscalers.Plan(300, 180, 6000, 3600, twice: true));   // über 16×: Basis höchstens ×4
-        Assert.Equal(new UpscalePlan(2, 301, 180), Upscalers.Plan(300, 180, 1201, 720, twice: true));     // nur knapp darüber
+        Assert.Equal(new UpscalePlan(2, 1200, 720), Upscalers.Plan(300, 180, 6000, 3600, twice: true));   // beyond 16×: base at most ×4
+        Assert.Equal(new UpscalePlan(2, 301, 180), Upscalers.Plan(300, 180, 1201, 720, twice: true));     // only just above
         Assert.True(Upscalers.BeyondOnePass(300, 180, 1201, 720));
         Assert.False(Upscalers.BeyondOnePass(300, 180, 1200, 720));
 
         var plan = Upscalers.Plan(300, 180, 4000, 2400, twice: true);
         var both = Upscalers.Estimate(UpscaleMethod.Medium, 300, 180, plan);
         Assert.Equal(Upscalers.Estimate(UpscaleMethod.Medium, 300, 180) + Upscalers.Estimate(UpscaleMethod.Medium, 1000, 600), both);
-        // Ausschnitt: beide Durchgänge im selben Verhältnis kleiner (seit 0.5.105 nach Kacheln geschätzt, nicht nach
-        // Fläche — ein Viertel der Fläche ist daher nicht genau ein Viertel der Zeit)
+        // Region: both passes smaller in the same ratio (estimated by tiles, not by area — a quarter of the area is
+        // therefore not exactly a quarter of the time)
         var part = Upscalers.Estimate(UpscaleMethod.Medium, 300, 180, plan, 150, 90);
         Assert.Equal(Upscalers.Estimate(UpscaleMethod.Medium, 150, 90) + Upscalers.Estimate(UpscaleMethod.Medium, 500, 300), part);
         Assert.True(part < both);
@@ -260,7 +261,7 @@ public class UpscaleTests
     [Fact]
     public void OnnxGraph_HalfPrecisionWeights_RunAndStayClose()
     {
-        // float32 hinein → float16 rechnen (Gewicht fp16) → float32 heraus, wie PiSA-SR auf der Grafikkarte
+        // float32 in → compute in float16 (fp16 weight) → float32 out, as PiSA-SR does on the graphics card
         using var g = new OnnxGraph();
         var x = g.Input("x", 1, 4);
         var h = g.Node("Cast", [x], ("to", 10L));
@@ -271,7 +272,7 @@ public class UpscaleTests
         using var outputs = session.Run(new Microsoft.ML.OnnxRuntime.RunOptions(), ["x"], [input], ["y"]);
         var y = outputs[0].GetTensorDataAsSpan<float>().ToArray();
         Assert.Equal([1f, 2.5f, -4f], y[..3]);
-        Assert.Equal(6.2832f, y[3], 2);   // halbe Genauigkeit: drei Stellen
+        Assert.Equal(6.2832f, y[3], 2);   // half precision: three digits
     }
 
     [Fact]

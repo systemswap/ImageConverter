@@ -4,14 +4,14 @@ using ImageMagick;
 
 namespace ImageConverter.Abnahme;
 
-/// <summary>abnahme.json im Arbeitsordner: Testbilder mit ihren Messbereichen (Anteile 0–1: x0, y0, x1, y1).</summary>
+/// <summary>Contents of abnahme.json in the working folder: test images with their measurement areas (fractions 0–1: x0, y0, x1, y1).</summary>
 public sealed class Config
 {
-    /// <summary>Name des Referenzlaufs (Ordner im Arbeitsordner).</summary>
+    /// <summary>Name of the reference run (folder in the working folder).</summary>
     public string Referenz { get; set; } = "0.4.45";
-    /// <summary>Längste Kante, auf die gerechnet wird (kleinere Bilder bleiben, wie sie sind).</summary>
+    /// <summary>Longest edge the images are rendered at (smaller images stay as they are).</summary>
     public int Kante { get; set; } = 4000;
-    /// <summary>Bild für die Leistungsmessung (am besten das größte).</summary>
+    /// <summary>Image for the performance measurement (preferably the largest).</summary>
     public string Leistungsbild { get; set; } = "";
     public List<Picture> Bilder { get; set; } = [];
     public List<SynthPicture> Synthetisch { get; set; } = [];
@@ -26,24 +26,24 @@ public sealed class Picture
 {
     public string Name { get; set; } = "";
     public string Datei { get; set; } = "";
-    /// <summary>Ferne Landschaft (Wiese, Hügel): Farbton, Buntheit, Detail.</summary>
+    /// <summary>Distant landscape (meadow, hills): hue, chroma, detail.</summary>
     public double[]? Ferne { get; set; }
-    /// <summary>Glatter Himmel: Treppen.</summary>
+    /// <summary>Smooth sky: banding.</summary>
     public double[]? Himmel { get; set; }
-    /// <summary>Sonne im Bild: Strahlen messen.</summary>
+    /// <summary>Sun in the image: measure the rays.</summary>
     public bool Sonne { get; set; }
 }
 
 public sealed class SynthPicture
 {
     public string Name { get; set; } = "";
-    /// <summary>Klares Bild; der Dunst wird künstlich darübergelegt.</summary>
+    /// <summary>Clear image; the haze is added artificially.</summary>
     public string Datei { get; set; } = "";
 }
 
 public sealed record Case(string Name, Adjustments? Adjust, double Denoise = 0, double Sharpen = 0, double SharpenSigma = 1);
 
-/// <summary>Die Fälle der Abnahme — Teil der Definition, darum hier im Code und nicht in der Konfiguration.</summary>
+/// <summary>The acceptance test cases — part of the test definition, hence in the code and not in the configuration.</summary>
 public static class Cases
 {
     public const string Original = "Original";
@@ -56,11 +56,12 @@ public static class Cases
         new("Dunst200x3", new Adjustments(Dehaze: 200)),
         new("Dunst100x1", new Adjustments(Dehaze: 100, DehazePasses: 1)),
         new("DunstMinus50", new Adjustments(Dehaze: -50)),
-        // Einstellungen des Benutzers (Turmlandschaft und Panorama, beispielhaft)
+        // Typical combined settings (Turmlandschaft and Panorama test images)
         new("KombiTurm", new Adjustments(Brightness: 4, Contrast: 24, Shadows: 63, Highlights: -59, Dehaze: 59, Vibrance: 20, Saturation: -17)),
         new("KombiPanorama", new Adjustments(Shadows: 27, Highlights: -71, Dehaze: 211), Sharpen: 1.4, SharpenSigma: 1.3),
-        // Vom Benutzer für das Panorama gewählt (09.10.2026: „sehr gut“) — viele sachte Durchläufe, wenig feine Schärfe.
-        // Braucht den Regler Dunstfarbe (ab 0.5.5); für eine Referenz mit älterem Core diesen Fall auskommentieren.
+        // Settings chosen for the Panorama image and rated "very good" — many gentle passes, little fine sharpening.
+        // Requires the haze colour slider (DehazeCast, Core 0.5.5 or later); comment out this case for a reference run
+        // with an older Core.
         new("NutzerPanorama", new Adjustments(Dehaze: 54, DehazePasses: 7, DehazeClarity: 35, DehazeContrast: 12, DehazeVibrance: 25,
             DehazeSharpen: 29, DehazeEdge: 13, DehazeBrightness: 85, DehazeDeband: 50, DehazeCast: 48)),
         new("ToolsOhneDunst", new Adjustments(Brightness: 10, Contrast: 15, Shadows: 30, Highlights: -30, Vibrance: 15, Warmth: 10)),
@@ -78,7 +79,7 @@ public static class Cases
     public static readonly string[] Performance = ["Dunst100x3", "Dunst100x1", "KombiPanorama", "ToolsOhneDunst"];
 }
 
-/// <summary>Messwerte eines Falls; nicht gemessene bleiben null.</summary>
+/// <summary>Measured values of one case; values that are not measured stay null.</summary>
 public sealed class Metrics
 {
     public double Kontrast { get; set; }
@@ -87,14 +88,14 @@ public sealed class Metrics
     public double? FerneBuntheit { get; set; }
     public double? FerneDetail { get; set; }
     public double? Treppen { get; set; }
-    /// <summary>Stufenhöhe im Himmel in Tonstufen: Sägezahn des quer gemittelten Profils um seinen geglätteten Verlauf (Effektivwert). Glatter Verlauf mit Korn ≈ 0,1; Treppe aus 1-Stufen-Schritten ≈ 0,3.</summary>
+    /// <summary>Step height in the sky in tone levels: sawtooth of the horizontally averaged profile around its smoothed course (RMS). Smooth gradient with grain ≈ 0.1; banding in 1-level steps ≈ 0.3.</summary>
     public double? Stufen { get; set; }
-    /// <summary>Schwankung um die Sonne (Strahlen) im Verhältnis zum Original, 1 = wie das Original.</summary>
+    /// <summary>Variation around the sun (rays) relative to the original; 1 = as in the original.</summary>
     public double? Strahlen { get; set; }
-    /// <summary>Abweichung zur Referenz: mittleres ΔE (Oklab × 100) und 99,5-%-Wert, nach 3×3-Mittel (Dither zählt nicht).</summary>
+    /// <summary>Deviation from the reference: mean ΔE (Oklab × 100) and 99.5 % value, after a 3×3 mean (dither does not count).</summary>
     public double? AbweichungMittel { get; set; }
     public double? AbweichungSpitze { get; set; }
-    // Künstlicher Dunst: Abstand zur Wahrheit
+    // Artificial haze: distance to the ground truth
     public double? WahrheitAlle { get; set; }
     public double? WahrheitOben { get; set; }
     public double? WahrheitGruenFarbton { get; set; }
@@ -125,7 +126,7 @@ public static class Measure
                 var lab = Ok.FromBytes(px, p);
                 var ch = Math.Sqrt(lab.A * lab.A + lab.B * lab.B);
                 var hue = Ok.Hue(lab.A, lab.B);
-                if (hue is < 80 or > 175 || ch < 0.02) continue;   // grün bis gelbgrün
+                if (hue is < 80 or > 175 || ch < 0.02) continue;   // green to yellow-green
                 sa += lab.A; sb += lab.B; c += ch; k++;
             }
             m.FerneDetail = det / Math.Max(1, kd);
@@ -155,10 +156,10 @@ public static class Measure
     }
 
     /// <summary>
-    /// Stufenhöhe: Je Streifen von 32 Pixeln Breite das senkrechte Helligkeitsprofil (über die Breite
-    /// gemittelt — Korn mittelt sich weg, Bänder im Himmel liegen quer dazu), davon der Effektivwert
-    /// der Abweichung zum über ±1 % der Höhe geglätteten Profil. Eine Treppe hinterlässt einen
-    /// Sägezahn (Stufe/√12), ein weicher Verlauf fast nichts.
+    /// Step height: for each strip 32 pixels wide, the vertical brightness profile (averaged across the
+    /// width — grain averages out, bands in the sky run across it), and from that the RMS of the deviation
+    /// from the profile smoothed over ±1 % of the height (at least ±4 rows). Banding leaves a sawtooth
+    /// (step/√12), a smooth gradient almost nothing.
     /// </summary>
     static double Steps(byte[] px, int w, int x0, int y0, int x1, int y1)
     {
@@ -192,7 +193,7 @@ public static class Measure
     static (int, int, int, int) Box(double[] b, int w, int h) =>
         ((int)(b[0] * w), (int)(b[1] * h), (int)(b[2] * w), (int)(b[3] * h));
 
-    /// <summary>Hellste Stelle der oberen Bildhälfte (Mittel über 33 × 33 Pixel).</summary>
+    /// <summary>Brightest spot in the upper half of the image (sum of 5 × 5 samples 8 px apart, covering 33 × 33 pixels).</summary>
     public static (int X, int Y) FindSun(byte[] px, int w, int h)
     {
         int bx = 0, by = 0; double best = -1;
@@ -206,7 +207,7 @@ public static class Measure
         return (bx, by);
     }
 
-    /// <summary>Strahlen: Schwankung der Helligkeit über 96 Winkel auf Ringen um die Sonne (3, 5 und 8 % der Kante), gemittelt.</summary>
+    /// <summary>Rays: brightness variation over 96 angles on rings around the sun (3, 5 and 8 % of the edge), averaged.</summary>
     public static double Rays(byte[] px, int w, int h, (int X, int Y) sun)
     {
         var edge = Math.Max(w, h);
@@ -230,7 +231,7 @@ public static class Measure
         return rings > 0 ? total / rings : 0;
     }
 
-    /// <summary>Abweichung zweier gleich großer Bilder nach 3 × 3-Mittel: mittleres ΔE und 99,5-%-Wert (Oklab × 100).</summary>
+    /// <summary>Deviation of two images of equal size after a 3 × 3 mean: mean ΔE and 99.5 % value (Oklab × 100).</summary>
     public static (double Mean, double Peak) Difference(byte[] a, byte[] b, int w, int h)
     {
         var d = new List<double>(w * h / 4);
@@ -246,13 +247,13 @@ public static class Measure
     }
 }
 
-/// <summary>Künstlicher Dunst über einem klaren Bild (bekannte Wahrheit) — wie die Laborumgebung bis 0.4.39.</summary>
+/// <summary>Artificial haze over a clear image (known ground truth).</summary>
 public static class Synthetic
 {
     static float Lin(byte v) { var x = v / 255f; return x <= 0.04045f ? x / 12.92f : MathF.Pow((x + 0.055f) / 1.055f, 2.4f); }
     static byte Enc(float l) { l = Math.Clamp(l, 0, 1); var x = l <= 0.0031308f ? 12.92f * l : 1.055f * MathF.Pow(l, 1 / 2.4f) - 0.055f; return (byte)(x * 255 + 0.5f); }
 
-    /// <summary>Durchlässigkeit von 1 (unten) bis 0,35 (oben), Luftlicht links bläulich, rechts warm.</summary>
+    /// <summary>Transmission from 1 (bottom) to 0.35 (top); airlight bluish on the left, warm on the right.</summary>
     public static (byte[] Truth, byte[] Hazy, int W, int H) Make(MagickImage clear)
     {
         var truth = ImageOps.ToBgra(clear);
@@ -300,7 +301,7 @@ public static class Synthetic
     }
 }
 
-/// <summary>Bericht auf der Konsole: Werte, Änderung zur Referenz, ✗ wo es schlechter wurde.</summary>
+/// <summary>Console report: values, change relative to the reference, ✗ where a value got worse.</summary>
 public static class Report
 {
     public static int Failures;
@@ -317,7 +318,7 @@ public static class Report
             Cell(m.FerneFarbton, r?.FerneFarbton, "F1", 9, abs: 3, worse: d => Math.Abs(d) > 5),
             Cell(m.FerneBuntheit, r?.FerneBuntheit, "F3", 7, rel: 0.08),
             Cell(m.FerneDetail, r?.FerneDetail, "F2", 7, rel: 0.10),
-            // Lücken im Tonwertvorrat: nur zur Information — Dither füllt Lücken auf, das Urteil fällt über die Stufenhöhe
+            // Gaps in the tonal range: for information only — dither fills gaps, the verdict is based on the step height
             Cell(m.Treppen, r?.Treppen, "F1", 8, abs: 0.5),
             Cell(m.Stufen, r?.Stufen, "F2", 7, abs: 0.03, worse: d => d > 0.06),
             Cell(m.Strahlen, r?.Strahlen, "F2", 9, abs: 0.05, worse: d => d < -0.08),
@@ -335,7 +336,7 @@ public static class Report
                           + $"{Cell(m.WahrheitOben, r?.WahrheitOben, "F2", 9, abs: 0.3, worse: d => d > 1.0)} "
                           + $"{Cell(m.WahrheitGruenFarbton, r?.WahrheitGruenFarbton, "F1", 9, abs: 2, worse: _ => Math.Abs(m.WahrheitGruenFarbton ?? 0) - Math.Abs(r?.WahrheitGruenFarbton ?? 0) > 2)}");
 
-    /// <summary>Wert, dahinter ≈ (wie die Referenz), ↑/↓ (geändert) oder ✗ (schlechter).</summary>
+    /// <summary>Value followed by ≈ (as the reference), ↑/↓ (changed) or ✗ (worse).</summary>
     static string Cell(double? v, double? r, string fmt, int width, double rel = 0, double abs = 0, Func<double, bool>? worse = null)
     {
         if (v is null) return new string(' ', width - 1) + "–";
@@ -351,7 +352,7 @@ public static class Report
     }
 }
 
-/// <summary>Vergleichsbilder: Referenz über Aktuell, darunter die Abweichung achtfach verstärkt.</summary>
+/// <summary>Comparison images: reference above current, below that the difference amplified eightfold.</summary>
 public static class Compare
 {
     public static void Pictures(string root, string refName, string name, Config config)
@@ -379,7 +380,7 @@ public static class Compare
     }
 }
 
-/// <summary>Oklab (Ottosson) für die Messung — eigenständig, damit sie nicht von der geprüften Fassung abhängt.</summary>
+/// <summary>Oklab (Ottosson) for the measurement — self-contained so that it does not depend on the build under test.</summary>
 public static class Ok
 {
     static readonly float[] Table = Enumerable.Range(0, 256).Select(i =>

@@ -40,7 +40,7 @@ public sealed class ImageLoaderTests : IDisposable
 
         Assert.Equal(40, loaded.Width);
         Assert.Equal(20, loaded.Height);
-        // Einfarbige PNGs speichert ImageMagick mit 1 Bit — der Export muss trotzdem 8 Bit liefern
+        // ImageMagick stores single-colour PNGs with 1 bit; the BGRA conversion must still deliver 8 bits per channel.
         Assert.Equal(40 * 20 * 4, bgra.Length);
         Assert.Equal([0, 0, 255, 255], bgra[..4]);
         Assert.Equal("PNG", loaded.FormatName);
@@ -49,9 +49,9 @@ public sealed class ImageLoaderTests : IDisposable
     [Fact]
     public async Task AppliesExifOrientation_LikePhonePhotos()
     {
-        // Querformat-Pixel, EXIF sagt "um 90° gedreht anzeigen" — wie bei Handyfotos.
-        // ImageMagick schreibt beim Speichern den EXIF-Wert aus der Orientation-
-        // Eigenschaft — deshalb beides setzen, so wie eine Kamera die Datei anlegt.
+        // Landscape pixels, EXIF says "display rotated by 90°", as with phone photos.
+        // When saving, ImageMagick writes the EXIF value from the Orientation property,
+        // so both are set, the way a camera creates the file.
         using var image = new MagickImage(MagickColors.Blue, 40, 20);
         var exif = new ExifProfile();
         exif.SetValue(ExifTag.Orientation, (ushort)6);

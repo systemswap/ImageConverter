@@ -4,9 +4,9 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// 16 Bit je Kanal: bei kräftiger Tonwert-Bearbeitung empfohlen und nach jeder solchen Änderung von der App gesetzt (auch
-/// wenn er von Hand heraus war); einen selbst gesetzten nimmt sie unter der Schwelle wieder heraus, einen von Hand gesetzten
-/// nicht; Rückgängig des auslösenden Reglers nimmt den Haken mit.
+/// Tests „16 Bit je Kanal“: recommended for strong tonal edits and ticked by the app after every such change (even if it
+/// was unticked by hand); the app unticks a tick it set itself once the edits fall below the threshold, but not a tick set
+/// by hand; undoing the slider that triggered it also undoes the tick.
 /// </summary>
 public class HighBitDepthTests
 {
@@ -16,7 +16,7 @@ public class HighBitDepthTests
     public void SpreadsTones_FromStrongTonalEdits_Only()
     {
         Assert.False(Adjustments.None.SpreadsTones);
-        Assert.False(new Adjustments(Dehaze: 10, Contrast: 15, Saturation: 80, Vibrance: 60).SpreadsTones);   // leicht, Farbe zählt nicht
+        Assert.False(new Adjustments(Dehaze: 10, Contrast: 15, Saturation: 80, Vibrance: 60).SpreadsTones);   // light edits; colour does not count
         Assert.True(new Adjustments(Dehaze: 20).SpreadsTones);
         Assert.True(new Adjustments(Contrast: -25).SpreadsTones);
         Assert.True(new Adjustments(Shadows: 30).SpreadsTones);
@@ -32,13 +32,13 @@ public class HighBitDepthTests
 
         vm.Dehaze = 40;
         Assert.True(vm.HighBitDepthRecommended);
-        Assert.True(vm.HighBitDepth);              // selbst gesetzt
+        Assert.True(vm.HighBitDepth);              // set by the app
 
         vm.Dehaze = 0;
         Assert.False(vm.HighBitDepthRecommended);
-        Assert.False(vm.HighBitDepth);             // selbst gesetzt → selbst wieder heraus
+        Assert.False(vm.HighBitDepth);             // set by the app → removed by the app
 
-        vm.SelectedFormat = "JPEG";                // kein 16 Bit: keine Empfehlung
+        vm.SelectedFormat = "JPEG";                // no 16 bits: no recommendation
         vm.Dehaze = 40;
         Assert.False(vm.HighBitDepthRecommended);
     }
@@ -49,16 +49,16 @@ public class HighBitDepthTests
         var vm = Create();
         vm.Dehaze = 40;
         Assert.True(vm.HighBitDepth);
-        vm.HighBitDepth = false;                   // von Hand heraus …
-        Assert.False(vm.HighBitDepth);             // … bleibt aus, bis wieder etwas Kräftiges geändert wird
+        vm.HighBitDepth = false;                   // unticked by hand …
+        Assert.False(vm.HighBitDepth);             // … stays off until another strong change is made
         vm.Dehaze = 60;
-        Assert.True(vm.HighBitDepth);              // lieber wieder an als vergessen
+        Assert.True(vm.HighBitDepth);              // ticked again rather than forgotten
 
         var hand = Create();
-        hand.HighBitDepth = true;                  // von Hand gesetzt
+        hand.HighBitDepth = true;                  // ticked by hand
         hand.Dehaze = 40;
         hand.Dehaze = 0;
-        Assert.True(hand.HighBitDepth);            // die App nimmt ihn nicht heraus
+        Assert.True(hand.HighBitDepth);            // the app does not untick it
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class HighBitDepthTests
         await vm.UndoCommand.ExecuteAsync(null);
         Assert.Equal(0, vm.Dehaze);
         Assert.False(vm.HighBitDepth);
-        Assert.False(vm.CanUndo);                  // kein eigener Schritt für den Haken
+        Assert.False(vm.CanUndo);                  // no separate undo step for the tick
 
         await vm.RedoCommand.ExecuteAsync(null);
         Assert.Equal(40, vm.Dehaze);

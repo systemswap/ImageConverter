@@ -4,16 +4,16 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Rauschen getrennt nach Helligkeit und Farbe: Rauschen weg, Details (feine Streifen, Kanten) bleiben, die Farb-Regler
-/// lassen die Helligkeit in Ruhe.
+/// Tests noise reduction separated into luminance and colour: the noise goes, details (fine stripes, edges) stay, and
+/// the colour sliders leave the luminance alone.
 /// </summary>
 public class DenoiserTests
 {
     private const int W = 256, H = 192;
 
     /// <summary>
-    /// Grafikkarte (wenn vorhanden) und CPU rechnen dasselbe Non-Local Means: Abweichung nur in der Rundung (unter
-    /// 1/1000 Stufe). Ohne Grafikkarte prüft der Test nur, dass die CPU rechnet.
+    /// GPU (if available) and CPU compute the same non-local means: the difference is rounding only (below 1/1000 of
+    /// a level). Without a GPU the test only checks that the CPU path runs.
     /// </summary>
     [Fact]
     public void LumaDenoise_GpuAndCpu_Agree()
@@ -26,7 +26,7 @@ public class DenoiserTests
         Assert.True(max < 1e-3, $"Grafikkarte ({GpuFilters.DeviceName ?? "keine"}) weicht um {max:0.0000} Stufen ab");
     }
 
-    /// <summary>Links eben, rechts feine senkrechte Streifen (Periode 6 px) — dazu Rauschen in Helligkeit und/oder Farbe.</summary>
+    /// <summary>Builds a scene that is flat on the left and has fine vertical stripes (period 6 px) on the right, plus luminance and/or colour noise.</summary>
     private static (float[] Noisy, float[] Clean) Scene(float lumaNoise, float chromaNoise)
     {
         var n1 = FaceDetails.GrainField(0, 0, W, H, 0, seed: 1);
@@ -40,7 +40,7 @@ public class DenoiserTests
             var v = x < W / 2 ? 0.5f : 0.5f + 0.15f * MathF.Sin(x * MathF.PI / 3);
             var l = lumaNoise * n1[i];
             float cb = chromaNoise * n2[i], cr = chromaNoise * n3[i];
-            // Helligkeit v + l, Farbabstände cb, cr → RGB (wie im Entrauscher)
+            // Luminance v + l, colour differences cb, cr → RGB (as in the denoiser)
             var yy = v + l;
             float r = yy + cr, b = yy + cb, g = (yy - 0.2126f * r - 0.0722f * b) / 0.7152f;
             (noisy[i * 4], noisy[i * 4 + 1], noisy[i * 4 + 2], noisy[i * 4 + 3]) = (b, g, r, 1);
@@ -51,7 +51,7 @@ public class DenoiserTests
 
     private static float Luma(float[] px, int i) => 0.2126f * px[i * 4 + 2] + 0.7152f * px[i * 4 + 1] + 0.0722f * px[i * 4];
 
-    /// <summary>Mittlere quadratische Abweichung vom sauberen Bild in einem Bereich (Helligkeit oder Farbe Cr).</summary>
+    /// <summary>Root mean square deviation from the clean image in a region (luminance or colour difference Cr).</summary>
     private static double Error(float[] a, float[] clean, int x0, int x1, bool chroma)
     {
         double sum = 0;
@@ -72,11 +72,11 @@ public class DenoiserTests
         var (noisy, clean) = Scene(lumaNoise: 0.03f, chromaNoise: 0);
         var result = Denoiser.Apply(noisy, W, H, luma: 0.7, chroma: 0);
 
-        // eben: Rauschen deutlich kleiner
+        // flat area: noise clearly lower
         var (before, after) = (Error(noisy, clean, 8, W / 2 - 8, false), Error(result, clean, 8, W / 2 - 8, false));
         Assert.True(after < before * 0.5, $"eben: vorher {before:0.0000}, nachher {after:0.0000}");
 
-        // Streifen: näher am sauberen Bild als vorher — sie werden nicht weggebügelt
+        // stripes: closer to the clean image than before denoising; they are not smoothed away
         var (sb, sa) = (Error(noisy, clean, W / 2 + 8, W - 8, false), Error(result, clean, W / 2 + 8, W - 8, false));
         Assert.True(sa < sb, $"Streifen: vorher {sb:0.0000}, nachher {sa:0.0000}");
     }
@@ -90,7 +90,7 @@ public class DenoiserTests
         var (before, after) = (Error(noisy, clean, 8, W - 8, true), Error(result, clean, 8, W - 8, true));
         Assert.True(after < before * 0.3, $"Farbe: vorher {before:0.0000}, nachher {after:0.0000}");
 
-        // Helligkeit unverändert
+        // luminance unchanged
         double maxLuma = 0;
         for (var i = 0; i < W * H; i++) maxLuma = Math.Max(maxLuma, Math.Abs(Luma(result, i) - Luma(noisy, i)));
         Assert.True(maxLuma < 1e-4, $"Helligkeit verändert um {maxLuma}");

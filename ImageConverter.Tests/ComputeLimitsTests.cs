@@ -2,7 +2,7 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Obergrenze der CPU: Stränge für Schleifen und KI, Kerne zählen.</summary>
+/// <summary>CPU limit: threads for parallel loops and AI, counting cores.</summary>
 public class ComputeLimitsTests
 {
     [Fact]
@@ -20,7 +20,7 @@ public class ComputeLimitsTests
             Assert.Equal(Math.Max(1, (int)Math.Round(Environment.ProcessorCount * 0.5)), ComputeLimits.Options.MaxDegreeOfParallelism);
             Assert.Equal(Math.Max(1, (int)Math.Round(ComputeLimits.PhysicalCores * 0.5)), ComputeLimits.OnnxThreads);
 
-            ComputeLimits.SetPercent(3);   // unter 10 % wird auf 10 % angehoben, nie 0 Stränge
+            ComputeLimits.SetPercent(3);   // below 10 % is raised to 10 %, never 0 threads
             Assert.Equal(10, ComputeLimits.Percent);
             Assert.True(ComputeLimits.Options.MaxDegreeOfParallelism >= 1);
             Assert.True(ComputeLimits.OnnxThreads >= 1);
@@ -52,7 +52,8 @@ public class ComputeLimitsTests
     [Fact]
     public void ImageMagickThreads_AreSetOnce_NeverWhileItMayBeWorking()
     {
-        // Ändern der Strangzahl während ImageMagick rechnet beschädigt dessen Speicher (Absturz) — nur einmal beim Start
+        // Changing the thread count while ImageMagick is working corrupts its memory (crash), so it is set only once at
+        // start-up. See docs/FEHLERGEDAECHTNIS.md, No. 77.
         ComputeLimits.SetPercent(ComputeLimits.Percent);
         var threads = ImageMagick.ResourceLimits.Thread;
         try

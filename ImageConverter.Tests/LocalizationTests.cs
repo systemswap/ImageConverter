@@ -10,9 +10,9 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Mehrsprachigkeit: Englisch muss jeden Text kennen, Sprachdateien aus dem Ordner
-/// languages werden gelesen. Schaltet die Sprache um — darum nicht parallel zu anderen
-/// Tests, die deutsche Meldungen prüfen.
+/// Localisation: English must know every text, and language files from the languages folder
+/// are read. The tests switch the language — hence they do not run in parallel with other
+/// tests that check German messages.
 /// </summary>
 [Collection(nameof(LocalizationTests))]
 [CollectionDefinition(nameof(LocalizationTests), DisableParallelization = true)]
@@ -38,7 +38,7 @@ public sealed partial class LocalizationTests : IDisposable
     [GeneratedRegex(@"Tr\.T\(""((?:[^""\\]|\\.)*)""")]
     private static partial Regex CsCall();
 
-    /// <summary>Alle deutschen Texte, die die Oberfläche übersetzt anzeigt.</summary>
+    /// <summary>Collects all German texts that the user interface displays translated.</summary>
     internal static SortedSet<string> AllTexts()
     {
         var texts = new SortedSet<string>(StringComparer.Ordinal);
@@ -59,7 +59,7 @@ public sealed partial class LocalizationTests : IDisposable
                 texts.Add(Regex.Unescape(m.Groups[1].Value));
         }
 
-        // Listen, deren Werte deutsche Texte sind und übersetzt angezeigt werden
+        // Lists whose values are German texts and are displayed translated
         var vm = new MainViewModel();
         texts.UnionWith(vm.MetadataModes);
         texts.UnionWith(vm.ColorModes);
@@ -75,10 +75,10 @@ public sealed partial class LocalizationTests : IDisposable
         texts.Add("Als PDF speichern");
         foreach (var f in FilterOption.All) { texts.Add(f.Description); texts.Add(f.BestFor); }
         foreach (var m in AiModelCatalog.All) { texts.Add(m.Name); texts.Add(m.Purpose); texts.Add(m.Description); texts.Add(m.Origin); }
-        // Papier: nur beschreibende Namen („Foto 10 × 15 cm“), nicht A4 oder Letter
+        // Paper: only descriptive names ("Foto 10 × 15 cm"), not A4 or Letter
         foreach (var p in PaperSize.Common) if (p.Name.Contains(' ')) texts.Add(p.Name);
 
-        // Texte ohne Buchstaben (Symbole, Zahlen) und reine Eigennamen brauchen keine Übersetzung
+        // Texts without letters (symbols, numbers) need no translation
         texts.RemoveWhere(t => !t.Any(char.IsLetter));
         return texts;
     }
@@ -93,9 +93,9 @@ public sealed partial class LocalizationTests : IDisposable
     }
 
     /// <summary>
-    /// Kein deutscher Text doppelt in English.cs: Die Tabelle wird über den Indexer gefüllt, ein zweiter Eintrag
-    /// überschreibt den ersten still. So hätte „Ziel“ für den neuen Luminanz-Regler (0.5.42) die Beschriftung des
-    /// Speicherorts beim Export in „Target“ verwandelt.
+    /// No German text appears twice in English.cs: the table is filled through the indexer, so a second entry
+    /// silently overwrites the first. For example, a second entry for "Ziel" (luminance slider) would turn the label
+    /// of the export destination into "Target".
     /// </summary>
     [Fact]
     public void English_HasNoDuplicateKeys()
@@ -111,7 +111,7 @@ public sealed partial class LocalizationTests : IDisposable
     [Fact]
     public void English_HasNoLeftovers()
     {
-        // Einträge, die im Code nicht mehr vorkommen — Text wurde geändert oder entfernt
+        // Entries that no longer occur in the code — the text was changed or removed
         var used = AllTexts();
         var stale = English.Texts.Keys.Where(k => !used.Contains(k)).ToList();
         Assert.True(stale.Count == 0, "Nicht mehr benutzt:\n" + string.Join("\n", stale));
@@ -152,8 +152,8 @@ public sealed partial class LocalizationTests : IDisposable
 
         Tr.Use(fr);
         Assert.Equal("Exporter", Tr.T("Exportieren"));
-        Assert.Equal("Close", Tr.T("Schließen"));                 // fehlt in fr.json → Englisch
-        Assert.Equal("Unbekannter Text", Tr.T("Unbekannter Text"));  // fehlt überall → Deutsch
+        Assert.Equal("Close", Tr.T("Schließen"));                 // missing in fr.json → English
+        Assert.Equal("Unbekannter Text", Tr.T("Unbekannter Text"));  // missing everywhere → German
 
         Tr.Use(Language.German);
         Assert.Equal("Exportieren", Tr.T("Exportieren"));
@@ -207,10 +207,10 @@ public sealed partial class LocalizationTests : IDisposable
         var path = Languages.WriteTemplate(_dir);
         Assert.Equal("_vorlage.json", Path.GetFileName(path));
 
-        // Die Vorlage selbst wird nicht als Sprache geladen (Unterstrich) …
+        // The template itself is not loaded as a language (leading underscore) …
         Assert.DoesNotContain(Languages.All(out _, _dir), l => l.Code == "xx");
 
-        // … umbenannt schon, mit allen Texten
+        // … but it is once renamed, with all texts
         File.Copy(path, Path.Combine(_dir, "xx.json"));
         var xx = Languages.All(out var problems, _dir).Single(l => l.Code == "xx");
         Assert.Empty(problems);
@@ -220,7 +220,7 @@ public sealed partial class LocalizationTests : IDisposable
     [Theory]
     [InlineData("de-DE", "de")]
     [InlineData("en-US", "en")]
-    [InlineData("fr-FR", "en")]   // keine französische Datei → Englisch
+    [InlineData("fr-FR", "en")]   // no French file → English
     public void FirstStart_FollowsTheSystem(string culture, string expected)
     {
         var all = Languages.All(out _, _dir);

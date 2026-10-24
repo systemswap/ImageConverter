@@ -5,18 +5,24 @@ using System.Text;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Eigenes Log neben dem Programm („ImageConverter.log“): Abstürze und unbehandelte Fehler — man muss nicht in der
-/// Ereignisanzeige suchen. Ein Absturz in nativem Code (ONNX Runtime, ImageMagick) lässt sich in .NET nicht abfangen; dafür
-/// merkt sich jede laufende App in einer kleinen Datei, was sie gerade rechnet („ImageConverter.&lt;pid&gt;.laeuft“). Fehlt
-/// beim nächsten Start das saubere Ende, kommt der Absturz mit der letzten Tätigkeit ins Log — unter Windows mit dem Eintrag
-/// der Ereignisanzeige (Stapel), den Windows selbst schreibt.
+/// The program's own log next to the program ("ImageConverter.log") for crashes and unhandled errors, so
+/// that there is no need to search the Windows Event Viewer.
 /// </summary>
+/// <remarks>
+/// A crash in native code (ONNX Runtime, ImageMagick) cannot be caught in .NET. Each running instance
+/// therefore records in a small marker file what it is currently processing
+/// ("ImageConverter.&lt;pid&gt;.laeuft"). If a later start finds a marker without a clean exit, the crash is
+/// written to the log together with the last activity; on Windows also with the Event Viewer entries
+/// (including the stack trace) that Windows itself writes. All file errors are ignored; logging never
+/// throws.
+/// </remarks>
 public static class AppLog
 {
+    /// <summary>File name of the log.</summary>
     public const string FileName = "ImageConverter.log";
     private const string MarkerPrefix = "ImageConverter.";
     private const string MarkerSuffix = ".laeuft";
-    private const long MaxBytes = 1 << 20;   // darüber: alte Hälfte nach „.log.alt“
+    private const long MaxBytes = 1 << 20;   // above this size the log is moved to ".log.alt" and a new one is started
 
     private static readonly Lock Gate = new();
     private static string? _folder;
@@ -25,10 +31,14 @@ public static class AppLog
     private static string? _activity;
     private static DateTime _activitySince;
 
-    /// <summary>Pfad des Logs, null wenn kein beschreibbarer Ordner gefunden wurde.</summary>
+    /// <summary>Path of the log; <see langword="null"/> if no writable folder was found or <see cref="Start"/> has not run.</summary>
     public static string? LogPath => _folder is null ? null : Path.Combine(_folder, FileName);
 
-    /// <summary>Beim Start: Ordner wählen, Abstürze vom letzten Mal nachtragen, eigene Lauf-Datei anlegen, Fehler abonnieren.</summary>
+    /// <summary>
+    /// Initialises the log at program start: chooses the folder, reports crashes of earlier runs in the
+    /// background, creates the marker file of this process and subscribes to unhandled exceptions.
+    /// </summary>
+    /// <param name="folder">Log folder; <see langword="null"/> to use the first writable one (next to the program, then the user data folder).</param>
     public static void Start(string? folder = null)
     {
         _folder = folder ?? WritableFolder();
@@ -37,7 +47,7 @@ public static class AppLog
         var pid = Environment.ProcessId;
         _marker = Path.Combine(_folder, MarkerPrefix + pid + MarkerSuffix);
 
-        // Lauf-Dateien anderer Prozesse: läuft der Prozess nicht mehr, endete er ohne sauberes Ende
+        // Marker files of other processes: if that process is no longer running, it ended without a clean exit.
         var crashed = new List<string>();
         foreach (var file in SafeFiles(_folder))
             if (PidOf(file) is { } other && other != pid && !IsRunning(other)) crashed.Add(file);
@@ -50,7 +60,7 @@ public static class AppLog
             Write("Fehler in einer Hintergrundaufgabe (nicht abgefangen)", e.Exception.ToString());
     }
 
-    /// <summary>Sauberes Ende: Lauf-Datei weg.</summary>
+    /// <summary>Marks a clean exit by deleting the marker file of this process.</summary>
     public static void Stop()
     {
         if (_marker is null) return;
@@ -58,7 +68,10 @@ public static class AppLog
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
-    /// <summary>Was gerade rechnet (KI-Modell, Upscaling …) — steht nach einem Absturz im Log. null = nichts mehr.</summary>
+    /// <summary>
+    /// Records the current activity (AI model, upscaling …), which appears in the log after a crash.
+    /// </summary>
+    /// <param name="what">Description of the activity; <see langword="null"/> when it has finished.</param>
     public static void Activity(string? what)
     {
         _activity = what;
@@ -66,7 +79,10 @@ public static class AppLog
         WriteMarker();
     }
 
-    /// <summary>Eintrag mit Zeit, Überschrift und eingerücktem Text.</summary>
+    /// <summary>Appends an entry with the time, a title and indented details.</summary>
+    /// <param name="title">Title line of the entry.</param>
+    /// <param name="details">Optional multi-line text; each line is indented by four spaces.</param>
+    /// <remarks>Thread-safe. Does nothing if there is no log path.</remarks>
     public static void Write(string title, string? details = null)
     {
         if (LogPath is not { } path) return;
@@ -86,7 +102,7 @@ public static class AppLog
         }
     }
 
-    // ------------------------------------------------------------ intern
+    // ------------------------------------------------------------ Internal
 
     private static Encoding AnsiEncoding()
     {
@@ -101,7 +117,7 @@ public static class AppLog
         }
     }
 
-    /// <summary>Zeit eines Ereignisses aus der Zeile „Date: …“ von wevtutil.</summary>
+    /// <summary>Time of an event from the "Date: …" line of the wevtutil output.</summary>
     private static DateTime? DateOf(string evt)
     {
         var i = evt.IndexOf("Date: ", StringComparison.Ordinal);
@@ -111,7 +127,7 @@ public static class AppLog
         return DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var d) ? d : null;
     }
 
-    /// <summary>Neben dem Programm, wenn dort geschrieben werden darf; sonst im Benutzerordner.</summary>
+    /// <summary>Next to the program if that folder is writable; otherwise in the user data folder.</summary>
     private static string? WritableFolder()
     {
         foreach (var dir in new[]
@@ -168,7 +184,10 @@ public static class AppLog
         catch (Exception e) when (e is ArgumentException or InvalidOperationException) { return false; }
     }
 
-    /// <summary>Für jede verwaiste Lauf-Datei: Absturz ins Log, mit letzter Tätigkeit und (Windows) der Ereignisanzeige.</summary>
+    /// <summary>
+    /// For each orphaned marker file: writes the crash to the log with the last activity and (on Windows) the
+    /// Event Viewer entries, then deletes the marker.
+    /// </summary>
     private static void ReportCrashes(IEnumerable<string> markers)
     {
         foreach (var marker in markers)
@@ -196,9 +215,9 @@ public static class AppLog
     }
 
     /// <summary>
-    /// Einträge von „Application Error“ (mit Prozess-ID) und „.NET Runtime“ (mit Stapel, ohne Prozess-ID — der zeitlich
-    /// passende davor) zu diesem Absturz — über wevtutil (gehört zu Windows), ohne zusätzliches Paket. Leer, wenn nichts
-    /// gefunden oder nicht lesbar.
+    /// Event Viewer entries for this crash from "Application Error" (with process ID) and ".NET Runtime" (with stack
+    /// trace but without process ID, so the one matching in time is chosen), read with wevtutil, which is part of
+    /// Windows, so no additional package is needed. Empty if nothing was found or the log could not be read.
     /// </summary>
     private static string EventLogSince(DateTime from, int? pid)
     {
@@ -210,7 +229,7 @@ public static class AppLog
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                // wevtutil schreibt umgeleitet in der ANSI-Codepage (deutsch: 1252)
+                // When redirected, wevtutil writes in the ANSI code page (1252 on German systems).
                 StandardOutputEncoding = AnsiEncoding(),
             };
             foreach (var arg in new[]
@@ -223,12 +242,12 @@ public static class AppLog
             if (p is null) return "";
             var output = p.StandardOutput.ReadToEndAsync();
             if (!p.WaitForExit(10_000) || !output.Wait(1000)) return "";
-            // Ein Ereignis beginnt mit „Event[n]“; nur die zu diesem Programm
+            // Each event starts with "Event[n]"; keep only those that concern this program.
             var events = output.Result.Replace("\0", "").Split("Event[", StringSplitOptions.RemoveEmptyEntries)
                 .Where(e => e.Contains("ImageConverter", StringComparison.OrdinalIgnoreCase))
                 .Select(e => (Text: "Event[" + e.TrimEnd(), Date: DateOf(e), Runtime: e.Contains(".NET Runtime", StringComparison.Ordinal)))
                 .ToList();
-            // Absturzmeldung dieses Prozesses (neueste zuerst); ohne Prozess-ID die neueste
+            // Crash report of this process (newest first); without a process ID the newest one.
             var crash = events.FirstOrDefault(e => !e.Runtime && (pid is not { } id || e.Text.Contains($"0x{id:X}", StringComparison.OrdinalIgnoreCase)));
             if (crash.Text is null) crash = events.FirstOrDefault(e => !e.Runtime && pid is null);
             var at = crash.Text is null ? (DateTime?)null : crash.Date;

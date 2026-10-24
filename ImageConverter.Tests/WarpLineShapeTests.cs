@@ -5,8 +5,8 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Linien im Werkzeug „Gewölbtes Blatt“: ein Vorschlag, der auf einer eigenen Linie liegt, gilt als doppelt (wird nicht
-/// noch einmal vorgeschlagen); übernommene Vorschläge sind eigene Linien.
+/// Lines in the curved-page tool: a suggestion that lies on an own line counts as a duplicate (it is not
+/// suggested again); adopted suggestions become own lines.
 /// </summary>
 public class WarpLineShapeTests
 {
@@ -17,10 +17,10 @@ public class WarpLineShapeTests
     public void Overlaps_SameLine_ShortOwnLineOnLongSuggestion_ButNotTheNextRow()
     {
         var suggestion = Line((100, 200), (500, 205), (900, 200));
-        Assert.True(Line((102, 203), (898, 198)).Overlaps(suggestion, 6));              // fast dieselbe
-        Assert.True(Line((400, 206), (600, 204)).Overlaps(suggestion, 6));              // kurze eigene Linie auf dem langen Vorschlag
-        Assert.False(Line((100, 240), (900, 240)).Overlaps(suggestion, 6));             // nächste Zeile, 40 px tiefer
-        Assert.False(Line((100, 200)).Overlaps(suggestion, 6));                          // ein Punkt allein ist keine Linie
+        Assert.True(Line((102, 203), (898, 198)).Overlaps(suggestion, 6));              // almost the same line
+        Assert.True(Line((400, 206), (600, 204)).Overlaps(suggestion, 6));              // short own line on the long suggestion
+        Assert.False(Line((100, 240), (900, 240)).Overlaps(suggestion, 6));             // next row, 40 px lower
+        Assert.False(Line((100, 200)).Overlaps(suggestion, 6));                          // a single point is not a line
     }
 
     [Fact]

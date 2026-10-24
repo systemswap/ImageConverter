@@ -4,8 +4,8 @@ using ImageMagick;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Frei drehen: der automatische Rahmen (größtes Rechteck im Seitenverhältnis, ganz im gedrehten
-/// Bild) und das Drehen + Zuschneiden des echten Bildes.
+/// Free rotation: the automatic frame (largest rectangle with the aspect ratio that lies entirely inside the
+/// rotated image) and rotating + cropping the actual image.
 /// </summary>
 public class RotationTests
 {
@@ -25,7 +25,7 @@ public class RotationTests
     [Fact]
     public void LargestInside_LandscapeAt90_IsSmallLandscape()
     {
-        // 300 × 200 um 90° gedreht ist 200 breit und 300 hoch: hinein passt 3:2 nur mit 200 × 133
+        // 300 × 200 rotated by 90° is 200 wide and 300 high: a 3:2 frame fits only at 200 × 133
         var (x, y, w, h) = RotationGeometry.LargestInside(300, 200, 90, 1.5);
         Assert.Equal(200, w, 3);
         Assert.Equal(133.333, h, 3);
@@ -34,8 +34,8 @@ public class RotationTests
     }
 
     /// <summary>
-    /// Erst kleiner, dann wieder größer: Bis 45° schrumpft der Rahmen, danach wächst er wieder —
-    /// und er liegt immer genau an den schrägen Kanten an.
+    /// First smaller, then larger again: as the angle increases the frame shrinks and later grows again —
+    /// and it always touches the slanted edges exactly.
     /// </summary>
     [Theory]
     [InlineData(1)]
@@ -50,11 +50,11 @@ public class RotationTests
         var (x, y, w, h) = RotationGeometry.LargestInside(300, 200, degrees, 1.5);
         Assert.True(RotationGeometry.ContainsRect(300, 200, degrees, x, y, w, h, tolerance: 1e-6));
 
-        // 1 % größer passt nicht mehr: Der Rahmen nutzt den Platz ganz aus
+        // 1 % larger no longer fits: the frame uses all the available space
         var bigger = (w * 1.01, h * 1.01);
         Assert.False(RotationGeometry.ContainsRect(300, 200, degrees,
             150 - bigger.Item1 / 2, 100 - bigger.Item2 / 2, bigger.Item1, bigger.Item2));
-        Assert.Equal(1.5, w / h, 6);   // Seitenverhältnis bleibt
+        Assert.Equal(1.5, w / h, 6);   // aspect ratio is kept
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class RotationTests
         return (bgra[o], bgra[o + 1], bgra[o + 2], bgra[o + 3]);
     }
 
-    /// <summary>Mit dem automatischen Rahmen bleiben keine leeren Ecken — bis in die Eckpixel nur Bild.</summary>
+    /// <summary>With the automatic frame there are no empty corners — image content right up to the corner pixels.</summary>
     [Theory]
     [InlineData(5)]
     [InlineData(-12.5)]
@@ -100,7 +100,7 @@ public class RotationTests
     {
         using var src = new MagickImage(MagickColors.Red, 300, 200);
         var (fx, fy, fw, fh) = RotationGeometry.LargestInside(300, 200, degrees, 1.5);
-        // Wie die Vorschau: auf ganze Pixel nach innen gerundet, 1 px Abstand zur Kante
+        // As in the preview: rounded inwards to whole pixels, 1 px away from the edge
         var x = (int)Math.Ceiling(fx) + 1;
         var y = (int)Math.Ceiling(fy) + 1;
         var w = (int)Math.Floor(fx + fw) - 1 - x;
@@ -109,7 +109,7 @@ public class RotationTests
         using var result = ImageOps.RotateAndCrop(src, degrees, x, y, w, h, radius: 0);
 
         Assert.Equal(((uint)w, (uint)h), (result.Width, result.Height));
-        Assert.False(result.HasAlpha);   // ohne Transparenz geladen → ohne Alphakanal zurück
+        Assert.False(result.HasAlpha);   // loaded without transparency → returned without an alpha channel
         foreach (var (px, py) in new[] { (0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1) })
         {
             var (b, g, r, _) = Pixel(result, px, py);
@@ -117,7 +117,7 @@ public class RotationTests
         }
     }
 
-    /// <summary>Gegenprobe zum Test oben: Ein zu großer Rahmen hat leere Ecken — der Test sieht das.</summary>
+    /// <summary>Counter-check for the test above: a frame that is too large has empty corners — the test detects that.</summary>
     [Fact]
     public void RotateAndCrop_TooLargeFrame_HasEmptyCorners()
     {
@@ -129,8 +129,8 @@ public class RotationTests
     }
 
     /// <summary>
-    /// Positive Winkel drehen im Uhrzeigersinn — wie die Vorschau (Avalonia). Links rot, rechts blau:
-    /// um 90° im Uhrzeigersinn liegt Rot oben, gegen den Uhrzeigersinn unten.
+    /// Positive angles rotate clockwise — as in the preview (Avalonia). Red on the left, blue on the right:
+    /// rotated 90° clockwise, red is at the top; rotated counter-clockwise, at the bottom.
     /// </summary>
     [Theory]
     [InlineData(90, true)]

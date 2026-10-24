@@ -13,14 +13,14 @@ public class SizeEstimatorTests(ITestOutputHelper output)
 
     private static MagickImage Smooth()
     {
-        // Glatter Verlauf mit Fläche — wie das Testbild, komprimiert extrem gut
+        // Smooth, large-area gradient — like the test image, compresses extremely well
         var img = new MagickImage("gradient:#4a6fa8-#e8b894", 2000, 1333);
         return img;
     }
 
     private static MagickImage PhotoLike()
     {
-        // Plasma-Fraktal: unregelmäßige Strukturen wie in einem Foto
+        // Plasma fractal: irregular structures as in a photo
         var img = new MagickImage("plasma:", 2000, 1333);
         img.GaussianBlur(0, 1.2);
         return img;

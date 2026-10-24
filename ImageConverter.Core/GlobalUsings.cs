@@ -1,2 +1,2 @@
-// Übersetzung (Tr.T) für Meldungen, die bis in die Oberfläche durchreichen
+// Translation (Tr.T) for messages that are passed through to the user interface.
 global using ImageConverter.Core.Localization;

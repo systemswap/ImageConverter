@@ -2,7 +2,7 @@ using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Standardformate: Hoch-/Querformat wie das Bild, Einpassen bei geschlossener Kette.</summary>
+/// <summary>Standard paper formats: portrait or landscape like the image, fitting when the aspect lock is closed.</summary>
 public class PaperFormatTests
 {
     private static readonly PaperFormat A4 = PaperFormats.Find("A4")!;
@@ -11,15 +11,15 @@ public class PaperFormatTests
     public void Landscape3To2_OnA4_FillsWidth()
     {
         var (w, h, widthLeads) = PaperFormats.Fit(1.5, A4, keepAspect: true);
-        Assert.Equal(297, w, 6);           // quer: lange Kante 297 mm
-        Assert.Equal(198, h, 6);           // 297 / 1,5 — passt in 210
+        Assert.Equal(297, w, 6);           // landscape: long edge 297 mm
+        Assert.Equal(198, h, 6);           // 297 / 1.5 — fits into 210
         Assert.True(widthLeads);
     }
 
     [Fact]
     public void Portrait3To4_OnA4_FillsWidthBecauseA4IsSlimmer()
     {
-        // 3:4 (0,75) ist breiter als A4 hoch (0,707) → die Breite stößt zuerst an
+        // 3:4 (0.75) is wider than portrait A4 (0.707) → the width reaches its limit first
         var (w, h, widthLeads) = PaperFormats.Fit(0.75, A4, keepAspect: true);
         Assert.Equal(210, w, 6);
         Assert.Equal(280, h, 6);

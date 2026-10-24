@@ -21,8 +21,8 @@ public class ResizeCalculatorTests
     [Fact]
     public void RatioDoesNotDrift_WhenTypingBackAndForth()
     {
-        // Das Verhaeltnis stammt aus der Quelle, nicht aus den gerundeten Feldern:
-        // wiederholtes Hin- und Herrechnen darf nicht wegwandern.
+        // The ratio comes from the source, not from the rounded fields:
+        // repeated back-and-forth conversion must not drift.
         var calc = new ResizeCalculator(1920, 1080);
         var width = 1337;
         for (var i = 0; i < 50; i++)

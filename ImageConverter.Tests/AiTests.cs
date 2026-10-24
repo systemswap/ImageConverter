@@ -8,7 +8,7 @@ namespace ImageConverter.Tests;
 
 public class AiTests
 {
-    /// <summary>Ersatzmodell: vergrößert jedes Pixel auf scale × scale (nächster Nachbar).</summary>
+    /// <summary>Stand-in model that enlarges every pixel to scale × scale (nearest neighbour).</summary>
     private sealed class NearestModel(int scale, int tile) : ITileModel
     {
         public int Scale => scale;
@@ -28,7 +28,7 @@ public class AiTests
         }
     }
 
-    /// <summary>Ersatzmodell, das alles schwarz macht — zeigt, ob Stärke und Alpha stimmen.</summary>
+    /// <summary>Stand-in model that turns everything black, which shows whether strength and alpha are handled correctly.</summary>
     private sealed class BlackModel(int scale, int tile) : ITileModel
     {
         public int Scale => scale;
@@ -48,7 +48,7 @@ public class AiTests
         return img;
     }
 
-    // ------------------------------------------------------------ Kacheln
+    // ------------------------------------------------------------ Tiles
 
     [Theory]
     [InlineData(300, 170, 1)]
@@ -73,7 +73,7 @@ public class AiTests
         {
             var expected = a[((y / factor) * w + x / factor) * 3 + c];
             var actual = b[(y * w * factor + x) * 3 + c];
-            Assert.InRange(actual - expected, -1, 1);   // nur Rundung
+            Assert.InRange(actual - expected, -1, 1);   // rounding only
         }
     }
 
@@ -112,10 +112,10 @@ public class AiTests
     public void Factors_LimitedByModelAndSize()
     {
         Assert.Equal([1, 2, 4], AiEnhancer.PossibleFactors(4, 1000, 800));
-        Assert.Equal([1, 2], AiEnhancer.PossibleFactors(4, 4000, 3000));   // 4× wären 192 MP
+        Assert.Equal([1, 2], AiEnhancer.PossibleFactors(4, 4000, 3000));   // 4× would be 192 MP
     }
 
-    // ------------------------------------------------------------ Gesichter
+    // ------------------------------------------------------------ Faces
 
     [Fact]
     public void Similarity_RecoversTransform()
@@ -135,7 +135,7 @@ public class AiTests
         Assert.Equal(45, y, 6);
     }
 
-    /// <summary>Gesichtsmodell, das nichts ändert — Ausschneiden und Zurücksetzen dürfen kaum Spuren hinterlassen.</summary>
+    /// <summary>Face model that changes nothing, so cutting out and pasting back must leave hardly any trace.</summary>
     private sealed class IdentityFace : IFaceModel
     {
         public int Size => 128;
@@ -145,7 +145,7 @@ public class AiTests
     [Fact]
     public void FaceRoundTrip_WithIdentityModel_LeavesImageAlmostUnchanged()
     {
-        // weicher Verlauf: bilineares Hin und Zurück ist dort fast verlustfrei
+        // smooth gradient: a bilinear round trip is almost lossless there
         using var src = new MagickImage("gradient:#203040-#E0C0A0", 300, 260);
         src.Rotate(20);
         src.Crop(new MagickGeometry(20, 20, 300, 260));
@@ -160,7 +160,7 @@ public class AiTests
         Assert.True(maxDiff < 65535 * 0.02, $"Abweichung {maxDiff / 655.35:0.0} %");
     }
 
-    /// <summary>Gesichtsmodell, das glättet (Mittel über 9 × 9) — wie ein Modell, das Haut glattbügelt.</summary>
+    /// <summary>Face model that smooths (9 × 9 box mean), like a model that irons out skin.</summary>
     private sealed class SmoothFace : IFaceModel
     {
         public int Size => 128;
@@ -188,7 +188,7 @@ public class AiTests
         }
     }
 
-    /// <summary>Mittlere Abweichung zum Original in der Gesichtsmitte (0…1).</summary>
+    /// <summary>Mean deviation from the original in the face centre (0…1).</summary>
     private static double FaceDistance(MagickImage src, MagickImage result)
     {
         var a = AiEnhancer.ReadPixels(src, "RGB");
@@ -220,7 +220,7 @@ public class AiTests
         var (dSmooth, dTextured) = (FaceDistance(src, smooth), FaceDistance(src, textured));
         Assert.True(dTextured < dSmooth * 0.6, $"glatt {dSmooth:0.000}, mit Struktur {dTextured:0.000}");
 
-        // Vorschau: verkleinert, aber dieselbe Richtung
+        // Preview: downscaled, but computed the same way
         var preview = run.Preview(new AiBlend(1, 1), AiPreviewSize.Fit(300, 300, 150));
         Assert.Equal(150, preview.Width);
         Assert.Equal(150 * 150 * 4, preview.Bgra.Length);
@@ -236,7 +236,7 @@ public class AiTests
         using var expected = AiEnhancer.Enhance(src, new BlackModel(4, 32), 1, 0.5, null, default);
         Assert.Equal(AiEnhancer.ReadPixels(expected, "RGB"), AiEnhancer.ReadPixels(half, "RGB"));
 
-        // Stärke 0 in der Vorschau = Original, Stärke 1 = schwarz
+        // strength 0 in the preview = original, strength 1 = black
         Assert.Contains(run.Preview(new AiBlend(0), new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
         Assert.DoesNotContain(run.Preview(new AiBlend(1), new AiPreviewSize(90, 70)).Bgra.Where((_, i) => i % 4 != 3), v => v > 0);
     }
@@ -260,7 +260,7 @@ public class AiTests
     [Fact]
     public void YuNetDecode_AnchorAndScale()
     {
-        // ein Treffer im 8er-Raster, Zelle (x=10, y=5) → Anker (80, 40)
+        // one hit in the stride-8 grid, cell (x=10, y=5) → anchor (80, 40)
         const int size = 640;
         float[][] outputs = new float[12][];
         int[] strides = [8, 16, 32];
@@ -276,9 +276,9 @@ public class AiTests
         var i = 5 * 80 + 10;
         outputs[0][i] = 0.9f;
         outputs[3][i] = 0.9f;
-        outputs[6][i * 4 + 2] = (float)Math.Log(4);   // Breite 4 × 8 = 32
-        outputs[6][i * 4 + 3] = (float)Math.Log(5);   // Höhe 40
-        outputs[9][i * 10] = 1;                      // erstes Auge: Anker + 8
+        outputs[6][i * 4 + 2] = (float)Math.Log(4);   // width 4 × 8 = 32
+        outputs[6][i * 4 + 3] = (float)Math.Log(5);   // height 40
+        outputs[9][i * 10] = 1;                      // first eye: anchor + 8
 
         var faces = AiFaces.Decode(outputs, size, 0.5, ratio: 2);
         var f = Assert.Single(faces);
@@ -300,7 +300,7 @@ public class AiTests
         }
     }
 
-    /// <summary>Liefert ein Stück und wirft dann — wie ein abgebrochener Download.</summary>
+    /// <summary>Delivers part of the data and then throws, like an interrupted download.</summary>
     private sealed class CancelingStream(byte[] data, int after) : MemoryStream(data)
     {
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
@@ -392,7 +392,7 @@ public class AiTests
             var dir = Path.Combine(store.Folders[0], model.Id);
             Assert.True(store.IsInstalled(model));
             Assert.True(File.Exists(Path.Combine(dir, "model.data")));
-            Assert.True(File.Exists(Path.Combine(dir, "böse.txt")));            // im Modellordner, nicht darüber
+            Assert.True(File.Exists(Path.Combine(dir, "böse.txt")));            // inside the model folder, not above it
             Assert.False(File.Exists(Path.Combine(store.Folders[0], "böse.txt")));
             Assert.Empty(Directory.GetFiles(dir, "*.zip*"));
         }

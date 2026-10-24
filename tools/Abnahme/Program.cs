@@ -5,16 +5,17 @@ using ImageConverter.Abnahme;
 using ImageConverter.Core.Imaging;
 using ImageMagick;
 
-// Abnahme der Bildkette: dieselben Bilder und Einstellungen mit der aktuellen Fassung rechnen,
-// messen und mit einer Referenzversion vergleichen (Stand 0.4.45, vom Benutzer abgenommen).
+// Acceptance test of the image chain: renders the same images and settings with the current build,
+// measures them and compares them with a reference run (the run named in "Referenz" in abnahme.json).
 //
-//   abnahme raster              Vorschau je Testbild mit 10-%-Raster (Messbereiche festlegen)
-//   abnahme referenz <name>     alle Fälle rechnen, als Referenz speichern (PNG + werte.json)
-//   abnahme pruefen <name>      alle Fälle rechnen, messen, mit der Referenz vergleichen
-//   abnahme leistung <name>     Laufzeit und Speicher großer Bilder (je Fall ein eigener Prozess)
+//   abnahme raster              preview of each test image with a 10 % grid (to define measurement areas)
+//   abnahme referenz <name>     render all cases and save them as a reference (PNG + werte.json)
+//   abnahme pruefen <name>      render all cases, measure them and compare them with the reference
+//   abnahme leistung <name>     run time and memory for large images (each case in a separate process)
+//   abnahme einzeln <bild> <fall> <kante>   one case in the current process; called by "leistung"
 //
-// Arbeitsordner: Umgebungsvariable IC_ABNAHME, sonst <LocalApplicationData>/imageconverter-build/abnahme
-// (Linux: ~/.local/share/…). Darin abnahme.json (Testbilder und Messbereiche) und je Lauf ein Ordner.
+// Working folder: environment variable IC_ABNAHME, otherwise <LocalApplicationData>/imageconverter-build/abnahme
+// (Linux: ~/.local/share/…). It contains abnahme.json (test images and measurement areas) and one folder per run.
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
@@ -35,7 +36,7 @@ switch (args.FirstOrDefault())
 }
 return Report.Failures > 0 ? 2 : 0;
 
-// ---------------------------------------------------------------- Rechnen und vergleichen
+// ---------------------------------------------------------------- Render and compare
 
 void Run(string name, string? compareTo)
 {
@@ -119,8 +120,8 @@ byte[] Render(MagickImage source, Case c, out int w, out int h, bool encode = tr
         c.Denoise, c.Sharpen, c.SharpenSigma, 300, MetadataMode.KeepAll, ColorMode.ConvertToSrgb, c.Adjust);
     using var rendered = ImageExporter.Render(source, options);
     if (!encode) return ImageOps.ToBgra(rendered);
-    // Messen, was gespeichert wird: als PNG kodieren und wieder lesen — seit 0.4.49 rundet erst das
-    // Kodieren (mit Dither) auf 8 Bit; das gerechnete Bild selbst hat 16 Bit
+    // Measure what is saved: encode as PNG and read it back — only the encoding rounds to 8 bits
+    // (with dither); the rendered image itself has 16 bits
     using var file = new MemoryStream();
     ImageExporter.Encode(rendered, options, file);
     file.Position = 0;
@@ -134,7 +135,7 @@ static void Save(byte[] px, int w, int h, string path)
     img.Write(path, MagickFormat.Png24);
 }
 
-// ---------------------------------------------------------------- Leistung
+// ---------------------------------------------------------------- Performance
 
 void Performance(string name)
 {
@@ -152,7 +153,7 @@ void Performance(string name)
         using var p = Process.Start(psi)!;
         var line = p.StandardOutput.ReadToEnd().Trim().Split('\n')[^1];
         p.WaitForExit();
-        var parts = line.Split(';').Select(double.Parse).ToArray();   // Sekunden;Spitze GB;Kante
+        var parts = line.Split(';').Select(double.Parse).ToArray();   // seconds;peak GB;edge
         results[$"{c}/{(edge == 0 ? "voll" : edge.ToString())}"] = parts;
         Console.WriteLine($"{c,-22} {parts[2],6:F0} {parts[0],8:F2} {parts[1],10:F2}");
     }
@@ -168,8 +169,8 @@ void Performance(string name)
     }
 }
 
-// Ein Fall in einem frischen Prozess, ohne Aufwärmlauf: Die Spitze des Arbeitsspeichers gilt für genau
-// diese Rechnung (ein Aufwärmlauf ließ Puffer liegen und verfälschte sie). Zeit inkl. JIT (~0,3 s).
+// One case in a fresh process, without a warm-up run: the peak working set then applies to exactly
+// this computation (a warm-up run leaves buffers behind and distorts it). The time includes JIT (~0.3 s).
 void Single(string imageName, string caseName, int edge)
 {
     var image = config.Bilder.First(b => b.Name == imageName);
@@ -205,7 +206,7 @@ void Raster()
     }
 }
 
-// Auswahl für schnelle Messrunden: IC_BILDER / IC_FAELLE = Namen mit Komma; leer = alle
+// Selection for quick measurement runs: IC_BILDER / IC_FAELLE = comma-separated names; empty = all
 static bool Wanted(string variable, string name) =>
     Environment.GetEnvironmentVariable(variable) is not { Length: > 0 } list
     || list.Split(',').Any(n => n.Trim().Equals(name, StringComparison.OrdinalIgnoreCase));

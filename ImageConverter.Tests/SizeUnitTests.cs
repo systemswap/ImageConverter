@@ -3,8 +3,8 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Größe in Pixel oder Millimeter. Ausgangslage im ViewModel ohne Bild:
-/// 4000 × 3000 px bei 72 DPI.
+/// Size in pixels or millimetres. Starting point of the view model without an image:
+/// 4000 × 3000 px at 72 DPI.
 /// </summary>
 public class SizeUnitTests
 {
@@ -26,7 +26,7 @@ public class SizeUnitTests
     [Fact]
     public void SwitchingToMm_ShowsPrintSize()
     {
-        var vm = new MainViewModel();      // 4000 px bei 72 DPI = 1411,1 mm
+        var vm = new MainViewModel();      // 4000 px at 72 DPI = 1411.1 mm
         vm.SelectedSizeUnit = "mm";
         Assert.Equal(1411.1m, vm.FieldWidth);
         Assert.Equal(1058.3m, vm.FieldHeight);
@@ -40,9 +40,9 @@ public class SizeUnitTests
 
         vm.FieldWidth = 100m;
 
-        Assert.Equal(100m, vm.FieldWidth);           // nicht 99,9 durch Rundung
-        Assert.Equal(75m, vm.FieldHeight);           // Kette: 4:3
-        Assert.Equal(1181, vm.TargetWidth);          // 100 mm / 25,4 × 300
+        Assert.Equal(100m, vm.FieldWidth);           // not 99.9 because of rounding
+        Assert.Equal(75m, vm.FieldHeight);           // aspect lock: 4:3
+        Assert.Equal(1181, vm.TargetWidth);          // 100 mm / 25.4 × 300
         Assert.Equal(886, vm.TargetHeight);
     }
 
@@ -91,8 +91,8 @@ public class SizeUnitTests
     [Fact]
     public void Pixel_ChangingDpi_KeepsPixels_ChangesPrintSize()
     {
-        var vm = new MainViewModel();                // 4000 × 3000 px bei 72 DPI
-        vm.Dpi = 400;                                // Einheit Pixel: nur die Druckgröße ändert sich
+        var vm = new MainViewModel();                // 4000 × 3000 px at 72 DPI
+        vm.Dpi = 400;                                // unit pixels: only the print size changes
 
         Assert.Equal((4000, 3000), (vm.TargetWidth, vm.TargetHeight));
         Assert.Equal("Druckgröße 25,4 × 19,1 cm", vm.PrintSize.Replace('.', ','));

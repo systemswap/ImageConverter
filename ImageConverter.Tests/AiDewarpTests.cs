@@ -5,11 +5,12 @@ using ImageMagick;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// „KI begradigen“: das fertige Gitter im Rezept (<see cref="DewarpGrid"/>) — ohne Modelllauf, der braucht die ONNX-Datei.
+/// Tests for „KI begradigen“ with a finished grid in the recipe (<see cref="DewarpGrid"/>), without running the model,
+/// which would need the ONNX file.
 /// </summary>
 public class AiDewarpTests
 {
-    /// <summary>Gitter nx × ny: Ergebnis (u, v) → Bild (x0 + ax·u, y0 + ay·v), relativ.</summary>
+    /// <summary>Builds an nx × ny grid mapping result (u, v) → image (x0 + ax·u, y0 + ay·v), in relative coordinates.</summary>
     private static DewarpGrid Affine(int nx, int ny, double x0, double ax, double y0, double ay, double relW, double relH, double? aspect)
     {
         var sx = new float[nx * ny];
@@ -26,7 +27,7 @@ public class AiDewarpTests
         var grid = Affine(5, 4, 0, 1, 0, 1, relW: 0.8, relH: 1.0, aspect: 1.25);
         var spec = new DewarpSpec([], Grid: grid);
         Assert.True(spec.IsUsable);
-        Assert.Equal(spec, new DewarpSpec([], Grid: Affine(5, 4, 0, 1, 0, 1, 0.8, 1.0, 1.25)));   // gleiches Gitter = gleiches Rezept (Zwischenspeicher)
+        Assert.Equal(spec, new DewarpSpec([], Grid: Affine(5, 4, 0, 1, 0, 1, 0.8, 1.0, 1.25)));   // same grid = same recipe (cache key)
 
         var map = Dewarp.MapFor(spec, 1000, 800);
         Assert.NotNull(map);
@@ -43,9 +44,9 @@ public class AiDewarpTests
     [Fact]
     public void ViewGrid_TurnedBack_FitsThePixelImage()
     {
-        // Pixelbild 1000 × 600, Ansicht um eine Vierteldrehung gedreht (600 × 1000). In der Ansicht legt das Gitter das
-        // Ergebnis auf den mittleren Teil: Ergebnis (u, v) → Ansicht (0,1 + 0,8 u, 0,2 + 0,6 v); Ergebnis 480 × 600 px in der
-        // Ansicht (in Ansichtsbreiten: 0,8 und 1,0).
+        // Pixel image 1000 × 600, view rotated by a quarter turn (600 × 1000). In the view the grid maps the result
+        // onto the middle part: result (u, v) → view (0.1 + 0.8 u, 0.2 + 0.6 v); the result is 480 × 600 px in the
+        // view (in view widths: 0.8 and 1.0).
         var recipe = new GeometryRecipe(Turns: 1);
         var view = Affine(5, 4, 0.1, 0.8, 0.2, 0.6, relW: 0.8, relH: 1.0, aspect: 1.25);
         var next = recipe.AiDewarpedInView(view, 1000, 600, 28);
@@ -53,11 +54,11 @@ public class AiDewarpTests
         var map = next.DewarpMapFor(1000, 600);
         Assert.NotNull(map);
 
-        // vor dem Drehen liegt das Ergebnis quer: 600 × 480, Seitenverhältnis umgekehrt
+        // before the rotation the result lies sideways: 600 × 480, aspect ratio inverted
         Assert.Equal((600, 480), map.SizeFor(1000));
         Assert.Equal(0.8, map.PageAspect!.Value, 6);
 
-        // eine Stelle des Ergebnisses vor dem Drehen ↔ dieselbe Stelle in der Ansicht ↔ Pixelbild
+        // a point of the result before the rotation ↔ the same point in the view ↔ pixel image
         void Check(double us, double vs)
         {
             var (uv, vv) = GeometryRecipe.OrientPoint(us, vs, (1, 1), 1, false);
@@ -72,30 +73,30 @@ public class AiDewarpTests
         Check(1, 0.25);
     }
 
-    /// <summary>Schattenkarte 3 × 2: links halbes Licht, rechts volles (je R, G, B gleich).</summary>
+    /// <summary>Builds a 3 × 2 shading map with half light on the left and full light on the right (R, G, B equal).</summary>
     private static DewarpShading HalfLitLeft(double strength, bool on = true) =>
         new(3, 2, [0.5f, 0.5f, 0.5f, 0.75f, 0.75f, 0.75f, 1, 1, 1, 0.5f, 0.5f, 0.5f, 0.75f, 0.75f, 0.75f, 1, 1, 1], strength, on);
 
     [Fact]
     public void Shading_IsDividedOut_WhenSwitchedOn()
     {
-        using var grey = new MagickImage(new MagickColor("#808080"), 40, 20);   // 50 % auf allen Kanälen
+        using var grey = new MagickImage(new MagickColor("#808080"), 40, 20);   // 50 % on all channels
         var grid = Affine(5, 4, 0, 1, 0, 1, relW: 1, relH: 0.5, aspect: null);
 
         double Left(MagickImage img) => AiEnhancer.ReadPixels(img, "RGB")[(10 * 40 + 1) * 3] / 65535.0;
         double Right(MagickImage img) => AiEnhancer.ReadPixels(img, "RGB")[(10 * 40 + 38) * 3] / 65535.0;
 
-        // eingeschaltet, volle Stärke: links ÷ Licht (am Rand gut 0,5) → fast weiß, rechts ÷ 1 → bleibt
+        // switched on, full strength: left ÷ light (a little above 0.5 at the edge) → almost white, right ÷ 1 → unchanged
         var lightLeft = HalfLitLeft(1).Sample(1.5 / 40, 10.5 / 20).R;
         using (var on = Dewarp.MapFor(new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(1) }), 40, 20)!.Render(grey))
         {
             Assert.Equal(Math.Min(1, 128 / 255.0 / lightLeft), Left(on), 2);
             Assert.InRange(Right(on), 0.49, 0.52);
         }
-        // halbe Stärke (helles Foto): Teiler 0,5 · 0,5 + 0,5 = 0,75
+        // half strength (bright photo): divisor 0.5 · 0.5 + 0.5 = 0.75
         using (var half = Dewarp.MapFor(new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(0.5) }), 40, 20)!.Render(grey))
             Assert.Equal(128 / 255.0 / (lightLeft * 0.5 + 0.5), Left(half), 2);
-        // ausgeschaltet: wie ohne Karte, aber ein anderes Rezept (Zwischenspeicher)
+        // switched off: same as without a map, but a different recipe (cache key)
         var offSpec = new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(1, on: false) });
         Assert.NotEqual(new DewarpSpec([], Grid: grid with { Shading = HalfLitLeft(1) }), offSpec);
         Assert.Null(Dewarp.MapFor(offSpec, 40, 20)!.Shading);
@@ -106,7 +107,7 @@ public class AiDewarpTests
     [Fact]
     public void Shading_TurnsWithTheGrid()
     {
-        // wie oben eine Vierteldrehung: die Karte liegt über dem Ergebnis und muss genauso umgeordnet werden wie das Gitter
+        // a quarter turn as above: the map covers the result and must be reordered exactly like the grid
         var recipe = new GeometryRecipe(Turns: 1);
         var view = Affine(5, 4, 0.1, 0.8, 0.2, 0.6, relW: 0.8, relH: 1.0, aspect: 1.25) with { Shading = HalfLitLeft(1) };
         var grid = recipe.AiDewarpedInView(view, 1000, 600, 28).Dewarp!.Grid!;

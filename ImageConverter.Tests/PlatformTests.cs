@@ -4,14 +4,14 @@ using ImageMagick;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Programmordner (AppImage oder .exe) und Telemetrie-Schalter der ONNX Runtime.
+/// Program folder (AppImage or .exe), the ONNX Runtime telemetry switch, the ImageMagick policy and the application log.
 /// </summary>
 public class PlatformTests
 {
     [Fact]
     public void ProgramFolder_AppImage_IsFolderOfTheAppImageFile()
     {
-        if (OperatingSystem.IsWindows()) return;   // AppImage gibt es nur unter Linux; Windows macht aus / ein \
+        if (OperatingSystem.IsWindows()) return;   // AppImage exists only on Linux; Windows turns / into \
 
         var folder = AppLocations.Resolve("/home/user/Programme/ImageConverter-x86_64.AppImage", "/tmp/.mount_abc/usr/bin/");
         Assert.Equal("/home/user/Programme", folder);
@@ -32,8 +32,8 @@ public class PlatformTests
     }
 
     /// <summary>
-    /// Die ONNX Runtime liest den Schalter mit getenv aus der Umgebung des Prozesses —
-    /// Environment.SetEnvironmentVariable allein erreicht die unter Linux nicht.
+    /// The ONNX Runtime reads the switch with getenv from the process environment —
+    /// Environment.SetEnvironmentVariable alone does not reach it on Linux.
     /// </summary>
     [Fact]
     public void OnnxTelemetry_SwitchReachesTheNativeEnvironment()
@@ -43,8 +43,8 @@ public class PlatformTests
     }
 
     /// <summary>
-    /// Ohne Richtlinie löst ein Pfad wie „https://…“ eine DNS-Anfrage aus und ruft curl auf.
-    /// Mit Richtlinie lehnt ImageMagick ab, bevor irgendetwas ins Netz geht.
+    /// Without the policy, a path such as "https://…" triggers a DNS request and calls curl.
+    /// With the policy, ImageMagick refuses before anything goes to the network.
     /// </summary>
     [Fact]
     public void ImageMagick_RefusesNetworkAddresses()
@@ -62,9 +62,9 @@ public class PlatformTests
         Assert.Contains("{HTTP,HTTPS,FTP,URL}", policy);
     }
     /// <summary>
-    /// Eigenes Log: Bleibt die Lauf-Datei eines beendeten Prozesses liegen (Absturz), kommt beim nächsten Start ein Eintrag
-    /// mit der letzten Tätigkeit ins Log und die Datei verschwindet; die eigene Lauf-Datei hält die Tätigkeit und geht beim
-    /// sauberen Ende weg.
+    /// Application log: if the running marker of a terminated process is left behind (crash), the next start writes an entry
+    /// with the last activity to the log and deletes the marker; the own running marker holds the current activity and is
+    /// removed on a clean exit.
     /// </summary>
     [Fact]
     public void AppLog_LeftoverMarker_BecomesCrashEntry()

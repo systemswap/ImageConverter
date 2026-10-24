@@ -3,11 +3,11 @@ using ImageMagick;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Weißabgleich mit Pipetten: Neutral, Schwarz, Weiß — einzeln und zusammen, mehrere Klicks gemittelt.</summary>
+/// <summary>White balance with eyedroppers: neutral, black, white — individually and together, several clicks averaged.</summary>
 public class WhiteBalanceTests
 {
-    // Foto unter warmem Kunstlicht: dieselbe Lichtfarbe auf Grau, Schwarz und Weiß — je Kanal derselbe Faktor in
-    // linearem Licht (so entsteht ein echter Farbstich; verschieden starke Stiche gäbe es in keinem Foto)
+    // Photo under warm artificial light: the same light colour on grey, black and white — the same factor per channel in
+    // linear light (this is how a real colour cast arises; casts of different strength would not occur in any photo)
     private static readonly double[] Light = [1.0, 0.82, 0.6];
 
     private static MagickColor UnderLight(double neutralLinear)
@@ -18,10 +18,10 @@ public class WhiteBalanceTests
 
     private static MagickImage CastImage()
     {
-        var img = new MagickImage(UnderLight(0.25), 300, 100);                                     // Grau
+        var img = new MagickImage(UnderLight(0.25), 300, 100);                                     // grey
         using (var black = new MagickImage(UnderLight(0.012), 100, 100)) img.Composite(black, 100, 0, CompositeOperator.Over);
         using (var white = new MagickImage(UnderLight(0.85), 100, 100)) img.Composite(white, 200, 0, CompositeOperator.Over);
-        return img;   // links grau, Mitte schwarz, rechts weiß
+        return img;   // left grey, centre black, right white
     }
 
     private static (double R, double G, double B) Encoded(float[] px, int width, int x, int y)
@@ -49,11 +49,11 @@ public class WhiteBalanceTests
 
         var gray = Encoded(px, 300, 50, 50);
         Assert.True(Spread(gray) < 0.01, $"Grau hat noch Farbe: {gray}");
-        Assert.True(Spread(before) > 0.08, $"Testbild ohne Stich: {before}");   // vorher deutlich farbig
+        Assert.True(Spread(before) > 0.08, $"Testbild ohne Stich: {before}");   // clearly coloured before balancing
         var lumBefore = 0.2126 * WhiteBalance.ToLinear(before.R) + 0.7152 * WhiteBalance.ToLinear(before.G) + 0.0722 * WhiteBalance.ToLinear(before.B);
-        Assert.Equal(lumBefore, WhiteBalance.ToLinear(gray.G), 2);  // Helligkeit bleibt
+        Assert.Equal(lumBefore, WhiteBalance.ToLinear(gray.G), 2);  // brightness is kept
 
-        // Der Stich verschwindet auch im Weiß und im Schwarz — es ist dieselbe Lichtfarbe
+        // The cast also disappears in white and black — it is the same light colour
         Assert.True(Spread(Encoded(px, 300, 250, 50)) < 0.01, $"Weiß hat noch Farbe: {Encoded(px, 300, 250, 50)}");
         Assert.True(Spread(Encoded(px, 300, 150, 50)) < 0.01);
     }
@@ -99,10 +99,10 @@ public class WhiteBalanceTests
     public void Measure_IgnoresClippedPixels_AndReportsAllClipped()
     {
         using var img = new MagickImage(MagickColors.White, 50, 50);
-        Assert.Null(WhiteBalance.Measure(img, 25, 25, WbPoint.Neutral));   // alles ausgefressen
+        Assert.Null(WhiteBalance.Measure(img, 25, 25, WbPoint.Neutral));   // everything clipped
         Assert.Null(WhiteBalance.Measure(img, 25, 25, WbPoint.White));
-        Assert.NotNull(WhiteBalance.Measure(img, 25, 25, WbPoint.Black));  // Schwarz misst alles
-        Assert.Null(WhiteBalance.Measure(img, 80, 25, WbPoint.Neutral));   // außerhalb
+        Assert.NotNull(WhiteBalance.Measure(img, 25, 25, WbPoint.Black));  // black measures everything
+        Assert.Null(WhiteBalance.Measure(img, 80, 25, WbPoint.Neutral));   // outside the image
     }
 
     [Fact]
@@ -114,11 +114,11 @@ public class WhiteBalanceTests
         Assert.Equal(0.3, twice.R, 9);
         var three = twice.Add(new WbSample(0.6, 0.1, 0.2));
         Assert.Equal(3, three.Count);
-        Assert.Equal((0.2 + 0.4 + 0.6) / 3, three.R, 9);           // jeder Klick zählt gleich
+        Assert.Equal((0.2 + 0.4 + 0.6) / 3, three.R, 9);           // every click has the same weight
         Assert.Equal((0.4 + 0.4 + 0.1) / 3, three.G, 9);
     }
 
-    /// <summary>Durch die ganze Kette (Vorschau und Export rechnen über <see cref="Adjust"/>): Weißabgleich wirkt zuerst.</summary>
+    /// <summary>Through the whole chain (preview and export compute via <see cref="Adjust"/>): white balance is applied first.</summary>
     [Fact]
     public void ThroughAdjust_GrayBecomesNeutral()
     {
@@ -127,6 +127,6 @@ public class WhiteBalanceTests
         Assert.False(adj.IsNone);
         var px = Adjust.Apply(Pixels.FromMagick(img), 300, 100, adj);
         Assert.True(Spread(Encoded(px, 300, 50, 50)) < 0.012);
-        Assert.NotEqual(Adjustments.None.PrepareKey, adj.PrepareKey);   // Vorschau rechnet den vorbereiteten Teil neu
+        Assert.NotEqual(Adjustments.None.PrepareKey, adj.PrepareKey);   // the preview recomputes the prepared part
     }
 }

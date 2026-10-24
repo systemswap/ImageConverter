@@ -48,8 +48,8 @@ public class PrinterOptionsTests
 
         var caps = SystemPrinters.ParseCupsCapabilities(output);
 
-        Assert.False(caps.Duplex);   // ausgrauen
-        Assert.False(caps.Color);    // nur Schwarzweiß möglich
+        Assert.False(caps.Duplex);   // disable the option
+        Assert.False(caps.Color);    // black and white only
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class PrinterOptionsTests
     {
         var caps = SystemPrinters.ParseCupsCapabilities("PageSize/Media Size: *A4 Letter\n");
 
-        Assert.Null(caps.Duplex);    // wählbar lassen
+        Assert.Null(caps.Duplex);    // keep the option selectable
         Assert.Null(caps.Color);
     }
 
@@ -80,7 +80,7 @@ public class PrinterOptionsTests
         Assert.Equal("/tmp/x.pdf", args[^1]);
     }
 
-    // ------------------------------------------------------------ Graustufen
+    // ------------------------------------------------------------ Greyscale
 
     [Fact]
     public void Grayscale_RendersNeutralGray()
@@ -93,7 +93,7 @@ public class PrinterOptionsTests
         using var back = new MagickImage(PrintDocument.RenderForPrint(img, options, p, grayscale: true));
         var px = ImageOps.ToBgra(back);
 
-        // B, G, R gleich (±2 wegen JPEG)
+        // B, G, R equal (±2 because of JPEG)
         Assert.InRange(Math.Abs(px[0] - px[1]), 0, 2);
         Assert.InRange(Math.Abs(px[1] - px[2]), 0, 2);
     }

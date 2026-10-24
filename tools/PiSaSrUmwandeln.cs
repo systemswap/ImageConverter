@@ -1,14 +1,14 @@
 #:project ../ImageConverter.Core/ImageConverter.Core.csproj
-// PiSA-SR (Stable Diffusion 2.1 + PiSA-LoRA) → drei ONNX-Dateien für die App, ohne Python — dasselbe, was die App beim
-// ersten Upscalen selbst macht. Mit --pruefen: die fertigen Dateien gegen Referenzwerte aus dem Original (PyTorch)
-// rechnen (Rohdaten float32 + shapes.json, geschrieben von referenz.py im Messplatz).
-// Aufruf (Bauausgabe außerhalb des Projekts, sonst entstehen bin/ und obj/ in ImageConverter.Core):
+// Converts PiSA-SR (Stable Diffusion 2.1 + PiSA LoRA) into three ONNX files for the app, without Python — the same step the
+// app performs itself on the first upscale. With --pruefen: runs the finished files against reference values from the
+// original (PyTorch) (raw float32 data + shapes.json, written by referenz.py in the measurement setup, see docs/KI-UPSCALING.md).
+// Usage (build output outside the project, otherwise bin/ and obj/ are created in ImageConverter.Core):
 //   dotnet run tools/PiSaSrUmwandeln.cs --property:UseArtifactsOutput=true --property:ArtifactsPath=<ordner> -- \
 //       <quellordner> <zielordner> [--pruefen <referenzordner>] [--nur-pruefen]
-// Quellordner: sd21/unet, sd21/vae (fp16-Safetensors), pisa_sr.pkl, dazu leere-beschreibung.safetensors oder
-// sd21/text_encoder/model.fp16.safetensors (dann wird die leere Beschreibung gerechnet und — falls beide da — verglichen;
-// --nur-text: nur das, --ohne-text: gespeicherte nehmen). --fp16: halbe Genauigkeit (für die Grafikkarte, Dateien „-fp16“);
-// --gpu: die Prüfung auf der Grafikkarte (DirectML).
+// Source folder: sd21/unet, sd21/vae (fp16 safetensors), pisa_sr.pkl, plus leere-beschreibung.safetensors or
+// sd21/text_encoder/model.fp16.safetensors (then the empty prompt embedding is computed and — if both are present — compared;
+// --nur-text: only that, --ohne-text: use the stored one). --fp16: half precision (for the graphics card, files "-fp16");
+// --gpu: run the check on the graphics card (DirectML).
 using System.Text.Json;
 using ImageConverter.Core.Ai.Onnx;
 using ImageConverter.Core.Ai.Upscale;
@@ -68,7 +68,7 @@ if (!args.Contains("--nur-pruefen"))
 
 if (refDir is null) return 0;
 
-// ------------------------------------------------------------ Prüfung gegen PyTorch
+// ------------------------------------------------------------ Check against PyTorch
 using var shapeDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(refDir, "shapes.json")));
 var shapes = shapeDoc.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.EnumerateArray().Select(e => e.GetInt32()).ToArray());
 float[] Load(string name)
@@ -95,7 +95,7 @@ void Check(string file, string inName, string outName, string refIn, string refO
     var input = Load(refIn);
     using var value = OrtValue.CreateTensorValueFromMemory(input, shapes[refIn].Select(d => (long)d).ToArray());
     clock.Restart();
-    using var runOptions = new RunOptions();   // am Leben halten, bis die Rechnung fertig ist
+    using var runOptions = new RunOptions();   // keep alive until the run has finished
     using var outputs = session.Run(runOptions, [inName], [value], [outName]);
     var got = outputs[0].GetTensorDataAsSpan<float>().ToArray();
     var want = Load(refOut);
@@ -120,7 +120,7 @@ void Check(string file, string inName, string outName, string refIn, string refO
     Console.WriteLine($"{file,-26} laden {load,6} ms, rechnen {clock.ElapsedMilliseconds,6} ms, max. Abweichung {maxDiff:0.0e0}, relativ {rel:0.0e0} — {(pass ? "stimmt" : "FALSCH")}");
 }
 
-// Halbe Genauigkeit: rund drei Stellen — relativ bis 1 % gilt als gleich
+// Half precision: about three digits — a relative error up to 1 % counts as equal
 var tolerance = half ? 1e-2 : 1e-3;
 Check(PiSaSrNet.FileName(PiSaSrNet.EncoderFile, half), "image", "latent", "vae_img", "vae_mean", tolerance);
 Check(PiSaSrNet.FileName(PiSaSrNet.DecoderFile, half), "latent", "image", "dec_in", "dec_out", tolerance);

@@ -4,8 +4,9 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Gruppe „Körnung“: Korn wie bei Film (Mitteltöne am meisten), fest je Pixel, streifenweise gleich wie am Stück,
-/// Vorschau wie der verkleinerte Export, Messen findet das Korn wieder, im Export zuletzt, in der Liste ausschaltbar.
+/// Tests the „Körnung“ group: grain as in film (strongest in the midtones), fixed per pixel, identical whether computed
+/// in strips or in one piece, preview like the downscaled export, measuring finds the grain again, applied last in the
+/// export, and can be switched off in the edit list.
 /// </summary>
 public class GrainTests
 {
@@ -16,7 +17,7 @@ public class GrainTests
         return px;
     }
 
-    /// <summary>Streuung eines Kanals (0 = B, 1 = G, 2 = R) über das ganze Bild.</summary>
+    /// <summary>Standard deviation of one channel (0 = B, 1 = G, 2 = R) over the whole image.</summary>
     private static double Std(float[] px, int channel = 1)
     {
         var n = px.Length / 4;
@@ -55,9 +56,9 @@ public class GrainTests
         var dark = Std(Grain.Apply(Flat(256, 256, 0.1f), 256, 256, g));
         var black = Std(Grain.Apply(Flat(256, 256, 0f), 256, 256, g));
 
-        Assert.InRange(mid / g.MidStd, 0.9, 1.1);            // Stärke = Streuung im Mittelton
-        Assert.InRange(dark / mid, 0.45, 0.75);              // √(4 · 0,1 · 0,9) = 0,6
-        Assert.True(black < 1e-6, $"Schwarz {black}");      // reines Schwarz bekommt nichts
+        Assert.InRange(mid / g.MidStd, 0.9, 1.1);            // strength = standard deviation in the midtone
+        Assert.InRange(dark / mid, 0.45, 0.75);              // √(4 · 0.1 · 0.9) = 0.6
+        Assert.True(black < 1e-6, $"Schwarz {black}");      // pure black gets no grain
     }
 
     [Fact]
@@ -70,10 +71,10 @@ public class GrainTests
     }
 
     [Theory]
-    [InlineData(1.0)]   // echter Gauß
-    [InlineData(6.0)]   // Boxfilter
-    [InlineData(0.1)]   // feiner als ein Pixel (Hochpass)
-    [InlineData(0.17)]  // halb Hochpass
+    [InlineData(1.0)]   // true Gaussian
+    [InlineData(6.0)]   // box filter
+    [InlineData(0.1)]   // finer than a pixel (high-pass)
+    [InlineData(0.17)]  // half high-pass
     public void Strips_GiveTheSameFieldAsOnePiece(double sigma)
     {
         const int w = 180;
@@ -83,7 +84,7 @@ public class GrainTests
         for (var i = 0; i < top.Length; i++) Assert.True(Math.Abs(whole[i] - top[i]) < 1e-4, $"{i}: {whole[i]} ≠ {top[i]}");
         for (var i = 0; i < rest.Length; i++) Assert.True(Math.Abs(whole[top.Length + i] - rest[i]) < 1e-4, $"{i}: {whole[top.Length + i]} ≠ {rest[i]}");
 
-        // auf Streuung 1 gebracht
+        // normalised to standard deviation 1
         double s2 = whole.Sum(v => (double)v * v) / whole.Length;
         Assert.InRange(Math.Sqrt(s2), 0.9, 1.1);
     }
@@ -100,17 +101,17 @@ public class GrainTests
         }
 
         var colour = Grain.Apply(Flat(w, h, 0.5f), w, h, new GrainSettings(60, Roughness: 0, Color: 100));
-        Assert.InRange(Correlation(colour, colour, 0, 2, 0.5f), -0.1, 0.1);   // B und R unabhängig
+        Assert.InRange(Correlation(colour, colour, 0, 2, 0.5f), -0.1, 0.1);   // B and R independent
         var half = Grain.Apply(Flat(w, h, 0.5f), w, h, new GrainSettings(60, Roughness: 0, Color: 50));
-        Assert.InRange(Correlation(half, half, 0, 2, 0.5f), 0.4, 0.6);        // Korrelation = 1 − Farbanteil
+        Assert.InRange(Correlation(half, half, 0, 2, 0.5f), 0.4, 0.6);        // correlation = 1 − colour share
     }
 
     [Theory]
     [InlineData(40)]   // 1 px
-    [InlineData(70)]   // 2,8 px
+    [InlineData(70)]   // 2.8 px
     public void Preview_LooksLikeTheDownscaledExport(double size)
     {
-        // Export in voller Größe mit Korn, dann auf ein Viertel verkleinert — gegen die Vorschau, die gleich klein rechnet
+        // Full-size export with grain, then downscaled to a quarter, compared with the preview computed directly at the small size
         const int full = 1024, small = 256;
         var g = new GrainSettings(60, size, Roughness: 0);
         var exported = Grain.Apply(Flat(full, full, 0.5f), full, full, g);
@@ -123,7 +124,7 @@ public class GrainTests
         Assert.InRange(preview / expected, 0.85, 1.18);
     }
 
-    /// <summary>Weicher Verlauf (ruhig genug, dass nur das Korn auffällt) mit bekanntem Korn.</summary>
+    /// <summary>Builds a smooth gradient (calm enough that only the grain stands out) with known grain.</summary>
     private static float[] GradientWithGrain(GrainSettings g, int w, int h)
     {
         var px = new float[w * h * 4];
@@ -150,7 +151,7 @@ public class GrainTests
         Assert.InRange(m.Color, given.Color - 15, given.Color + 15);
         Assert.Equal(0, m.Roughness);
 
-        // Ausgabe halb so groß: Korn feiner verwischt, also schwächer
+        // Output at half size: the grain is blurred finer and therefore weaker.
         var half = Grain.Measure(GradientWithGrain(given, w, h), w, h, outputScale: 0.5);
         Assert.True(half!.Amount < m.Amount, $"{half.Amount} ≥ {m.Amount}");
     }
@@ -193,11 +194,11 @@ public class GrainTests
         vm.HiddenSteps = EditSteps.Grain;
         var s = vm.CaptureSettings();
         Assert.Null(MainViewModel.OptionsFor(s).Grain);
-        Assert.Equal(35, vm.GrainAmount);                              // Regler behält seinen Wert
-        Assert.Equal(0, MainViewModel.WithoutHidden(s, s.Hidden).GrainAmount);   // „Neu anwenden“ setzt ihn auf null
+        Assert.Equal(35, vm.GrainAmount);                              // the slider keeps its value
+        Assert.Equal(0, MainViewModel.WithoutHidden(s, s.Hidden).GrainAmount);   // „Neu anwenden“ resets it to zero
     }
 
-    /// <summary>Korrelation benachbarter Werte (waagerecht) und Streuung von 4 × 4-Mitteln — grobe Häufungen.</summary>
+    /// <summary>Correlation of horizontally adjacent values and standard deviation of 4 × 4 means (coarse clusters).</summary>
     private static (double Neighbour, double Blocks) Texture(float[] f, int w, int h)
     {
         double sab = 0, saa = 0;
@@ -234,12 +235,12 @@ public class GrainTests
         var finer = Grain.Field(0, w, h, 0.1, seed: 3);
         var (nPixel, bPixel) = Texture(pixel, w, h);
         var (nFiner, bFiner) = Texture(finer, w, h);
-        // weißes Rauschen: Nachbarn unabhängig, 4 × 4-Mittel streuen 1/4; feiner: Nachbarn gegenläufig, Häufungen weg
+        // White noise: neighbours independent, 4 × 4 means have a standard deviation of 1/4; finer: neighbours anti-correlated, clusters gone
         Assert.InRange(nPixel, -0.03, 0.03);
         Assert.InRange(bPixel, 0.22, 0.28);
         Assert.True(nFiner < -0.15, $"Nachbarn {nFiner:0.000}");
         Assert.True(bFiner < 0.6 * bPixel, $"Häufungen {bFiner:0.000} gegen {bPixel:0.000}");
-        // gleiche Streuung: die Stärke bleibt
+        // same standard deviation: the strength stays
         Assert.InRange(Math.Sqrt(finer.Sum(v => (double)v * v) / finer.Length), 0.95, 1.05);
     }
 
@@ -252,10 +253,10 @@ public class GrainTests
         double Std(float[] f) => Math.Sqrt(f.Sum(v => (double)v * v) / f.Length);
         double MeanAbs(float[] f) => f.Average(v => Math.Abs((double)v));
         Assert.InRange(Std(hard), 0.95, 1.05);
-        // weich: wie ein Gauß (E|Z| = 0,80); hart: fast nur hell oder dunkel (gegen 1)
+        // soft: like a Gaussian (E|Z| = 0.80); hard: almost only bright or dark (towards 1)
         Assert.InRange(MeanAbs(soft), 0.76, 0.84);
         Assert.True(MeanAbs(hard) > 0.92, $"E|Korn| {MeanAbs(hard):0.000}");
-        // Härte 0: unverändert, auch über Apply
+        // hardness 0: unchanged, also through Apply
         Assert.Same(soft, Grain.Harden(soft, Grain.Hardening.For(0)));
         var px = Flat(64, 48, 0.5f);
         Assert.Equal(Grain.Apply(px, 64, 48, new GrainSettings(50, 40, 20, 30)), Grain.Apply(px, 64, 48, new GrainSettings(50, 40, 20, 30, 0)));

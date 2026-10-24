@@ -5,39 +5,50 @@ using ImageMagick;
 namespace ImageConverter.Core.Platform;
 
 /// <summary>
-/// Wie viel vom Rechner die Berechnungen nehmen dürfen (Einstellungen › Leistung), damit er bedienbar bleibt:
-/// <list type="bullet">
-/// <item><b>Niedrige Priorität</b> (Vorgabe): andere Programme haben Vorrang; ist der Rechner sonst frei, wird trotzdem mit
-/// voller Kraft gerechnet.</item>
-/// <item><b>Obergrenze</b> in Prozent der CPU: wirkt auf die eigenen parallelen Schleifen (<see cref="Options"/>), die
-/// KI-Laufzeit (<see cref="OnnxThreads"/>) und ImageMagick. Gemessen (Ryzen 9 7950X3D, PiSA-SR): mit 8 statt 16 Kernen
-/// nur rund ein Viertel langsamer.</item>
-/// </list>
+/// Controls how much of the computer the processing may use (Settings › Performance), so that the
+/// computer stays responsive.
 /// </summary>
+/// <remarks>
+/// <list type="bullet">
+/// <item><b>Low priority</b> (default): other programs take precedence; if the computer is otherwise idle,
+/// processing still runs at full speed.</item>
+/// <item><b>Upper limit</b> in percent of the CPU: applies to the program's own parallel loops
+/// (<see cref="Options"/>), the AI runtime (<see cref="OnnxThreads"/>) and ImageMagick. Measured
+/// (Ryzen 9 7950X3D, PiSA-SR): with 8 instead of 16 cores only about a quarter slower.</item>
+/// </list>
+/// </remarks>
 public static class ComputeLimits
 {
-    /// <summary>Höchstens so viel Prozent der CPU (10 … 100).</summary>
+    /// <summary>Upper limit of CPU usage in percent (10 … 100).</summary>
     public static int Percent { get; private set; } = 100;
 
-    /// <summary>Für jede parallele Schleife des Programms — begrenzt die Zahl gleichzeitiger Stränge.</summary>
+    /// <summary>Options for every parallel loop of the program; they limit the number of concurrent threads.</summary>
+    /// <remarks>Without a limit, <see cref="ParallelOptions.MaxDegreeOfParallelism"/> is -1; otherwise it is the share of the logical processors.</remarks>
     public static ParallelOptions Options { get; } = new();
 
-    /// <summary>Logische Prozessoren (mit Hyperthreading doppelt so viele wie Kerne).</summary>
+    /// <summary>Number of logical processors (twice the number of cores with hyper-threading).</summary>
     public static int LogicalProcessors => Environment.ProcessorCount;
 
-    /// <summary>Echte Kerne (ohne Hyperthreading-Zwillinge); so zählt auch die KI-Laufzeit.</summary>
+    /// <summary>Number of physical cores (without hyper-threading siblings); the AI runtime counts the same way.</summary>
     public static int PhysicalCores { get; } = CountPhysicalCores();
 
-    /// <summary>Erlaubte Kerne nach der Obergrenze (mindestens einer).</summary>
+    /// <summary>Number of physical cores allowed by the upper limit (at least one).</summary>
     public static int AllowedCores => Math.Max(1, (int)Math.Round(PhysicalCores * Percent / 100.0));
 
-    /// <summary>Stränge der KI-Laufzeit: null = ihre Vorgabe (alle echten Kerne), sonst die erlaubten Kerne.</summary>
+    /// <summary>
+    /// Thread count for the AI runtime: <see langword="null"/> for its default (all physical cores),
+    /// otherwise <see cref="AllowedCores"/>.
+    /// </summary>
     public static int? OnnxThreads => Percent >= 100 ? null : AllowedCores;
 
-    /// <summary>Nach einer Änderung der Obergrenze (die KI öffnet ihre Modelle dann neu).</summary>
+    /// <summary>Raised after the upper limit has changed (the AI then reopens its models).</summary>
     public static event EventHandler? Changed;
 
-    /// <summary>Obergrenze setzen (beim Start und aus den Einstellungen).</summary>
+    /// <summary>Sets the upper limit (at start-up and from the settings).</summary>
+    /// <param name="percent">Limit in percent of the CPU; clamped to 10 … 100.</param>
+    /// <remarks>
+    /// ImageMagick is configured only by the first successful call; see <see cref="MagickNeedsRestart"/>.
+    /// </remarks>
     public static void SetPercent(int percent)
     {
         percent = Math.Clamp(percent, 10, 100);
@@ -45,10 +56,10 @@ public static class ComputeLimits
         var changed = percent != Percent;
         Percent = percent;
         Options.MaxDegreeOfParallelism = threads;
-        // ImageMagick nur einmal, beim Start, bevor es rechnet: Es legt Puffer je Strang nach der Grenze zu Beginn einer
-        // Operation an — wird sie währenddessen erhöht, schreiben die zusätzlichen Stränge über das Ende hinaus
-        // (gemessen: „free(): invalid pointer“, Absturz; siehe docs/FEHLERGEDAECHTNIS.md). Spätere Änderungen gelten für
-        // ImageMagick ab dem nächsten Start.
+        // Configure ImageMagick only once, at start-up, before it processes anything: it allocates per-thread buffers
+        // according to the limit at the start of an operation. If the limit is raised meanwhile, the additional threads
+        // write past the end (observed: "free(): invalid pointer", crash; see docs/FEHLERGEDAECHTNIS.md, No. 77).
+        // Later changes apply to ImageMagick from the next start.
         if (MagickPercent is null)
         {
             try
@@ -58,26 +69,30 @@ public static class ComputeLimits
             }
             catch (Exception e) when (e is TypeInitializationException or DllNotFoundException)
             {
-                // ImageMagick fehlt (Tests ohne native Bibliothek)
+                // ImageMagick is missing (tests without the native library).
             }
         }
         if (changed) Changed?.Invoke(null, EventArgs.Empty);
     }
 
-    /// <summary>Grenze, mit der ImageMagick beim Start eingestellt wurde (null: noch nicht).</summary>
+    /// <summary>Limit in percent that ImageMagick was configured with at start-up; <see langword="null"/> if not yet configured.</summary>
     public static int? MagickPercent { get; private set; }
 
-    /// <summary>Die Grenze wurde nach dem Start geändert — für ImageMagick gilt sie erst beim nächsten Start.</summary>
+    /// <summary>Whether the limit was changed after start-up; for ImageMagick it applies only from the next start.</summary>
     public static bool MagickNeedsRestart => MagickPercent is { } m && m != Percent;
 
-    /// <summary>Ist die niedrige Priorität gesetzt?</summary>
+    /// <summary>Whether the low priority is set.</summary>
     public static bool LowPriority { get; private set; }
 
     /// <summary>
-    /// Ganzes Programm auf niedrige Priorität. Unter Linux gilt „nice“ je Strang: alle vorhandenen werden umgestellt, neue
-    /// erben den Wert von dem Strang, der sie anlegt. Zurück auf normal geht unter Linux ohne Administratorrechte nicht
-    /// — das Ausschalten wirkt dort erst nach einem Neustart.
+    /// Lowers the priority of the whole program.
     /// </summary>
+    /// <remarks>
+    /// On Linux the nice value applies per thread: all existing threads are changed, and new threads
+    /// inherit the value of the thread that creates them. Returning to normal priority is not possible on
+    /// Linux without administrator rights, so switching it off takes effect there only after a restart.
+    /// Failures are logged, not thrown.
+    /// </remarks>
     public static void LowerPriority()
     {
         if (LowPriority) return;
@@ -102,7 +117,11 @@ public static class ComputeLimits
         }
     }
 
-    /// <summary>Windows: zurück auf normal (unter Linux nicht möglich, siehe <see cref="LowerPriority"/>).</summary>
+    /// <summary>Restores normal priority on Windows (not possible on Linux, see <see cref="LowerPriority"/>).</summary>
+    /// <returns>
+    /// <see langword="true"/> if the priority is normal afterwards; <see langword="false"/> on Linux or if
+    /// the change failed.
+    /// </returns>
     public static bool TryNormalPriority()
     {
         if (!LowPriority) return true;
@@ -119,13 +138,13 @@ public static class ComputeLimits
         }
     }
 
-    /// <summary>„nice“-Wert unter Linux: deutlich hinter allem, was der Benutzer gerade tut.</summary>
+    /// <summary>Nice value on Linux: well behind everything else that is currently running.</summary>
     private const int NiceValue = 10;
 
     [DllImport("libc", SetLastError = true)]
     private static extern int setpriority(int which, uint who, int prio);
 
-    // ------------------------------------------------------------ Kerne zählen
+    // ------------------------------------------------------------ Counting cores
 
     private static int CountPhysicalCores()
     {
@@ -137,12 +156,12 @@ public static class ComputeLimits
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException
                                        or EntryPointNotFoundException or DllNotFoundException)
         {
-            // unten: Schätzung
+            // fall back to the estimate below
         }
         return Math.Max(1, Environment.ProcessorCount);
     }
 
-    /// <summary>Linux: verschiedene (Paket, Kern)-Paare der Prozessoren.</summary>
+    /// <summary>Linux: number of distinct (package, core) pairs of the processors.</summary>
     private static int LinuxCores()
     {
         var cores = new HashSet<string>();
@@ -157,7 +176,7 @@ public static class ComputeLimits
         return cores.Count > 0 ? cores.Count : Environment.ProcessorCount;
     }
 
-    /// <summary>Windows: Einträge „Prozessorkern“ aus GetLogicalProcessorInformation.</summary>
+    /// <summary>Windows: number of processor core entries returned by GetLogicalProcessorInformation.</summary>
     private static int WindowsCores()
     {
         uint length = 0;

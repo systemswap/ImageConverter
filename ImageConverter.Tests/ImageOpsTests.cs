@@ -29,12 +29,12 @@ public class ImageOpsTests
         using var src = new MagickImage(MagickColors.Red, 200, 200);
         using var circle = ImageOps.Crop(src, 0, 0, 100, 100, radius: 50);
 
-        Assert.Equal(100u, circle.Width);                 // bleibt ein Rechteck
-        Assert.Equal(0, AlphaAt(circle, 0, 0));           // Ecke transparent
-        Assert.Equal(0, AlphaAt(circle, 10, 10));         // außerhalb des Kreises
-        Assert.Equal(255, AlphaAt(circle, 50, 1));        // oben mittig: im Kreis
-        Assert.Equal(255, AlphaAt(circle, 50, 50));       // Mitte
-        Assert.Equal(255, AlphaAt(circle, 25, 25));       // innerhalb (Abstand 35 < 50)
+        Assert.Equal(100u, circle.Width);                 // stays a rectangle
+        Assert.Equal(0, AlphaAt(circle, 0, 0));           // corner transparent
+        Assert.Equal(0, AlphaAt(circle, 10, 10));         // outside the circle
+        Assert.Equal(255, AlphaAt(circle, 50, 1));        // top centre: inside the circle
+        Assert.Equal(255, AlphaAt(circle, 50, 50));       // centre
+        Assert.Equal(255, AlphaAt(circle, 25, 25));       // inside (distance 35 < 50)
     }
 
     [Fact]
@@ -44,8 +44,8 @@ public class ImageOpsTests
         using var rounded = ImageOps.Crop(src, 0, 0, 100, 60, radius: 10);
 
         Assert.Equal(0, AlphaAt(rounded, 0, 0));
-        Assert.Equal(255, AlphaAt(rounded, 10, 10));      // schon innerhalb der Rundung
-        Assert.Equal(255, AlphaAt(rounded, 50, 0));       // Kante bleibt gerade
+        Assert.Equal(255, AlphaAt(rounded, 10, 10));      // already inside the rounding
+        Assert.Equal(255, AlphaAt(rounded, 50, 0));       // edge stays straight
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class ImageOpsTests
     [InlineData(false)]
     public void Resize_OpaqueImage_StaysOpaque(bool gamma)
     {
-        // Wie ein JPEG: kein Alphakanal
+        // Like a JPEG: no alpha channel
         using var src = new MagickImage(MagickColors.SkyBlue, 400, 300);
         src.Format = MagickFormat.Jpeg;
         src.Alpha(AlphaOption.Off);
@@ -101,8 +101,8 @@ public class ImageOpsTests
     }
 
     /// <summary>
-    /// Regression: Anzeige-Export und danach Skalieren (genau die Reihenfolge der App)
-    /// lieferte schwarz-transparente Pixel, solange ToBgra über ToByteArray(format) lief.
+    /// Regression test: exporting for display and then resizing (exactly the order used by the app)
+    /// produces black, transparent pixels if ToBgra goes through ToByteArray(format).
     /// </summary>
     [Fact]
     public async Task ExportForDisplay_ThenResize_KeepsPixels()
@@ -112,27 +112,27 @@ public class ImageOpsTests
         try
         {
             using var loaded = await ImageLoader.LoadAsync(path);
-            _ = ImageOps.ToBgra(loaded.Image);   // wie SetDocumentAsync
+            _ = ImageOps.ToBgra(loaded.Image);   // as in SetDocumentAsync
 
             using var small = ImageOps.Resize(loaded.Image, 400, 300, ResampleFilter.Lanczos3, gammaCorrect: true);
             var bgra = ImageOps.ToBgra(small);
             var p = (150 * 400 + 200) * 4;
 
             Assert.Equal(255, bgra[p + 3]);
-            Assert.InRange(bgra[p + 2], 100, 160);   // Rotanteil von SkyBlue (135)
+            Assert.InRange(bgra[p + 2], 100, 160);   // red component of SkyBlue (135)
         }
         finally { File.Delete(path); }
     }
 
     /// <summary>
-    /// Qualitätswächter: Gamma-korrektes Skalieren darf dunkle Tonstufen nicht
-    /// zusammenfallen lassen. Mit Q8 blieben hier nur 6 von 41 übrig (Banding in
-    /// Schatten) — deshalb Q16. Fällt der Test, ist vermutlich wieder Q8 im Spiel.
+    /// Quality guard: gamma-correct resizing must not merge dark tone levels. With a Q8 build
+    /// of ImageMagick only 6 of 41 levels remain here (banding in shadows), which is why Q16 is
+    /// used. If this test fails, a Q8 build is probably in use.
     /// </summary>
     [Fact]
     public void GammaCorrectResize_KeepsDarkTones()
     {
-        // 82 × 1: jede Stufe 0–40 doppelt nebeneinander, Box halbiert auf 41 × 1
+        // 82 × 1: each level 0–40 twice side by side, box filter halves to 41 × 1
         const int levels = 41;
         var bgra = new byte[levels * 2 * 4];
         for (var x = 0; x < levels * 2; x++)
@@ -151,9 +151,9 @@ public class ImageOpsTests
     }
 
     /// <summary>
-    /// Große Bilder werden in Streifen parallel skaliert (Magick.NET rechnet sonst auf
-    /// einem Kern). Das Ergebnis muss dem einfachen Weg über ImageMagick entsprechen —
-    /// mit Transparenz, Farbprofil, EXIF und 8 Bit Tiefe.
+    /// Large images are resized in parallel strips (otherwise Magick.NET computes on a single
+    /// core). The result must match the plain ImageMagick path, including transparency, colour
+    /// profile, EXIF and 8-bit depth.
     /// </summary>
     [Theory]
     [InlineData(true)]
@@ -182,8 +182,8 @@ public class ImageOpsTests
         var b = strips.GetPixelsUnsafe().ToShortArray("RGBA")!;
         var diffs = a.Zip(b, (x, y) => Math.Abs(x - y) / 257.0).ToArray();
 
-        // Rundung der Zwischenstufen: einzelne Pixel bis 3 Stufen (von 255), im Mittel praktisch 0
-        // (Testbild ist ein Zufallsmuster — die größte Abweichung schwankt zwischen 1 und 2,5)
+        // Rounding of intermediate values: single pixels up to 3 levels (of 255), practically 0 on average
+        // (the test image is a random pattern, so the largest deviation varies between 1 and 2.5)
         Assert.Equal((640u, 400u), (strips.Width, strips.Height));
         Assert.True(diffs.Max() <= 3, $"Abweichung bis {diffs.Max():F2} Stufen");
         Assert.True(diffs.Average() < 0.05, $"mittlere Abweichung {diffs.Average():F3} Stufen");
@@ -194,14 +194,13 @@ public class ImageOpsTests
     }
 
     /// <summary>
-    /// Vorschau, Größenschätzung und Export lesen gleichzeitig dasselbe Bild.
-    /// Nachgestellt mit vielen parallelen Aufgaben — keine darf scheitern oder
-    /// ein falsches Ergebnis liefern.
+    /// Preview, size estimation and export read the same image at the same time. Reproduced
+    /// here with many parallel tasks; none may fail or return a wrong result.
     /// </summary>
     [Fact]
     public async Task ConcurrentOperations_OnSameSource_AreSafe()
     {
-        // Über ParallelMinPixels: auch das Skalieren in Streifen läuft hier gleichzeitig
+        // Above ParallelMinPixels, so resizing in strips also runs concurrently here
         using var src = new MagickImage(MagickColors.SkyBlue, 1500, 800);
         src.SetProfile(ColorProfiles.AdobeRGB1998);
         var expectedDisplay = ImageOps.ToDisplayBgra(src);
@@ -230,7 +229,7 @@ public class ImageOpsTests
 
         await Task.WhenAll(tasks);
 
-        // Die Quelle selbst ist unverändert
+        // The source itself is unchanged.
         Assert.Equal((1500u, 800u), (src.Width, src.Height));
         Assert.Contains("Adobe", src.GetColorProfile()?.Description ?? "");
     }

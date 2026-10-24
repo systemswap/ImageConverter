@@ -1,17 +1,20 @@
 namespace ImageConverter.Core.Localization;
 
 /// <summary>
-/// Englisch, eingebaut. Schlüssel ist der deutsche Text aus dem Code bzw. XAML —
-/// der Test <c>LocalizationTests.English_CoversEveryText</c> meldet fehlende Einträge,
-/// <c>English_HasNoLeftovers</c> solche, deren deutscher Text sich geändert hat.
-/// Platzhalter {0}, {1} … müssen in der Übersetzung erhalten bleiben.
+/// The built-in English translation, keyed by the German text from the code or XAML.
 /// </summary>
+/// <remarks>
+/// The test <c>LocalizationTests.English_CoversEveryText</c> reports missing entries,
+/// <c>English_HasNoLeftovers</c> reports entries whose German text was changed or removed, and
+/// <c>English_HasNoDuplicateKeys</c> reports keys that occur twice (a second entry silently overwrites the
+/// first). Placeholders {0}, {1} … must be kept in the translation (<c>English_KeepsPlaceholders</c>).
+/// </remarks>
 public static class English
 {
-    // Zuerst die Tabelle: statische Felder werden in Textreihenfolge belegt
+    // The table must come first: static fields are initialised in textual order, and Language below uses it.
     private static readonly Dictionary<string, string> _texts = new(StringComparer.Ordinal)
     {
-        // ------------------------------------------------------------ Kopf, Fuß, Bildfläche
+        // ------------------------------------------------------------ Header, footer, image area
         ["＋  Bilder"] = "＋  Images",
         ["Bilder oder ganze Ordner öffnen — oder einfach ins Fenster ziehen."] = "Open images or whole folders — or just drag them into the window.",
         ["Vorheriges Bild"] = "Previous image",
@@ -57,7 +60,7 @@ public static class English
         ["Zielordner für den Export"] = "Destination folder for export",
         ["Kein Dateimanager gefunden. Der Ordner ist: {0}"] = "No file manager found. The folder is: {0}",
 
-        // ------------------------------------------------------------ Kachelleiste
+        // ------------------------------------------------------------ Thumbnail strip
         ["Leiste aufklappen: zeigt, was in jeder Rubrik steckt"] = "Expand the bar: shows what each section contains",
         ["Standard"] = "Standard",
         ["Standard: Format · Zuschnitt · Größe · DPI · Schärfen"] = "Standard: format · crop · size · DPI · sharpening",
@@ -72,7 +75,7 @@ public static class English
         ["Ausgabe: Metadaten · Farbprofil · Dateiname"] = "Output: metadata · colour profile · file name",
         ["Metadaten · Farbprofil · Dateiname"] = "Metadata · colour profile · file name",
 
-        // ------------------------------------------------------------ Mehrere Bilder
+        // ------------------------------------------------------------ Several images
         ["Gleiche Einstellungen für alle Bilder"] = "Same settings for all images",
         ["Haken gesetzt: alle Bilder teilen sich die Einstellungen."] = "Checked: all images share the settings.",
         ["Die Größe wird pro Bild umgerechnet: Die eingegebene Kante gilt, die andere folgt dem Seitenverhältnis des Bildes — nichts wird verzerrt."] = "The size is recalculated per image: the edge you entered applies, the other follows the image's aspect ratio — nothing is distorted.",
@@ -95,7 +98,7 @@ public static class English
         ["{0} % größer als das Original ({1})"] = "{0} % larger than the original ({1})",
         ["Schätzung nicht möglich: {0}"] = "Estimate not possible: {0}",
 
-        // ------------------------------------------------------------ Zuschnitt
+        // ------------------------------------------------------------ Crop
         ["ZUSCHNITT"] = "CROP",
         ["Verhältnis"] = "Ratio",
         ["Frei"] = "Free",
@@ -114,7 +117,7 @@ public static class English
         ["Auf Auswahl zuschneiden"] = "Crop to selection",
         ["Der Ausschnitt wird zum neuen Bild. Bei runden Ecken wird alles außerhalb der Rundung transparent. Rückgängig mit Strg+Z. Auch per Enter oder Doppelklick in den Rahmen."] = "The selection becomes the new image. With rounded corners, everything outside the rounding becomes transparent. Undo with Ctrl+Z. Also with Enter or a double-click inside the frame.",
 
-        // ------------------------------------------------------------ Größe
+        // ------------------------------------------------------------ Size
         ["GRÖSSE"] = "SIZE",
         ["Einheit"] = "Unit",
         ["Pixel"] = "Pixels",
@@ -126,7 +129,7 @@ public static class English
         ["Gamma-korrekt skalieren"] = "Gamma-correct scaling",
         ["Rechnet so, wie das Auge Helligkeit wahrnimmt: Feine helle Linien und Kanten werden beim Verkleinern nicht dunkler. Gilt für jedes Umrechnen der Pixel — auch, wenn sich die Pixelzahl durch eine neue DPI ändert. Kostet etwas Zeit, sieht fast immer besser aus."] = "Calculates the way the eye perceives brightness: fine bright lines and edges don't get darker when shrinking. Applies to every pixel recalculation — also when a new DPI changes the pixel count. Takes a little time, almost always looks better.",
 
-        // Filter
+        // Filters
         ["Bezieht viele Nachbarpixel ein und hält dadurch feine Details wie Haare, Blätter oder Schrift scharf. An harten Kanten kann ein leichter heller Saum entstehen."] = "Takes many neighbouring pixels into account and keeps fine detail such as hair, leaves or text sharp. Hard edges may get a slight bright fringe.",
         ["Fotos verkleinern — die beste Wahl für fast alles."] = "Shrinking photos — the best choice for almost everything.",
         ["Glättet weich und natürlich. Etwas weniger scharf als Lanczos, dafür ohne Säume an Kanten."] = "Smooth and natural. Slightly less sharp than Lanczos, but without fringes at edges.",
@@ -144,7 +147,7 @@ public static class English
         ["Übernimmt einfach den nächstgelegenen Pixel, ohne zu glätten — Kanten bleiben hart und pixelig."] = "Simply takes the nearest pixel without smoothing — edges stay hard and pixelated.",
         ["Pixel-Art, Icons und Screenshots. Für Fotos ungeeignet."] = "Pixel art, icons and screenshots. Not suitable for photos.",
 
-        // ------------------------------------------------------------ Auflösung
+        // ------------------------------------------------------------ Resolution
         ["Auflösung"] = "Resolution",
         ["Druckgröße {0:F1} × {1:F1} cm"] = "Print size {0:F1} × {1:F1} cm",
         ["Bildschirm und Web"] = "screen and web",
@@ -153,7 +156,7 @@ public static class English
         ["hochwertiger Kunstdruck"] = "high-quality fine-art print",
         ["Strichzeichnungen und Scans"] = "line drawings and scans",
 
-        // ------------------------------------------------------------ Schärfen
+        // ------------------------------------------------------------ Sharpening
         ["Schärfen"] = "Sharpen",
         ["Radius"] = "Radius",
         ["Rauschen"] = "Noise",
@@ -196,7 +199,7 @@ public static class English
         ["Speichert mit 65 536 statt 256 Stufen je Farbe — gegen Treppen in Verläufen, wenn das Bild später weiterbearbeitet wird. Die Datei wird dadurch etwa doppelt so groß. Wirkt nur, wenn am Bild gerechnet wurde (Größe, Regler, Entzerren): ein unbearbeitetes 8-Bit-Foto bleibt gleich groß. Bei kräftiger Tonwert-Bearbeitung (Dunst, Kontrast, Tiefen/Lichter, Helligkeit, Luminanz) setzt die App den Haken nach jeder solchen Änderung selbst – „empfohlen“; herausnehmen geht jederzeit. Bilder, die schon 16 Bit haben, bleiben es auch ohne Haken."] = "Saves with 65,536 instead of 256 levels per colour — against banding in gradients when the image is edited further later. The file becomes about twice as large. Only has an effect when the image was processed (size, sliders, perspective): an unedited 8-bit photo stays the same size. With strong tonal edits (dehaze, contrast, shadows/highlights, brightness, luminance) the app ticks it itself after every such change – “recommended”; you can untick it at any time. Images that already have 16 bits keep them even without the tick.",
         ["empfohlen"] = "recommended",
         ["Kräftige Tonwert-Bearbeitung: mit 16 Bit bleiben weiche Verläufe auch beim Weiterbearbeiten ohne Treppen. Die Datei wird etwa doppelt so groß."] = "Strong tonal edits: with 16 bits, smooth gradients stay free of banding even when edited further. The file becomes about twice as large.",
-        // Fortschritt beim Speichern
+        // Progress while saving
         ["Vorbereiten …"] = "Preparing …",
         ["Laden …"] = "Loading …",
         ["Bild {0} von {1} · {2}"] = "Image {0} of {1} · {2}",
@@ -353,7 +356,7 @@ public static class English
         ["Zurücksetzen"] = "Reset",
         ["Alle Regler dieser Kachel auf 0, Färben aus. Rückgängig mit Strg+Z."] = "All sliders in this section to 0, tint off. Undo with Ctrl+Z.",
 
-        // ------------------------------------------------------------ Ausgabe
+        // ------------------------------------------------------------ Output
         ["METADATEN & FARBE"] = "METADATA & COLOUR",
         ["EXIF/IPTC/XMP: Kamera, Datum, Ort, Copyright. „Nur GPS entfernen“ löscht die Ortsangaben — sinnvoll vor dem Teilen im Netz."] = "EXIF/IPTC/XMP: camera, date, location, copyright. “Remove GPS only” deletes the location — sensible before sharing online.",
         ["Alles behalten"] = "Keep everything",
@@ -368,7 +371,7 @@ public static class English
         ["Dateiname"] = "File name",
         ["Platzhalter: {name} Dateiname ohne Endung · {breite} {höhe} Pixelmaße · {n} laufende Nummer · {datum} heutiges Datum. Die Endung kommt automatisch dazu."] = "Placeholders: {name} file name without extension · {breite} {höhe} width and height in pixels · {n} running number · {datum} today's date. The extension is added automatically.",
 
-        // ------------------------------------------------------------ Meldungen der Hauptansicht
+        // ------------------------------------------------------------ Messages of the main view
         ["„{0}“ ist kein unterstütztes Bildformat."] = "“{0}” is not a supported image format.",
         ["Keine Bilder gefunden."] = "No images found.",
         ["{0} Datei(en) übersprungen — Format wird nicht unterstützt."] = "{0} file(s) skipped — format not supported.",
@@ -379,7 +382,7 @@ public static class English
         ["Export fehlgeschlagen: {0}"] = "Export failed: {0}",
         ["Pixel konnten nicht gelesen werden."] = "Could not read the pixels.",
 
-        // ------------------------------------------------------------ Export-Fenster
+        // ------------------------------------------------------------ Export window
         ["Bilder exportieren"] = "Export images",
         ["Alle"] = "All",
         ["Keine"] = "None",
@@ -399,7 +402,7 @@ public static class English
         ["Fertig — 1 Bild exportiert ({0})."] = "Done — 1 image exported ({0}).",
         ["Fertig — {0} Bilder exportiert ({1})."] = "Done — {0} images exported ({1}).",
 
-        // ------------------------------------------------------------ Drucken
+        // ------------------------------------------------------------ Printing
         ["Drucken"] = "Print",
         ["DRUCKER"] = "PRINTER",
         ["Als PDF speichern"] = "Save as PDF",
@@ -467,7 +470,7 @@ public static class English
         ["{0} ließ sich nicht starten."] = "{0} could not be started.",
         ["{0} antwortet nicht."] = "{0} is not responding.",
 
-        // ------------------------------------------------------------ KI
+        // ------------------------------------------------------------ AI
         ["KI-VERBESSERUNG"] = "AI ENHANCEMENT",
         ["Noch keine KI-Modelle vorhanden. Sie laufen komplett auf deinem Rechner und werden einmalig heruntergeladen."] = "No AI models yet. They run entirely on your computer and are downloaded once.",
         ["Modelle laden …"] = "Get models …",
@@ -527,7 +530,7 @@ public static class English
         ["  ·  noch ca. {0}"] = "  ·  about {0} left",
 
 
-        // Liste „Bearbeitungen“
+        // Edits list
         ["BEARBEITUNGEN"] = "EDITS",
         ["Noch keine Bearbeitungen an diesem Bild."] = "No edits on this image yet.",
         ["Neu anwenden"] = "Apply selection",
@@ -557,7 +560,7 @@ public static class English
         ["Schärfe"] = "Sharpness",
         ["Färben {0:0}°"] = "Tint {0:0}°",
         ["{0:0.00} · Radius {1:0.0}"] = "{0:0.00} · radius {1:0.0}",
-        // KI-Modelle (Einstellungen)
+        // AI models (settings)
         ["Modelle lassen sich auch von Hand hineinlegen (je Modell ein Unterordner) — die App erkennt sie automatisch."] = "Models can also be placed there by hand (one subfolder per model) — the app detects them automatically.",
         ["Herunterladen"] = "Download",
         ["Löschen"] = "Delete",
@@ -595,7 +598,7 @@ public static class English
         ["Shangchen Zhou (CodeFormer), ONNX von FaceFusion"] = "Shangchen Zhou (CodeFormer), ONNX by FaceFusion",
         ["Zhouxia Wang u. a. (RestoreFormer++), ONNX von FaceFusion"] = "Zhouxia Wang et al. (RestoreFormer++), ONNX by FaceFusion",
 
-        // ------------------------------------------------------------ Einstellungen, Sprache
+        // ------------------------------------------------------------ Settings, language
         ["Einstellungen"] = "Settings",
         ["Schließen"] = "Close",
         ["Laufende Downloads gehen im Hintergrund weiter."] = "Running downloads continue in the background.",
@@ -611,7 +614,7 @@ public static class English
         ["{0}: Deutsch ist eingebaut und lässt sich nicht ersetzen."] = "{0}: German is built in and cannot be replaced.",
         ["kein JSON-Objekt"] = "not a JSON object",
 
-        // Frei drehen
+        // Free rotation
         ["Frei drehen: mit dem Regler unten um einen beliebigen Winkel drehen, z. B. den Horizont gerade richten. Der Rahmen zeigt, was übrig bleibt – er passt sich beim Drehen an und lässt sich danach verschieben und verkleinern. „Drehen und zuschneiden“ übernimmt, Esc verwirft."] =
             "Rotate freely: turn the image by any angle with the slider below, e.g. to straighten the horizon. The frame shows what remains – it follows the angle and can then be moved and made smaller. “Rotate and crop” applies, Esc discards.",
         ["Drehen"] = "Rotate",
@@ -625,7 +628,7 @@ public static class English
         ["gespiegelt"] = "flipped",
         ["{0} × {1} px · runde Ecken"] = "{0} × {1} px · rounded corners",
 
-        // Entzerren
+        // Perspective correction
         ["Entzerren: die vier Ecken des Rahmens auf die Ecken von etwas legen, das in Wirklichkeit rechteckig ist – Blatt, Bild an der Wand, Fenster, Hausfront. Daraus wird ein gerades Rechteck, genau der Inhalt des Rahmens. Beim Ziehen hilft eine Lupe; Pfeiltasten verschieben die zuletzt gezogene Ecke um 1 px (Umschalt: 10 px)."] =
             "Straighten perspective: put the four corners of the frame on the corners of something that is really rectangular – a sheet, a picture on the wall, a window, a facade. It becomes a straight rectangle, exactly the content of the frame. A magnifier helps while dragging; arrow keys move the last dragged corner by 1 px (Shift: 10 px).",
         ["Entzerren"] = "Straighten",
@@ -636,12 +639,12 @@ public static class English
             "Turns the frame into a straight rectangle – one step, Ctrl+Z undoes it. Also with Enter or a double-click inside the frame; Esc cancels.",
         ["Entzerrt"] = "Straightened",
 
-        // Standardformate
+        // Standard formats
         ["DIN-Formate"] = "ISO A sizes",
         ["Fotoabzüge (cm)"] = "Photo prints (cm)",
         ["US-Formate"] = "US sizes",
 
-        // Weißabgleich
+        // White balance
         ["WEISSABGLEICH"] = "WHITE BALANCE",
         ["Weißabgleich"] = "White balance",
         ["Neutral"] = "Neutral",
@@ -669,12 +672,12 @@ public static class English
             "White: click the brightest spot that should be white but still has detail (not blown out). Several clicks are averaged; Esc ends.",
         ["Pipette wählen und ins Bild klicken. Eine Pipette reicht – Neutral (grau) ist meist die beste. Mit Schwarz und Weiß dazu und mit mehreren Klicks wird es genauer."] =
             "Choose an eyedropper and click into the image. One is enough – Neutral (grey) is usually the best. Adding Black and White and clicking several times makes it more accurate.",
-        // ------------------------------------------------------------ Grafikkarte (Einstellungen › Leistung)
+        // ------------------------------------------------------------ Graphics card (Settings › Performance)
         ["Diese Laufzeit kann keine Grafikkarte ansprechen — die KI rechnet auf der CPU."] = "This runtime cannot use a graphics card — the AI runs on the CPU.",
         ["Die Grafikkarte ({0}) ließ sich nicht nutzen — die KI rechnet auf der CPU. Grund: {1}"] = "The graphics card ({0}) could not be used — the AI runs on the CPU. Reason: {1}",
         ["Die KI-Scaler (Größe › Verfahren) rechnen auf der Grafikkarte ({0}), die übrigen Modelle (Gesichter, Entfernen, Begradigen) auf der CPU."] = "The AI scalers (Size › Method) run on the graphics card ({0}), the other models (faces, removal, straightening) on the CPU.",
 
-        // ------------------------------------------------------------ Upscaling (Gruppe unter „Größe“)
+        // ------------------------------------------------------------ Upscaling (group below "Size")
         ["Vielfaches des Bildes"] = "Multiple of the image",
         ["{0}×  ·  {1} × {2} px"] = "{0}×  ·  {1} × {2} px",
         ["Skalierung zurücksetzen: wieder die Größe des Bildes ({0} × {1} px)."] = "Reset scaling: back to the size of the image ({0} × {1} px).",
@@ -768,7 +771,7 @@ public static class English
         ["Wird nur einmal gebraucht: PiSA-SR rechnet mit leerer Beschreibung, die die App beim Umwandeln daraus berechnet. Wird mit PiSA-SR geladen."] = "Needed only once: PiSA-SR works with an empty description, which the app computes from it during conversion. Downloaded with PiSA-SR.",
         ["Stability AI (Stable Diffusion 2.1-base), Spiegel „Manojb/stable-diffusion-2-1-base“ auf Hugging Face"] = "Stability AI (Stable Diffusion 2.1-base), mirror “Manojb/stable-diffusion-2-1-base” on Hugging Face",
 
-        // Einstellungsfenster: Seiten links
+        // Settings window: pages on the left
         ["Allgemein"] = "General",
         ["Begradigen"] = "Straighten",
         ["Bilder verbessern"] = "Improve images",
@@ -793,7 +796,7 @@ public static class English
         ["Upscaler, geschätzt für ein Foto mit 12 MP: {0}"] = "Upscalers, estimated for a 12 MP photo: {0}",
         ["Rechnet Entrauschen, Dunst und ein kleines KI-Modell je einmal auf der Grafikkarte und auf der CPU und nutzt danach, was auf diesem Rechner schneller ist. Dann misst er die vorhandenen Upscaler, damit die Zeitschätzung stimmt (PiSA-SR kann einige Minuten dauern)."] = "Runs noise reduction, haze and a small AI model once on the graphics card and once on the CPU, then uses whichever is faster on this computer. Afterwards it measures the installed upscalers so the time estimate is right (PiSA-SR can take a few minutes).",
         ["Das Bild ist zu groß für diesen Rechner ({0} × {1} Pixel, {2:0} Megapixel; höchstens {3:0} Megapixel)."] = "The image is too large for this computer ({0} × {1} pixels, {2:0} megapixels; at most {3:0} megapixels).",
-        // Rechner bedienbar halten (Einstellungen › Leistung)
+        // Keeping the computer responsive (Settings › Performance)
         ["Für Laden, Ausrichten und Umwandeln gilt die neue Grenze ab dem nächsten Start; KI und Bildfilter sofort."] = "For loading, aligning and converting the new limit applies from the next start; AI and image filters immediately.",
         ["100 % · alle {0} Kerne"] = "100 % · all {0} cores",
         ["{0} % · {1} von {2} Kernen"] = "{0} % · {1} of {2} cores",
@@ -804,7 +807,7 @@ public static class English
         ["CPU höchstens"] = "CPU at most",
         ["Begrenzt, wie viele Kerne KI, Bildfilter und Umwandeln gleichzeitig nutzen. Mit der Hälfte dauert es meist nur rund ein Viertel länger, der Lüfter bleibt ruhiger."] = "Limits how many cores AI, image filters and conversion use at the same time. With half of them it usually takes only about a quarter longer, and the fan stays quieter.",
         ["Nach einer Änderung der Obergrenze am besten neu testen – die Zeiten gelten je Einstellung."] = "After changing the limit, best test again – the times apply per setting.",
-        // Geschwindigkeitstest Grafikkarte/CPU (Einstellungen › Leistung)
+        // Speed test graphics card/CPU (Settings › Performance)
         ["Die KI rechnet auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "The AI runs on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
         ["Entrauschen und Dunst rechnen auf der CPU — laut Geschwindigkeitstest ist sie hier schneller als die Grafikkarte ({0})."] = "Noise reduction and haze run on the CPU — according to the speed test it is faster here than the graphics card ({0}).",
         ["Noch nicht getestet — die Grafikkarte wird genutzt, wenn eine da ist."] = "Not tested yet — the graphics card is used if there is one.",
@@ -824,7 +827,9 @@ public static class English
         ["Geschwindigkeit testen"] = "Test speed",
     };
 
+    /// <summary>English texts keyed by the German text.</summary>
     public static IReadOnlyDictionary<string, string> Texts => _texts;
 
+    /// <summary>The built-in English language.</summary>
     public static readonly Language Language = new("en", "English", new Flag(FlagKind.UnionJack), _texts);
 }

@@ -2,15 +2,15 @@ using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Dunst entfernen (Dark Channel Prior), Regler „Dunst“ in der Kachel Tools.</summary>
+/// <summary>Tests haze removal (dark channel prior), the „Dunst“ slider in the Tools tile.</summary>
 public class DehazeTests
 {
     private const int W = 240, H = 160;
 
     /// <summary>
-    /// Klare Szene: kräftige Farbflächen mit Schatten bis Schwarz — jede Fläche hat einen
-    /// dunklen Kanal. Oben ein Streifen Himmel in der Farbe der Luft: Daraus schätzt das
-    /// Verfahren das Himmelslicht, wie in echten Fotos.
+    /// Air light of the test scene. The clear scene consists of saturated colour areas with shading down to black,
+    /// so every area has a dark channel. A strip of sky in the colour of the air at the top lets the method estimate
+    /// the air light from it, as in real photos.
     /// </summary>
     private const float Air = 0.85f;
     private const int SkyRows = 20;
@@ -24,7 +24,7 @@ public class DehazeTests
             var i = (y * W + x) * 3;
             if (y < SkyRows) { rgb[i] = rgb[i + 1] = rgb[i + 2] = Air; continue; }
             var block = (x / 20 + y / 20) % 4;
-            var shade = ((x * 7 + y * 3) % 20) / 19f;   // 0 (Schatten) … 1
+            var shade = ((x * 7 + y * 3) % 20) / 19f;   // 0 (shadow) … 1
             (rgb[i], rgb[i + 1], rgb[i + 2]) = block switch
             {
                 0 => (0.8f * shade, 0.2f * shade, 0),
@@ -36,7 +36,7 @@ public class DehazeTests
         return rgb;
     }
 
-    /// <summary>Dunst nach dem physikalischen Modell in linearem Licht: Bild = Szene · t + Luft · (1 − t).</summary>
+    /// <summary>Adds haze following the physical model in linear light: image = scene · t + air · (1 − t).</summary>
     private static byte[] Haze(float[] scene, float t, float air)
     {
         var bgra = new byte[W * H * 4];
@@ -63,9 +63,9 @@ public class DehazeTests
         Enumerable.Range(0, W * H * 4).Where(i => i % 4 != 3).Average(i => Math.Abs(a[i] - b[i]));
 
     /// <summary>
-    /// Grafikkarte (wenn vorhanden) und CPU rechnen denselben Dunst (alle Durchläufe der Kette): im Mittel unter 1/100
-    /// Stufe, einzelne Pixel höchstens wenige Stufen (dort kippt eine Schwelle durch die Rundung). Ohne Grafikkarte prüft
-    /// der Test nur die CPU gegen sich selbst.
+    /// GPU (if available) and CPU compute the same dehazing (all passes of the chain): on average less than 1/100 of a
+    /// level, single pixels at most a few levels (where rounding tips a threshold). Without a GPU the test only
+    /// compares the CPU with itself.
     /// </summary>
     [Fact]
     public void Dehaze_GpuAndCpu_Agree()
@@ -81,8 +81,8 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Kontrast und Farben kommen zurück, die Helligkeit bleibt (Helligkeitsausgleich wie bei
-    /// Adobe) — ohne ihn wurde das Ergebnis dunkel.
+    /// Contrast and colours come back while the brightness stays (brightness compensation as in Adobe
+    /// products); without the compensation the result would become dark.
     /// </summary>
     [Fact]
     public void HazyImage_GetsContrastAndColourBack_WithoutGettingDark()
@@ -94,8 +94,8 @@ public class DehazeTests
         var result = Adjust.Apply(hazy, W, H, new Adjustments(Dehaze: 100));
 
         Assert.True(Contrast(result) > Contrast(hazy) * 1.5, $"Kontrast {Contrast(hazy):F1} → {Contrast(result):F1}");
-        // Farbe deutlich zurück, aber nicht ganz bis zum Modell: die Buntheit ist auf das begrenzt,
-        // was der geschätzte Dunst genommen hat (sonst wurde Grün ocker, siehe ThinHaze_…)
+        // Colour clearly comes back, but not fully to the model: the chroma is limited to what the
+        // estimated haze has taken away (otherwise green turns ochre, see ThinHaze_…).
         Assert.True(Chroma(result) > 1.8 * Chroma(hazy),
             $"Buntheit {Chroma(hazy):F3} → {Chroma(result):F3} (klar {Chroma(clear):F3})");
         Assert.True(Mean(result) > Mean(hazy) * 0.85, $"Helligkeit {Mean(hazy):F1} → {Mean(result):F1}");
@@ -104,7 +104,7 @@ public class DehazeTests
     private static double Mean(byte[] bgra) =>
         Enumerable.Range(0, W * H).Average(p => 0.2126 * bgra[p * 4 + 2] + 0.7152 * bgra[p * 4 + 1] + 0.0722 * bgra[p * 4]);
 
-    /// <summary>Mittlere Oklab-Buntheit der Landschaft (ohne Himmelsstreifen).</summary>
+    /// <summary>Mean Oklab chroma of the landscape (without the sky strip).</summary>
     private static double Chroma(byte[] bgra) => Enumerable.Range(SkyRows * W, (H - SkyRows) * W).Average(p =>
     {
         var c = Oklab.FromSrgb(bgra[p * 4 + 2] / 255f, bgra[p * 4 + 1] / 255f, bgra[p * 4] / 255f);
@@ -112,9 +112,9 @@ public class DehazeTests
     });
 
     /// <summary>
-    /// Regler bis 300: stufenlos kräftiger, ohne Stillstand und ohne Sprung; kaum ein Kanal
-    /// säuft ins Schwarz ab, der bei 100 noch Zeichnung hatte — ohne Grenze gab es schwarze und
-    /// rote Bänder, mit einer harten Grenze blieb der Regler ab 150 wirkungslos.
+    /// Slider up to 300: the effect grows steadily, without standing still and without jumps; hardly any channel
+    /// that still had detail at 100 is crushed to black. Without a limit, black and red bands appear; with a hard
+    /// limit, the slider has no effect above 150.
     /// </summary>
     [Fact]
     public void UpTo300_GetsStrongerSteadily_ButNothingCrushes()
@@ -133,19 +133,19 @@ public class DehazeTests
             Assert.True(contrast < previous * 1.5, $"Sprung bei {amount}: {previous:F1} → {contrast:F1}");
             previous = contrast;
 
-            // Abgesoffen: Kanal schwarz, der bei 100 noch Zeichnung hatte
+            // Crushed: channel black that still had detail at 100
             var crushed = Enumerable.Range(0, hazy.Length).Count(i => i % 4 != 3 && result[i] < 8 && at100[i] >= 8)
                           / (W * H * 3.0);
             Assert.True(crushed < 0.03, $"{amount}: {crushed:P1} der Kanäle abgesoffen");
         }
-        // Hier rechnet 100 schon fast alles frei (jede Fläche hat einen dunklen Kanal); in Fotos
-        // bleibt mehr Spielraum, weil Himmelsschutz und Glättung bei 100 zurückhalten
+        // Here 100 already removes almost all haze (every area has a dark channel); in photos there is
+        // more headroom because sky protection and smoothing hold back at 100.
         Assert.True(previous > Contrast(at100) * 1.03, $"Kontrast 100: {Contrast(at100):F1}, 300: {previous:F1}");
     }
 
     /// <summary>
-    /// Klares Bild: Wie in Referenzwerkzeug wirken Kontrast, Klarheit und Schärfe auch ohne Dunst —
-    /// aber maßvoll (kein HDR-Look), die Helligkeit bleibt.
+    /// Clear image: as in Referenzwerkzeug, contrast, clarity and sharpness also act without haze, but moderately
+    /// (no HDR look), and the brightness stays.
     /// </summary>
     [Fact]
     public void ClearImage_GetsOnlyModeratelyCrisper()
@@ -157,8 +157,8 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Farbton bleibt: Dünner Dunst über olivgrünem Feld (wenig Blau) — das Modell rechnete
-    /// Blau gegen null, Felder wurden ocker und braun.
+    /// The hue stays: thin haze over a green vegetation field. The plain haze model pushes the weak channel of
+    /// such vegetation (blue in olive-green fields) towards zero, which turns fields ochre and brown.
     /// </summary>
     [Fact]
     public void ThinHaze_KeepsTheHueOfVegetation()
@@ -170,8 +170,8 @@ public class DehazeTests
             var i = (y * W + x) * 3;
             if (y < SkyRows) { scene[i] = scene[i + 1] = scene[i + 2] = Air; continue; }
             var shade = 0.4f + 0.6f * (((x * 7 + y * 3) % 20) / 19f);
-            (scene[i], scene[i + 1], scene[i + 2]) = (0.05f * shade, 0.20f * shade, 0.16f * shade);   // B, G, R
-            if ((x + y) % 23 == 0) scene[i] = scene[i + 1] = scene[i + 2] = 0.005f;                  // Schattenpunkte
+            (scene[i], scene[i + 1], scene[i + 2]) = (0.05f * shade, 0.20f * shade, 0.16f * shade);   // R, G, B (the order in which Haze reads the scene)
+            if ((x + y) % 23 == 0) scene[i] = scene[i + 1] = scene[i + 2] = 0.005f;                  // shadow points
         }
         var hazy = Haze(scene, 0.85f, Air);
 
@@ -190,8 +190,8 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Dunstfarbe (0.5.5): Bläulicher Dunst über einer grünen Wiese verschiebt ihren Farbton zum Blau. Mit
-    /// „Dunstfarbe“ 100 % liegt das Ergebnis näher am wahren Farbton als mit 0 % (Farbton wie im Original).
+    /// Haze colour: bluish haze over a green meadow shifts its hue towards blue. With „Dunstfarbe“ at 100 % the
+    /// result is closer to the true hue than with 0 % (hue as in the original).
     /// </summary>
     [Fact]
     public void HazeColour_MovesTheHueBackTowardsTheScene()
@@ -202,15 +202,15 @@ public class DehazeTests
         {
             var i = (y * W + x) * 3;
             var shade = 0.4f + 0.6f * (((x * 7 + y * 3) % 20) / 19f);
-            (scene[i], scene[i + 1], scene[i + 2]) = (0.10f * shade, 0.30f * shade, 0.06f * shade);   // R, G, B: Wiese
+            (scene[i], scene[i + 1], scene[i + 2]) = (0.10f * shade, 0.30f * shade, 0.06f * shade);   // R, G, B: meadow
         }
-        float[] air = [0.62f, 0.72f, 0.92f];   // R, G, B: bläulicher Dunst
+        float[] air = [0.62f, 0.72f, 0.92f];   // R, G, B: bluish haze
         var hazy = new byte[W * H * 4];
         for (var p = 0; p < W * H; p++)
         {
             for (var c = 0; c < 3; c++)
             {
-                var t = 0.25f + 0.7f * (p / W) / (H - 1f);   // oben dichter Dunst, unten fast klar — wie eine Landschaft in die Ferne
+                var t = 0.25f + 0.7f * (p / W) / (H - 1f);   // dense haze at the top, almost clear at the bottom, like a landscape receding into the distance
                 hazy[p * 4 + (2 - c)] = Srgb.ToByte(scene[p * 3 + c] * t + air[c] * (1 - t));
             }
             hazy[p * 4 + 3] = 255;
@@ -233,8 +233,8 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Durchläufe: Jeder Durchlauf schätzt am Zwischenstand neu — mehr Durchläufe, mehr
-    /// Kontrast, ohne dass das Bild kippt; die Feineinstellung zählt nur mit Dunst.
+    /// Passes: each pass estimates again on the intermediate result, so more passes give more contrast without
+    /// the image tipping over; the fine-tuning settings count only when dehazing is active.
     /// </summary>
     [Fact]
     public void Passes_RemoveMoreHaze_AndDetailsOnlyCountWithDehaze()
@@ -252,9 +252,9 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Treppen (0.4.43: bei 3 Durchläufen im Himmel): Ein weicher 8-Bit-Verlauf bleibt nach mehreren
-    /// Durchläufen weich — gerechnet in Fließkomma, entstuft, am Schluss mit Dither gerundet. Gemessen
-    /// am Zeilenmittel: Der größte Sprung von Zeile zu Zeile gegenüber dem mittleren Anstieg.
+    /// Banding (seen in skies with 3 passes): a smooth 8-bit gradient stays smooth after several passes because it
+    /// is computed in floating point, debanded and rounded with dithering at the end. Measured on the row means:
+    /// the largest step from row to row relative to the mean slope.
     /// </summary>
     [Fact]
     public void Passes_KeepSkyGradientSmooth()
@@ -302,15 +302,15 @@ public class DehazeTests
     public void AirLight_IsTheHazeColour()
     {
         var air = Dehaze.AirLight(Linear(Haze(Scene(), 0.5f, Air)), W, H);
-        Assert.All(air, a => Assert.InRange(a, Air - 0.03f, Air + 0.03f));   // aus dem Himmel
+        Assert.All(air, a => Assert.InRange(a, Air - 0.03f, Air + 0.03f));   // from the sky
 
-        Assert.All(Dehaze.AirLight(Linear(Haze(Scene(), 1, 0)), W, H), a => Assert.True(a >= 0.25f));   // Untergrenze
+        Assert.All(Dehaze.AirLight(Linear(Haze(Scene(), 1, 0)), W, H), a => Assert.True(a >= 0.25f));   // lower bound
     }
 
     /// <summary>
-    /// Luftlicht je Richtung: links bläulich-dunkler Dunst, rechts heller warmer (zur Sonne
-    /// hin) — jede Seite bekommt ihren. Ein Streifen nur aus Bäumen (kein Himmel) fällt auf
-    /// den Wert für das ganze Bild zurück, statt Baumgrün als „Dunst“ zu nehmen.
+    /// Air light per direction: darker bluish haze on the left, brighter warm haze on the right (towards the sun);
+    /// each side gets its own. A strip consisting only of trees (no sky) falls back to the value for the whole
+    /// image instead of taking tree green as haze.
     /// </summary>
     [Fact]
     public void AirLight_FollowsTheDirection_AndIgnoresStripsWithoutSky()
@@ -321,9 +321,9 @@ public class DehazeTests
         {
             var i = (y * W + x) * 3;
             (float B, float G, float R) c =
-                x < W / 8 ? (0.01f, 0.03f, 0.01f)                        // nur Bäume
-                : y >= SkyRows ? (0.05f, 0.15f, 0.08f)                   // Landschaft
-                : x < W / 2 ? (0.45f, 0.40f, 0.38f) : (0.80f, 0.85f, 0.95f);   // Dunst links / rechts
+                x < W / 8 ? (0.01f, 0.03f, 0.01f)                        // trees only
+                : y >= SkyRows ? (0.05f, 0.15f, 0.08f)                   // landscape
+                : x < W / 2 ? (0.45f, 0.40f, 0.38f) : (0.80f, 0.85f, 0.95f);   // haze left / right
             (lin[i], lin[i + 1], lin[i + 2]) = c;
         }
 
@@ -331,10 +331,10 @@ public class DehazeTests
         var global = Dehaze.AirLight(lin, W, H);
         float At(int x, int c) => air[x * 3 + c];
 
-        Assert.InRange(At(W * 5 / 16, 2), 0.36f, 0.42f);   // links: R des bläulichen Dunstes
-        Assert.InRange(At(W * 13 / 16, 2), 0.90f, 1.00f);  // rechts: R des warmen Dunstes
+        Assert.InRange(At(W * 5 / 16, 2), 0.36f, 0.42f);   // left: R of the bluish haze
+        Assert.InRange(At(W * 13 / 16, 2), 0.90f, 1.00f);  // right: R of the warm haze
         for (var c = 0; c < 3; c++)
-            Assert.InRange(At(0, c), global[c] - 0.02f, global[c] + 0.02f);   // Bäume: Gesamtwert
+            Assert.InRange(At(0, c), global[c] - 0.02f, global[c] + 0.02f);   // trees: value for the whole image
     }
 
     [Fact]

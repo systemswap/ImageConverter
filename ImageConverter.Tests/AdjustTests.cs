@@ -4,10 +4,10 @@ using ImageMagick;
 
 namespace ImageConverter.Tests;
 
-/// <summary>Kachel „Tools“: Licht und Farbe (Core: <see cref="Adjust"/>).</summary>
+/// <summary>Tests for the light and colour tools of the „Tools“ tile (core: <see cref="Adjust"/>).</summary>
 public class AdjustTests
 {
-    /// <summary>Waagerechter Verlauf schwarz → weiß, eine Zeile reicht für Tonkurven.</summary>
+    /// <summary>Horizontal black-to-white ramp; a single row is enough to test tone curves.</summary>
     private static byte[] Ramp(int width = 256)
     {
         var bgra = new byte[width * 4];
@@ -57,8 +57,8 @@ public class AdjustTests
     }
 
     /// <summary>
-    /// Tiefen hellt nur auf, wo die Umgebung dunkel ist: Linke Hälfte dunkel, rechte hell —
-    /// gleiches dunkles Grau links wird deutlich heller, rechts im Hellen bleibt Weiß weiß.
+    /// Shadows brightens only where the surroundings are dark: with a dark left half and a bright right half,
+    /// the dark grey on the left becomes clearly brighter while the bright right half stays as it is.
     /// </summary>
     [Fact]
     public void Shadows_LiftDarkAreas_LeaveBrightAreas()
@@ -76,14 +76,13 @@ public class AdjustTests
         var dark = result[(50 * w + 50) * 4 + 1];
         var bright = result[(50 * w + 350) * 4 + 1];
 
-        Assert.True(dark > 65, $"dunkler Bereich nur auf {dark}");   // 40 → ~70: monotone Kurve, siehe Raise
+        Assert.True(dark > 65, $"dunkler Bereich nur auf {dark}");   // 40 → ~70: monotonic curve, see Raise
         Assert.InRange(bright, 228, 233);
     }
 
     /// <summary>
-    /// Kein Lichthof: Helle Pixel direkt an einer harten Kante zu einer dunklen Fläche
-    /// (Himmel an Bergen) bleiben, wie sie sind. Mit einfachem Gauß als Umgebung wurden
-    /// sie mit aufgehellt.
+    /// No halo: bright pixels directly at a hard edge next to a dark area (sky against mountains) stay
+    /// as they are. A plain Gaussian blur as the surround would brighten them as well.
     /// </summary>
     [Fact]
     public void Shadows_NoHaloAtHardEdges()
@@ -124,7 +123,7 @@ public class AdjustTests
     [Fact]
     public void Shadows_KeepTheHue()
     {
-        // Dunkles Rot bleibt rot, wird nur heller
+        // Dark red stays red and only becomes brighter.
         var bgra = new byte[64 * 64 * 4];
         for (var i = 0; i < 64 * 64; i++) { bgra[i * 4 + 2] = 60; bgra[i * 4 + 1] = 20; bgra[i * 4] = 10; bgra[i * 4 + 3] = 255; }
 
@@ -141,12 +140,12 @@ public class AdjustTests
     [InlineData(0, Tint.BlackWhite)]
     public void FullDesaturation_And_BlackWhite_GiveGray(double saturation, Tint tint)
     {
-        var bgra = new byte[] { 30, 140, 220, 255 };   // kräftiges Orange (B, G, R, A)
+        var bgra = new byte[] { 30, 140, 220, 255 };   // saturated orange (B, G, R, A)
         var result = Adjust.Apply(bgra, 1, 1, new Adjustments(Saturation: saturation, Tint: tint));
 
         Assert.InRange(result[2] - result[0], -1, 1);
         Assert.InRange(result[1] - result[0], -1, 1);
-        Assert.Equal(255, result[3]);   // Alpha bleibt
+        Assert.Equal(255, result[3]);   // alpha is kept
     }
 
     [Fact]
@@ -176,12 +175,12 @@ public class AdjustTests
     private static double Chroma(byte[] bgra) =>
         bgra[..3].Max() - (double)bgra[..3].Min();
 
-    /// <summary>Dynamik: Blasses gewinnt viel, Kräftiges wenig — anders als Sättigung.</summary>
+    /// <summary>Vibrance boosts muted colours a lot and strong colours little, unlike saturation.</summary>
     [Fact]
     public void Vibrance_BoostsMutedColours_MoreThanStrongOnes()
     {
-        byte[] muted = [150, 135, 120, 255];    // blasses Blaugrau (B, G, R)
-        byte[] strong = [20, 60, 220, 255];     // kräftiges Rot
+        byte[] muted = [150, 135, 120, 255];    // muted blue-grey (B, G, R)
+        byte[] strong = [20, 60, 220, 255];     // saturated red
 
         var a = new Adjustments(Vibrance: 80);
         var mutedGain = Chroma(Adjust.Apply(muted, 1, 1, a)) / Chroma(muted);
@@ -192,13 +191,13 @@ public class AdjustTests
     }
 
     /// <summary>
-    /// Sättigung und Dynamik ändern nur die Buntheit (Oklab): Farbton und Helligkeit bleiben.
-    /// In RGB kippte Blau beim Verstärken ins Violette und Gelb wurde heller.
+    /// Saturation and vibrance change only the chroma (Oklab); hue and lightness stay. Boosting in RGB
+    /// would shift blue towards violet and make yellow brighter.
     /// </summary>
     [Theory]
-    [InlineData(200, 90, 40)]     // Blau (B, G, R)
-    [InlineData(40, 200, 220)]    // Gelb
-    [InlineData(150, 135, 120)]   // blasses Blaugrau
+    [InlineData(200, 90, 40)]     // blue (B, G, R)
+    [InlineData(40, 200, 220)]    // yellow
+    [InlineData(150, 135, 120)]   // muted blue-grey
     public void ColourBoost_KeepsHueAndLightness(byte b, byte g, byte r)
     {
         byte[] px = [b, g, r, 255];
@@ -214,7 +213,7 @@ public class AdjustTests
         }
     }
 
-    /// <summary>Gleiche Farbe, Luminanz: multipliziert die Helligkeit — Mitten deutlich heller, Weiß frisst nicht aus.</summary>
+    /// <summary>Match colour, luminance: multiplies the lightness; midtones become clearly brighter without clipping white.</summary>
     [Fact]
     public void MatchLuminance_ScalesBrightness_WithoutClippingWhite()
     {
@@ -222,12 +221,12 @@ public class AdjustTests
 
         var mid = Oklab.FromSrgb(Gray(result, 100) / 255f, Gray(result, 100) / 255f, Gray(result, 100) / 255f).L;
         var midBefore = Oklab.FromSrgb(100 / 255f, 100 / 255f, 100 / 255f).L;
-        Assert.InRange(mid / midBefore, 1.4, 1.55);              // ×1,5 (Referenzwerkzeug: Luminanz 150)
-        Assert.True(Gray(result, 200) < Gray(result, 255));       // helle Töne bleiben unterscheidbar
-        Assert.Equal(0, Gray(result, 0));                        // Schwarz bleibt
+        Assert.InRange(mid / midBefore, 1.4, 1.55);              // ×1.5 (Referenzwerkzeug: luminance 150)
+        Assert.True(Gray(result, 200) < Gray(result, 255));       // bright tones stay distinguishable
+        Assert.Equal(0, Gray(result, 0));                        // black stays black
     }
 
-    /// <summary>Zwei Hälften (links/rechts) mit je einer Farbe, als Float-Puffer (ohne Dither).</summary>
+    /// <summary>Builds a float buffer (no dithering) whose left and right halves each have one colour.</summary>
     internal static float[] Halves(int w, int h, (float R, float G, float B) left, (float R, float G, float B) right)
     {
         var px = new float[w * h * 4];
@@ -244,27 +243,27 @@ public class AdjustTests
     internal static float At(float[] px, int w, int x, int y, int channel = 1) => px[(y * w + x) * 4 + channel];
 
     /// <summary>
-    /// Luminanz mit Schwellwert nach Bereichen: Ein dunkler Bereich wird so hell wie ohne Grenze, der helle daneben
-    /// bleibt — auch direkt an der Kante (kein Hof), anders als mit weichgezeichneter Maske.
+    /// Regional luminance with a threshold: a dark region becomes as bright as without the limit, the bright region
+    /// next to it stays unchanged, also directly at the edge (no halo, unlike a blurred mask).
     /// </summary>
     [Fact]
     public void MatchLimit_LiftsDarkRegionsFully_AndLeavesBrightOnesIncludingTheEdge()
     {
         const int w = 400, h = 200;
-        var src = Halves(w, h, (0.18f, 0.2f, 0.15f), (0.8f, 0.85f, 0.9f));   // dunkler Wald | heller Himmel
+        var src = Halves(w, h, (0.18f, 0.2f, 0.15f), (0.8f, 0.85f, 0.9f));   // dark forest | bright sky
         var free = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100));
         var limited = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchLimit: 45));
 
         Assert.True(At(limited, w, 50, 100) > At(src, w, 50, 100) + 0.1f, "dunkler Bereich nicht aufgehellt");
-        Assert.Equal(At(free, w, 50, 100), At(limited, w, 50, 100), 3);              // so hell wie ohne Grenze
-        Assert.True(At(free, w, 300, 100) > At(src, w, 300, 100) + 0.02f);           // ohne Grenze würde der Himmel heller
-        for (var x = w / 2; x < w; x += 1)                                           // Himmel bis an die Kante unverändert
+        Assert.Equal(At(free, w, 50, 100), At(limited, w, 50, 100), 3);              // as bright as without the limit
+        Assert.True(At(free, w, 300, 100) > At(src, w, 300, 100) + 0.02f);           // without the limit the sky would become brighter
+        for (var x = w / 2; x < w; x += 1)                                           // sky unchanged right up to the edge
             Assert.InRange(At(limited, w, x, 100), At(src, w, x, 100) - 0.004f, At(src, w, x, 100) + 0.004f);
     }
 
     /// <summary>
-    /// Mischen über die Laplace-Pyramide: Weit weg vom Maskenrand genau die jeweilige Fassung, am Rand ein weicher,
-    /// breiter Übergang ohne Sprung — und Kanten im Bild bleiben dabei scharf.
+    /// Laplacian pyramid blending: far from the mask edge the result is exactly the respective version, at the edge
+    /// there is a soft, wide transition without a step, and edges in the image stay sharp.
     /// </summary>
     [Fact]
     public void PyramidBlend_GivesSoftTransition_ButKeepsImageEdgesSharp()
@@ -277,34 +276,34 @@ public class AdjustTests
         for (var x = 0; x < w; x++)
         {
             var i = y * w + x;
-            var edge = x % 64 < 32 ? 0f : 0.2f;            // feines Streifenmuster (Kanten) in beiden Fassungen
+            var edge = x % 64 < 32 ? 0f : 0.2f;            // fine stripe pattern (edges) in both versions
             a[i] = 0.3f + edge;
             b[i] = 0.6f + edge;
-            weight[i] = x < w / 2 ? 0 : 1;                  // harter Maskenrand in der Mitte
+            weight[i] = x < w / 2 ? 0 : 1;                  // hard mask edge in the middle
         }
         var r = PyramidBlend.Blend(a, b, weight, w, h);
         float At(int x) => r[32 * w + x];
 
-        Assert.Equal(a[32 * w + 10], At(10), 2);           // weit links: Fassung a
-        Assert.Equal(b[32 * w + 500], At(500), 2);         // weit rechts: Fassung b
-        // Streifenkante bei x = 96 (links) bleibt ein Sprung von 0,2 – Kanten werden nicht verwaschen
+        Assert.Equal(a[32 * w + 10], At(10), 2);           // far left: version a
+        Assert.Equal(b[32 * w + 500], At(500), 2);         // far right: version b
+        // The stripe edge at x = 96 (left) remains a step of 0.2, so edges are not washed out.
         Assert.InRange(At(96) - At(95), 0.15f, 0.25f);
-        // Am Maskenrand kein Sprung um die volle Differenz (0,3): der Übergang verteilt sich
+        // At the mask edge there is no step of the full difference (0.3); the transition is spread out.
         var maxStep = Enumerable.Range(200, 112).Where(x => x % 32 != 0).Max(x => Math.Abs(At(x) - At(x - 1)));
         Assert.True(maxStep < 0.12f, $"Sprung {maxStep:0.000} am Maskenrand");
     }
 
     /// <summary>
-    /// Durchblicke: Am Rand eines dunklen Baums scheinen Himmelsstückchen durch, die dunkler sind, als der feste Schutz
-    /// heller Pixel greift — sie bleiben trotzdem, weil sie aussehen wie der Himmel dahinter. Gleich große, gleich helle
-    /// Sonnenflecken in Gelbgrün werden dagegen aufgehellt (andere Farbe als der Himmel).
+    /// Sky gaps: at the edge of a dark tree, small patches of sky show through that are darker than the threshold of
+    /// the fixed protection for bright pixels. They stay unchanged anyway because they look like the sky behind.
+    /// Sunlit spots of the same size and lightness in yellow-green are brightened (different colour from the sky).
     /// </summary>
     [Fact]
     public void MatchLimit_KeepsSkyGapsAtTreeEdge_ButLiftsSunlitLeaves()
     {
         const int w = 400, h = 300;
         var sky = (0.42f, 0.5f, 0.62f);
-        var src = Halves(w, h, (0.07f, 0.13f, 0.05f), sky);              // dunkler Baum | Himmel
+        var src = Halves(w, h, (0.07f, 0.13f, 0.05f), sky);              // dark tree | sky
         void Spot(int x, int y, (float R, float G, float B) c)
         {
             for (var dy = 0; dy < 2; dy++)
@@ -316,40 +315,41 @@ public class AdjustTests
         }
         for (var y = 20; y < h - 20; y += 12)
         {
-            Spot(w / 2 - 6, y, sky);                                       // Himmel scheint durch
-            Spot(w / 2 - 6, y + 6, (0.45f, 0.48f, 0.12f));                 // Sonnenfleck auf Nadeln
+            Spot(w / 2 - 6, y, sky);                                       // sky shows through
+            Spot(w / 2 - 6, y + 6, (0.45f, 0.48f, 0.12f));                 // sunlit spot on needles
         }
         Assert.True(Oklab.FromSrgb(sky.Item1, sky.Item2, sky.Item3).L < 0.62f, "Testhimmel zu hell — der feste Schutz würde greifen");
 
         var r = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchLimit: 45));
         int gap = w / 2 - 6, row = 152;
-        Assert.InRange(At(r, w, gap, row), At(src, w, gap, row) - 0.02f, At(src, w, gap, row) + 0.02f);     // Lücke bleibt
+        Assert.InRange(At(r, w, gap, row), At(src, w, gap, row) - 0.02f, At(src, w, gap, row) + 0.02f);     // gap stays
         Assert.True(At(r, w, gap, row + 6) > At(src, w, gap, row + 6) + 0.05f, "Sonnenfleck nicht aufgehellt");
         Assert.True(At(r, w, 60, 150) > At(src, w, 60, 150) + 0.05f, "Baum nicht aufgehellt");
     }
 
     /// <summary>
-    /// Zielwert: Ein dunkler Bereich wird bis etwa zum Ziel angehoben, ein Bereich im Mittelton darüber bleibt — ohne
-    /// Zielwert würde er im selben Verhältnis mit hochgezogen und überstrahlen.
+    /// Target value: a dark region is lifted to about the target, a midtone region above it stays unchanged. Without
+    /// a target it would be lifted by the same ratio and blow out.
     /// </summary>
     [Fact]
     public void MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone()
     {
         const int w = 400, h = 200;
-        var src = Halves(w, h, (0.08f, 0.12f, 0.06f), (0.42f, 0.5f, 0.28f));   // dunkler Baum | sonnige Wiese
+        var src = Halves(w, h, (0.08f, 0.12f, 0.06f), (0.42f, 0.5f, 0.28f));   // dark tree | sunny meadow
         var free = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100));
         var target = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
         float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
 
         Assert.True(L(free, 300) > L(src, 300) + 0.15f, "ohne Zielwert würde die Wiese stark aufhellen");
-        Assert.InRange(L(target, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);   // Wiese bleibt
-        Assert.InRange(L(target, 60), 0.36f, 0.44f);                              // Baum etwa bis zum Ziel (40 %)
+        Assert.InRange(L(target, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);   // meadow stays
+        Assert.InRange(L(target, 60), 0.36f, 0.44f);                              // tree lifted to about the target (40 %)
         Assert.True(L(target, 60) > L(src, 60) + 0.1f);
     }
 
     /// <summary>
-    /// Nur Zielwert (ohne Schwellwert, wie in der Praxis benutzt): Der Baum wird zum Ziel hin heller, der Himmel und die
-    /// Himmelsstückchen am Baumrand bleiben (dort ist der Bereich schon so hell wie das Ziel), und nichts wird dunkler.
+    /// Target value only (without threshold, as used in practice): the tree becomes brighter towards the target, the
+    /// sky and the sky gaps at the tree edge stay (the region there is already as bright as the target), and nothing
+    /// becomes darker.
     /// </summary>
     [Fact]
     public void MatchTarget_Alone_LiftsTree_AndLeavesSkyAndGaps()
@@ -373,13 +373,13 @@ public class AdjustTests
         }
         var r = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
         int gap = w / 2 - 6, row = 140, sun = 152;
-        Assert.InRange(At(r, w, gap, row), At(src, w, gap, row) - 0.02f, At(src, w, gap, row) + 0.02f);     // Lücke bleibt
+        Assert.InRange(At(r, w, gap, row), At(src, w, gap, row) - 0.02f, At(src, w, gap, row) + 0.02f);     // gap stays
         Assert.True(At(r, w, gap, sun) >= At(src, w, gap, sun) - 0.005f, "Sonnenfleck dunkler geworden");
         Assert.True(At(r, w, 60, 150) > At(src, w, 60, 150) + 0.05f, "Baum nicht aufgehellt");
-        Assert.InRange(At(r, w, 300, 150), At(src, w, 300, 150) - 0.01f, At(src, w, 300, 150) + 0.01f);     // Himmel bleibt
+        Assert.InRange(At(r, w, 300, 150), At(src, w, 300, 150) - 0.01f, At(src, w, 300, 150) + 0.01f);     // sky stays
     }
 
-    /// <summary>Helle Lücken in einem dunklen Bereich (Himmel zwischen Ästen) leuchten nicht auf.</summary>
+    /// <summary>Bright gaps inside a dark region (sky between branches) do not light up.</summary>
     [Fact]
     public void MatchLimit_ProtectsBrightGapsInsideDarkRegions()
     {
@@ -394,20 +394,20 @@ public class AdjustTests
             (src[i], src[i + 1], src[i + 2]) = (0.95f, 0.9f, 0.85f);
         }
         var limited = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchLimit: 45));
-        Assert.True(At(limited, w, 35, 35) > At(src, w, 35, 35) + 0.1f);                                 // Wald heller
-        Assert.InRange(At(limited, w, 140, 140), At(src, w, 140, 140) - 0.01f, At(src, w, 140, 140) + 0.01f);   // Lücke bleibt
+        Assert.True(At(limited, w, 35, 35) > At(src, w, 35, 35) + 0.1f);                                 // forest brighter
+        Assert.InRange(At(limited, w, 140, 140), At(src, w, 140, 140) - 0.01f, At(src, w, 140, 140) + 0.01f);   // gap stays
     }
 
 
     /// <summary>
-    /// Luminanz bis 300 %: Mit Zielwert erreicht ein tiefer Schatten das Ziel (mit 200 % nicht), Mitteltöne darüber
-    /// bleiben unverändert; mehr als 300 % gibt es nicht (insgesamt heller macht „Gesamt“).
+    /// Luminance up to 300 %: with a target value a deep shadow reaches the target (with 200 % it does not), midtones
+    /// above it stay unchanged; values above 300 % are clamped (overall brightening is done by „Gesamt“).
     /// </summary>
     [Fact]
     public void MatchLuminance_UpTo300_LetsDeepShadowsReachTheTarget()
     {
         const int w = 400, h = 200;
-        var src = Halves(w, h, (0.03f, 0.05f, 0.025f), (0.42f, 0.5f, 0.28f));   // tiefer Schatten | Wiese
+        var src = Halves(w, h, (0.03f, 0.05f, 0.025f), (0.42f, 0.5f, 0.28f));   // deep shadow | meadow
         float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
         var at200 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
         var at300 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 200, MatchTarget: 40));
@@ -415,32 +415,32 @@ public class AdjustTests
         var at300Target60 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 200, MatchTarget: 60));
 
         Assert.True(L(at200, 60) < 0.34f, $"Mit 200 % schon {L(at200, 60):0.00} — Testschatten nicht dunkel genug");
-        Assert.InRange(L(at300, 60), 0.36f, 0.44f);                              // mit 300 % bis etwa zum Ziel
-        Assert.InRange(L(at300, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // Wiese bleibt
-        Assert.Equal(L(at300Target60, 60), L(above, 60), 3);                      // über 300 % wird begrenzt
+        Assert.InRange(L(at300, 60), 0.36f, 0.44f);                              // with 300 % up to about the target
+        Assert.InRange(L(at300, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // meadow stays
+        Assert.Equal(L(at300Target60, 60), L(above, 60), 3);                      // above 300 % is clamped
     }
 
     /// <summary>
-    /// Luminanz „Gesamt“ wirkt nach der Bereichs-Luminanz auf das ganze Bild: Was der Zielwert angeglichen hat, wird
-    /// danach insgesamt heller — die Wiese, die der Zielwert stehen ließ, jetzt auch.
+    /// Luminance „Gesamt“ acts on the whole image after the regional luminance: what the target value has evened out
+    /// becomes brighter overall, including the meadow that the target value left unchanged.
     /// </summary>
     [Fact]
     public void MatchGlobal_BrightensWholeImage_AfterRegionalLuminance()
     {
         const int w = 400, h = 200;
-        var src = Halves(w, h, (0.08f, 0.12f, 0.06f), (0.42f, 0.5f, 0.28f));   // dunkler Baum | Wiese
+        var src = Halves(w, h, (0.08f, 0.12f, 0.06f), (0.42f, 0.5f, 0.28f));   // dark tree | meadow
         float L(float[] px, int x) => Oklab.FromSrgb(px[(100 * w + x) * 4 + 2], px[(100 * w + x) * 4 + 1], px[(100 * w + x) * 4]).L;
         var even = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40));
         var brighter = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 100, MatchTarget: 40, MatchGlobal: 25));
 
-        Assert.InRange(L(even, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);     // Zielwert lässt die Wiese stehen
-        Assert.InRange(L(brighter, 300) / L(even, 300), 1.2f, 1.3f);                  // Gesamt +25 %: auch die Wiese
-        Assert.InRange(L(brighter, 60) / L(even, 60), 1.2f, 1.3f);                    // und der angeglichene Baum
+        Assert.InRange(L(even, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);     // the target value leaves the meadow unchanged
+        Assert.InRange(L(brighter, 300) / L(even, 300), 1.2f, 1.3f);                  // „Gesamt“ +25 %: the meadow too
+        Assert.InRange(L(brighter, 60) / L(even, 60), 1.2f, 1.3f);                    // and the evened-out tree
         Assert.False(new Adjustments(MatchGlobal: 10).IsNone);
-        Assert.Equal(Adjustments.None.PrepareKey, new Adjustments(MatchGlobal: 40).PrepareKey);   // kein teurer Teil
+        Assert.Equal(Adjustments.None.PrepareKey, new Adjustments(MatchGlobal: 40).PrepareKey);   // no expensive preparation step
     }
 
-    /// <summary>Luminanzmaske: Dunkles bekommt viel, Mitteltöne anteilig, ab „Auslaufen“ nichts; steiler = Mitte weniger.</summary>
+    /// <summary>Luminance mask: dark tones get the most, midtones a share, nothing from „Auslaufen“ upwards; a steeper curve gives midtones less.</summary>
     [Fact]
     public void LumMask_WeightsDarkMost_AndFadesOutAtTheEnd()
     {
@@ -451,15 +451,15 @@ public class AdjustTests
         Assert.Equal(0f, W(0.9f, 30));
         Assert.True(W(0.4f, 100) < W(0.4f, 0), "steiler Verlauf soll Mitteltönen weniger geben");
 
-        // Über das ganze Bild: Dunkles wird viel heller, Helles über „Auslaufen“ bleibt (Grau 0..255)
+        // Applied to an image: dark tones become much brighter, tones above „Auslaufen“ stay (grey 0..255).
         var ramp = Pixels.FromBytes(Ramp());
         var r = Adjust.Apply(ramp, 256, 1, new Adjustments(MaskAmount: 100, MaskEnd: 60));
         float L(float[] px, int x) => Oklab.FromSrgb(px[x * 4 + 2], px[x * 4 + 1], px[x * 4]).L;
         Assert.True(L(r, 40) - L(ramp, 40) > L(r, 120) - L(ramp, 120), "Dunkles soll mehr bekommen als Mitteltöne");
-        for (var x = 160; x < 256; x++) Assert.Equal(L(ramp, x), L(r, x), 3);   // über 60 % unverändert
+        for (var x = 160; x < 256; x++) Assert.Equal(L(ramp, x), L(r, x), 3);   // unchanged above 60 %
     }
 
-    /// <summary>Luminanzmaske ohne Umkehr der Tonwerte — auch im ungünstigsten Fall (weichster Verlauf, +200 %).</summary>
+    /// <summary>The luminance mask never reverses tones, even in the worst case (softest curve, +200 %).</summary>
     [Theory]
     [InlineData(0, 200, 100)]
     [InlineData(0, 200, 50)]
@@ -473,20 +473,20 @@ public class AdjustTests
             Assert.True(r[x * 4 + 1] >= r[(x - 1) * 4 + 1] - 1e-4f, $"Umkehr bei {x}: {r[(x - 1) * 4 + 1]:0.0000} → {r[x * 4 + 1]:0.0000}");
     }
 
-    /// <summary>„Maske zeigen“: Graustufen statt Bild — weiß wo die volle Stärke wirkt, schwarz wo nichts.</summary>
+    /// <summary>„Maske zeigen“ shows the mask in grey instead of the image: white where the full strength applies, black where nothing does.</summary>
     [Fact]
     public void LumMask_Preview_ShowsTheMaskInGrey()
     {
         var ramp = Pixels.FromBytes(Ramp());
         var r = Adjust.Apply(ramp, 256, 1, new Adjustments(MaskAmount: 80, MaskEnd: 75, MaskPreview: true));
-        Assert.True(r[1] > 0.9f, $"Schwarz → Maske fast weiß: {r[1]:0.000}");   // 30 % Bereich: knapp unter Weiß
-        Assert.Equal(0f, r[255 * 4 + 1], 3);                         // Weiß → Maske schwarz
-        Assert.Equal(r[100 * 4], r[100 * 4 + 2], 4);                 // grau (R = B)
+        Assert.True(r[1] > 0.9f, $"Schwarz → Maske fast weiß: {r[1]:0.000}");   // 30 % region: just below white
+        Assert.Equal(0f, r[255 * 4 + 1], 3);                         // white → mask black
+        Assert.Equal(r[100 * 4], r[100 * 4 + 2], 4);                 // grey (R = B)
         Assert.False(new Adjustments(MaskPreview: true).IsNone);
-        Assert.True(new Adjustments(MaskEnd: 40, MaskCurve: 90).IsNone);   // ohne Stärke wirkt nichts
+        Assert.True(new Adjustments(MaskEnd: 40, MaskCurve: 90).IsNone);   // without strength nothing applies
     }
 
-    /// <summary>Gleiche Farbe, Ausgleichen: ein gelblicher Stich auf grauer Wand wird neutral.</summary>
+    /// <summary>Match colour, neutralise: a yellowish cast on a grey wall becomes neutral.</summary>
     [Fact]
     public void Neutralize_RemovesColourCast_ButKeepsStrongColours()
     {
@@ -494,7 +494,7 @@ public class AdjustTests
         var bgra = new byte[w * h * 4];
         for (var p = 0; p < w * h; p++)
         {
-            // Wand mit Kunstlicht-Stich, links unten ein kräftig blaues Kissen
+            // Wall with an artificial-light cast, a strongly blue cushion at the bottom left
             var cushion = p % w < 16 && p / w > 48;
             (bgra[p * 4], bgra[p * 4 + 1], bgra[p * 4 + 2]) = cushion ? ((byte)200, (byte)60, (byte)30) : ((byte)150, (byte)180, (byte)195);
             bgra[p * 4 + 3] = 255;
@@ -509,7 +509,7 @@ public class AdjustTests
         Assert.True(Math.Sqrt(blue.A * blue.A + blue.B * blue.B) > 0.12, "Kissen bleibt kräftig blau");
     }
 
-    /// <summary>Ausgleichen 50 % nimmt den halben Farbstich weg.</summary>
+    /// <summary>Neutralise at 50 % removes half of the colour cast.</summary>
     [Fact]
     public void Neutralize_Strength_RemovesPartOfTheCast()
     {
@@ -522,7 +522,7 @@ public class AdjustTests
         Assert.InRange(Cast(half) / Cast(bgra), 0.4, 0.6);
     }
 
-    /// <summary>Farbe: rechts wärmer (gelblich), links kühler (bläulich), Schwarz bleibt neutral.</summary>
+    /// <summary>Warmth: positive values shift towards yellow, negative values towards blue; black stays neutral.</summary>
     [Fact]
     public void Warmth_ShiftsTowardsYellowOrBlue_ButKeepsBlackNeutral()
     {
@@ -539,8 +539,8 @@ public class AdjustTests
     [Fact]
     public void Vibrance_ProtectsSkinTones()
     {
-        byte[] skin = [140, 170, 215, 255];     // heller Hautton (B, G, R)
-        byte[] sky = [215, 170, 140, 255];      // gleich blass, aber blau
+        byte[] skin = [140, 170, 215, 255];     // light skin tone (B, G, R)
+        byte[] sky = [215, 170, 140, 255];      // equally muted, but blue
 
         var a = new Adjustments(Vibrance: 80);
         var skinGain = Chroma(Adjust.Apply(skin, 1, 1, a)) / Chroma(skin);
@@ -550,8 +550,8 @@ public class AdjustTests
     }
 
     /// <summary>
-    /// Tiefen lässt Mitteltöne in Ruhe: Gesichter in Innenräumen liegen um 0,4–0,6
-    /// (gemessen an einem Familienfoto, das Wangen und Augenpartie mit aufhellte).
+    /// Shadows leaves midtones alone: faces in indoor photos lie around 0.4–0.6 (measured on an indoor
+    /// family photo in which the cheeks and eye area were brightened as well).
     /// </summary>
     [Fact]
     public void Shadows_LeaveMidtonesLikeFaces()
@@ -560,7 +560,7 @@ public class AdjustTests
         var bgra = new byte[w * h * 4];
         for (var i = 0; i < w * h; i++)
         {
-            bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = 102;   // ≈ 0,4
+            bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = 102;   // ≈ 0.4
             bgra[i * 4 + 3] = 255;
         }
 
@@ -570,8 +570,8 @@ public class AdjustTests
     }
 
     /// <summary>
-    /// Tonwerte dürfen sich nie umdrehen: Was dunkler war, bleibt dunkler — für jede
-    /// Reglerstellung. Die alte Tiefen-Kurve (Belichtung x·2^…) kippte bei starken Werten.
+    /// Tones must never reverse: what was darker stays darker, for every slider position. An
+    /// exposure-style shadow curve (x·2^…) reverses at strong settings.
     /// </summary>
     [Theory]
     [InlineData(1f)]
@@ -592,7 +592,7 @@ public class AdjustTests
         }
     }
 
-    /// <summary>Eine Pupille im hellen Gesicht bleibt dunkel — nur weite dunkle Flächen zählen.</summary>
+    /// <summary>A pupil in a bright face stays dark; only large dark areas count.</summary>
     [Fact]
     public void Shadows_LeaveSmallDarkSpotsInBrightAreas()
     {
@@ -613,9 +613,9 @@ public class AdjustTests
     }
 
     /// <summary>
-    /// Pufferpool (Phase 2): Zwischenstände gehen zurück in den Pool — der Eingang nie. Würde er
-    /// zurückgegeben und wiederverwendet, änderte sich das Bild im Zwischenspeicher der Vorschau.
-    /// Zwei Rechnungen nacheinander müssen gleich ausfallen, der Eingang unverändert bleiben.
+    /// Buffer pool: intermediate buffers go back to the pool, the input never does. If it were returned and
+    /// reused, the image in the preview cache would change. Two consecutive runs must give the same result and
+    /// leave the input unchanged.
     /// </summary>
     [Fact]
     public void PooledBuffers_NeverTouchTheInput()
@@ -639,11 +639,11 @@ public class AdjustTests
 
         var prepared = Adjust.Prepare(px, w, h, a);
         var source = (float[])prepared.Source.Clone();
-        Adjust.Apply(px, w, h, a);   // nutzt den Pool erneut
+        Adjust.Apply(px, w, h, a);   // uses the pool again
         Assert.Equal(source, prepared.Source);
     }
 
-    /// <summary>Vorschau (Phase 2): Ein abgebrochener Plan beendet die Rechnung beim nächsten Schritt; der Eingang bleibt.</summary>
+    /// <summary>Preview: a cancelled plan stops the computation at the next step; the input stays unchanged.</summary>
     [Fact]
     public void CancelledPlan_StopsBetweenSteps()
     {
@@ -665,7 +665,7 @@ public class AdjustTests
             0, 0, 1, 96, MetadataMode.KeepAll, ColorMode.KeepProfile, new Adjustments(Brightness: 50));
 
         using var rendered = ImageExporter.Render(src, options);
-        // Wie die Vorschau: 32-Bit-Puffer, gerundet erst am Ende (hier ohne Dither, damit Pixel vergleichbar)
+        // Same as the preview: 32-bit float buffer, rounded only at the end (here without dithering so that pixels are comparable).
         var expected = Pixels.ToBytes(Adjust.Apply(Pixels.FromMagick(src), 300, 200, options.Adjustments!), dither: false);
 
         Assert.Equal(expected[(100 * 300 + 150) * 4 + 1], ImageOps.ToBgra(rendered)[(100 * 300 + 150) * 4 + 1]);

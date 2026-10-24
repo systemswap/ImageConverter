@@ -5,13 +5,13 @@ using ImageMagick;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Zwischenstände für wiederholte Läufe (Größenschätzung, <see cref="LookCache"/>) und die geteilte Vorbereitung
-/// (<see cref="Adjust.Dehazed"/> → <see cref="Adjust.Finish"/>): gleiches Ergebnis wie ohne, aber nur ab der ersten
-/// geänderten Stufe gerechnet — Tiefen/Lichter, Licht und Farbe, Schärfen, Körnung rechnen den Dunst nicht neu.
+/// Intermediate results for repeated runs (size estimation, <see cref="LookCache"/>) and the split preparation
+/// (<see cref="Adjust.Dehazed"/> → <see cref="Adjust.Finish"/>): same result as without, but computed only from the first
+/// changed stage onwards — shadows/highlights, light and colour, sharpening and grain do not recompute the dehaze.
 /// </summary>
 public class LookCacheTests
 {
-    /// <summary>Foto-ähnliches Testbild: Verlauf mit Struktur und etwas Dunst.</summary>
+    /// <summary>Photo-like test image: gradient with structure and some haze.</summary>
     private static MagickImage Photo(int w = 320, int h = 220)
     {
         var bytes = new byte[w * h * 3];
@@ -46,7 +46,7 @@ public class LookCacheTests
         var split = Adjust.Finish(Adjust.Dehazed(px, (int)photo.Width, (int)photo.Height, a), (int)photo.Width, (int)photo.Height, a);
         Assert.Equal(whole.Source, split.Source);
         Assert.Equal(whole.Toned, split.Toned);
-        // Tiefen/Lichter und Bereichskarten gehören nicht zum Schlüssel des Dunstes, Licht und Farbe auch nicht
+        // Shadows/highlights, area masks, and light and colour are not part of the dehaze key
         Assert.Equal(a.DehazeKey, (a with { Shadows = 0, Highlights = 0, MaskAmount = 0, Brightness = 20 }).DehazeKey);
         Assert.NotEqual(a.DehazeKey, (a with { Dehaze = 41 }).DehazeKey);
     }
@@ -68,15 +68,15 @@ public class LookCacheTests
             Assert.Equal(plain.Depth, cached.Depth);
         }
 
-        Same(Options(a, grain: grain), 4);                                          // Eingang, Dunst, Tiefen/Lichter, Licht und Farbe
-        Same(Options(a, grain: grain), 0);                                          // nichts geändert
-        Same(Options(a, sharpen: 1.2, grain: grain with { Hardness = 50 }), 0);      // Schärfen und Körnung: immer neu, aber billig
-        Same(Options(a with { Brightness = 30 }, grain: grain), 1);                 // nur Licht und Farbe
-        Same(Options(a with { Shadows = 60 }, grain: grain), 2);                    // Tiefen/Lichter, Dunst bleibt
-        Same(Options(a with { Dehaze = 60 }, grain: grain), 3);                     // Dunst neu
-        Same(Options(a, grain: grain), 2);                                          // voriger Dunst noch im Speicher
-        Same(Options(a, w: 120, h: 83), 4);                                         // andere Größe: andere Probe
-        Same(Options(null, sharpen: 0), 0);                                         // ohne Look: das skalierte Bild selbst … (Eingang da)
+        Same(Options(a, grain: grain), 4);                                          // input, dehaze, shadows/highlights, light and colour
+        Same(Options(a, grain: grain), 0);                                          // nothing changed
+        Same(Options(a, sharpen: 1.2, grain: grain with { Hardness = 50 }), 0);      // sharpening and grain: always recomputed, but cheap
+        Same(Options(a with { Brightness = 30 }, grain: grain), 1);                 // only light and colour
+        Same(Options(a with { Shadows = 60 }, grain: grain), 2);                    // shadows/highlights, dehaze is kept
+        Same(Options(a with { Dehaze = 60 }, grain: grain), 3);                     // dehaze recomputed
+        Same(Options(a, grain: grain), 2);                                          // previous dehaze still cached
+        Same(Options(a, w: 120, h: 83), 4);                                         // different size: different sample
+        Same(Options(null, sharpen: 0), 0);                                         // without a look: the scaled image itself … (input already cached)
         Same(Options(null, sharpen: 0, w: 100, h: 69), 1);
     }
 
@@ -90,7 +90,7 @@ public class LookCacheTests
         var first = SizeEstimator.EstimateSize(photo, o, sampleEdge: 300, cache: cache);
         var again = SizeEstimator.EstimateSize(photo, o with { Quality = 70 }, sampleEdge: 300, cache: cache);
         Assert.Equal(plain, first);
-        Assert.Equal(0, cache.Computed);   // zweite Probe des zweiten Laufs: alles aus dem Speicher
+        Assert.Equal(0, cache.Computed);   // second sample of the second run: everything from the cache
         Assert.Equal(SizeEstimator.EstimateSize(photo, o with { Quality = 70 }, sampleEdge: 300), again);
     }
 }

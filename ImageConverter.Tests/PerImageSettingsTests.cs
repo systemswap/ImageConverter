@@ -5,8 +5,8 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// „Gleiche Einstellungen für alle": wie ein Stand auf ein anders großes Bild
-/// übertragen wird. Ausgangslage: Querformat 4000 × 3000 bei 300 DPI.
+/// "Same settings for all": how a settings state is transferred to an image of a different size.
+/// Starting point: landscape 4000 × 3000 at 300 DPI.
 /// </summary>
 public class PerImageSettingsTests
 {
@@ -15,7 +15,7 @@ public class PerImageSettingsTests
     {
         var vm = new MainViewModel { DeferHistoryTurns = false };
         vm.Dpi = 300;
-        var s = vm.SettingsFor("—", 4000, 3000, ImageLoader.DefaultDpi);   // Vorlage mit allen Standardwerten
+        var s = vm.SettingsFor("—", 4000, 3000, ImageLoader.DefaultDpi);   // template with all default values
         return s with
         {
             SourceWidth = 4000, SourceHeight = 3000,
@@ -40,7 +40,7 @@ public class PerImageSettingsTests
         var adapted = MainViewModel.AdaptToImage(Landscape(1920, 1440), 1080, 1920);
 
         Assert.Equal(1920, adapted.TargetWidth);
-        Assert.Equal(3413, adapted.TargetHeight);   // 1920 × 1920/1080 — nicht verzerrt
+        Assert.Equal(3413, adapted.TargetHeight);   // 1920 × 1920/1080 — not distorted
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class PerImageSettingsTests
 
         Assert.Equal(OutputFormat.Jpeg, o.Format);
         Assert.Equal(70, o.Quality);
-        Assert.Equal((8000, 6000), (o.Width, o.Height));   // vergrößert wird, wenn die Maße es sagen
+        Assert.Equal((8000, 6000), (o.Width, o.Height));   // the image is enlarged when the dimensions say so
     }
 
     [Fact]

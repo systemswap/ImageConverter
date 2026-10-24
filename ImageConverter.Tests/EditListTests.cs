@@ -4,8 +4,8 @@ using ImageConverter.ViewModels;
 namespace ImageConverter.Tests;
 
 /// <summary>
-/// Liste „Bearbeitungen“: ausgeblendete Bearbeitungen fehlen in Vorschau und Export, die Regler behalten ihren
-/// Wert; „Neu anwenden“ setzt genau die ausgeblendeten auf null.
+/// Tests the „Bearbeitungen“ list: hidden edits are missing from preview and export while their sliders keep their
+/// values; „Neu anwenden“ resets exactly the hidden edits to zero.
 /// </summary>
 public class EditListTests
 {
@@ -34,12 +34,12 @@ public class EditListTests
         var o = MainViewModel.OptionsFor(s);
 
         Assert.Equal(0, o.Adjustments!.Dehaze);
-        Assert.Equal(12, o.Adjustments.Brightness);          // Licht nicht ausgeblendet
+        Assert.Equal(12, o.Adjustments.Brightness);          // light not hidden
         Assert.Equal(0, o.SharpenAmount);
         Assert.Equal(0.3, o.Denoise, 6);
-        Assert.Equal((s.SourceWidth, s.SourceHeight), (o.Width, o.Height));   // Größe ausgeblendet: Originalgröße
+        Assert.Equal((s.SourceWidth, s.SourceHeight), (o.Width, o.Height));   // size hidden: original size
 
-        Assert.Equal(47, vm.Dehaze);   // der Regler behält seinen Wert
+        Assert.Equal(47, vm.Dehaze);   // the slider keeps its value
         Assert.Equal(0.8, vm.SharpenAmount, 6);
     }
 
@@ -50,7 +50,7 @@ public class EditListTests
 
         var noColour = MainViewModel.Mask(a, EditSteps.Color);
         Assert.Equal(0, noColour.Saturation);
-        Assert.Equal(15, noColour.Warmth);        // „Gleiche Farbe“ bleibt
+        Assert.Equal(15, noColour.Warmth);        // „Gleiche Farbe“ stays
         Assert.Equal(12, noColour.Brightness);
 
         var noMatch = MainViewModel.Mask(a, EditSteps.MatchColor | EditSteps.Light);
@@ -70,10 +70,10 @@ public class EditListTests
 
         Assert.Equal(EditSteps.None, applied.Hidden);
         Assert.Equal(0, applied.Dehaze);
-        Assert.Equal(6, applied.DehazePasses);    // Feineinstellung bleibt
+        Assert.Equal(6, applied.DehazePasses);    // fine-tuning setting stays
         Assert.Equal(0, applied.NoiseReduction);
         Assert.Equal(applied.SourceWidth, applied.TargetWidth);
-        Assert.Equal(12, applied.Brightness);     // nicht ausgeblendet: bleibt
+        Assert.Equal(12, applied.Brightness);     // not hidden: stays
         Assert.Equal(0.8, applied.SharpenAmount, 6);
     }
 

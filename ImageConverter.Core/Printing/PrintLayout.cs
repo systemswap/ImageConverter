@@ -1,28 +1,35 @@
 namespace ImageConverter.Core.Printing;
 
-/// <summary>Wie Bilder auf die Seiten verteilt werden.</summary>
+/// <summary>Specifies how images are distributed over the pages.</summary>
 public enum PackingMode
 {
     /// <summary>
-    /// Mehrere pro Seite, so dass jede Seite mit geraden Schnitten von Kante zu Kante
-    /// zerlegt werden kann (Guillotine-Verfahren) — ideal zum Ausschneiden.
+    /// Several images per page, arranged so that each page can be divided by straight edge-to-edge cuts
+    /// (guillotine method); best suited for cutting out.
     /// </summary>
     CutFriendly,
 
-    /// <summary>Mehrere pro Seite, möglichst dicht (MaxRects-Verfahren).</summary>
+    /// <summary>Several images per page, packed as densely as possible (MaxRects method).</summary>
     Dense,
 
-    /// <summary>Jedes Bild auf eine eigene Seite, mittig.</summary>
+    /// <summary>Each image on its own page, centred.</summary>
     OnePerPage,
 }
 
+/// <summary>Page orientation; <see cref="Auto"/> chooses the better one per layout or per image.</summary>
 public enum PageOrientation { Portrait, Landscape, Auto }
 
-/// <summary>Papierformat in Millimetern (Hochformat).</summary>
+/// <summary>Paper size in millimetres (portrait).</summary>
+/// <param name="Name">Display name; translated through <see cref="Tr.T(string)"/>.</param>
+/// <param name="WidthMm">Width in millimetres.</param>
+/// <param name="HeightMm">Height in millimetres.</param>
 public sealed record PaperSize(string Name, double WidthMm, double HeightMm)
 {
-    public override string ToString() => Tr.T(Name);   // „Foto 10 × 15 cm“ übersetzt, A4 bleibt
+    /// <summary>Returns the translated display name.</summary>
+    /// <returns>The name in the current language.</returns>
+    public override string ToString() => Tr.T(Name);   // "Foto 10 × 15 cm" is translated, "A4" stays as it is
 
+    /// <summary>Common paper sizes offered for selection.</summary>
     public static IReadOnlyList<PaperSize> Common { get; } =
     [
         new("A4", 210, 297),
@@ -35,9 +42,20 @@ public sealed record PaperSize(string Name, double WidthMm, double HeightMm)
     ];
 }
 
-/// <summary>Ein Bild mit seiner Druckgröße in Millimetern.</summary>
+/// <summary>An image with its print size in millimetres.</summary>
+/// <param name="Id">Identifier of the image; returned in <see cref="Placement.ItemId"/> and <see cref="LayoutResult.NotPlaced"/>.</param>
+/// <param name="WidthMm">Print width in millimetres.</param>
+/// <param name="HeightMm">Print height in millimetres.</param>
 public sealed record PrintItem(int Id, double WidthMm, double HeightMm);
 
+/// <summary>Settings for <see cref="PrintLayout.Arrange"/>.</summary>
+/// <param name="Paper">Paper size.</param>
+/// <param name="Orientation">Page orientation.</param>
+/// <param name="MarginMm">Margin on every side of the page in millimetres.</param>
+/// <param name="GapMm">Minimum gap between two images in millimetres; negative values count as 0.</param>
+/// <param name="AllowRotation">Whether images may be rotated by 90°.</param>
+/// <param name="Mode">Packing method.</param>
+/// <param name="ShrinkToFit">Whether images that are too large for the printable area are scaled down; otherwise they are not placed.</param>
 public sealed record LayoutOptions(
     PaperSize Paper,
     PageOrientation Orientation,
@@ -48,29 +66,52 @@ public sealed record LayoutOptions(
     bool ShrinkToFit);
 
 /// <summary>
-/// Lage eines Bildes auf der Seite (mm, Ursprung oben links). Breite/Höhe sind die
-/// gedruckten Maße — bei <see cref="Rotated"/> um 90° gedreht, bei <see cref="Scale"/> &lt; 1
-/// verkleinert, weil das Bild sonst nicht auf die Seite passt.
+/// Position of an image on the page (mm, origin at the top left of the page).
 /// </summary>
+/// <remarks>
+/// Width and height are the printed dimensions: swapped for <see cref="Rotated"/> (rotated by 90°), and scaled
+/// down for <see cref="Scale"/> &lt; 1 because the image would otherwise not fit on the page.
+/// </remarks>
+/// <param name="ItemId">Identifier of the <see cref="PrintItem"/>.</param>
+/// <param name="X">Left edge in millimetres, including the margin.</param>
+/// <param name="Y">Top edge in millimetres, including the margin.</param>
+/// <param name="Width">Printed width in millimetres.</param>
+/// <param name="Height">Printed height in millimetres.</param>
+/// <param name="Rotated">Whether the image is rotated by 90°.</param>
+/// <param name="Scale">Scale factor relative to the print size of the item (1 = unchanged).</param>
 public sealed record Placement(int ItemId, double X, double Y, double Width, double Height, bool Rotated, double Scale);
 
+/// <summary>One page of the layout.</summary>
+/// <param name="WidthMm">Page width in millimetres, according to the orientation.</param>
+/// <param name="HeightMm">Page height in millimetres, according to the orientation.</param>
+/// <param name="Placements">The images on this page.</param>
 public sealed record LayoutPage(double WidthMm, double HeightMm, IReadOnlyList<Placement> Placements);
 
+/// <summary>Result of <see cref="PrintLayout.Arrange"/>.</summary>
+/// <param name="Pages">The pages with their placements.</param>
+/// <param name="NotPlaced">Identifiers of the images that could not be placed (too large, or invalid size).</param>
 public sealed record LayoutResult(IReadOnlyList<LayoutPage> Pages, IReadOnlyList<int> NotPlaced);
 
 /// <summary>
-/// Verteilt Bilder auf Seiten — ohne Überlappung, mit Mindestabstand und innerhalb
-/// des Rands. Grundlage: J. Jylänki, „A Thousand Ways to Pack the Bin" (2010).
-///
-/// Abstand: Jedes Bild wird rechts und unten um den Abstand vergrößert, die
-/// bedruckbare Fläche ebenfalls. Gepackt wird ohne Lücken — dadurch liegen zwischen
-/// zwei Bildern immer mindestens <see cref="LayoutOptions.GapMm"/>, und kein Bild
-/// ragt in den Rand.
+/// Distributes images over pages without overlap, with a minimum gap and within the margin.
 /// </summary>
+/// <remarks>
+/// Based on J. Jylänki, "A Thousand Ways to Pack the Bin – A Practical Approach to Two-Dimensional
+/// Rectangle Bin Packing" (2010).
+/// <para>
+/// Gap: every image is enlarged by the gap on the right and at the bottom, and so is the printable area.
+/// Packing is done without spacing, so two images are always at least <see cref="LayoutOptions.GapMm"/>
+/// apart and no image reaches into the margin.
+/// </para>
+/// </remarks>
 public static class PrintLayout
 {
     private const double Eps = 1e-6;
 
+    /// <summary>Distributes the images over pages.</summary>
+    /// <param name="items">Images with their print sizes.</param>
+    /// <param name="o">Paper, margin, gap and packing method.</param>
+    /// <returns>The pages, and the images that could not be placed.</returns>
     public static LayoutResult Arrange(IReadOnlyList<PrintItem> items, LayoutOptions o)
     {
         if (o.Mode == PackingMode.OnePerPage)
@@ -79,12 +120,12 @@ public static class PrintLayout
         if (o.Orientation != PageOrientation.Auto)
             return Pack(items, o, o.Orientation == PageOrientation.Landscape);
 
-        // Automatisch: die Ausrichtung mit weniger Seiten; bei Gleichstand Hochformat
+        // Automatic: the orientation with the better score (see below); portrait on a tie.
         var portrait = Pack(items, o, landscape: false);
         var landscape = Pack(items, o, landscape: true);
         return Score(landscape).CompareTo(Score(portrait)) < 0 ? landscape : portrait;
 
-        // Weniger nicht platzierbare Bilder vor weniger Seiten vor weniger gedrehten Bildern
+        // Fewer unplaced images before fewer pages before fewer rotated images.
         static (int, int, int) Score(LayoutResult r) =>
             (r.NotPlaced.Count, r.Pages.Count, r.Pages.Sum(p => p.Placements.Count(x => x.Rotated)));
     }
@@ -93,15 +134,15 @@ public static class PrintLayout
         landscape ? (Math.Max(p.WidthMm, p.HeightMm), Math.Min(p.WidthMm, p.HeightMm))
                   : (Math.Min(p.WidthMm, p.HeightMm), Math.Max(p.WidthMm, p.HeightMm));
 
-    // ------------------------------------------------------------ Packen
+    // ------------------------------------------------------------ Packing
 
-    // Sortierungen, die durchprobiert werden — „große zuerst" in verschiedenen Lesarten
+    // Sort orders that are tried in turn: "largest first" in different interpretations.
     private static readonly Comparison<(PrintItem Item, double W, double H, double Scale)>[] SortOrders =
     [
-        (a, b) => Desc(a.W * a.H, b.W * b.H, Math.Max(a.W, a.H), Math.Max(b.W, b.H)),   // Fläche
-        (a, b) => Desc(Math.Max(a.W, a.H), Math.Max(b.W, b.H), a.W * a.H, b.W * b.H),   // längste Seite
-        (a, b) => Desc(a.H, b.H, a.W, b.W),                                             // Höhe
-        (a, b) => Desc(a.W, b.W, a.H, b.H),                                             // Breite
+        (a, b) => Desc(a.W * a.H, b.W * b.H, Math.Max(a.W, a.H), Math.Max(b.W, b.H)),   // area
+        (a, b) => Desc(Math.Max(a.W, a.H), Math.Max(b.W, b.H), a.W * a.H, b.W * b.H),   // longest side
+        (a, b) => Desc(a.H, b.H, a.W, b.W),                                             // height
+        (a, b) => Desc(a.W, b.W, a.H, b.H),                                             // width
     ];
 
     private static int Desc(double a1, double b1, double a2, double b2)
@@ -111,11 +152,13 @@ public static class PrintLayout
     }
 
     /// <summary>
-    /// Einzelne Heuristiken haben Ausreißer (z. B. drehen sie bei Gleichstand ein Bild,
-    /// und der Rest passt danach schlechter). Deshalb mehrere Varianten rechnen und die
-    /// beste nehmen: wenigste nicht platzierte Bilder, dann wenigste Seiten, dann
-    /// wenigste gedrehte Bilder — Fotos bleiben möglichst aufrecht.
+    /// Packs with every sort order, with and without rotation (if allowed), and keeps the best result.
     /// </summary>
+    /// <remarks>
+    /// Single heuristics have outliers (for example, they rotate an image on a tie and the rest then fits
+    /// worse). The best result has the fewest unplaced images, then the fewest pages, then the fewest rotated
+    /// images, so that photos stay upright where possible.
+    /// </remarks>
     private static LayoutResult Pack(IReadOnlyList<PrintItem> items, LayoutOptions o, bool landscape)
     {
         LayoutResult? best = null;
@@ -169,7 +212,7 @@ public static class PrintLayout
 
         foreach (var (item, w, h, scale) in prepared)
         {
-            // Mit Abstand als Puffer rechts/unten; Fläche ebenfalls um den Abstand größer
+            // With the gap as a buffer on the right and at the bottom; the area is also larger by the gap.
             var bw = w + gap;
             var bh = h + gap;
 
@@ -192,7 +235,7 @@ public static class PrintLayout
                 spot = bin.Insert(bw, bh, allowRotation);
             }
 
-            if (spot is not { } r) { notPlaced.Add(item.Id); continue; }   // sollte nach FitScale nie passieren
+            if (spot is not { } r) { notPlaced.Add(item.Id); continue; }   // should never happen after FitScale
 
             var rotated = Math.Abs(r.W - bw) > Eps;
             var placedW = rotated ? h : w;
@@ -206,7 +249,10 @@ public static class PrintLayout
             notPlaced);
     }
 
-    /// <summary>1 = passt, &lt; 1 = so stark verkleinern, null = passt gar nicht (Fläche zu klein).</summary>
+    /// <summary>
+    /// Scale at which an image fits into the area: 1 = fits as it is, &lt; 1 = scale down by this factor,
+    /// <see langword="null"/> = does not fit at all (invalid size or empty area).
+    /// </summary>
     internal static double? FitScale(double w, double h, double areaW, double areaH, bool allowRotation)
     {
         if (w <= 0 || h <= 0 || areaW <= 0 || areaH <= 0) return null;
@@ -217,7 +263,7 @@ public static class PrintLayout
         return best >= 1 - Eps ? 1 : best;
     }
 
-    // ------------------------------------------------------------ Eins pro Seite
+    // ------------------------------------------------------------ One per page
 
     private static LayoutResult OnePerPage(IReadOnlyList<PrintItem> items, LayoutOptions o)
     {
@@ -226,7 +272,7 @@ public static class PrintLayout
 
         foreach (var item in items)
         {
-            // Automatisch: Seite so drehen wie das Bild
+            // Automatic: orient the page like the image.
             var landscape = o.Orientation switch
             {
                 PageOrientation.Landscape => true,
@@ -243,7 +289,7 @@ public static class PrintLayout
                 continue;
             }
 
-            // Drehen nur, wenn das Bild gedreht größer (bzw. überhaupt in Originalgröße) passt
+            // Rotate only if the image does not fit at its original size and fits larger when rotated.
             var straight = Math.Min(areaW / item.WidthMm, areaH / item.HeightMm);
             var turned = o.AllowRotation ? Math.Min(areaW / item.HeightMm, areaH / item.WidthMm) : 0;
             var rotated = straight < 1 - Eps && turned > straight + Eps;
@@ -268,7 +314,7 @@ public static class PrintLayout
         return new LayoutResult(pages, notPlaced);
     }
 
-    // ------------------------------------------------------------ Verfahren
+    // ------------------------------------------------------------ Packing methods
 
     internal readonly record struct Rect(double X, double Y, double W, double H)
     {
@@ -284,17 +330,18 @@ public static class PrintLayout
 
     private interface IBin
     {
-        /// <summary>Platz für w × h (oder gedreht) suchen und belegen; null = passt nicht.</summary>
+        /// <summary>Finds and occupies space for w × h (or rotated); <see langword="null"/> if it does not fit.</summary>
         Rect? Insert(double w, double h, bool allowRotation);
     }
 
     /// <summary>
-    /// Guillotine: Jede Platzierung teilt ein freies Rechteck mit EINEM geraden Schnitt
-    /// in zwei. Ohne Zusammenlegen freier Flächen — so bleibt garantiert, dass die
-    /// Seite mit durchgehenden Schnitten zerlegbar ist.
-    /// Auswahl: kleinste Restfläche (Best Area Fit); Schnitt: entlang der kürzeren
-    /// Restachse (Shorter Leftover Axis).
+    /// Guillotine: every placement splits a free rectangle into two with ONE straight cut.
     /// </summary>
+    /// <remarks>
+    /// Free areas are never merged, which guarantees that the page can be divided by edge-to-edge cuts.
+    /// Selection: smallest leftover area (Best Area Fit); split: along the shorter leftover axis
+    /// (Shorter Leftover Axis).
+    /// </remarks>
     private sealed class GuillotineBin(double width, double height) : IBin
     {
         private readonly List<Rect> _free = [new Rect(0, 0, width, height)];
@@ -331,19 +378,19 @@ public static class PrintLayout
             _free.RemoveAt(bestIndex);
             var placed = new Rect(free.X, free.Y, bestW, bestH);
 
-            // Ein gerader Schnitt durch den Rest: entlang der kürzeren Restachse
+            // One straight cut through the rest, along the shorter leftover axis.
             var restW = free.W - bestW;
             var restH = free.H - bestH;
             Rect right, bottom;
             if (restW <= restH)
             {
-                // Waagerechter Schnitt über die ganze Breite
+                // Horizontal cut across the full width.
                 right = new Rect(free.X + bestW, free.Y, restW, bestH);
                 bottom = new Rect(free.X, free.Y + bestH, free.W, restH);
             }
             else
             {
-                // Senkrechter Schnitt über die ganze Höhe
+                // Vertical cut across the full height.
                 right = new Rect(free.X + bestW, free.Y, restW, free.H);
                 bottom = new Rect(free.X, free.Y + bestH, bestW, restH);
             }
@@ -355,10 +402,10 @@ public static class PrintLayout
     }
 
     /// <summary>
-    /// MaxRects: führt alle maximalen freien Rechtecke (dürfen sich überlappen) und
-    /// wählt den Platz mit dem kleinsten Rest an der kürzeren Seite (Best Short Side Fit).
-    /// Packt dichter als Guillotine, die Seite ist aber nicht immer durchgehend schneidbar.
+    /// MaxRects: keeps all maximal free rectangles (which may overlap) and chooses the position with the
+    /// smallest leftover on the shorter side (Best Short Side Fit).
     /// </summary>
+    /// <remarks>Packs more densely than guillotine, but the page cannot always be divided by edge-to-edge cuts.</remarks>
     private sealed class MaxRectsBin(double width, double height) : IBin
     {
         private readonly List<Rect> _free = [new Rect(0, 0, width, height)];
@@ -390,7 +437,7 @@ public static class PrintLayout
 
             if (best is not { } placed) return null;
 
-            // Jedes freie Rechteck, das der neue Platz schneidet, in bis zu vier Reste teilen
+            // Split every free rectangle that the new position intersects into up to four remainders.
             var next = new List<Rect>(_free.Count + 4);
             foreach (var f in _free)
             {
@@ -402,7 +449,7 @@ public static class PrintLayout
                 if (placed.Bottom < f.Bottom - Eps) next.Add(new Rect(f.X, placed.Bottom, f.W, f.Bottom - placed.Bottom));
             }
 
-            // Rechtecke entfernen, die vollständig in anderen liegen
+            // Remove rectangles that lie completely inside others (of two identical ones, keep the first).
             _free.Clear();
             for (var i = 0; i < next.Count; i++)
             {
