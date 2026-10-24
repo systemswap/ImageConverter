@@ -2312,3 +2312,14 @@ Test oder Nachweis.
   dort nicht gepushte Commits und die lokalen Notizen sichern).
 - **Nicht tun:** echte Orts-, Foto- oder Personennamen in Doku, Kommentare, Tests oder Nachrichten
   schreiben – neutral beschreiben; neue Namen in `.git/blocked-words` eintragen.
+
+## 82. Doku: Herkunft von Testblättern und eigene Hardware (24.10.2026)
+
+- **Entdeckt:** 24.10.2026, Stand 0.6.26-beta, bei der Durchsicht nach fremden Programmen und
+  Testmaterial. **Behoben:** 0.6.27-beta (4fbcd89; nur Kommentare und Doku, Programm nachweislich gleich).
+- **Was:** Fehlergedächtnis und KI-Dokus nannten Verlage der Testblätter und das Prozessormodell des
+  eigenen Rechners – Rückschlüsse auf Testmaterial und Rechner.
+- **Lösung:** Neutral beschrieben („Arbeitsblatt“, „Schulbuch“, „Notebook mit integrierter Grafik“);
+  auch in der Historie ersetzt.
+- **Nicht tun:** Herkunft von Testmaterial oder die eigene Hardware nennen – Messungen mit allgemeiner
+  Geräteklasse angeben.
