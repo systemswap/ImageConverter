@@ -4,48 +4,94 @@ using ImageMagick;
 namespace ImageConverter.Core.Ai;
 
 /// <summary>
-/// Ein Bildmodell, das Kacheln verarbeitet: RGB planar (3 × h × w, Werte 0…1) hinein,
-/// dasselbe in <see cref="Scale"/>-facher Größe heraus.
+/// An image model that processes one tile at a time: planar RGB in, planar RGB at
+/// <see cref="Scale"/> times the size out.
 /// </summary>
+/// <remarks>
+/// Both input and output are laid out as 3 × height × width (channel planes R, G, B) with values
+/// in the range 0…1.
+/// </remarks>
 public interface ITileModel
 {
+    /// <summary>Gets the integer magnification of the model (output edge = input edge × scale).</summary>
     int Scale { get; }
 
-    /// <summary>Kantenlänge einer Kachel (Eingabe).</summary>
+    /// <summary>Gets the edge length of an input tile in pixels.</summary>
     int TileSize { get; }
 
+    /// <summary>Runs the model on one tile.</summary>
+    /// <param name="input">Planar RGB, 3 × <paramref name="height"/> × <paramref name="width"/>, values 0…1.</param>
+    /// <param name="width">Tile width in pixels.</param>
+    /// <param name="height">Tile height in pixels.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <returns>Planar RGB, 3 × (height × <see cref="Scale"/>) × (width × <see cref="Scale"/>), values nominally 0…1.</returns>
     float[] Run(float[] input, int width, int height, CancellationToken ct);
 }
 
 /// <summary>
-/// Ganzes Bild durch ein Kachelmodell. Kacheln überlappen; von jeder Kachel wird nur
-/// die Mitte übernommen — so gibt es keine sichtbaren Nähte. Für „Größe behalten“
-/// wird das vergrößerte Ergebnis blockweise gemittelt (Supersampling): exakt pro
-/// Kachel, ohne dass je das ganze 4×-Bild im Speicher liegt.
+/// Runs a whole image through an <see cref="ITileModel"/>.
 /// </summary>
+/// <remarks>
+/// Tiles overlap and only the centre of each tile is kept, so no seams are visible. For output
+/// sizes below the model scale (for example "keep size"), the enlarged model output is averaged
+/// block by block (supersampling). This happens exactly per tile, so the full-scale model output
+/// of the whole image is never held in memory.
+/// </remarks>
 public static class AiEnhancer
 {
-    /// <summary>Mehr Pixel als das wird das Ergebnis nicht (Speicher, Zeit).</summary>
+    /// <summary>Largest permitted output size in pixels; limits memory use and computing time.</summary>
     public const long MaxOutputPixels = 80_000_000;
 
-    /// <summary>Welche Vergrößerungen für ein Bild möglich sind (1 = Größe behalten).</summary>
+    /// <summary>Returns the output factors that are possible for an image (1 = keep size).</summary>
+    /// <param name="modelScale">Magnification of the model (<see cref="ITileModel.Scale"/>).</param>
+    /// <param name="width">Image width in pixels.</param>
+    /// <param name="height">Image height in pixels.</param>
+    /// <returns>
+    /// Those of 1, 2, 4 and 8 that do not exceed <paramref name="modelScale"/>, divide it evenly and keep
+    /// the output within <see cref="MaxOutputPixels"/>, in ascending order.
+    /// </returns>
     public static IEnumerable<int> PossibleFactors(int modelScale, int width, int height) =>
         new[] { 1, 2, 4, 8 }.Where(f => f <= modelScale && modelScale % f == 0
                                         && (long)width * f * height * f <= MaxOutputPixels);
 
-    /// <param name="factor">Ausgabegröße: 1 = wie das Original, sonst Vielfaches (Teiler der Modellskalierung).</param>
-    /// <param name="strength">0…1: Mischung mit dem Original (1 = nur Modell).</param>
-    /// <param name="progress">Anteil 0…1.</param>
-    /// <param name="preview">Zwischenstände: fertige Kacheln neu, der Rest noch alt.</param>
+    /// <summary>Enhances an image with a tile model and blends the result with the original.</summary>
+    /// <param name="source">Image to enhance; it is not modified.</param>
+    /// <param name="model">Tile model to apply.</param>
+    /// <param name="factor">Output size: 1 = same as the original, otherwise a multiple that divides the model scale.</param>
+    /// <param name="strength">0…1: blend with the original (1 = model only).</param>
+    /// <param name="progress">Receives the completed fraction, 0…1.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <param name="preview">Receives intermediate frames: finished tiles enhanced, the rest still from the original.</param>
+    /// <param name="previewMaxEdge">Longest edge of the intermediate frames in pixels.</param>
+    /// <returns>A new image owned by the caller, with the profiles and density of <paramref name="source"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than 1 or does not divide the model scale.</exception>
     public static MagickImage Enhance(MagickImage source, ITileModel model, int factor, double strength,
         IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048) =>
         Run(source, model, factor, progress, ct, preview, previewMaxEdge).Compose(new AiBlend(strength));
 
     /// <summary>
-    /// Das Modell mit voller Wirkung über das ganze Bild, noch nicht mit dem Original gemischt
-    /// (<see cref="EnhanceRun"/>) — die Stärke lässt sich danach live ändern, ohne neu zu rechnen.
+    /// Applies the model at full strength to the whole image without blending it with the original.
     /// </summary>
+    /// <remarks>
+    /// The returned <see cref="EnhanceRun"/> holds both the model result and the original at the
+    /// target size, so the strength can be changed live afterwards without running the model again.
+    /// The tiles are processed one after another on the calling thread; the call blocks until all
+    /// tiles are done. <see cref="MaxOutputPixels"/> is not checked here; callers choose the factor
+    /// from <see cref="PossibleFactors"/>.
+    /// </remarks>
+    /// <param name="source">Image to enhance; it is not modified.</param>
+    /// <param name="model">Tile model to apply.</param>
+    /// <param name="factor">Output size: 1 = same as the original, otherwise a multiple that divides the model scale.</param>
+    /// <param name="progress">Receives the completed fraction, 0…1, after each tile.</param>
+    /// <param name="ct">Cancels the computation; checked before each tile and passed to the model.</param>
+    /// <param name="preview">
+    /// Receives intermediate frames at most every 400 ms: finished tiles enhanced, the rest from the
+    /// original, shown paler. No frame is sent after the last tile.
+    /// </param>
+    /// <param name="previewMaxEdge">Longest edge of the intermediate frames in pixels.</param>
+    /// <returns>The unblended result at the target size.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than 1 or does not divide the model scale.</exception>
     public static EnhanceRun Run(MagickImage source, ITileModel model, int factor,
         IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048)
@@ -62,8 +108,8 @@ public static class AiEnhancer
         var src = ReadPixels(source, mapping);
         int ow = w * factor, oh = h * factor;
 
-        // Vergleichsbild in Zielgröße: für die Mischung (Stärke) und den Alphakanal — immer, die Stärke
-        // wird erst danach gewählt
+        // Reference image at the target size, used for blending (strength) and for the alpha channel.
+        // It is always created because the strength is chosen only afterwards.
         ushort[] baseline;
         if (factor == 1) baseline = src;
         else
@@ -76,9 +122,9 @@ public static class AiEnhancer
 
         var result = new ushort[(long)ow * oh * channels];
         var tile = model.TileSize;
-        var pad = Math.Max(4, tile / 12);   // Rand, der verworfen wird
+        var pad = Math.Max(4, tile / 12);   // border that is discarded
         var core = tile - 2 * pad;
-        var block = scale / factor;          // so viele Modellpixel ergeben einen Ausgabepixel
+        var block = scale / factor;          // edge length in model pixels of the block that forms one output pixel
         var input = new float[3 * tile * tile];
 
         var tilesX = (w + core - 1) / core;
@@ -93,7 +139,7 @@ public static class AiEnhancer
             int cx = tx * core, cy = ty * core;
             int cw = Math.Min(core, w - cx), ch = Math.Min(core, h - cy);
 
-            // Eingabe mit Rand; außerhalb des Bildes Randpixel wiederholen
+            // Input including the border; outside the image the edge pixels are repeated
             for (var y = 0; y < tile; y++)
             {
                 var sy = Math.Clamp(cy - pad + y, 0, h - 1);
@@ -109,11 +155,11 @@ public static class AiEnhancer
             }
 
             var output = model.Run(input, tile, tile, ct);
-            var os = tile * scale;               // Kantenlänge der Modellausgabe
+            var os = tile * scale;               // edge length of the model output
             var plane = (long)os * os;
             var norm = 1f / (block * block);
 
-            // Kern übernehmen, auf Zielgröße gemittelt
+            // Take over the core, averaged down to the target size
             for (var y = 0; y < ch * factor; y++)
             {
                 var oy = cy * factor + y;
@@ -145,7 +191,7 @@ public static class AiEnhancer
 
             if (sink.IsDue && done < tilesX * tilesY)
             {
-                // Kacheln laufen zeilenweise: fertig ist alles vor Kachel Nr. „done“
+                // Tiles run row by row: every tile with an index below "done" is finished
                 var finished = done;
                 sink.Emit(ow, oh, (x, y, rgba) =>
                 {
@@ -153,7 +199,7 @@ public static class AiEnhancer
                     var isDone = sy / core * tilesX + sx / core < finished;
                     var i = isDone ? ((long)y * ow + x) * channels : ((long)sy * w + sx) * channels;
                     var data = isDone ? result : src;
-                    // Noch nicht berechnet: etwas blass — so sieht man, wie das Bild neu aufgebaut wird
+                    // Not yet computed: shown slightly paler so the progress of the rebuild is visible
                     var fade = isDone ? 1f : 0.6f;
                     var lift = isDone ? 0f : 0.4f;
                     rgba[0] = data[i] / 65535f * fade + lift;
@@ -177,7 +223,9 @@ public static class AiEnhancer
         }
     }
 
-    /// <summary>Auf Vorschaugröße verkleinern, genau wie die normale Vorschau (RGB verschachtelt, 0…1).</summary>
+    /// <summary>
+    /// Reduces pixel data to preview size exactly like the normal preview; returns interleaved RGB, 0…1.
+    /// </summary>
     internal static float[] Shrink(ushort[] data, int width, int height, string mapping, AiPreviewSize size)
     {
         using var full = WritePixels(data, width, height, mapping);
@@ -190,8 +238,8 @@ public static class AiEnhancer
 
     internal static MagickImage WritePixels(ushort[] data, int width, int height, string mapping)
     {
-        // Direkt aus dem 16-Bit-Feld (Q16: Quantum = ushort) — vorher über eine Bytekopie gleicher Größe (beim ×4-Ergebnis
-        // eines 12-MP-Fotos 1,15 GB zusätzlich)
+        // Read directly from the 16-bit array (Q16: Quantum = ushort). Going through a byte copy of the same
+        // size would cost an extra 1.15 GB for the ×4 result of a 12-MP photo.
         var image = new MagickImage();
         image.ReadPixels(data, new PixelReadSettings((uint)width, (uint)height, StorageType.Quantum, mapping));
         return image;

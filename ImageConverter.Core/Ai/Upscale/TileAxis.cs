@@ -1,17 +1,21 @@
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>
-/// Kacheln entlang einer Achse: gleichmäßig verteilt, je mindestens <c>overlap</c> überlappend. Dazu Gewichte, die an jeder
-/// Stelle zusammen genau 1 ergeben (weiche Rampen in den Überlappungen, am Bildrand keine) — so lässt sich ein Ergebnis
-/// Kachel für Kachel direkt aufaddieren, ohne Summen- und Gewichtspuffer in voller Größe. Zweidimensional: Produkt der
-/// Gewichte beider Achsen (ergibt ebenfalls überall 1).
+/// Division of one axis into tiles, with blending weights.
 /// </summary>
+/// <remarks>
+/// The tiles are spread evenly and overlap by at least <c>overlap</c> (with <c>align</c> = 1). The weights sum to exactly 1
+/// at every position (soft ramps in the overlaps, none at the image border), so a result can be added up tile by tile
+/// without full-size sum and weight buffers. In two dimensions the product of the weights of both axes is used; it also
+/// sums to 1 everywhere. See docs/FEHLERGEDAECHTNIS.md, No. 61.
+/// </remarks>
 public sealed class TileAxis
 {
-    /// <param name="length">Länge der Achse.</param>
-    /// <param name="tile">Kachelgröße (bei kürzerer Achse: eine Kachel über alles).</param>
-    /// <param name="overlap">Mindestüberlappung; die Rampen sind so breit.</param>
-    /// <param name="align">Anfänge auf Vielfache davon (VAE: 1 Latentpixel = 8 Bildpixel).</param>
+    /// <summary>Divides an axis into tiles.</summary>
+    /// <param name="length">Length of the axis.</param>
+    /// <param name="tile">Tile size (if the axis is shorter: one tile covering everything).</param>
+    /// <param name="overlap">Minimum overlap; the ramps have this width.</param>
+    /// <param name="align">Starts are rounded down to multiples of this value (VAE: 1 latent pixel = 8 image pixels); the last tile always ends at the axis end.</param>
     public TileAxis(int length, int tile, int overlap, int align = 1)
     {
         Length = length;
@@ -25,7 +29,7 @@ public sealed class TileAxis
         }
         Starts[^1] = length - Size;
 
-        // Rohgewichte: Rampe von den Kachelrändern nach innen (nicht am Bildrand), dann je Stelle auf Summe 1 bringen
+        // Raw weights: ramp from the tile edges inwards (not at the image border), then normalise to sum 1 per position
         var ramp = Math.Max(1, overlap);
         var raw = new float[n][];
         var sum = new double[length];
@@ -49,24 +53,34 @@ public sealed class TileAxis
             for (var i = 0; i < Size; i++) Weights[k][i] = (float)(raw[k][i] / sum[Starts[k] + i]);
         }
 
-        // Für die Zwischenstände: letzte Kachel, die eine Stelle berührt
+        // For the intermediate results: last tile that touches a position
         LastCovering = new int[length];
         for (var k = 0; k < n; k++)
         for (var i = 0; i < Size; i++) LastCovering[Starts[k] + i] = k;
     }
 
+    /// <summary>Gets the length of the axis.</summary>
     public int Length { get; }
+
+    /// <summary>Gets the size of each tile (at most the length of the axis).</summary>
     public int Size { get; }
+
+    /// <summary>Gets the start position of each tile, in ascending order.</summary>
     public int[] Starts { get; }
+
+    /// <summary>Gets the number of tiles.</summary>
     public int Count => Starts.Length;
 
-    /// <summary>Gewicht je Kachel und Stelle in der Kachel.</summary>
+    /// <summary>Gets the weight per tile and position within the tile.</summary>
     public float[][] Weights { get; }
 
-    /// <summary>Je Stelle die letzte (höchste) Kachel, die sie berührt.</summary>
+    /// <summary>Gets, per position, the last (highest-numbered) tile that touches it.</summary>
     public int[] LastCovering { get; }
 
-    /// <summary>Dieselbe Einteilung in <paramref name="factor"/>-facher Auflösung (Latent → Bild), Rampen mitskaliert.</summary>
+    /// <summary>Returns the same division at <paramref name="factor"/> times the resolution (latent → image), ramps scaled as well.</summary>
+    /// <param name="factor">Resolution factor.</param>
+    /// <param name="overlap">Ramp width at the coarse resolution; it is multiplied by <paramref name="factor"/>.</param>
+    /// <returns>The scaled division.</returns>
     public TileAxis Scaled(int factor, int overlap) => new(this, factor, overlap);
 
     private TileAxis(TileAxis coarse, int factor, int overlap)

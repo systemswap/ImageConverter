@@ -4,21 +4,30 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
-/// <summary>Gesichtsbereiche (Face Parsing): je Pixel des ausgerichteten Ausschnitts eine Klasse.</summary>
+/// <summary>Face parsing: assigns a region class to every pixel of the aligned face crop.</summary>
 public interface IFaceParser
 {
-    /// <param name="crop">Ausschnitt RGB planar 0…1, <paramref name="size"/> × <paramref name="size"/>.</param>
-    /// <returns>Klasse je Pixel (CelebAMask-HQ, siehe <see cref="FaceDetails"/>).</returns>
+    /// <summary>Classifies every pixel of an aligned face crop.</summary>
+    /// <param name="crop">Crop as planar RGB 0…1, <paramref name="size"/> × <paramref name="size"/>.</param>
+    /// <param name="size">Edge length of the crop in pixels.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <returns>One class per pixel, row by row (CelebAMask-HQ classes, see <see cref="FaceDetails"/>).</returns>
     byte[] Parse(float[] crop, int size, CancellationToken ct);
 }
 
-/// <summary>BiSeNet über ONNX (FaceFusion): 512 × 512, RGB, ImageNet-normiert, 19 Klassen.</summary>
+/// <summary>Face parser using BiSeNet through ONNX Runtime (FaceFusion export): 512 × 512, RGB, ImageNet normalisation, 19 classes.</summary>
+/// <param name="session">ONNX session of the BiSeNet model; it stays owned by the caller.</param>
 public sealed class OnnxFaceParser(InferenceSession session) : IFaceParser
 {
     private const int Size = 512;
     private static readonly float[] Mean = [0.485f, 0.456f, 0.406f];
     private static readonly float[] Std = [0.229f, 0.224f, 0.225f];
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Crops of a size other than 512 are resampled to 512 and back with nearest neighbour.
+    /// Cancellation is checked before the model runs and also stops a running computation.
+    /// </remarks>
     public byte[] Parse(float[] crop, int size, CancellationToken ct)
     {
         var plane = Size * Size;
@@ -27,15 +36,16 @@ public sealed class OnnxFaceParser(InferenceSession session) : IFaceParser
         for (var y = 0; y < Size; y++)
         for (var x = 0; x < Size; x++)
         {
-            // nächster Nachbar, falls der Ausschnitt eine andere Größe hat (alle Modelle bisher 512)
+            // Nearest neighbour in case the crop has a different size (all supported models use 512)
             var v = crop[c * size * size + y * size / Size * size + x * size / Size];
             input[c * plane + y * Size + x] = (v - Mean[c]) / Std[c];
         }
 
         ct.ThrowIfCancellationRequested();
         using var value = OrtValue.CreateTensorValueFromMemory(input, [1, 3, Size, Size]);
-        // Über OnnxSessions.Run: die Laufoptionen bleiben bis zum Ende der Rechnung am Leben. Mit „new RunOptions()“ direkt im
-        // Aufruf konnte die Speicherbereinigung sie mitten in der Rechnung freigeben — Absturz (Zugriffsverletzung) in ONNX.
+        // Through OnnxSessions.Run, so that the run options stay alive until the computation ends. With "new RunOptions()"
+        // directly in the call, the garbage collector could free them in the middle of the computation, causing a crash
+        // (access violation) in ONNX Runtime. See docs/FEHLERGEDAECHTNIS.md, No. 69.
         var logits = OnnxSessions.Run(session, new Dictionary<string, OrtValue> { [session.InputNames[0]] = value }, ct);
         var classes = logits.Length / plane;
 
@@ -53,17 +63,26 @@ public sealed class OnnxFaceParser(InferenceSession session) : IFaceParser
     }
 }
 
-/// <summary>Kornprofil eines Fotos: Stärke je Helligkeit (wie AV1 Film Grain) und Korngröße.</summary>
-/// <param name="SigmaByLevel">Standardabweichung des Korns (0…1) je Helligkeitsstufe, gleichmäßig über 0…1.</param>
-/// <param name="GrainSigma">Korngröße als Gauß-Sigma in Bildpixeln (0 = weißes Rauschen, Pixel für Pixel).</param>
-/// <param name="CoarseGain">Wie viel der Mess-Hochpass von Korn dieser Größe (Streuung 1) sieht — zum Umrechnen.</param>
+/// <summary>Grain profile of a photo: strength per brightness level (as in AV1 film grain synthesis) and grain size.</summary>
+/// <param name="SigmaByLevel">
+/// Standard deviation of the grain (0…1) per brightness level; <see cref="GrainLevels"/> levels spread evenly over 0…1.
+/// </param>
+/// <param name="GrainSigma">Grain size as a Gaussian sigma in image pixels (0 = white noise, pixel by pixel).</param>
+/// <param name="CoarseGain">
+/// How much of grain of this size (standard deviation 1) the measuring high-pass filter sees; used to convert
+/// measured values into grain strength.
+/// </param>
 public sealed record GrainProfile(float[] SigmaByLevel, double GrainSigma, double CoarseGain = 1)
 {
+    /// <summary>Gets a profile without grain (all levels 0).</summary>
     public static GrainProfile None { get; } = new(new float[GrainLevels], 0);
 
+    /// <summary>Number of brightness levels in <see cref="SigmaByLevel"/>.</summary>
     public const int GrainLevels = 8;
 
-    /// <summary>Kornstärke bei Helligkeit <paramref name="y"/> (0…1), linear zwischen den Stufen.</summary>
+    /// <summary>Returns the grain strength at brightness <paramref name="y"/>, interpolated linearly between the level centres.</summary>
+    /// <param name="y">Brightness, 0…1; values outside are clamped.</param>
+    /// <returns>Standard deviation of the grain, 0…1.</returns>
     public float SigmaAt(float y)
     {
         var t = Math.Clamp(y, 0f, 1f) * GrainLevels - 0.5f;
@@ -72,40 +91,49 @@ public sealed record GrainProfile(float[] SigmaByLevel, double GrainSigma, doubl
         return SigmaByLevel[i] + (SigmaByLevel[i + 1] - SigmaByLevel[i]) * f;
     }
 
+    /// <summary>Gets the mean grain strength over all levels.</summary>
     public float Average => SigmaByLevel.Average();
 }
 
 /// <summary>
-/// Details um die KI herum: was das Original an Struktur hatte (vor der KI eingelesen), was das Modell davon
-/// weggeglättet hat (danach verglichen) und wie das Korn des Fotos aussieht. Gerechnet wird einmal je Lauf;
-/// die Regler „Falten &amp; Züge“ und „Körnung“ mischen danach live.
+/// Detail analysis around the face model: the structure the original had (read before the model), what the
+/// model smoothed away (compared afterwards) and what the grain of the photo looks like.
 /// </summary>
 /// <remarks>
-/// Vorbilder: Zerlegung in Detailstufen (Laplace-Pyramide, Burt &amp; Adelson), Detail-Übertragung zwischen zwei
-/// Aufnahmen (Petschnigg u. a. 2004), Korn wie AV1 Film Grain Synthesis (Norkin &amp; Birkbeck 2018: Rest aus
-/// Original minus entrauschtem Bild, Stärke als Funktion der Helligkeit), Gesichtsbereiche mit BiSeNet.
+/// <para>
+/// The analysis runs once per AI run; the "Folds &amp; lines" and "Grain" controls then blend live.
+/// </para>
+/// <para>
+/// Sources: decomposition into detail bands (Laplacian pyramid, Burt &amp; Adelson), detail transfer between two
+/// exposures (Petschnigg et al. 2004), grain as in AV1 film grain synthesis (Norkin &amp; Birkbeck 2018: residual
+/// of the original minus the denoised image, strength as a function of brightness), face regions with BiSeNet.
+/// </para>
 /// </remarks>
 public static class FaceDetails
 {
-    // Klassen des Face Parsings (CelebAMask-HQ)
+    /// <summary>Face parsing class indices (CelebAMask-HQ) as returned by <see cref="IFaceParser.Parse"/>.</summary>
     public const byte Skin = 1, BrowLeft = 2, BrowRight = 3, EyeLeft = 4, EyeRight = 5, Glasses = 6,
         EarLeft = 7, EarRight = 8, Earring = 9, Nose = 10, Mouth = 11, LipUpper = 12, LipLower = 13, Neck = 14;
 
-    /// <summary>Bereiche, in die Falten aus dem Original zurückdürfen: Haut, Nase, Ohren, Hals.</summary>
+    /// <summary>Regions into which folds from the original may return: skin, nose, ears, neck.</summary>
     private static bool TakesFolds(byte label) => label is Skin or Nose or EarLeft or EarRight or Neck;
 
-    /// <summary>Gröbere Detailstufe „Falten &amp; Züge“: von etwa 1 bis 4 Bildpixeln.</summary>
+    /// <summary>Coarser detail band "folds &amp; lines": from about 1 to 4 image pixels.</summary>
     internal const double FoldsFrom = 1.0, FoldsTo = 4.0;
 
-    /// <summary>Abstand der Falten zu Augen, Lippen und Gesichtsrand (Ausschnitt-Pixel): drei Viertel der Stufenbreite.</summary>
+    /// <summary>
+    /// Distance of the folds from eyes, lips and face outline (crop pixels): three quarters of the band width.
+    /// Without this distance the band reaches across the skin boundary and edges of eyelids, lips and face
+    /// outline come back from the blurred original. See docs/FEHLERGEDAECHTNIS.md, No. 24.
+    /// </summary>
     internal static double FoldsKeepAway(double scale) => Math.Clamp(FoldsTo * scale * 0.75, 2, 30);
 
-    // ------------------------------------------------------------ Bereiche
+    // ------------------------------------------------------------ Regions
 
     /// <summary>
-    /// Wo Falten zurückdürfen (0…1, weich): Haut ja, Augen, Brauen, Lippen, Zähne, Haare nein — mit Abstand
-    /// <paramref name="keepAway"/> (Ausschnitt-Pixel) zu diesen Bereichen. Ohne Face Parsing
-    /// ersatzweise alles außer weichen Kreisen um Augen und Mund (aus der Normlage der fünf Punkte).
+    /// Where folds may return (0…1, soft): skin yes; eyes, brows, lips, teeth, hair no, with a distance of
+    /// <paramref name="keepAway"/> (crop pixels) from the excluded regions. Without face parsing, everything
+    /// except soft circles around eyes and mouth (from the reference positions of the five landmarks).
     /// </summary>
     internal static float[] FoldMask(byte[]? labels, int size, IReadOnlyList<(double X, double Y)> template, double keepAway = 0)
     {
@@ -138,9 +166,9 @@ public static class FaceDetails
             });
         }
 
-        // Abstand zu Augen, Lippen, Gesichtsrand: so weit, wie die Detailstufe reicht — sonst kämen deren Kanten
-        // aus dem Original mit (doppelte Konturen). Weichzeichnen und hoch ansetzen schrumpft den Bereich um etwa
-        // 1,9 Sigma.
+        // Distance from eyes, lips and face outline as far as the detail band reaches; otherwise their edges would
+        // come along from the original (double contours). Blurring and thresholding high shrinks the region by
+        // about 1.9 sigma.
         if (keepAway > 0)
         {
             var spread = (float[])mask.Clone();
@@ -148,15 +176,15 @@ public static class FaceDetails
             for (var i = 0; i < mask.Length; i++) mask[i] = spread[i] > 0.97f ? mask[i] : 0;
         }
 
-        // weicher Rand, damit keine Kante an Augen und Lippen entsteht
+        // Soft edge so that no hard edge appears at eyes and lips
         Blur.Gauss(mask, size, size, size / 170.0);
         return mask;
     }
 
 
     /// <summary>
-    /// Für die Karte: Gesichtsteile, die vom Modell bleiben — Augen, Brauen, Brille, Lippen, Zähne (0…1).
-    /// Ohne Face Parsing die Kreise um Augen und Mund.
+    /// For the map: face parts that stay from the model, i.e. eyes, brows, glasses, lips, inner mouth and teeth (0…1).
+    /// Without face parsing, the circles around eyes and mouth.
     /// </summary>
     internal static float[] KeptMask(byte[]? labels, int size, IReadOnlyList<(double X, double Y)> template)
     {
@@ -175,17 +203,19 @@ public static class FaceDetails
         }
         return kept;
     }
-    // ------------------------------------------------------------ Falten & Züge
+    // ------------------------------------------------------------ Folds & lines
 
     /// <summary>
-    /// Was das Modell an Falten und Zügen weggeglättet hat: mittlere Detailstufe (Helligkeit) des Originals minus
-    /// die des Modells, nur auf der Haut und nur dort, wo beide übereinanderpassen — wo das Modell eine Form
-    /// verschoben hat (Augen, Mundwinkel), entstünden sonst doppelte Konturen.
+    /// What the model smoothed away in folds and lines: the middle detail band (brightness) of the original minus
+    /// that of the model, only on the skin and only where both are aligned. Where the model has moved a shape
+    /// (eyes, mouth corners), double contours would appear otherwise.
     /// </summary>
-    /// <param name="crop">Original im Ausschnitt (RGB planar 0…1).</param>
-    /// <param name="enhanced">Ergebnis des Modells (RGB planar 0…1).</param>
-    /// <param name="scale">Ausschnitt-Pixel je Bildpixel (die Stufe gilt in Bildpixeln).</param>
-    /// <returns>Helligkeitsunterschied je Ausschnitt-Pixel — mit dem Regler mal 0…1 aufs Ergebnis.</returns>
+    /// <param name="crop">Original in the crop (planar RGB 0…1).</param>
+    /// <param name="enhanced">Model result (planar RGB 0…1).</param>
+    /// <param name="size">Edge length of the crop in pixels.</param>
+    /// <param name="scale">Crop pixels per image pixel (the band is defined in image pixels).</param>
+    /// <param name="mask">Where folds may return (<see cref="FoldMask"/>).</param>
+    /// <returns>Brightness difference per crop pixel; multiplied by the slider value 0…1 and added to the result.</returns>
     internal static float[] Folds(float[] crop, float[] enhanced, int size, double scale, float[] mask)
     {
         var s1 = Math.Clamp(FoldsFrom * scale, 0.7, 12);
@@ -193,7 +223,7 @@ public static class FaceDetails
         var mo = Band(Luma(crop, size), size, s1, s2);
         var me = Band(Luma(enhanced, size), size, s1, s2);
 
-        // Passen beide zusammen? Örtliche Energie und Korrelation der Stufe über die Breite der Stufe
+        // Are both aligned? Local energy and correlation of the band over the width of the band
         var n = size * size;
         float[] eo = new float[n], ee = new float[n], cross = new float[n];
         for (var i = 0; i < n; i++) { eo[i] = mo[i] * mo[i]; ee[i] = me[i] * me[i]; cross[i] = mo[i] * me[i]; }
@@ -206,14 +236,14 @@ public static class FaceDetails
         for (var i = 0; i < n; i++)
         {
             var corr = cross[i] / MathF.Sqrt(eo[i] * ee[i] + eps);
-            var r = ee[i] / (ee[i] + eo[i] + eps);                  // 0 = Modell glatt, 1 = nur Modell hat Struktur
-            var align = Math.Clamp(1 - r * (1 - corr) * 2, 0f, 1f);  // glatt oder gleichlaufend: ja; versetzt: nein
+            var r = ee[i] / (ee[i] + eo[i] + eps);                  // 0 = model smooth, 1 = only the model has structure
+            var align = Math.Clamp(1 - r * (1 - corr) * 2, 0f, 1f);  // smooth or in phase: yes; shifted: no
             folds[i] = (mo[i] - me[i]) * align * mask[i];
         }
         return folds;
     }
 
-    /// <summary>Helligkeit (Rec. 709) aus RGB planar.</summary>
+    /// <summary>Luma (ITU-R BT.709 coefficients) from planar RGB.</summary>
     private static float[] Luma(float[] rgb, int size)
     {
         var n = size * size;
@@ -222,7 +252,7 @@ public static class FaceDetails
         return y;
     }
 
-    /// <summary>Detailstufe zwischen zwei Glättungen (Differenz zweier Gauß-Stufen).</summary>
+    /// <summary>Detail band between two blur levels (difference of Gaussians).</summary>
     private static float[] Band(float[] y, int size, double s1, double s2)
     {
         var a = (float[])y.Clone();
@@ -233,18 +263,28 @@ public static class FaceDetails
         return a;
     }
 
-    // ------------------------------------------------------------ Korn
+    // ------------------------------------------------------------ Grain
 
-    private const double MeasureSigma = 2.0;   // Hochpass für die Stärke
-    private const double FineSigma = 0.7;      // zweiter, feinerer Hochpass für die Korngröße
+    private const double MeasureSigma = 2.0;   // high-pass filter for the strength
+    private const double FineSigma = 0.7;      // second, finer high-pass filter for the grain size
     private const int Block = 16;
 
     /// <summary>
-    /// Kornprofil des Fotos (vor der KI eingelesen): je Helligkeitsstufe die Streuung in den ruhigsten Blöcken
-    /// (dort ist nur Korn, kein Motiv) — wie bei AV1 als Funktion der Helligkeit; die Korngröße aus dem
-    /// Verhältnis zweier Hochpässe, abgeglichen an künstlichem Korn bekannter Größe.
+    /// Measures the grain profile of a photo (before the model runs).
     /// </summary>
-    /// <param name="image">Bild RGB verschachtelt 0…1.</param>
+    /// <remarks>
+    /// Per brightness level, the spread in the quietest 20 % of the 16 × 16 blocks is taken (there is only grain,
+    /// no subject), as a function of brightness as in AV1. The grain size follows from the ratio of two high-pass
+    /// filters, calibrated against synthetic grain of known size. Levels without enough blocks take the value of
+    /// the nearest measured level.
+    /// </remarks>
+    /// <param name="image">Image as interleaved RGB 0…1.</param>
+    /// <param name="w">Image width in pixels.</param>
+    /// <param name="h">Image height in pixels.</param>
+    /// <returns>
+    /// The measured profile, or <see cref="GrainProfile.None"/> if the width or height is below 32 pixels or no
+    /// brightness level has enough usable blocks.
+    /// </returns>
     public static GrainProfile MeasureGrain(float[] image, int w, int h)
     {
         if (w < Block * 2 || h < Block * 2) return GrainProfile.None;
@@ -258,12 +298,12 @@ public static class FaceDetails
         var coarse = HighPassStd(y, w, h, MeasureSigma);
         var fine = HighPassStd(y, w, h, FineSigma);
 
-        // je Helligkeitsstufe die ruhigsten 20 % der Blöcke
+        // Per brightness level the quietest 20 % of the blocks
         var levels = GrainProfile.GrainLevels;
         var perLevel = Enumerable.Range(0, levels).Select(_ => new List<(float Coarse, float Fine)>()).ToArray();
         foreach (var (mean, c, f) in coarse.Blocks.Zip(fine.Blocks, (a, b) => (a.Mean, a.Std, b.Std)))
         {
-            if (mean < 0.03f || mean > 0.97f) continue;   // abgeschnitten: dort ist kein Korn mehr messbar
+            if (mean < 0.03f || mean > 0.97f) continue;   // clipped: no grain can be measured there
             perLevel[Math.Min(levels - 1, (int)(mean * levels))].Add((c, f));
         }
 
@@ -280,12 +320,12 @@ public static class FaceDetails
         }
         if (raw.All(float.IsNaN)) return GrainProfile.None;
 
-        // Korngröße: welches künstliche Korn hat dasselbe Verhältnis fein/grob?
+        // Grain size: which synthetic grain has the same fine/coarse ratio?
         ratios.Sort();
         var ratio = ratios.Count > 0 ? ratios[ratios.Count / 2] : Calibration[0].Ratio;
         var (grainSigma, coarseGain) = Lookup(ratio);
 
-        // Lücken mit der nächsten gemessenen Stufe füllen, Rest-Std in Korn-Std umrechnen
+        // Fill gaps with the nearest measured level, convert residual std into grain std
         var sigma = new float[levels];
         for (var l = 0; l < levels; l++)
         {
@@ -297,18 +337,22 @@ public static class FaceDetails
 
 
     /// <summary>
-    /// Wie viel Korn ein verbessertes Gesicht schon hat (gemessen wie beim Foto, auf der Haut), umgerechnet in einen
-    /// Anteil: 1 = glatt, volles Korn nötig; 0 = schon so körnig wie das Foto (manche Modelle erfinden selbst feine
-    /// Struktur). „Körnung 100 %“ füllt so nur auf, was bis zum Foto fehlt.
+    /// How much grain a restored face already has (measured as for the photo, on the skin), converted into a
+    /// share: 1 = smooth, full grain needed; 0 = already as grainy as the photo (some models invent fine
+    /// structure themselves). "Grain 100 %" thus only fills up what is missing compared with the photo.
     /// </summary>
-    /// <param name="luma">Helligkeit des eingesetzten Gesichts (Bildausschnitt).</param>
-    /// <param name="weight">Wo gemessen wird (Haut, 0…1).</param>
+    /// <remarks>
+    /// Only the quietest blocks count, as for the photo. Taking the total spread of the skin fails: the contours
+    /// of nose and cheeks count as well and no grain is added at all. See docs/FEHLERGEDAECHTNIS.md, No. 24.
+    /// </remarks>
+    /// <param name="luma">Brightness of the pasted face (image area).</param>
+    /// <param name="weight">Where to measure (skin, 0…1).</param>
     internal static float GrainGain(float[] luma, float[] weight, int w, int h, GrainProfile profile)
     {
         var blurred = (float[])luma.Clone();
         Blur.Gauss(blurred, w, h, MeasureSigma);
 
-        // wie beim Foto: nur die ruhigsten Stellen zählen (dort ist Korn, keine Kontur) — 8er-Blöcke, Gesichter sind klein
+        // As for the photo, only the quietest areas count (grain there, no contour); 8 × 8 blocks because faces are small
         const int block = 8;
         var quiet = new List<(double Std, double Mean)>();
         for (var by = 0; by + block <= h; by += block)
@@ -323,7 +367,7 @@ public static class FaceDetails
                 sw += weight[i]; sy += luma[i]; sr += r; sr2 += r * r;
             }
             const int n = block * block;
-            if (sw < n * 0.8) continue;   // nicht ganz auf der Haut
+            if (sw < n * 0.8) continue;   // not entirely on the skin
             var mean = sr / n;
             quiet.Add((Math.Sqrt(Math.Max(0, sr2 / n - mean * mean)), sy / n));
         }
@@ -336,11 +380,11 @@ public static class FaceDetails
         var photoSigma = profile.SigmaAt((float)faceMean);
         if (photoSigma <= 1e-6) return 0;
         var ratio = faceSigma / photoSigma;
-        return (float)Math.Sqrt(Math.Max(0, 1 - ratio * ratio));   // Streuungen addieren sich quadratisch
+        return (float)Math.Sqrt(Math.Max(0, 1 - ratio * ratio));   // standard deviations add in quadrature
     }
     private sealed record BlockStats(List<(float Mean, float Std)> Blocks);
 
-    /// <summary>Mittelwert der Helligkeit und Streuung des Hochpasses je 16er-Block.</summary>
+    /// <summary>Mean brightness and standard deviation of the high-pass residual per 16 × 16 block.</summary>
     private static BlockStats HighPassStd(float[] y, int w, int h, double sigma)
     {
         var blurred = (float[])y.Clone();
@@ -368,8 +412,8 @@ public static class FaceDetails
         return new BlockStats(blocks.ToList());
     }
 
-    // Abgleich: künstliches Korn (Gauß-gefiltertes weißes Rauschen, Streuung 1) — Verhältnis fein/grob und
-    // wie viel davon der grobe Hochpass misst. Einmal beim ersten Gebrauch gerechnet.
+    // Calibration: synthetic grain (Gaussian-filtered white noise, standard deviation 1), its fine/coarse ratio and
+    // how much of it the coarse high-pass filter measures. Computed once on first use.
     private static readonly Lazy<(double Sigma, double Ratio, double CoarseGain)[]> CalibrationTable = new(() =>
     {
         double[] sizes = [0, 0.4, 0.6, 0.8, 1.0, 1.3, 1.7, 2.2, 3.0];
@@ -387,7 +431,7 @@ public static class FaceDetails
 
     private static (double Sigma, double CoarseGain) Lookup(double ratio)
     {
-        var t = Calibration;   // Verhältnis fällt mit wachsender Korngröße
+        var t = Calibration;   // the ratio falls as the grain size grows
         if (ratio >= t[0].Ratio) return (t[0].Sigma, t[0].CoarseGain);
         for (var i = 1; i < t.Length; i++)
         {
@@ -400,9 +444,9 @@ public static class FaceDetails
     }
 
     /// <summary>
-    /// Korn mit Streuung 1 für einen Bildausschnitt (Bildkoordinaten <paramref name="x0"/>, <paramref name="y0"/>):
-    /// weißes Rauschen fest je Bildpixel (gleiches Korn bei jeder Rechnung, auch wo sich Gesichter überlappen),
-    /// mit <paramref name="sigma"/> weichgezeichnet.
+    /// Grain with standard deviation 1 for an image area (image coordinates <paramref name="x0"/>, <paramref name="y0"/>):
+    /// white noise fixed per image pixel (the same grain in every computation, also where faces overlap),
+    /// blurred with <paramref name="sigma"/>.
     /// </summary>
     internal static float[] GrainField(int x0, int y0, int w, int h, double sigma, int seed = 0)
     {
@@ -427,13 +471,13 @@ public static class FaceDetails
             sum2 += v * v;
         }
 
-        // auf Streuung 1 bringen — das Weichzeichnen hat sie verringert
+        // Normalise to standard deviation 1, because blurring has reduced it
         var k = (float)(1 / Math.Sqrt(Math.Max(1e-12, sum2 / result.Length)));
         for (var i = 0; i < result.Length; i++) result[i] *= k;
         return result;
     }
 
-    /// <summary>Normalverteilter Wert, fest je Pixelort (Hash, Box-Muller).</summary>
+    /// <summary>Normally distributed value, fixed per pixel position (hash, Box-Muller transform).</summary>
     private static float Gaussian(int x, int y, int seed)
     {
         var h1 = Hash((uint)x * 73856093u ^ (uint)y * 19349663u ^ (uint)seed * 83492791u);

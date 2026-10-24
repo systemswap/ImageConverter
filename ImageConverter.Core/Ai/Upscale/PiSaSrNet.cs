@@ -4,43 +4,61 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>
-/// Baut die drei ONNX-Teile von PiSA-SR (Modus „Standard“, ein Schritt) aus den Gewichten von Stable Diffusion 2.1-base und
-/// der LoRA von PiSA-SR — in C#, ohne Python. Nachbau von diffusers (<c>UNet2DConditionModel</c>, <c>AutoencoderKL</c>) mit
-/// den Einstellungen von SD 2.1 (lineare Projektion im Transformer, Kopfbreite 64). Weil Zeitschritt (t = 1) und Text
-/// (leere Beschreibung) fest sind, werden Zeit-Einbettung und Schlüssel/Werte der Kreuz-Aufmerksamkeit schon beim Bauen
-/// gerechnet: die Zeit landet als Bias in den Faltungen, der Text als Konstanten.
+/// Builds the three ONNX parts of PiSA-SR (default mode, one step) from the weights of Stable Diffusion 2.1-base and the
+/// PiSA-SR LoRA, in C# without Python.
 /// </summary>
+/// <remarks>
+/// Re-implements diffusers (<c>UNet2DConditionModel</c>, <c>AutoencoderKL</c>) with the settings of SD 2.1 (linear
+/// projection in the transformer, head width 64). Because the time step (t = 1) and the text (empty prompt) are fixed,
+/// the time embedding and the keys and values of the cross-attention are computed while building: the time ends up as
+/// bias in the convolutions, the text as constants.
+/// </remarks>
 public static class PiSaSrNet
 {
-    /// <summary>Skalierung des Latentraums von SD 2.1 (<c>vae.config.scaling_factor</c>).</summary>
+    /// <summary>Scaling of the SD 2.1 latent space (<c>vae.config.scaling_factor</c>).</summary>
     public const float LatentScale = 0.18215f;
 
-    /// <summary>LoRA-Rang und -Alpha (PEFT-Vorgabe 8) → Faktor alpha / rang.</summary>
+    /// <summary>LoRA alpha (PEFT default 8); the scale factor is alpha / rank.</summary>
     private const float LoraAlpha = 8;
 
-    /// <summary>Gewichte nach Namen (diffusers-Schema).</summary>
+    /// <summary>Source of weights by name (diffusers naming scheme).</summary>
     public interface IWeights
     {
+        /// <summary>Loads a weight.</summary>
+        /// <param name="name">Weight name, for example "conv_in.weight".</param>
+        /// <returns>A new tensor on every call; the builders modify its data in place (for example to add a bias).</returns>
         TorchTensor Get(string name);
+
+        /// <summary>Returns whether a weight of this name exists.</summary>
+        /// <param name="name">Weight name.</param>
+        /// <returns>True if the weight exists.</returns>
         bool Has(string name);
     }
 
-    /// <summary>Safetensors-Datei als Gewichtsquelle.</summary>
+    /// <summary>A <c>.safetensors</c> file as weight source.</summary>
+    /// <param name="file">Open file; it stays owned by the caller.</param>
     public sealed class FileWeights(SafeTensors file) : IWeights
     {
+        /// <inheritdoc/>
         public TorchTensor Get(string name) => file.Get(name);
+
+        /// <inheritdoc/>
         public bool Has(string name) => file.Contains(name);
     }
 
     /// <summary>
-    /// UNet von SD 2.1 mit eingerechneter PiSA-LoRA: W' = W + Σ (alpha/rang) · B·A über die Pixel- und die
-    /// semantischen Adapter (im Modus „Standard“ sind beide aktiv — wie <c>PiSASR_eval</c> mit <c>--default</c>).
+    /// SD 2.1 UNet with the PiSA-SR LoRA merged in: W' = W + Σ (alpha/rank) · B·A over the pixel and the semantic adapters
+    /// (in default mode both are active, as in <c>PiSASR_eval</c> with <c>--default</c>). See docs/FEHLERGEDAECHTNIS.md, No. 61.
     /// </summary>
     public sealed class MergedUnet : IWeights
     {
         private readonly SafeTensors _base;
         private readonly Dictionary<string, List<(TorchTensor A, TorchTensor B, float Scale)>> _lora = new(StringComparer.Ordinal);
 
+        /// <summary>Collects the LoRA adapters of the PiSA-SR checkpoint for the UNet weights.</summary>
+        /// <param name="unet">SD 2.1 UNet weights; the file stays owned by the caller.</param>
+        /// <param name="pisa">PiSA-SR checkpoint with <c>state_dict_unet</c> and the LoRA ranks.</param>
+        /// <exception cref="InvalidDataException"><c>state_dict_unet</c>, a rank or a <c>lora_B</c> weight is missing.</exception>
         public MergedUnet(SafeTensors unet, TorchCheckpoint pisa)
         {
             _base = unet;
@@ -61,11 +79,15 @@ public static class PiSaSrNet
             }
         }
 
-        /// <summary>Zahl der Gewichte, auf die eine LoRA wirkt (Prüfung).</summary>
+        /// <summary>Gets the number of weights a LoRA applies to (for verification).</summary>
         public int LoraTargets => _lora.Count;
 
+        /// <inheritdoc/>
         public bool Has(string name) => _base.Contains(name);
 
+        /// <inheritdoc/>
+        /// <remarks>Weights with LoRA adapters are merged on every call.</remarks>
+        /// <exception cref="InvalidDataException">A LoRA does not match the shape of its weight.</exception>
         public TorchTensor Get(string name)
         {
             var w = _base.Get(name);
@@ -74,11 +96,11 @@ public static class PiSaSrNet
             return w;
         }
 
-        /// <summary>W += s · B∘A (Linear: B·A; Faltung: B (1×1) nach A (k×k) — wie PEFT <c>get_delta_weight</c>).</summary>
+        /// <summary>W += s · B∘A (linear: B·A; convolution: B (1×1) after A (k×k), as PEFT <c>get_delta_weight</c>).</summary>
         private static void AddDelta(TorchTensor w, TorchTensor a, TorchTensor b, float s)
         {
             int outC = b.Shape[0], r = b.Shape[1];
-            var inner = a.Count / r;   // Linear: in; Faltung: in · kh · kw
+            var inner = a.Count / r;   // linear: in; convolution: in · kh · kw
             if (w.Count != outC * inner) throw new InvalidDataException($"LoRA passt nicht zum Gewicht {w} (A {a}, B {b}).");
             Parallel.For(0, outC, ComputeLimits.Options, o =>
             {
@@ -94,11 +116,12 @@ public static class PiSaSrNet
         }
     }
 
-    // ------------------------------------------------------------ Bausteine
+    // ------------------------------------------------------------ Building blocks
 
+    /// <summary>Building blocks of the networks on top of an <see cref="OnnxGraph"/>.</summary>
     /// <param name="half">
-    /// Halbe Genauigkeit (für die Grafikkarte): Gewichte und Rechnung in float16, Normierungen und Softmax in float32
-    /// (sonst laufen Mittelwert/Streuung und die Exponentialfunktion über). Ein- und Ausgänge bleiben float32.
+    /// Half precision (for the graphics card): weights and computation in float16, normalisations and softmax in float32
+    /// (otherwise mean/variance and the exponential function overflow). Inputs and outputs stay float32.
     /// </param>
     private sealed class Net(OnnxGraph g, IWeights w, bool half)
     {
@@ -106,15 +129,15 @@ public static class PiSaSrNet
         public IWeights W => w;
         public bool Half => half;
 
-        /// <summary>Daten-Gewicht im Rechenformat des Graphen.</summary>
+        /// <summary>Data weight in the computation format of the graph.</summary>
         public string Const(float[] data, params long[] dims) => half ? g.WeightHalf(data, dims) : g.Weight(data, dims);
 
         public string Cast(string x, bool toHalf) => g.Node("Cast", [x], ("to", toHalf ? 10L : 1L));
 
-        /// <summary>Eingang (float32) ins Rechenformat.</summary>
+        /// <summary>Converts an input (float32) to the computation format.</summary>
         public string In(string x) => half ? Cast(x, true) : x;
 
-        /// <summary>Ergebnis zurück nach float32.</summary>
+        /// <summary>Converts a result back to float32.</summary>
         public string Out(string x) => half ? Cast(x, false) : x;
 
         public string Conv(string x, string prefix, int stride = 1, int pad = 1, float[]? extraBias = null)
@@ -127,7 +150,7 @@ public static class PiSaSrNet
                 ("kernel_shape", new long[] { k, k }), ("strides", new long[] { stride, stride }), ("pads", new long[] { pad, pad, pad, pad }));
         }
 
-        /// <summary>Linear auf der letzten Achse: x · Wᵀ (+ b); <paramref name="scale"/> wird ins Gewicht eingerechnet.</summary>
+        /// <summary>Linear layer on the last axis: x · Wᵀ (+ b); <paramref name="scale"/> is folded into the weight.</summary>
         public string Linear(string x, string prefix, bool bias = true, float scale = 1)
         {
             var wt = w.Get(prefix + ".weight");
@@ -144,13 +167,13 @@ public static class PiSaSrNet
 
         public string Silu(string x) => g.Node("Mul", [x, g.Node("Sigmoid", [x])]);
 
-        /// <summary>GroupNorm über NCHW: in Gruppen umformen, InstanceNormalization, zurück, Affin je Kanal.</summary>
+        /// <summary>GroupNorm over NCHW: reshape into groups, InstanceNormalization, reshape back, affine per channel.</summary>
         public string GroupNorm(string x, string prefix, float eps, int groups = 32)
         {
             var gamma = w.Get(prefix + ".weight").Data;
             var beta = w.Get(prefix + ".bias").Data;
             var shape = g.Node("Shape", [x]);
-            var grouped = g.Node("Reshape", [half ? Cast(x, false) : x, g.Ints(0, groups, -1)]);   // Normieren immer in float32
+            var grouped = g.Node("Reshape", [half ? Cast(x, false) : x, g.Ints(0, groups, -1)]);   // always normalise in float32
             var norm = g.Node("InstanceNormalization",
                 [grouped, g.Weight(Enumerable.Repeat(1f, groups).ToArray(), groups), g.Weight(new float[groups], groups)], ("epsilon", eps));
             var back = g.Node("Reshape", [norm, shape]);
@@ -167,7 +190,7 @@ public static class PiSaSrNet
             return half ? Cast(y, true) : y;
         }
 
-        /// <summary>ResnetBlock2D: GN, SiLU, Faltung (+ Zeit als Bias), GN, SiLU, Faltung; Abkürzung mit 1×1 bei anderer Kanalzahl.</summary>
+        /// <summary>ResnetBlock2D: GN, SiLU, convolution (+ time as bias), GN, SiLU, convolution; 1×1 shortcut if the channel count changes.</summary>
         public string Resnet(string x, string prefix, float eps, float[]? time = null)
         {
             float[]? timeBias = null;
@@ -178,7 +201,7 @@ public static class PiSaSrNet
             return g.Node("Add", [skip, h]);
         }
 
-        /// <summary>Lineare Schicht auf einem festen Vektor, schon beim Bauen gerechnet.</summary>
+        /// <summary>Linear layer on a fixed vector, computed while building.</summary>
         public float[] Dense(float[] v, string prefix)
         {
             var wt = w.Get(prefix + ".weight");
@@ -196,7 +219,7 @@ public static class PiSaSrNet
 
         public static float[] Silu(float[] v) => v.Select(x => x / (1 + MathF.Exp(-x))).ToArray();
 
-        /// <summary>Mehrkopf-Aufmerksamkeit auf [N, L, C] → [N, L, C]; Schlüssel/Werte aus x selbst oder als Konstanten.</summary>
+        /// <summary>Multi-head attention on [N, L, C] → [N, L, C]; keys and values from x itself or as constants.</summary>
         public string Attention(string x, string prefix, int heads, bool qkvBias, float[]? context = null, int contextLen = 0)
         {
             var wq = w.Get(prefix + ".to_q.weight");
@@ -213,7 +236,7 @@ public static class PiSaSrNet
             }
             else
             {
-                // Text fest: K = ctx · Wkᵀ, V = ctx · Wvᵀ jetzt schon, als [1, h, d, L] und [1, h, L, d]
+                // Fixed text: K = ctx · Wkᵀ and V = ctx · Wvᵀ computed now, as [1, h, d, L] and [1, h, L, d]
                 var k = Project(context, contextLen, prefix + ".to_k");
                 var vv = Project(context, contextLen, prefix + ".to_v");
                 var kt = new float[heads * d * contextLen];
@@ -235,7 +258,7 @@ public static class PiSaSrNet
             return Linear(g.Node("Reshape", [o, g.Ints(0, 0, c)]), prefix + ".to_out.0");
         }
 
-        /// <summary>ctx [L, in] · Wᵀ → [L, out], beim Bauen gerechnet.</summary>
+        /// <summary>ctx [L, in] · Wᵀ → [L, out], computed while building.</summary>
         private float[] Project(float[] ctx, int len, string prefix)
         {
             var wt = w.Get(prefix + ".weight");
@@ -253,14 +276,14 @@ public static class PiSaSrNet
             return y;
         }
 
-        /// <summary>NCHW → [N, HW, C] und zurück (mit der Form eines Vorbilds).</summary>
+        /// <summary>NCHW → [N, HW, C]; <see cref="FromTokens"/> converts back (using the shape of a template value).</summary>
         public string ToTokens(string x) =>
             g.Node("Transpose", [g.Node("Reshape", [x, g.Ints(0, 0, -1)])], ("perm", new long[] { 0, 2, 1 }));
 
         public string FromTokens(string t, string like) =>
             g.Node("Reshape", [g.Node("Transpose", [t], ("perm", new long[] { 0, 2, 1 })), g.Node("Shape", [like])]);
 
-        /// <summary>Transformer2DModel (SD 2.x: lineare Projektion, ein BasicTransformerBlock).</summary>
+        /// <summary>Transformer2DModel (SD 2.x: linear projection, one BasicTransformerBlock).</summary>
         public string Transformer(string x, string prefix, float[] context, int contextLen)
         {
             var c = w.Get(prefix + ".proj_in.weight").Shape[0];
@@ -273,7 +296,7 @@ public static class PiSaSrNet
             return g.Node("Add", [FromTokens(Linear(h, prefix + ".proj_out"), x), x]);
         }
 
-        /// <summary>GEGLU: proj → (Wert, Tor), Wert · GELU(Tor), dann Linear zurück.</summary>
+        /// <summary>GEGLU: proj → (value, gate), value · GELU(gate), then linear back.</summary>
         private string FeedForward(string x, string prefix)
         {
             var proj = Linear(x, prefix + ".net.0.proj");
@@ -286,7 +309,7 @@ public static class PiSaSrNet
             return Linear(g.Node("Mul", [value, gelu]), prefix + ".net.2");
         }
 
-        /// <summary>Nächster Nachbar auf die Größe eines Vorbilds (×2, auch bei ungeraden Größen wie diffusers mit output_size).</summary>
+        /// <summary>Nearest neighbour to the size of a template value (×2, also for odd sizes, like diffusers with output_size).</summary>
         public string UpsampleTo(string x, string like)
         {
             var sizes = g.Node("Concat", [
@@ -303,7 +326,7 @@ public static class PiSaSrNet
 
     // ------------------------------------------------------------ UNet
 
-    /// <summary>Zeit-Einbettung für t (flip_sin_to_cos, freq_shift 0) → time_embedding (Linear, SiLU, Linear).</summary>
+    /// <summary>Time embedding for t (flip_sin_to_cos, freq_shift 0) → time_embedding (linear, SiLU, linear).</summary>
     private static float[] TimeEmbedding(Net n, float t)
     {
         const int dim = 320, half = dim / 2;
@@ -311,16 +334,22 @@ public static class PiSaSrNet
         for (var i = 0; i < half; i++)
         {
             var arg = t * Math.Exp(-Math.Log(10000) * i / half);
-            e[i] = (float)Math.Cos(arg);          // flip_sin_to_cos: erst cos, dann sin
+            e[i] = (float)Math.Cos(arg);          // flip_sin_to_cos: cos first, then sin
             e[half + i] = (float)Math.Sin(arg);
         }
         return n.Dense(Net.Silu(n.Dense(e, "time_embedding.linear_1")), "time_embedding.linear_2");
     }
 
     /// <summary>
-    /// UNet (Eingang „latent“ [1, 4, h, w] → „pred“ [1, 4, h, w]) für t = 1 und die feste Beschreibung
-    /// <paramref name="context"/> (77 × 1024). Gewichte ausgelagert in <c>&lt;onnxPath&gt;.data</c> (über 2 GB).
+    /// Builds the UNet (input "latent" [1, 4, h, w] → "pred" [1, 4, h, w]) for t = 1 and the fixed prompt
+    /// <paramref name="context"/> (77 × 1024).
     /// </summary>
+    /// <param name="weights">UNet weights, usually <see cref="MergedUnet"/>.</param>
+    /// <param name="context">Empty-prompt embedding, 77 × 1024 values.</param>
+    /// <param name="onnxPath">Target file of the model.</param>
+    /// <param name="progress">Receives the progress, 0…1.</param>
+    /// <param name="dataPath">File for the external weights (over 2 GB); default <c>&lt;onnxPath&gt;.data</c>. It must be in the same folder as the model.</param>
+    /// <param name="half">Half precision for the graphics card.</param>
     public static void BuildUnet(IWeights weights, float[] context, string onnxPath, IProgress<double>? progress = null, string? dataPath = null,
         bool half = false)
     {
@@ -366,7 +395,7 @@ public static class PiSaSrNet
                     h = n.Transformer(h, $"up_blocks.{b}.attentions.{r}", context, ctxLen);
             }
             if (weights.Has($"up_blocks.{b}.upsamplers.0.conv.weight"))
-                h = n.Conv(n.UpsampleTo(h, skips[^1]), $"up_blocks.{b}.upsamplers.0.conv");   // auf die Größe der nächsten Abkürzung
+                h = n.Conv(n.UpsampleTo(h, skips[^1]), $"up_blocks.{b}.upsamplers.0.conv");   // to the size of the next skip connection
             progress?.Report(0.5 + 0.1 * (b + 1));
         }
 
@@ -378,14 +407,17 @@ public static class PiSaSrNet
 
     // ------------------------------------------------------------ VAE
 
-    /// <summary>Aufmerksamkeit im VAE: ein Kopf über alle Pixel, mit GroupNorm davor und Rest-Verbindung.</summary>
+    /// <summary>Attention in the VAE: one head over all pixels, with GroupNorm before it and a residual connection.</summary>
     private static string VaeAttention(Net n, string x, string prefix)
     {
         var t = n.ToTokens(n.GroupNorm(x, prefix + ".group_norm", 1e-6f));
         return n.G.Node("Add", [n.FromTokens(n.Attention(t, prefix, 1, true), x), x]);
     }
 
-    /// <summary>VAE-Encoder: „image“ [1, 3, H, W] (−1 … 1) → „latent“ [1, 4, H/8, W/8] (Mittelwert · 0,18215).</summary>
+    /// <summary>Builds the VAE encoder: "image" [1, 3, H, W] (−1 … 1) → "latent" [1, 4, H/8, W/8] (mean · 0.18215).</summary>
+    /// <param name="weights">VAE weights.</param>
+    /// <param name="onnxPath">Target file of the model (weights embedded).</param>
+    /// <param name="half">Half precision for the graphics card.</param>
     public static void BuildVaeEncoder(IWeights weights, string onnxPath, bool half = false)
     {
         using var g = new OnnxGraph();
@@ -397,7 +429,7 @@ public static class PiSaSrNet
             for (var r = 0; r < 2; r++) h = n.Resnet(h, $"encoder.down_blocks.{b}.resnets.{r}", 1e-6f);
             if (weights.Has($"encoder.down_blocks.{b}.downsamplers.0.conv.weight"))
             {
-                // diffusers: rechts und unten eine Null-Reihe, dann Faltung ohne Polster mit Schritt 2
+                // diffusers: one row of zeros on the right and at the bottom, then convolution without padding, stride 2
                 h = g.Node("Pad", [h, g.Ints(0, 0, 0, 0, 0, 0, 1, 1)]);
                 h = n.Conv(h, $"encoder.down_blocks.{b}.downsamplers.0.conv", stride: 2, pad: 0);
             }
@@ -412,7 +444,10 @@ public static class PiSaSrNet
         g.Save(onnxPath, "ImageConverter PiSA-SR VAE-Encoder");
     }
 
-    /// <summary>VAE-Decoder: „latent“ [1, 4, h, w] (skaliert) → „image“ [1, 3, 8h, 8w] (−1 … 1, ungeklammert).</summary>
+    /// <summary>Builds the VAE decoder: "latent" [1, 4, h, w] (scaled) → "image" [1, 3, 8h, 8w] (−1 … 1, not clamped).</summary>
+    /// <param name="weights">VAE weights.</param>
+    /// <param name="onnxPath">Target file of the model (weights embedded).</param>
+    /// <param name="half">Half precision for the graphics card.</param>
     public static void BuildVaeDecoder(IWeights weights, string onnxPath, bool half = false)
     {
         using var g = new OnnxGraph();
@@ -435,20 +470,38 @@ public static class PiSaSrNet
         g.Save(onnxPath, "ImageConverter PiSA-SR VAE-Decoder");
     }
 
-    // ------------------------------------------------------------ alles zusammen
+    // ------------------------------------------------------------ Everything together
 
+    /// <summary>File name of the UNet model (full precision).</summary>
     public const string UnetFile = "pisasr-unet.onnx";
+
+    /// <summary>File name of the VAE encoder model (full precision).</summary>
     public const string EncoderFile = "pisasr-vae-encoder.onnx";
+
+    /// <summary>File name of the VAE decoder model (full precision).</summary>
     public const string DecoderFile = "pisasr-vae-decoder.onnx";
 
-    /// <summary>Dateiname in voller oder halber Genauigkeit („pisasr-unet-fp16.onnx“).</summary>
+    /// <summary>Returns the file name for full or half precision ("pisasr-unet-fp16.onnx").</summary>
+    /// <param name="file">File name for full precision.</param>
+    /// <param name="half">Whether the half-precision variant is wanted.</param>
+    /// <returns>The file name.</returns>
     public static string FileName(string file, bool half) => half ? file.Replace(".onnx", "-fp16.onnx", StringComparison.Ordinal) : file;
 
     /// <summary>
-    /// Baut die drei ONNX-Dateien nach <paramref name="targetDir"/> (zuerst unter Hilfsnamen, erst am Ende umbenannt — ein
-    /// Abbruch hinterlässt kein halbes Modell). <paramref name="context"/>: leere Beschreibung, 77 × 1024.
+    /// Builds the three ONNX files in <paramref name="targetDir"/>.
     /// </summary>
-    /// <param name="half">Halbe Genauigkeit für die Grafikkarte (Dateien mit „-fp16“).</param>
+    /// <remarks>
+    /// The models are written under temporary names first and renamed only at the end, so cancellation leaves no half
+    /// model. Cancellation is checked between the stages (VAE, UNet), not within them.
+    /// </remarks>
+    /// <param name="unetPath">SD 2.1 UNet weights (<c>.safetensors</c>).</param>
+    /// <param name="vaePath">SD 2.1 VAE weights (<c>.safetensors</c>).</param>
+    /// <param name="loraPath">PiSA-SR checkpoint with the LoRA.</param>
+    /// <param name="context">Empty-prompt embedding, 77 × 1024 values.</param>
+    /// <param name="targetDir">Target folder; it is created if necessary.</param>
+    /// <param name="progress">Receives the progress, 0…1.</param>
+    /// <param name="cancel">Cancels the build between its stages.</param>
+    /// <param name="half">Half precision for the graphics card (files with "-fp16").</param>
     public static void BuildAll(string unetPath, string vaePath, string loraPath, float[] context, string targetDir,
         IProgress<double>? progress = null, CancellationToken cancel = default, bool half = false)
     {
@@ -469,7 +522,7 @@ public static class PiSaSrNet
         using (var unet = new SafeTensors(unetPath))
         {
             var merged = new MergedUnet(unet, TorchCheckpoint.Load(loraPath));
-            // Die .data-Datei heißt im Modell so, wie sie am Ende liegt — sie wird unter ihrem endgültigen Namen geschrieben
+            // The model refers to the .data file by its final name, so it is written under that name directly
             BuildUnet(merged, context, Tmp(UnetFile), new Part(progress, 0.06, 0.94), Path.Combine(targetDir, Name(UnetFile) + ".data"), half);
         }
         cancel.ThrowIfCancellationRequested();
@@ -478,7 +531,11 @@ public static class PiSaSrNet
         progress?.Report(1);
     }
 
-    /// <summary>Teilfortschritt: 0 … 1 → from … from + span, sofort weitergereicht (kein Umweg über einen Kontext).</summary>
+    /// <summary>
+    /// Partial progress: 0 … 1 → from … from + span, passed on immediately. <see cref="Progress{T}"/> without a
+    /// synchronisation context would report through the thread pool and therefore out of order.
+    /// See docs/FEHLERGEDAECHTNIS.md, No. 61.
+    /// </summary>
     internal sealed class Part(IProgress<double>? target, double from, double span) : IProgress<double>
     {
         public void Report(double value) => target?.Report(from + span * value);

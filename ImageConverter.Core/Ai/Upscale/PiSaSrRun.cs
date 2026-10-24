@@ -5,27 +5,37 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>
-/// PiSA-SR auf einem ganzen Bild, in Kacheln — wie <c>PiSASR_eval</c> im Modus „Standard“: Original bikubisch ×4, in den
-/// Latentraum (VAE-Encoder), ein Schritt UNet (Rauschen vorhersagen und abziehen), zurück ins Bild (VAE-Decoder), Farben
-/// angleichen (AdaIN). Alle drei Teile laufen in Kacheln mit weichen Übergängen; nichts davon braucht je das ganze
-/// Bild in voller Größe als Gleitkomma. Gerechnet wird streifenweise von oben nach unten (je Decoder-Zeile so viel Encoder
-/// und UNet wie nötig); fertige Flächen werden gemeldet, sobald keine spätere Kachel sie mehr berührt.
+/// Runs PiSA-SR on a whole image in tiles, as <c>PiSASR_eval</c> does in default mode.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Steps: original bicubic ×4, into the latent space (VAE encoder), one UNet step (predict the noise and subtract it),
+/// back into the image (VAE decoder), colour matching (AdaIN). All three parts run in tiles with soft transitions;
+/// none of them ever needs the whole image at full size as floating point.
+/// </para>
+/// <para>
+/// The computation proceeds in stripes from top to bottom (per decoder row only as much encoder and UNet work as
+/// needed); finished areas are reported as soon as no later tile touches them. See docs/FEHLERGEDAECHTNIS.md, No. 65.
+/// </para>
+/// </remarks>
 public static class PiSaSrRun
 {
-    // Kacheln in Latentpixeln (1 Latentpixel = 8 Bildpixel). Das UNet ist auf 512 px (64 Latent) trainiert; größere
-    // Kacheln brauchen in der Aufmerksamkeit quadratisch mehr Speicher.
+    // Tiles in latent pixels (1 latent pixel = 8 image pixels). The UNet was trained on 512 px (64 latent); larger tiles
+    // need quadratically more memory in the attention. See docs/FEHLERGEDAECHTNIS.md, No. 61.
     private const int EncoderTile = 96, EncoderOverlap = 16;
     private const int UnetTile = 64, UnetOverlap = 16;
     private const int DecoderTile = 64, DecoderOverlap = 12;
 
-    // Geschätzte Kosten je Latentpixel (für den Fortschritt; gemessen auf CPU, nur das Verhältnis zählt)
+    // Estimated cost per latent pixel (for the progress; measured on the CPU, only the ratio matters)
     private const double EncoderCost = 1.45, UnetCost = 1.06, DecoderCost = 3.4;   // 500 × 300: 80 s, 65 s, 210 s
 
     /// <summary>
-    /// Rechenaufwand für ein Original dieser Größe — Kacheln × Kachelfläche × Kosten je Teil, wie <see cref="Run"/>
-    /// rechnet (mit Überlappung). Grundlage der Zeitschätzung: Zeit = Sekunden je Einheit × Aufwand.
+    /// Returns the computing effort for an original of this size: tiles × tile area × cost per part, tiled as
+    /// <see cref="Run"/> does (with overlap).
     /// </summary>
+    /// <param name="w">Width of the original in pixels.</param>
+    /// <param name="h">Height of the original in pixels.</param>
+    /// <returns>Effort in arbitrary units; basis of the time estimate: time = seconds per unit × effort.</returns>
     public static double Work(int w, int h)
     {
         int lw = (4 * w + 7) / 8, lh = (4 * h + 7) / 8;
@@ -39,7 +49,18 @@ public static class PiSaSrRun
                + Part(lw, lh, DecoderTile, DecoderOverlap, DecoderCost);
     }
 
-    /// <param name="done">Fertige Fläche (in Pixeln des Originals) — aus dem Rechen-Thread aufgerufen.</param>
+    /// <summary>Upscales an image ×4 with PiSA-SR.</summary>
+    /// <param name="source">Original image; it is not modified.</param>
+    /// <param name="encoder">Session of the VAE encoder.</param>
+    /// <param name="unet">Session of the UNet.</param>
+    /// <param name="decoder">Session of the VAE decoder.</param>
+    /// <param name="progress">Receives the completed fraction, 0…1, weighted by the estimated cost of each part.</param>
+    /// <param name="ct">Cancels the computation; checked before each tile and passed to the models.</param>
+    /// <param name="done">
+    /// Called with each finished area (in pixels of the original), on the computing thread. The colour matching is
+    /// updated before each call, so areas reported earlier may change slightly in colour.
+    /// </param>
+    /// <returns>The raw result; it is filled while the run proceeds.</returns>
     public static UpscaleResult Run(MagickImage source, InferenceSession encoder, InferenceSession unet, InferenceSession decoder,
         IProgress<double>? progress, CancellationToken ct, Action<UpscaleResult, SourceRect>? done = null)
     {
@@ -47,7 +68,7 @@ public static class PiSaSrRun
         var channels = source.HasAlpha ? 4 : 3;
         var src = AiEnhancer.ReadPixels(source, channels == 4 ? "RGBA" : "RGB");
         int ow = w * 4, oh = h * 4;
-        int lw = (ow + 7) / 8, lh = (oh + 7) / 8;   // VAE braucht Vielfache von 8; der Überstand wird am Ende abgeschnitten
+        int lw = (ow + 7) / 8, lh = (oh + 7) / 8;   // the VAE needs multiples of 8; the excess is cut off at the end
         float Src(int c, int x, int y) => src[((long)Math.Clamp(y, 0, h - 1) * w + Math.Clamp(x, 0, w - 1)) * channels + c] / 65535f;
 
         var ex = new TileAxis(lw, EncoderTile, EncoderOverlap);
@@ -71,14 +92,14 @@ public static class PiSaSrRun
         var raw = result.Raw;
         var colors = new ColorMatch(src, channels, w * h);
 
-        // Streifenweise von oben nach unten: jede Zeile Decoder-Kacheln, sobald die Zeilen darüber durch Encoder und UNet
-        // fertig sind — so erscheinen fertige Bildteile über die ganze Rechnung verteilt, nicht erst am Ende. Eine
-        // Latentzeile ist fertig, wenn alle Kacheln, die sie berühren, gerechnet sind; das sind die mit Anfang davor.
+        // In stripes from top to bottom: each row of decoder tiles as soon as the rows above have passed encoder and UNet,
+        // so finished parts of the image appear throughout the computation, not only at the end. A latent row is finished
+        // when all tiles touching it are computed; those are the tiles starting before it.
         var latent = new float[4 * lh * lw];
         var pred = new float[latent.Length];
         int encoderRow = 0, unetRow = 0;
 
-        // 1) Encoder bis Latentzeile rowEnd: bikubisch ×4 → −1 … 1 → Latent (Mittelwert · 0,18215)
+        // 1) Encoder up to latent row rowEnd: bicubic ×4 → −1 … 1 → latent (mean · 0.18215)
         void EncodeUpTo(int rowEnd)
         {
             for (; encoderRow < ey.Count && ey.Starts[encoderRow] < rowEnd; encoderRow++)
@@ -94,7 +115,7 @@ public static class PiSaSrRun
             }
         }
 
-        // 2) UNet bis Latentzeile rowEnd: Vorhersage je Kachel, weich zusammengesetzt
+        // 2) UNet up to latent row rowEnd: prediction per tile, blended softly
         void PredictUpTo(int rowEnd)
         {
             for (; unetRow < uy.Count && uy.Starts[unetRow] < rowEnd; unetRow++)
@@ -111,7 +132,7 @@ public static class PiSaSrRun
             }
         }
 
-        // 3) Decoder: Latent − Vorhersage, Kachel für Kachel ins 16-Bit-Ergebnis (Gewichte ergeben zusammen 1 → direkt aufaddieren)
+        // 3) Decoder: latent − prediction, tile by tile into the 16-bit result (the weights sum to 1, so they are added directly)
         for (var ky = 0; ky < dy.Count; ky++)
         for (var kx = 0; kx < dx.Count; kx++)
         {
@@ -140,7 +161,7 @@ public static class PiSaSrRun
                 }
             });
 
-            // Fertig sind jetzt die Pixel, die keine spätere Kachel mehr berührt: ein Rechteck
+            // Finished now are the pixels that no later tile touches: a rectangle
             var (fx0, fx1) = Finished(dxp, kx, ow);
             var (fy0, fy1) = Finished(dyp, ky, oh);
             var finished = new SourceRect(fx0 / 4, fy0 / 4, (fx1 - fx0) / 4, (fy1 - fy0) / 4);
@@ -155,7 +176,7 @@ public static class PiSaSrRun
         return result;
     }
 
-    /// <summary>Bereich [von, bis) in Bildpixeln, dessen letzte berührende Kachel <paramref name="k"/> ist.</summary>
+    /// <summary>Range [from, to) in image pixels whose last touching tile is <paramref name="k"/>.</summary>
     private static (int From, int To) Finished(TileAxis axis, int k, int limit)
     {
         int from = -1, to = -1;
@@ -183,7 +204,7 @@ public static class PiSaSrRun
         return OnnxSessions.Run(session, new Dictionary<string, OrtValue> { [input] = value }, ct);
     }
 
-    /// <summary>Kachel [c][th][tw] gewichtet in [c][lh][lw] aufaddieren.</summary>
+    /// <summary>Adds tile [c][th][tw], weighted, into [c][lh][lw].</summary>
     private static void Accumulate(float[] target, float[] tile, int lw, int lh, int tx, int ty, int tw, int th, float[] wx, float[] wy)
     {
         var channels = tile.Length / (tw * th);
@@ -197,9 +218,9 @@ public static class PiSaSrRun
     }
 
     /// <summary>
-    /// AdaIN wie PiSA-SR (<c>adain_color_fix</c>): Mittelwert und Streuung je Farbkanal auf die des Originals bringen —
-    /// das rohe Ergebnis ist sonst etwas dunkler und wärmer. Die Werte des Ergebnisses wachsen mit jeder fertigen Fläche;
-    /// am Ende sind es die des ganzen Bildes.
+    /// AdaIN as in PiSA-SR (<c>adain_color_fix</c>): brings mean and standard deviation per colour channel to those of
+    /// the original; otherwise the raw result is slightly darker and warmer. The statistics of the result grow with
+    /// each finished area; at the end they cover the whole image.
     /// </summary>
     private sealed class ColorMatch
     {

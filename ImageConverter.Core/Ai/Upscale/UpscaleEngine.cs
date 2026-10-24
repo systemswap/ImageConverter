@@ -3,17 +3,32 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
-/// <summary>Ein ×4-Kachelmodell (Real-ESRGAN x4v3, UltraSharpV2) über ein ganzes Bild, als <see cref="UpscaleResult"/>.</summary>
+/// <summary>Runs a ×4 tile model (Real-ESRGAN x4v3, UltraSharpV2) over a whole image and returns an <see cref="UpscaleResult"/>.</summary>
 public static class UpscaleEngine
 {
-    /// <summary>Zahl der Kacheln für ein Original dieser Größe (wie <see cref="RunTiles"/> kachelt).</summary>
+    /// <summary>Returns the number of tiles for an original of this size (tiled as <see cref="RunTiles"/> does).</summary>
+    /// <param name="w">Width of the original in pixels.</param>
+    /// <param name="h">Height of the original in pixels.</param>
+    /// <param name="tile">Tile size of the model in pixels.</param>
+    /// <returns>The number of tiles.</returns>
     public static int TileCount(int w, int h, int tile)
     {
         var core = tile - 2 * Math.Max(4, tile / 12);
         return ((w + core - 1) / core) * ((h + core - 1) / core);
     }
 
-    /// <param name="done">Fertige Fläche (in Pixeln des Originals) — aus dem Rechen-Thread aufgerufen.</param>
+    /// <summary>Upscales an image ×4 with a tile model.</summary>
+    /// <remarks>
+    /// Tiles overlap; only the centre of each tile is kept (as in <see cref="AiEnhancer"/>). The tiles are processed one
+    /// after another on the calling thread.
+    /// </remarks>
+    /// <param name="source">Original image; it is not modified.</param>
+    /// <param name="model">Tile model with scale 4.</param>
+    /// <param name="progress">Receives the completed fraction, 0…1, after each tile.</param>
+    /// <param name="ct">Cancels the computation; checked before each tile and passed to the model.</param>
+    /// <param name="done">Called with each finished area (in pixels of the original), on the computing thread.</param>
+    /// <returns>The raw result; it is filled while the run proceeds.</returns>
+    /// <exception cref="ArgumentException">The model does not scale by <see cref="UpscaleResult.Factor"/>.</exception>
     public static UpscaleResult RunTiles(MagickImage source, ITileModel model, IProgress<double>? progress, CancellationToken ct,
         Action<UpscaleResult, SourceRect>? done = null)
     {
@@ -27,7 +42,7 @@ public static class UpscaleEngine
         var ow = w * 4;
 
         var tile = model.TileSize;
-        var pad = Math.Max(4, tile / 12);   // Rand, der verworfen wird (wie AiEnhancer)
+        var pad = Math.Max(4, tile / 12);   // border that is discarded (as in AiEnhancer)
         var core = tile - 2 * pad;
         var tilesX = (w + core - 1) / core;
         var tilesY = (h + core - 1) / core;

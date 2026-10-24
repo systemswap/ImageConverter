@@ -3,9 +3,13 @@ using System.Text;
 namespace ImageConverter.Core.Ai.Onnx;
 
 /// <summary>
-/// Baut ein ONNX-Modell (Graph aus Knoten, Gewichte als Initialisierer) und schreibt es als Protobuf — ohne Abhängigkeit,
-/// nur die Felder von <c>onnx.proto</c>, die ein Inferenzmodell braucht. Namen der Werte vergibt der Graph selbst.
+/// Builds an ONNX model (graph of nodes, weights as initialisers) and writes it as Protobuf.
 /// </summary>
+/// <remarks>
+/// No external dependency: only the fields of <c>onnx.proto</c> that an inference model needs are written (IR version 8,
+/// default opset <see cref="Opset"/>). The graph assigns the names of intermediate values itself; the methods return them.
+/// Not thread-safe.
+/// </remarks>
 public sealed class OnnxGraph : IDisposable
 {
     private readonly List<byte[]> _nodes = [];
@@ -14,51 +18,70 @@ public sealed class OnnxGraph : IDisposable
     private readonly List<byte[]> _outputs = [];
     private int _next;
 
-    // Ausgelagerte Gewichte (Modelle über 2 GB — Protobuf erlaubt nicht mehr): große Initialisierer gehen gleich beim
-    // Anlegen in eine Datei neben dem Modell, im Modell steht nur Ort, Versatz und Länge
+    // External weights (models over 2 GB, the Protobuf limit): large initialisers go straight into a file next to the
+    // model when they are created; the model only stores location, offset and length
     private readonly FileStream? _external;
     private readonly string? _externalName;
-    private const int ExternalFrom = 4096;   // ab so vielen Bytes auslagern
+    private const int ExternalFrom = 4096;   // store externally from this many bytes
 
+    /// <summary>Version of the default ONNX operator set the model is written for.</summary>
     public const int Opset = 17;
 
-    /// <summary>Alles im Modell selbst (bis 2 GB).</summary>
+    /// <summary>Creates a graph that keeps all weights inside the model (up to 2 GB in total).</summary>
     public OnnxGraph()
     {
     }
 
     /// <summary>
-    /// Große Gewichte in <paramref name="externalDataPath"/> auslagern (ONNX „external data“); das Modell muss dann
-    /// im selben Ordner liegen und verweist über den Dateinamen darauf.
+    /// Creates a graph that stores large weights (4096 bytes and more) in <paramref name="externalDataPath"/>
+    /// (ONNX "external data").
     /// </summary>
+    /// <param name="externalDataPath">File for the weights; it is created or overwritten immediately.</param>
+    /// <remarks>
+    /// The model must then be saved in the same folder, because it refers to the data file by file name only.
+    /// Dispose the graph after <see cref="Save"/> to close the data file.
+    /// </remarks>
     public OnnxGraph(string externalDataPath)
     {
         _external = File.Create(externalDataPath);
         _externalName = Path.GetFileName(externalDataPath);
     }
 
+    /// <summary>Closes the external data file, if any.</summary>
     public void Dispose() => _external?.Dispose();
 
-    /// <summary>Eingang float32 mit Form; Zahlen sind feste, Texte benannte (offene) Größen.</summary>
-    /// <remarks>Eingänge und Ausgänge sind immer float32 — ein Graph in halber Genauigkeit wandelt selbst um (Cast).</remarks>
+    /// <summary>Declares a float32 graph input.</summary>
+    /// <param name="name">Name of the input.</param>
+    /// <param name="dims">Shape: numbers are fixed sizes, strings are named (dynamic) dimensions.</param>
+    /// <returns><paramref name="name"/>, for use as a node input.</returns>
+    /// <remarks>Inputs and outputs are always float32; a graph in half precision converts itself (Cast).</remarks>
     public string Input(string name, params object[] dims)
     {
         _inputs.Add(ValueInfo(name, dims));
         return name;
     }
 
-    /// <summary>Ein schon erzeugter Wert wird Ausgang (über Identity unter dem gewünschten Namen).</summary>
+    /// <summary>Declares an existing value as a float32 graph output (through an Identity node under the desired name).</summary>
+    /// <param name="value">Name of the value to expose.</param>
+    /// <param name="name">Name of the output.</param>
+    /// <param name="dims">Shape: numbers are fixed sizes, strings are named (dynamic) dimensions.</param>
     public void Output(string value, string name, params object[] dims)
     {
         Node("Identity", [value], name);
         _outputs.Add(ValueInfo(name, dims));
     }
 
-    /// <summary>Gewicht (float32).</summary>
+    /// <summary>Adds a float32 weight.</summary>
+    /// <param name="data">Values in C order.</param>
+    /// <param name="dims">Shape of the tensor.</param>
+    /// <returns>Name of the initialiser.</returns>
     public string Weight(float[] data, params long[] dims) =>
         Initializer(System.Runtime.InteropServices.MemoryMarshal.AsBytes(data.AsSpan()), 1, dims);
 
-    /// <summary>Gewicht in halber Genauigkeit (float16) — für die Grafikkarte: halber Speicher.</summary>
+    /// <summary>Adds a weight in half precision (float16), which halves the memory on the graphics card.</summary>
+    /// <param name="data">Values in C order; they are rounded to float16.</param>
+    /// <param name="dims">Shape of the tensor.</param>
+    /// <returns>Name of the initialiser.</returns>
     public string WeightHalf(float[] data, params long[] dims)
     {
         var half = new Half[data.Length];
@@ -71,7 +94,7 @@ public sealed class OnnxGraph : IDisposable
         var name = "w" + _next++;
         if (_external is not null && bytes.Length >= ExternalFrom)
         {
-            // auf 64 Bytes ausrichten (ONNX Runtime kann die Datei dann direkt einblenden)
+            // Align to 64 bytes so that ONNX Runtime can memory-map the file directly
             var pad = (int)((64 - _external.Position % 64) % 64);
             if (pad > 0) _external.Write(new byte[pad]);
             var offset = _external.Position;
@@ -85,14 +108,19 @@ public sealed class OnnxGraph : IDisposable
         return name;
     }
 
-    /// <summary>Modell schreiben (bei ausgelagerten Gewichten: diese zuerst abschließen, Modell in denselben Ordner).</summary>
+    /// <summary>Writes the model to a file.</summary>
+    /// <param name="path">Target file; with external weights it must be in the same folder as the data file.</param>
+    /// <param name="producer">Producer name stored in the model.</param>
+    /// <remarks>External weights are flushed to their file first.</remarks>
     public void Save(string path, string producer = "ImageConverter")
     {
         _external?.Flush();
         File.WriteAllBytes(path, ToModel(producer));
     }
 
-    /// <summary>Ganzzahlige Konstante (int64), z. B. Polster oder Größen.</summary>
+    /// <summary>Adds a one-dimensional int64 constant, for example padding or sizes.</summary>
+    /// <param name="values">Values of the constant.</param>
+    /// <returns>Name of the initialiser.</returns>
     public string Ints(params long[] values)
     {
         var name = "c" + _next++;
@@ -102,7 +130,15 @@ public sealed class OnnxGraph : IDisposable
         return name;
     }
 
-    /// <summary>Knoten mit einem Ausgang; Attribute als (Name, Wert) mit long, float, string, long[] oder float[].</summary>
+    /// <summary>Adds a node with one output.</summary>
+    /// <param name="op">ONNX operator type, for example "Conv".</param>
+    /// <param name="inputs">Names of the input values.</param>
+    /// <param name="attributes">
+    /// Attributes as (name, value); supported value types are int, long, float, double (stored as float), string,
+    /// int[], long[] and float[].
+    /// </param>
+    /// <returns>Name of the output value.</returns>
+    /// <exception cref="ArgumentException">An attribute value has an unsupported type.</exception>
     public string Node(string op, string[] inputs, params (string Name, object Value)[] attributes) =>
         Node(op, inputs, "v" + _next++, attributes);
 
@@ -118,7 +154,9 @@ public sealed class OnnxGraph : IDisposable
         return output;
     }
 
-    /// <summary>Das fertige Modell (ModelProto).</summary>
+    /// <summary>Serialises the model (ModelProto).</summary>
+    /// <param name="producer">Producer name stored in the model.</param>
+    /// <returns>The encoded model; with external weights it refers to the data file.</returns>
     public byte[] ToModel(string producer = "ImageConverter")
     {
         var graph = new ProtoWriter();
@@ -208,7 +246,7 @@ public sealed class OnnxGraph : IDisposable
         return w.ToArray();
     }
 
-    /// <summary>Protobuf-Kodierung: Varint, Längenpräfix, 32-Bit-Float.</summary>
+    /// <summary>Protobuf encoding: varint, length prefix, 32-bit float.</summary>
     private sealed class ProtoWriter
     {
         private readonly MemoryStream _s = new();

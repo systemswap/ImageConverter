@@ -5,19 +5,22 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai;
 
 /// <summary>
-/// Ganzes Bild mit voller Wirkung des Modells, noch nicht mit dem Original gemischt (<see cref="AiEnhancer.Run"/>).
-/// Die Stärke ist eine Mischung zwischen beiden — das Modell rechnet dafür nicht neu; die Vorschau mischt auf
-/// einer verkleinerten Fassung, beim Übernehmen in voller Größe.
+/// Whole image processed at full model strength, not yet blended with the original (<see cref="AiEnhancer.Run"/>).
 /// </summary>
+/// <remarks>
+/// The strength is a blend between the two, so the model does not run again when it changes. The preview
+/// blends a reduced copy, applying blends at full size. Only <see cref="AiBlend.Strength"/> has an effect;
+/// the alpha channel is ignored in the preview and taken from the original in <see cref="Compose"/>.
+/// </remarks>
 public sealed class EnhanceRun : IAiRun
 {
-    private readonly ushort[] _result;     // Modell, in Zielgröße
-    private readonly ushort[] _baseline;   // Original, in Zielgröße (Lanczos)
+    private readonly ushort[] _result;     // model result at the target size
+    private readonly ushort[] _baseline;   // original at the target size (Lanczos)
     private readonly int _w, _h, _channels;
     private readonly string _mapping;
-    private readonly MagickImage _meta;    // Profile und Auflösung (1 × 1 Pixel)
+    private readonly MagickImage _meta;    // profiles and density (1 × 1 pixel)
 
-    // Vorschau: beide Fassungen verkleinert (RGB 0…1), je Vorschaugröße einmal gerechnet
+    // Preview: both versions reduced (RGB 0…1), computed once per preview size
     private (AiPreviewSize Size, float[] Result, float[] Baseline)? _small;
 
     internal EnhanceRun(MagickImage source, ushort[] result, ushort[] baseline, int w, int h, string mapping, int channels)
@@ -31,11 +34,16 @@ public sealed class EnhanceRun : IAiRun
         }
     }
 
+    /// <inheritdoc/>
     public int Width => _w;
+
+    /// <inheritdoc/>
     public int Height => _h;
 
+    /// <inheritdoc/>
     public bool SupportsDetails => false;
 
+    /// <inheritdoc/>
     public AiPixels Preview(AiBlend blend, AiPreviewSize size)
     {
         var small = Small(size);
@@ -58,6 +66,7 @@ public sealed class EnhanceRun : IAiRun
         return new AiPixels(bgra, sw, sh);
     }
 
+    /// <inheritdoc/>
     public MagickImage Compose(AiBlend blend)
     {
         var s = (float)Math.Clamp(blend.Strength, 0, 1);
@@ -79,7 +88,7 @@ public sealed class EnhanceRun : IAiRun
         return image;
     }
 
-    /// <summary>Beide Fassungen auf Vorschaugröße, verkleinert wie die normale Vorschau.</summary>
+    /// <summary>Both versions at preview size, reduced like the normal preview.</summary>
     private (AiPreviewSize Size, float[] Result, float[] Baseline) Small(AiPreviewSize size)
     {
         if (_small is { } s && s.Size == size) return s;

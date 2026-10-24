@@ -3,28 +3,48 @@ using System.Text;
 
 namespace ImageConverter.Core.Ai.Onnx;
 
-/// <summary>Ein Tensor aus einem Checkpoint: Werte zusammenhängend (C-Reihenfolge) und Form.</summary>
+/// <summary>A tensor from a checkpoint or weights file.</summary>
+/// <param name="Data">Values as float32, contiguous (C order).</param>
+/// <param name="Shape">Dimensions of the tensor.</param>
 public sealed record TorchTensor(float[] Data, int[] Shape)
 {
+    /// <summary>Gets the number of values.</summary>
     public int Count => Data.Length;
+
+    /// <summary>Returns the shape as text, for example "[64, 3, 3, 3]".</summary>
+    /// <returns>The dimensions in square brackets.</returns>
     public override string ToString() => $"[{string.Join(", ", Shape)}]";
 }
 
 /// <summary>
-/// Liest einen PyTorch-Checkpoint (<c>torch.save</c>, Zip-Format seit PyTorch 1.6, auch von Lightning): ein Zip mit
-/// <c>&lt;name&gt;/data.pkl</c> (Pickle, Protokoll 2) und den rohen Speichern <c>&lt;name&gt;/data/&lt;schlüssel&gt;</c>
-/// (Little Endian). Ohne Python: ein schmaler Unpickler für die Befehle, die <c>torch.save</c> schreibt; fremde Klassen
-/// werden zu <see cref="PyObject"/> (Name und Zustand), Tensoren zu <see cref="TorchTensor"/> (float32; ganze Zahlen werden
-/// umgewandelt). Ausgeführt wird dabei nichts — anders als beim Laden in Python.
+/// Reads a PyTorch checkpoint without Python.
 /// </summary>
+/// <remarks>
+/// Supported is the zip format of <c>torch.save</c> (PyTorch 1.6 and later, also written by Lightning): a zip archive with
+/// <c>&lt;name&gt;/data.pkl</c> (pickle, protocol 2) and the raw storages <c>&lt;name&gt;/data/&lt;key&gt;</c>
+/// (little-endian). A minimal unpickler handles the opcodes that <c>torch.save</c> writes; unknown classes become
+/// <see cref="PyObject"/> (name and state), tensors become <see cref="TorchTensor"/> (float32; integer and boolean
+/// storages are converted). Nothing is executed, unlike loading in Python. The pickle data and every referenced
+/// storage are read completely into memory.
+/// </remarks>
 public sealed class TorchCheckpoint
 {
     private TorchCheckpoint(object? root) => Root = root;
 
-    /// <summary>Was im Checkpoint steht (Wörterbücher als <see cref="Dictionary{TKey,TValue}"/>, Listen, Tupel als object[]).</summary>
+    /// <summary>
+    /// Gets the content of the checkpoint (dictionaries as <see cref="Dictionary{TKey,TValue}"/>, lists as
+    /// <see cref="List{T}"/>, tuples as object[]).
+    /// </summary>
     public object? Root { get; }
 
-    /// <summary>Die Gewichte (<c>state_dict</c>; bei einem reinen Gewichts-Wörterbuch dieses selbst), Name → Tensor.</summary>
+    /// <summary>
+    /// Gets the weights, name → tensor: the entry <c>state_dict</c> of the root dictionary, or the root dictionary itself
+    /// if it has no such entry.
+    /// </summary>
+    /// <remarks>
+    /// Only entries with a string key and a tensor value are included; empty if the root is not a dictionary. Each access
+    /// builds a new dictionary.
+    /// </remarks>
     public IReadOnlyDictionary<string, TorchTensor> StateDict
     {
         get
@@ -37,7 +57,9 @@ public sealed class TorchCheckpoint
         }
     }
 
-    /// <summary>Wert unter einem Pfad wie „hyper_parameters/data/bm_out_size“ (null = nicht da).</summary>
+    /// <summary>Returns the value under a path such as "hyper_parameters/data/bm_out_size".</summary>
+    /// <param name="path">Keys separated by "/"; each step looks into a dictionary or into the items or state of a <see cref="PyObject"/>.</param>
+    /// <returns>The value, or null if the path does not exist.</returns>
     public object? Get(string path)
     {
         object? cur = Root;
@@ -54,12 +76,26 @@ public sealed class TorchCheckpoint
         return cur;
     }
 
+    /// <summary>Loads a checkpoint from a file.</summary>
+    /// <param name="path">Path of the checkpoint file.</param>
+    /// <returns>The loaded checkpoint.</returns>
+    /// <exception cref="InvalidDataException">
+    /// The file is not a supported checkpoint (no data.pkl, big-endian, missing storage, unsupported pickle opcode,
+    /// persistent reference or storage type).
+    /// </exception>
     public static TorchCheckpoint Load(string path)
     {
         using var stream = File.OpenRead(path);
         return Load(stream);
     }
 
+    /// <summary>Loads a checkpoint from a stream.</summary>
+    /// <param name="stream">Stream with the zip archive; it is left open.</param>
+    /// <returns>The loaded checkpoint.</returns>
+    /// <exception cref="InvalidDataException">
+    /// The data is not a supported checkpoint (no data.pkl, big-endian, missing storage, unsupported pickle opcode,
+    /// persistent reference or storage type).
+    /// </exception>
     public static TorchCheckpoint Load(Stream stream)
     {
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
@@ -90,14 +126,28 @@ public sealed class TorchCheckpoint
         return new TorchCheckpoint(new Unpickler(data, Storage).Run());
     }
 
-    /// <summary>Unbekannte Python-Klasse (oder Aufruf) im Pickle: Name, Aufrufargumente, Zustand und angehängte Einträge.</summary>
+    /// <summary>Unknown Python class (or call) in the pickle: name, call arguments, state and attached entries.</summary>
+    /// <param name="name">Full name (module.name) of the class or function.</param>
+    /// <param name="args">Arguments of the call, or null.</param>
     public sealed class PyObject(string name, object?[]? args = null)
     {
+        /// <summary>Gets the full name (module.name) of the class or function; for other callables their text form.</summary>
         public string Name { get; } = name;
+
+        /// <summary>Gets the arguments of the call, or null.</summary>
         public object?[]? Args { get; } = args;
+
+        /// <summary>Gets or sets the state passed by the pickle BUILD opcode.</summary>
         public object? State { get; set; }
+
+        /// <summary>Gets the entries set by SETITEM/SETITEMS.</summary>
         public Dictionary<object, object?> Items { get; } = [];
+
+        /// <summary>Gets the entries added by APPEND/APPENDS/ADDITEMS.</summary>
         public List<object?> List { get; } = [];
+
+        /// <summary>Returns <see cref="Name"/>.</summary>
+        /// <returns>The full name.</returns>
         public override string ToString() => Name;
     }
 
@@ -110,7 +160,7 @@ public sealed class TorchCheckpoint
 
     private sealed class Mark;
 
-    /// <summary>Unpickler für die Befehle von Pickle-Protokoll 2–4 (ohne Ausführen von Code).</summary>
+    /// <summary>Unpickler for a subset of the opcodes of pickle protocols 2–4 (without executing code).</summary>
     private sealed class Unpickler(byte[] data, Func<string, byte[]> storage)
     {
         private int _pos;
@@ -145,7 +195,7 @@ public sealed class TorchCheckpoint
                         int n = data[_pos++];
                         long v = 0;
                         for (var i = 0; i < n && i < 8; i++) v |= (long)data[_pos + i] << (8 * i);
-                        if (n is > 0 and < 8 && (data[_pos + n - 1] & 0x80) != 0) v -= 1L << (8 * n);   // Vorzeichen
+                        if (n is > 0 and < 8 && (data[_pos + n - 1] & 0x80) != 0) v -= 1L << (8 * n);   // sign
                         _pos += n;
                         _stack.Add(v);
                         break;
@@ -273,10 +323,10 @@ public sealed class TorchCheckpoint
         private static void Build(object? target, object? state)
         {
             if (target is PyObject o) o.State = state;
-            // Tensor: Zustand (u. a. requires_grad) brauchen wir nicht; geordnete Wörterbücher bleiben Wörterbücher
+            // Tensor: its state (requires_grad and others) is not needed; ordered dictionaries stay dictionaries
         }
 
-        /// <summary>Persistente Verweise: ('storage', Typ, Schlüssel, Gerät, Anzahl) — der rohe Speicher aus dem Zip.</summary>
+        /// <summary>Persistent references ('storage', type, key, device, count): the raw storage from the zip archive.</summary>
         private object? Persistent(object? pid)
         {
             if (pid is not object?[] t || t.Length < 3 || t[0] as string != "storage")
@@ -306,11 +356,11 @@ public sealed class TorchCheckpoint
                 case "torch._utils._rebuild_parameter":
                     return args.Length > 0 ? args[0] : null;   // nn.Parameter(tensor, requires_grad, hooks)
                 default:
-                    return new PyObject(g.Full, args);         // unbekannt: nur merken, nichts ausführen
+                    return new PyObject(g.Full, args);         // unknown: record only, execute nothing
             }
         }
 
-        /// <summary>_rebuild_tensor_v2(speicher, versatz, größe, schritte, …) → zusammenhängender float32-Tensor.</summary>
+        /// <summary>_rebuild_tensor_v2(storage, offset, size, stride, …) → contiguous float32 tensor.</summary>
         private static TorchTensor RebuildTensor(object?[] args)
         {
             var s = (StorageRef)args[0]!;

@@ -3,16 +3,23 @@ using System.Text.Json;
 namespace ImageConverter.Core.Ai.Onnx;
 
 /// <summary>
-/// Liest eine <c>.safetensors</c>-Datei (Hugging Face): 8 Bytes Kopflänge, JSON-Kopf mit Name → Typ, Form, Bereich, danach
-/// die rohen Daten (Little Endian). Reine Daten, kein Code. Tensoren werden einzeln geladen und als float32 geliefert
-/// (F16 und BF16 werden umgerechnet) — so liegt nie die ganze Datei im Speicher.
+/// Reads a <c>.safetensors</c> file (Hugging Face format).
 /// </summary>
+/// <remarks>
+/// Layout: 8 bytes header length, JSON header with name → type, shape and byte range, followed by the raw data
+/// (little-endian). The format holds data only, no code. Tensors are loaded one at a time and returned as float32
+/// (F16 and BF16 are converted), so the whole file is never held in memory. The file stays open until
+/// <see cref="Dispose"/>; <see cref="Get"/> may be called from several threads.
+/// </remarks>
 public sealed class SafeTensors : IDisposable
 {
     private readonly FileStream _file;
     private readonly long _dataStart;
     private readonly Dictionary<string, (string Type, long[] Shape, long Begin, long End)> _index = new(StringComparer.Ordinal);
 
+    /// <summary>Opens a file and reads its header.</summary>
+    /// <param name="path">Path of the <c>.safetensors</c> file.</param>
+    /// <exception cref="InvalidDataException">The header length is not positive or exceeds 100,000,000 bytes.</exception>
     public SafeTensors(string path)
     {
         _file = File.OpenRead(path);
@@ -34,13 +41,24 @@ public sealed class SafeTensors : IDisposable
         }
     }
 
+    /// <summary>Gets the names of all tensors in the file.</summary>
     public IEnumerable<string> Names => _index.Keys;
 
+    /// <summary>Returns whether the file contains a tensor of this name.</summary>
+    /// <param name="name">Tensor name (case-sensitive).</param>
+    /// <returns>True if the tensor exists.</returns>
     public bool Contains(string name) => _index.ContainsKey(name);
 
+    /// <summary>Returns the shape of a tensor without loading its data.</summary>
+    /// <param name="name">Tensor name (case-sensitive).</param>
+    /// <returns>The dimensions of the tensor.</returns>
     public long[] Shape(string name) => _index[name].Shape;
 
-    /// <summary>Tensor als float32, Werte zusammenhängend (C-Reihenfolge).</summary>
+    /// <summary>Loads a tensor as float32 with contiguous values (C order).</summary>
+    /// <param name="name">Tensor name (case-sensitive).</param>
+    /// <returns>A new tensor; each call reads the data from the file again.</returns>
+    /// <exception cref="KeyNotFoundException">The file contains no tensor of this name.</exception>
+    /// <exception cref="NotSupportedException">The data type is not F32, F16 or BF16.</exception>
     public TorchTensor Get(string name)
     {
         if (!_index.TryGetValue(name, out var t)) throw new KeyNotFoundException($"Gewicht „{name}“ fehlt in der Safetensors-Datei.");
@@ -69,13 +87,18 @@ public sealed class SafeTensors : IDisposable
         return new TorchTensor(data, t.Shape.Select(s => (int)s).ToArray());
     }
 
+    /// <summary>Closes the file.</summary>
     public void Dispose() => _file.Dispose();
 
-    /// <summary>Einen Tensor (float32) als Safetensors-Datei schreiben.</summary>
+    /// <summary>Writes a single float32 tensor as a <c>.safetensors</c> file.</summary>
+    /// <param name="path">Target file; it is created or overwritten.</param>
+    /// <param name="name">Tensor name; it is written into the JSON header without escaping.</param>
+    /// <param name="data">Values in C order.</param>
+    /// <param name="shape">Shape of the tensor.</param>
     public static void Write(string path, string name, float[] data, params long[] shape)
     {
         var header = $"{{\"{name}\":{{\"dtype\":\"F32\",\"shape\":[{string.Join(",", shape)}],\"data_offsets\":[0,{data.Length * 4L}]}}}}";
-        while ((header.Length + 8) % 8 != 0) header += " ";   // Daten auf 8 Bytes ausrichten
+        while ((header.Length + 8) % 8 != 0) header += " ";   // align the data to 8 bytes
         var bytes = System.Text.Encoding.UTF8.GetBytes(header);
         using var file = File.Create(path);
         file.Write(BitConverter.GetBytes((long)bytes.Length));

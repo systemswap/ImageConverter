@@ -5,30 +5,60 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
-/// <summary>Gesichtsmodell: ausgerichteter Gesichtsausschnitt (RGB planar, −1…1) hinein und heraus.</summary>
+/// <summary>A face restoration model: aligned face crop in, restored face crop of the same size out.</summary>
 public interface IFaceModel
 {
+    /// <summary>Gets the edge length of the square crop in pixels.</summary>
     int Size { get; }
+
+    /// <summary>Runs the model on one aligned crop.</summary>
+    /// <param name="input">Planar RGB, 3 × <see cref="Size"/> × <see cref="Size"/>, values −1…1.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <returns>Planar RGB in the same layout, values nominally −1…1.</returns>
     float[] Run(float[] input, CancellationToken ct);
 }
 
-/// <summary>Ein gefundenes Gesicht mit fünf Punkten: Augen, Nase, Mundwinkel.</summary>
+/// <summary>A detected face with its bounding box and five landmarks (eyes, nose, mouth corners).</summary>
+/// <param name="X1">Left edge of the bounding box in source image pixels.</param>
+/// <param name="Y1">Top edge of the bounding box in source image pixels.</param>
+/// <param name="X2">Right edge of the bounding box in source image pixels.</param>
+/// <param name="Y2">Bottom edge of the bounding box in source image pixels.</param>
+/// <param name="Score">Detection confidence, 0…1 (class score × objectness).</param>
+/// <param name="Landmarks">
+/// Five points in source image pixels, in the order YuNet reports them: eye, eye, nose, mouth corner,
+/// mouth corner (each pair from left to right in the image).
+/// </param>
 public sealed record DetectedFace(double X1, double Y1, double X2, double Y2, double Score, (double X, double Y)[] Landmarks)
 {
+    /// <summary>Gets the width of the bounding box in pixels.</summary>
     public double Width => X2 - X1;
+
+    /// <summary>Gets the height of the bounding box in pixels.</summary>
     public double Height => Y2 - Y1;
 }
 
 /// <summary>
-/// Ähnlichkeitstransformation (drehen, gleichmäßig skalieren, verschieben):
+/// A 2-D similarity transform (rotation, uniform scaling, translation):
 /// x' = a·x − b·y + tx,  y' = b·x + a·y + ty.
 /// </summary>
+/// <param name="A">Scale × cos(angle).</param>
+/// <param name="B">Scale × sin(angle).</param>
+/// <param name="Tx">Horizontal translation.</param>
+/// <param name="Ty">Vertical translation.</param>
 public readonly record struct Similarity(double A, double B, double Tx, double Ty)
 {
+    /// <summary>Maps a point.</summary>
+    /// <param name="x">X coordinate of the point.</param>
+    /// <param name="y">Y coordinate of the point.</param>
+    /// <returns>The transformed point.</returns>
     public (double X, double Y) Apply(double x, double y) => (A * x - B * y + Tx, B * x + A * y + Ty);
 
+    /// <summary>Gets the uniform scale factor of the transform.</summary>
     public double ScaleFactor => Math.Sqrt(A * A + B * B);
 
+    /// <summary>Returns the inverse transform.</summary>
+    /// <returns>The transform that maps the results of <see cref="Apply"/> back to the original points.</returns>
+    /// <remarks>Undefined (division by zero) when the scale factor is 0.</remarks>
     public Similarity Inverse()
     {
         var d = A * A + B * B;
@@ -36,7 +66,10 @@ public readonly record struct Similarity(double A, double B, double Tx, double T
         return new Similarity(ia, ib, -(ia * Tx - ib * Ty), -(ib * Tx + ia * Ty));
     }
 
-    /// <summary>Beste Transformation (kleinste Quadrate), die <paramref name="from"/> auf <paramref name="to"/> abbildet.</summary>
+    /// <summary>Estimates the similarity transform that best maps <paramref name="from"/> onto <paramref name="to"/> (least squares).</summary>
+    /// <param name="from">Source points.</param>
+    /// <param name="to">Target points; same count and order as <paramref name="from"/>.</param>
+    /// <returns>The least-squares transform.</returns>
     public static Similarity Estimate(IReadOnlyList<(double X, double Y)> from, IReadOnlyList<(double X, double Y)> to)
     {
         var n = from.Count;
@@ -59,23 +92,41 @@ public readonly record struct Similarity(double A, double B, double Tx, double T
 }
 
 /// <summary>
-/// Gesichter verbessern: finden (YuNet), auf die Normlage des Modells ausrichten,
-/// verbessern und mit weichem Rand zurücksetzen. Der Rest des Bildes bleibt unberührt.
+/// Face restoration: detects faces (YuNet), aligns each to the reference position of the model,
+/// restores it and pastes it back with a soft edge. The rest of the image is left untouched.
 /// </summary>
 public static class AiFaces
 {
-    /// <summary>Normlage der fünf Punkte im 512er-Ausschnitt (FFHQ, wie beim Training).</summary>
+    /// <summary>
+    /// Reference positions of the five landmarks as fractions of the crop edge (FFHQ alignment of the
+    /// 512-px crop, as used for training).
+    /// </summary>
     internal static readonly (double X, double Y)[] Template =
     [
         (0.37691676, 0.46864664), (0.62285697, 0.46912813), (0.50123859, 0.61331904),
         (0.39308822, 0.72541100), (0.61150205, 0.72490465),
     ];
 
-    /// <summary>Kleinere Gesichter (Breite in Pixeln) werden übergangen — da gibt es nichts zu retten.</summary>
+    /// <summary>
+    /// Minimum face width in source pixels; narrower faces are skipped because they contain too little
+    /// detail to restore.
+    /// </summary>
     public const int MinFaceSize = 16;
 
-    // ------------------------------------------------------------ Erkennung
+    // ------------------------------------------------------------ Detection
 
+    /// <summary>Finds faces in an image with the YuNet detector.</summary>
+    /// <param name="source">Image to search; it is not modified.</param>
+    /// <param name="detector">ONNX session of the YuNet model (640 × 640 input).</param>
+    /// <param name="threshold">Minimum confidence (class score × objectness), 0…1.</param>
+    /// <returns>
+    /// The detected faces in source image coordinates, overlapping duplicates removed (IoU above 0.4),
+    /// faces narrower than <see cref="MinFaceSize"/> omitted, ordered by descending confidence.
+    /// </returns>
+    /// <remarks>
+    /// The image is reduced to fit into 640 × 640 (aspect ratio kept, never enlarged), so very small faces
+    /// in large images can be missed.
+    /// </remarks>
     public static List<DetectedFace> Detect(MagickImage source, InferenceSession detector, double threshold = 0.5)
     {
         const int size = 640;
@@ -84,14 +135,14 @@ public static class AiFaces
         using (var small = ImageOps.CloneOf(source))
         {
             if (small.Width > size || small.Height > size)
-                small.Resize(new MagickGeometry(size, size));   // Seitenverhältnis bleibt
+                small.Resize(new MagickGeometry(size, size));   // aspect ratio is kept
             rw = (int)small.Width;
             rh = (int)small.Height;
             using var pixels = small.GetPixelsUnsafe();
             bgr = pixels.ToByteArray("BGR") ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
         }
 
-        // links oben einsetzen, Rest schwarz; Werte 0…255, BGR (so wurde YuNet trainiert)
+        // Place at the top left, rest black; values 0…255 in BGR order (as YuNet was trained)
         var input = new float[3 * size * size];
         for (var y = 0; y < rh; y++)
         for (var x = 0; x < rw; x++)
@@ -112,8 +163,8 @@ public static class AiFaces
     }
 
     /// <summary>
-    /// YuNet-Ausgaben lesen: je Raster (8, 16, 32 px) Klasse, „Objekt“, Rahmen, 5 Punkte.
-    /// Jede Rasterzelle ist ein Anker; Werte sind relativ zur Zelle.
+    /// Decodes the YuNet outputs: for each stride (8, 16, 32 px) class score, objectness, box and five points.
+    /// Each grid cell is one anchor; values are relative to the cell.
     /// </summary>
     internal static List<DetectedFace> Decode(float[][] outputs, int size, double threshold, double ratio)
     {
@@ -146,7 +197,7 @@ public static class AiFaces
         return faces;
     }
 
-    /// <summary>Überlappende Treffer desselben Gesichts zusammenfassen: der sicherste bleibt.</summary>
+    /// <summary>Non-maximum suppression: of overlapping detections of the same face, the most confident one is kept.</summary>
     internal static List<DetectedFace> Nms(List<DetectedFace> faces, double maxOverlap)
     {
         var kept = new List<DetectedFace>();
@@ -165,24 +216,42 @@ public static class AiFaces
         return inter / (a.Width * a.Height + b.Width * b.Height - inter);
     }
 
-    // ------------------------------------------------------------ Verbessern
+    // ------------------------------------------------------------ Restoration
 
-    /// <summary>Gesichter verbessern und mit <paramref name="strength"/> ins Bild mischen (ohne Detailregler).</summary>
-    /// <param name="strength">0…1: Deckkraft über dem Original.</param>
-    /// <param name="progress">Anteil 0…1.</param>
-    /// <param name="preview">Zwischenstand nach jedem Gesicht.</param>
+    /// <summary>Restores faces and blends them into the image with <paramref name="strength"/> (without the detail controls).</summary>
+    /// <param name="source">Image to restore; it is not modified.</param>
+    /// <param name="faces">Faces to restore, typically from <see cref="Detect"/>.</param>
+    /// <param name="model">Face restoration model.</param>
+    /// <param name="strength">0…1: opacity over the original.</param>
+    /// <param name="progress">Receives the completed fraction, 0…1, after each face.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <param name="preview">Receives intermediate frames at most every 400 ms; none after the last face.</param>
+    /// <param name="previewMaxEdge">Longest edge of the intermediate frames in pixels.</param>
+    /// <returns>A new image owned by the caller, with the profiles and density of <paramref name="source"/>.</returns>
     public static MagickImage Restore(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model,
         double strength, IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048) =>
         Run(source, faces, model, null, progress, ct, preview, previewMaxEdge).Compose(new AiBlend(strength));
 
     /// <summary>
-    /// Gesichter mit voller Wirkung verbessern, aber noch nicht ins Bild mischen: Das Ergebnis
-    /// (<see cref="FaceRun"/>) mischt danach Stärke, Hautstruktur, Falten und Korn beliebig oft neu, ohne das Modell.
-    /// Vor dem Modell wird das Ausgangsbild eingelesen (Gesichtsbereiche, Kornprofil), danach mit dem
-    /// Ergebnis verglichen (was an Falten und Zügen verloren ging).
+    /// Restores faces at full strength without blending them into the image.
     /// </summary>
-    /// <param name="parser">Gesichtsbereiche; ohne ersatzweise Kreise um Augen und Mund.</param>
+    /// <remarks>
+    /// The returned <see cref="FaceRun"/> blends strength, skin texture, folds and grain afterwards as
+    /// often as needed without running the model again. Before the model runs, the source image is
+    /// analysed (face regions, grain profile); afterwards the result is compared with it to find the
+    /// folds and lines the model smoothed away. The faces are processed one after another on the
+    /// calling thread.
+    /// </remarks>
+    /// <param name="source">Image to restore; it is not modified.</param>
+    /// <param name="faces">Faces to restore, typically from <see cref="Detect"/>.</param>
+    /// <param name="model">Face restoration model.</param>
+    /// <param name="parser">Face parsing model for the face regions; if null, soft circles around eyes and mouth are used instead.</param>
+    /// <param name="progress">Receives the completed fraction, 0…1, after each face.</param>
+    /// <param name="ct">Cancels the computation; checked before each face and passed to the models.</param>
+    /// <param name="preview">Receives intermediate frames at most every 400 ms; none after the last face.</param>
+    /// <param name="previewMaxEdge">Longest edge of the intermediate frames in pixels.</param>
+    /// <returns>The unblended result at the size of <paramref name="source"/>.</returns>
     public static FaceRun Run(MagickImage source, IReadOnlyList<DetectedFace> faces, IFaceModel model, IFaceParser? parser,
         IProgress<double>? progress, CancellationToken ct,
         Action<AiPreviewFrame>? preview = null, int previewMaxEdge = 2048)
@@ -201,14 +270,14 @@ public static class AiFaces
             image[i + 2] = pixels[j + 2] / 65535f;
         }
 
-        // Vor der KI: wie sieht das Korn des Fotos aus?
+        // Before the model: measure the grain of the photo
         var grain = FaceDetails.MeasureGrain(image, w, h);
 
         var sink = new AiPreviewSink(preview, previewMaxEdge);
         var size = model.Size;
         var target = Template.Select(p => (p.X * size, p.Y * size)).ToArray();
         var done = new List<FaceRun.Face>();
-        float[]? shown = null;   // Zwischenstand während der Rechnung
+        float[]? shown = null;   // intermediate image for the preview frames
         var pasted = 0;
         for (var f = 0; f < faces.Count; f++)
         {
@@ -216,17 +285,17 @@ public static class AiFaces
             var toCrop = Similarity.Estimate(faces[f].Landmarks, target);
             var crop = WarpToCrop(image, w, h, toCrop, size);
 
-            // vor der KI: Bereiche des Gesichts (Haut, Augen, Mund …) im Original
+            // Before the model: face regions (skin, eyes, mouth …) in the original
             var labels = parser?.Parse(crop, size, ct);
             var foldMask = FaceDetails.FoldMask(labels, size, Template, FaceDetails.FoldsKeepAway(toCrop.ScaleFactor));
 
             var enhanced = FromModelRange(model.Run(ToModelRange(crop), ct));
 
-            // nach der KI: was hat das Modell an Falten und Zügen weggeglättet?
+            // After the model: which folds and lines did the model smooth away?
             var folds = FaceDetails.Folds(crop, enhanced, size, toCrop.ScaleFactor, foldMask);
             var face = new FaceRun.Face(crop, enhanced, Smoothed(enhanced, size, toCrop), toCrop, size, folds, foldMask,
                 FaceDetails.KeptMask(labels, size, Template));
-            face = face with { GrainGain = MeasureGrainGain(image, w, h, face, grain) };   // Korn, das schon da ist
+            face = face with { GrainGain = MeasureGrainGain(image, w, h, face, grain) };   // grain the restored face already has
             done.Add(face);
             progress?.Report((f + 1) / (double)faces.Count);
 
@@ -249,8 +318,8 @@ public static class AiFaces
     }
 
     /// <summary>
-    /// Grobe Fassung des verbesserten Gesichts: Unterschied dazu = seine feine Struktur. Geglättet über etwa
-    /// ein Pixel des Bildes (im Ausschnitt so viele Pixel, wie ein Bildpixel dort groß ist).
+    /// Coarse version of the restored face; the difference to it is the fine structure. Smoothed over about
+    /// one image pixel, i.e. as many crop pixels as one image pixel covers in the crop.
     /// </summary>
     private static float[] Smoothed(float[] enhanced, int size, Similarity toCrop)
     {
@@ -267,10 +336,10 @@ public static class AiFaces
         return low;
     }
 
-    /// <summary>Was als „feine Struktur“ gilt: Unterschiede über so viele Bildpixel (Gauß-Sigma).</summary>
+    /// <summary>Scale of what counts as fine structure: differences over this many image pixels (Gaussian sigma).</summary>
     internal const double FineDetailPixels = 1.0;
 
-    /// <summary>Feine Struktur des Bildes: Bild minus über <see cref="FineDetailPixels"/> geglättet (RGB verschachtelt).</summary>
+    /// <summary>Fine structure of the image: the image minus its blur over <see cref="FineDetailPixels"/> (interleaved RGB).</summary>
     internal static float[] HighPass(float[] image, int w, int h)
     {
         var blurred = (float[])image.Clone();
@@ -280,8 +349,8 @@ public static class AiFaces
     }
 
     /// <summary>
-    /// Ausschnitt in Normlage, RGB planar 0…1. Ist das Gesicht im Bild größer als der
-    /// Ausschnitt, wird pro Pixel über mehrere Punkte gemittelt (sonst Treppchen/Flimmern).
+    /// Crop in the reference position, planar RGB 0…1. If the face in the image is larger than the crop,
+    /// each crop pixel averages several samples (up to 4 × 4); otherwise jagged edges and aliasing appear.
     /// </summary>
     internal static float[] WarpToCrop(float[] image, int w, int h, Similarity toCrop, int size)
     {
@@ -315,7 +384,7 @@ public static class AiFaces
         return crop;
     }
 
-    /// <summary>Bildbereich, den ein Gesicht beim Zurücksetzen berührt (Bildkoordinaten, einschließlich).</summary>
+    /// <summary>Image area a face touches when it is pasted back (image coordinates, inclusive).</summary>
     internal static (int X0, int Y0, int X1, int Y1) Bounds(Similarity toCrop, int size, int w, int h)
     {
         var back = toCrop.Inverse();
@@ -324,7 +393,10 @@ public static class AiFaces
             Math.Min(w - 1, (int)Math.Ceiling(corners.Max(c => c.X))), Math.Min(h - 1, (int)Math.Ceiling(corners.Max(c => c.Y))));
     }
 
-    /// <summary>Weicher Rand beim Zurücksetzen: 0 bis 10 px vom Rand des Ausschnitts, voll ab 66 px (bei 512).</summary>
+    /// <summary>
+    /// Soft edge for pasting back: 0 up to 10 px from the crop edge, full weight from 66 px (for a 512-px crop,
+    /// scaled for other sizes), smoothstep in between.
+    /// </summary>
     internal static float EdgeWeight(double u, double v, int size)
     {
         var d = Math.Min(Math.Min(u, v), Math.Min(size - 1 - u, size - 1 - v)) / (size / 512.0);
@@ -332,21 +404,21 @@ public static class AiFaces
         return (float)(t * t * (3 - 2 * t));
     }
 
-    /// <summary>Korn für ein Gesicht in den Koordinaten des Bildes, auf das zurückgesetzt wird.</summary>
-    /// <param name="Field">Korn mit Streuung 1 (bzw. verkleinert in der Vorschau), Zeile für Zeile ab <paramref name="X0"/>, <paramref name="Y0"/>.</param>
+    /// <summary>Grain for one face in the coordinates of the image it is pasted into.</summary>
+    /// <param name="Field">Grain with standard deviation 1 (reduced in size for the preview), row by row from <paramref name="X0"/>, <paramref name="Y0"/>.</param>
     internal sealed record GrainPatch(float[] Field, int X0, int Y0, int Width, int Height, GrainProfile Profile);
 
     /// <summary>
-    /// Verbessertes Gesicht zurück ins Bild, mit weichem Rand zum Rand des Ausschnitts.
-    /// Bei Gesichtern, die größer als der Ausschnitt sind, bleiben die feinen Details des
-    /// Originals erhalten, die im Ausschnitt gar nicht vorkommen können.
+    /// Pastes a restored face back into the image (in place), fading out towards the edge of the crop.
+    /// For faces larger than the crop, the fine details of the original that the crop cannot contain
+    /// are preserved.
     /// </summary>
-    /// <param name="highPass">Feine Struktur des Bildes davor (<see cref="HighPass"/>, gleiche Größe wie
-    /// <paramref name="image"/>); nur für Hautstruktur &gt; 0 nötig.</param>
-    /// <param name="toCrop">Bild → Ausschnitt; für die Vorschau auf deren Maßstab umgerechnet.</param>
-    /// <param name="blend">Stärke (Deckkraft); Hautstruktur: feine Struktur aus dem Bild davor statt der des Modells —
-    /// gegen das „Wachsgesicht“; Falten: was das Modell an Zügen weggeglättet hat, auf der Haut zurück; Korn.</param>
-    /// <param name="grain">Korn in diesen Koordinaten; nur für Korn &gt; 0 nötig.</param>
+    /// <param name="highPass">Fine structure of the image before the model (<see cref="HighPass"/>, same size as
+    /// <paramref name="image"/>); needed only for texture &gt; 0.</param>
+    /// <param name="toCrop">Image → crop; for the preview converted to its scale.</param>
+    /// <param name="blend">Strength (opacity); texture: fine structure from the image before the model instead of the
+    /// model's own, against the "wax face" look; folds: what the model smoothed away, restored on the skin; grain.</param>
+    /// <param name="grain">Grain in these coordinates; needed only for grain &gt; 0.</param>
     internal static void PasteBack(float[] image, int w, int h, FaceRun.Face face, float[]? highPass,
         Similarity toCrop, AiBlend blend, GrainPatch? grain)
     {
@@ -356,9 +428,9 @@ public static class AiFaces
         if (x1 < x0 || y1 < y0 || strength <= 0) return;
 
         var back = toCrop.Inverse();
-        // Anteil der Originaldetails jenseits der Ausschnitt-Auflösung (0 bei kleinen Gesichtern)
+        // Share of original detail beyond the crop resolution (0 for small faces)
         var keepDetail = (float)Math.Clamp(back.ScaleFactor - 1, 0, 1);
-        // Hautstruktur: dort, wo das Original schon über keepDetail zurückkommt, nicht doppelt
+        // Texture: not twice where the original already comes back through keepDetail
         var tex = highPass is null ? 0 : (float)Math.Clamp(blend.Texture, 0, 1) * (1 - keepDetail);
         var folds = (float)Math.Clamp(blend.Folds, 0, 1);
         var grainAmount = grain is null ? 0 : (float)Math.Max(0, blend.Grain);
@@ -388,14 +460,14 @@ public static class AiFaces
                 {
                     var original = image[i + c];
                     var val = enh[c] + (keepDetail > 0 ? (original - low[c]) * keepDetail : 0);
-                    // feine Struktur des Modells (enh − grob) gegen die des Originals tauschen
+                    // Swap the fine structure of the model (enh − coarse) for that of the original
                     if (tex > 0) val += tex * (highPass![i + c] - (enh[c] - coarse[c]));
-                    value[c] = val + fold;   // Falten: Helligkeit, auf alle Kanäle gleich
+                    value[c] = val + fold;   // folds: brightness, equal on all channels
                 }
 
                 if (grainAmount > 0)
                 {
-                    // Korn in der Helligkeit, so stark wie im Foto bei dieser Helligkeit
+                    // Grain in the brightness, as strong as in the photo at this brightness
                     var g = grain!;
                     int gx = x - g.X0, gy = y - g.Y0;
                     if (gx >= 0 && gy >= 0 && gx < g.Width && gy < g.Height)
@@ -414,8 +486,8 @@ public static class AiFaces
 
 
     /// <summary>
-    /// Wie viel Korn dem eingesetzten Gesicht bis zum Foto noch fehlt: das Gesicht einmal mit voller Stärke in
-    /// seinen Bildausschnitt setzen und auf der Haut messen (<see cref="FaceDetails.GrainGain"/>).
+    /// How much grain the pasted face still lacks compared with the photo: pastes the face once at full strength
+    /// into its image area and measures on the skin (<see cref="FaceDetails.GrainGain"/>).
     /// </summary>
     private static float MeasureGrainGain(float[] image, int w, int h, FaceRun.Face face, GrainProfile profile)
     {
@@ -444,7 +516,7 @@ public static class AiFaces
         }
         return FaceDetails.GrainGain(luma, weight, bw, bh, profile);
     }
-    /// <summary>Bilinear aus einer einzelnen Ebene (size × size).</summary>
+    /// <summary>Bilinear sample from a single plane (size × size).</summary>
     internal static float SampleOne(float[] data, int size, double u, double v)
     {
         int iu = Math.Min((int)u, size - 2), iv = Math.Min((int)v, size - 2);
@@ -470,7 +542,7 @@ public static class AiFaces
         return result;
     }
 
-    /// <summary>Bilinear aus dem RGB-Bild (verschachtelt), außerhalb: Randpixel.</summary>
+    /// <summary>Bilinear sample from the interleaved RGB image; outside the image the edge pixels are used.</summary>
     private static void Sample(float[] image, int w, int h, double x, double y, Span<float> rgb)
     {
         x = Math.Clamp(x, 0, w - 1);
@@ -489,7 +561,7 @@ public static class AiFaces
         }
     }
 
-    /// <summary>Bilinear aus einem planaren Ausschnitt (3 × size × size).</summary>
+    /// <summary>Bilinear sample from a planar crop (3 × size × size).</summary>
     private static void SamplePlanar(float[] crop, int size, double u, double v, Span<float> rgb)
     {
         int iu = Math.Min((int)u, size - 2), iv = Math.Min((int)v, size - 2);

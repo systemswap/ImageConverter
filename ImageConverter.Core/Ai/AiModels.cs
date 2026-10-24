@@ -1,42 +1,57 @@
 namespace ImageConverter.Core.Ai;
 
+/// <summary>Category of an AI model; determines where it is offered and how it is run.</summary>
 public enum AiModelKind
 {
-    /// <summary>Ganzes Bild in Kacheln: Rauschen, Artefakte, Unschärfe, Vergrößern.</summary>
+    /// <summary>Whole image in tiles: noise, artefacts, blur, enlargement.</summary>
     Enhance,
 
-    /// <summary>Nur Gesichter: erkennen, ausrichten, verbessern, zurücksetzen.</summary>
+    /// <summary>Faces only: detect, align, restore, paste back.</summary>
     Face,
 
-    /// <summary>Wird von anderen Modellen gebraucht (Gesichtserkennung), nicht selbst wählbar.</summary>
+    /// <summary>Needed by other models (face detection, face parsing); not selectable on its own.</summary>
     Helper,
 
-    /// <summary>Markierte Stellen neu malen: Wasserzeichen, Schrift, Störendes entfernen (Tab „Entfernen“).</summary>
+    /// <summary>Repaints marked areas: removes watermarks, text and distracting objects (the "Remove" tab).</summary>
     Inpaint,
 
-    /// <summary>Fotografiertes Blatt begradigen („KI begradigen“ in der Vorschau).</summary>
+    /// <summary>Straightens a photographed sheet ("AI straighten" in the preview).</summary>
     Dewarp,
 
-    /// <summary>Vergrößern mit KI (Gruppe „Upscaling“ unter „Größe“).</summary>
+    /// <summary>Enlargement with AI (the "Upscaling" group under "Size").</summary>
     Upscale,
 
-    /// <summary>Gewichte, aus denen die App ein Modell baut (Stable Diffusion für PiSA-SR) — nur über das Hauptmodell geladen.</summary>
+    /// <summary>Weights from which the app builds a model (Stable Diffusion for PiSA-SR); downloaded only together with the main model.</summary>
     Part,
 }
 
 /// <summary>
-/// Ein herunterladbares Modell. Liegt nach dem Download in einem eigenen Unterordner
-/// <c>KI-Modelle/&lt;Id&gt;/</c>; vorhanden ist es, sobald <see cref="MainFile"/> dort liegt.
+/// A downloadable AI model.
 /// </summary>
-/// <param name="Url">Download-Adresse — eine .onnx-Datei oder ein .zip (<see cref="IsZip"/>).</param>
-/// <param name="Sha256">Prüfsumme des Downloads; stimmt sie nicht, wird nichts gespeichert.</param>
-/// <param name="Scale">Vergrößerung des Modells (Enhance), sonst 1.</param>
-/// <param name="TileSize">Kachelgröße (Enhance) bzw. Gesichtsgröße (Face) in Pixeln.</param>
-/// <param name="FixedTile">Modell nimmt nur genau diese Kachelgröße an.</param>
-/// <param name="Requires">Ids weiterer Modelle, die mit heruntergeladen werden.</param>
+/// <remarks>
+/// After the download it lives in its own subfolder <c>KI-Modelle/&lt;Id&gt;/</c> (see <see cref="AiModelStore"/>);
+/// it counts as installed as soon as <see cref="MainFile"/> is present there.
+/// </remarks>
+/// <param name="Id">Stable identifier; also the name of the model's subfolder.</param>
+/// <param name="Name">Display name.</param>
+/// <param name="Purpose">Short description of what the model is good for.</param>
+/// <param name="Description">Longer description for the model list.</param>
+/// <param name="Kind">Category of the model.</param>
+/// <param name="Url">Download address: a single file (.onnx, checkpoint or weights) or a .zip archive (<see cref="IsZip"/>).</param>
+/// <param name="DownloadSize">Size of the download in bytes; used for progress if the server sends no length.</param>
+/// <param name="Sha256">SHA-256 checksum of the download (hexadecimal); if it does not match, nothing is saved.</param>
+/// <param name="IsZip">Whether <paramref name="Url"/> points to a .zip archive that is extracted after the download.</param>
+/// <param name="MainFile">File name inside the model folder that is opened and marks the model as installed.</param>
+/// <param name="License">Licence identifier shown to the user.</param>
+/// <param name="NonCommercial">Whether the licence permits only non-commercial use.</param>
+/// <param name="Origin">Authors and source of the model (and of the ONNX conversion).</param>
+/// <param name="Scale">Magnification of the model (Enhance, Upscale), otherwise 1.</param>
+/// <param name="TileSize">Tile size (Enhance, Upscale), face crop size (Face) or input size (Inpaint, face detection) in pixels.</param>
+/// <param name="FixedTile">Whether the model accepts only exactly this tile size.</param>
+/// <param name="Requires">IDs of further models that are downloaded together with this one.</param>
 /// <param name="Gpu">
-/// Darf auf der Grafikkarte rechnen. Nur Modelle, die dort geprüft sind — ein Fehler im Grafikkartentreiber oder in DirectML
-/// ist ein Speicherfehler, den die App nicht abfangen kann (das Gesichtsbereichsmodell stürzte so ab, 14.10.2026).
+/// Whether the model may run on the graphics card. Only models that have been tested there: an error in the graphics
+/// driver or in DirectML is a memory fault that the app cannot catch. See docs/FEHLERGEDAECHTNIS.md, No. 67 and No. 69.
 /// </param>
 public sealed record AiModel(
     string Id,
@@ -58,24 +73,31 @@ public sealed record AiModel(
     string[]? Requires = null,
     bool Gpu = false)
 {
+    /// <summary>Gets the IDs of further models that are downloaded together with this one; never null.</summary>
     public string[] Requires { get; init; } = Requires ?? [];
 
+    /// <summary>Gets the download size as text in KB or MB.</summary>
     public string SizeText => DownloadSize >= 1024 * 1024
         ? $"{DownloadSize / (1024.0 * 1024):0.#} MB"
         : $"{DownloadSize / 1024.0:0} KB";
 
+    /// <summary>Returns the display name.</summary>
+    /// <returns><see cref="Name"/>.</returns>
     public override string ToString() => Name;
 }
 
 /// <summary>
-/// Die angebotenen Modelle. Bewusst nur Modelle mit bekannter Lizenz; Quellen sind
-/// feste, versionierte Releases. Die Prüfsummen schützen vor kaputten oder
-/// ausgetauschten Dateien.
+/// The models offered for download.
 /// </summary>
+/// <remarks>
+/// Only models with a known licence are included. Sources are fixed files: versioned releases or pinned commits
+/// where the host offers them. The checksums protect against corrupted or replaced files.
+/// </remarks>
 public static class AiModelCatalog
 {
     private const string FaceFusion = "https://github.com/facefusion/facefusion-assets/releases/download/";
 
+    /// <summary>Gets the small all-round enhancement model (Real-ESRGAN general x4v3).</summary>
     public static AiModel Allround { get; } = new(
         "allround",
         "Allround (klein)",
@@ -96,6 +118,7 @@ public static class AiModelCatalog
         FixedTile: true,
         Gpu: true);
 
+    /// <summary>Gets the face detector (YuNet), a helper model loaded with every face model.</summary>
     public static AiModel FaceDetector { get; } = new(
         "yunet",
         "Gesichtserkennung",
@@ -113,6 +136,7 @@ public static class AiModelCatalog
         Origin: "Shiqi Yu u. a. (OpenCV Zoo), ONNX von FaceFusion",
         TileSize: 640);
 
+    /// <summary>Gets the face parsing model (BiSeNet), a helper model loaded with every face model.</summary>
     public static AiModel FaceParser { get; } = new(
         "faceparser",
         "Gesichtsbereiche",
@@ -131,6 +155,7 @@ public static class AiModelCatalog
         Origin: "zllrunning (face-parsing.PyTorch, BiSeNet), ONNX von FaceFusion",
         TileSize: 512);
 
+    /// <summary>Gets the GFPGAN 1.4 face model.</summary>
     public static AiModel Gfpgan { get; } = new(
         "gfpgan",
         "Gesichter – GFPGAN 1.4",
@@ -148,6 +173,7 @@ public static class AiModelCatalog
         Origin: "TencentARC (GFPGAN), ONNX von FaceFusion",
         Requires: ["yunet", "faceparser"]);
 
+    /// <summary>Gets the GFPGAN 1.3 face model.</summary>
     public static AiModel Gfpgan13 { get; } = new(
         "gfpgan13",
         "Gesichter – GFPGAN 1.3",
@@ -165,6 +191,7 @@ public static class AiModelCatalog
         Origin: "TencentARC (GFPGAN), ONNX von FaceFusion",
         Requires: ["yunet", "faceparser"]);
 
+    /// <summary>Gets the RestoreFormer++ face model.</summary>
     public static AiModel RestoreFormer { get; } = new(
         "restoreformer",
         "Gesichter – RestoreFormer++",
@@ -182,6 +209,7 @@ public static class AiModelCatalog
         Origin: "Zhouxia Wang u. a. (RestoreFormer++), ONNX von FaceFusion",
         Requires: ["yunet", "faceparser"]);
 
+    /// <summary>Gets the CodeFormer face model (non-commercial licence).</summary>
     public static AiModel CodeFormer { get; } = new(
         "codeformer",
         "Gesichter – CodeFormer",
@@ -199,10 +227,11 @@ public static class AiModelCatalog
         Origin: "Shangchen Zhou (CodeFormer), ONNX von FaceFusion",
         Requires: ["yunet", "faceparser"]);
 
-    // Feste Fassung des Hugging-Face-Archivs (Commit), nicht „main“ — sonst könnte sich die Datei ändern
+    // Fixed revision of the Hugging Face repository (commit), not "main"; otherwise the file could change
     private const string LamaRepo = "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/";
     private const string MiganRepo = "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/";
 
+    /// <summary>Gets the LaMa inpainting model (thorough).</summary>
     public static AiModel Lama { get; } = new(
         "lama",
         "LaMa (gründlich)",
@@ -220,6 +249,7 @@ public static class AiModelCatalog
         Origin: "Roman Suvorov u. a. (LaMa, Samsung AI Center), ONNX von Carve",
         TileSize: 512);
 
+    /// <summary>Gets the MI-GAN inpainting model (fast).</summary>
     public static AiModel Migan { get; } = new(
         "migan",
         "MI-GAN (schnell)",
@@ -238,11 +268,14 @@ public static class AiModelCatalog
         TileSize: 512);
 
     /// <summary>
-    /// SyntheticDoc (Nachfolger von UVDoc): sagt für ein fotografiertes Blatt die Rückabbildung als Gitter 121 × 177 voraus.
-    /// Geladen wird der Original-Checkpoint der Autoren (PyTorch, ETH Zürich); die ONNX-Datei baut die App daraus beim ersten
-    /// Gebrauch selbst (<c>SyntheticDoc.SyntheticDocModel</c>, ohne Python). Ein selbst trainierter Checkpoint unter demselben
-    /// Namen ersetzt ihn (docs/KI-BEGRADIGEN.md).
+    /// Gets the SyntheticDoc dewarping model (successor of UVDoc), which predicts the backward mapping of a photographed
+    /// sheet as a 121 × 177 grid.
     /// </summary>
+    /// <remarks>
+    /// The authors' original checkpoint (PyTorch, ETH Zurich) is downloaded; the app builds the ONNX file from it on first
+    /// use (<c>SyntheticDoc.SyntheticDocModel</c>, without Python). A self-trained checkpoint with the same name replaces it.
+    /// See docs/KI-BEGRADIGEN.md.
+    /// </remarks>
     public static AiModel SyntheticDoc { get; } = new(
         "syntheticdoc",
         "SyntheticDoc",
@@ -260,14 +293,14 @@ public static class AiModelCatalog
         NonCommercial: false,
         Origin: "Daniel Woortmann, Tanguy Magne, Olga Sorkine-Hornung (SyntheticDoc, ECCV 2026, ETH Zürich)");
 
-    // Feste Fassungen (Commits), nicht „main“
+    // Fixed revisions (commits), not "main"
     private const string UltraSharpRepo = "https://huggingface.co/Kim2091/UltraSharpV2/resolve/2d1db39ff692c111da92112d49f833e4ad7035ae/";
-    // Stable Diffusion 2.1-base: Stability AI hat das Original 2025 zurückgezogen — Spiegel mit denselben Dateien
+    // Stable Diffusion 2.1-base: Stability AI has withdrawn the original repository; this mirror holds the same files
     private const string Sd21Repo = "https://huggingface.co/Manojb/stable-diffusion-2-1-base/resolve/0094d483a120f3f33dafbd187ea4aa60d10de75c/";
     private const string Sd21License = "CreativeML-OpenRAIL++-M";
     private const string Sd21Origin = "Stability AI (Stable Diffusion 2.1-base), Spiegel „Manojb/stable-diffusion-2-1-base“ auf Hugging Face";
 
-    /// <summary>Upscaling „KI UltraSharpV2 · mittel“: 4x-UltraSharpV2 (DAT), ONNX vom Autor.</summary>
+    /// <summary>Gets the medium-speed upscaling model 4x-UltraSharpV2 (DAT architecture), ONNX export by its author.</summary>
     public static AiModel UltraSharpV2 { get; } = new(
         "ultrasharpv2",
         "4x-UltraSharpV2",
@@ -289,10 +322,12 @@ public static class AiModelCatalog
         Gpu: true);
 
     /// <summary>
-    /// Upscaling „KI PiSA-SR · langsam“ (wie Referenzwerkzeug): PiSA-SR (CVPR 2025) — LoRA der Autoren auf Stable Diffusion 2.1. Geladen werden die
-    /// Gewichte (LoRA von Google Drive, SD 2.1 vom Spiegel); die ONNX-Dateien baut die App beim ersten Gebrauch selbst
-    /// (<c>Upscale.PiSaSrModel</c>, ohne Python).
+    /// Gets the slow upscaling model PiSA-SR (CVPR 2025, comparable to Referenzwerkzeug): the authors' LoRA on Stable Diffusion 2.1.
     /// </summary>
+    /// <remarks>
+    /// The weights are downloaded (LoRA from Google Drive, SD 2.1 from the mirror); the app builds the ONNX files itself on
+    /// first use (<c>Upscale.PiSaSrModel</c>, without Python).
+    /// </remarks>
     public static AiModel PiSaSr { get; } = new(
         "pisasr",
         "PiSA-SR",
@@ -313,6 +348,7 @@ public static class AiModelCatalog
         Requires: ["sd21-unet", "sd21-vae", "sd21-text"],
         Gpu: true);
 
+    /// <summary>Gets the Stable Diffusion 2.1 UNet weights, part of PiSA-SR.</summary>
     public static AiModel Sd21Unet { get; } = new(
         "sd21-unet", "Stable Diffusion 2.1 – UNet", "Teil von PiSA-SR",
         "Das Herz von Stable Diffusion 2.1 (halbe Genauigkeit, reicht als Quelle — die App rechnet in voller). Wird mit PiSA-SR geladen.",
@@ -320,6 +356,7 @@ public static class AiModelCatalog
         "28ec9cf3b239c0751c201b1f6fb46b551df5862731b30a37aa1360101cb3fbab", IsZip: false,
         MainFile: "diffusion_pytorch_model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
 
+    /// <summary>Gets the Stable Diffusion 2.1 VAE weights, part of PiSA-SR.</summary>
     public static AiModel Sd21Vae { get; } = new(
         "sd21-vae", "Stable Diffusion 2.1 – Bildkodierer (VAE)", "Teil von PiSA-SR",
         "Übersetzt zwischen Bild und dem inneren Raum von Stable Diffusion. Wird mit PiSA-SR geladen.",
@@ -327,6 +364,7 @@ public static class AiModelCatalog
         "3e4c08995484ee61270175e9e7a072b66a6e4eeb5f0c266667fe1f45b90daf9a", IsZip: false,
         MainFile: "diffusion_pytorch_model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
 
+    /// <summary>Gets the Stable Diffusion 2.1 text encoder weights, part of PiSA-SR (needed only while converting).</summary>
     public static AiModel Sd21Text { get; } = new(
         "sd21-text", "Stable Diffusion 2.1 – Text-Encoder", "Teil von PiSA-SR",
         "Wird nur einmal gebraucht: PiSA-SR rechnet mit leerer Beschreibung, die die App beim Umwandeln daraus berechnet. " +
@@ -335,8 +373,12 @@ public static class AiModelCatalog
         "681c555376658c81dc273f2d737a2aeb23ddb6d1d8e5b3a7064636d359a22668", IsZip: false,
         MainFile: "model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
 
+    /// <summary>Gets all models of the catalogue.</summary>
     public static IReadOnlyList<AiModel> All { get; } =
         [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, UltraSharpV2, PiSaSr, Sd21Unet, Sd21Vae, Sd21Text, FaceDetector, FaceParser];
 
+    /// <summary>Looks up a model by its ID.</summary>
+    /// <param name="id">Model ID (<see cref="AiModel.Id"/>), compared case-sensitively.</param>
+    /// <returns>The model, or null if the catalogue has no model with this ID.</returns>
     public static AiModel? Find(string id) => All.FirstOrDefault(m => m.Id == id);
 }

@@ -3,46 +3,59 @@ using ImageMagick;
 
 namespace ImageConverter.Core.Ai;
 
-/// <summary>Ein Pinselstrich über das, was verschwinden soll — Punkte und Radius in Bildpixeln.</summary>
+/// <summary>A brush stroke over something that is to be removed.</summary>
+/// <param name="Points">Points of the stroke in image pixels; a single point marks a round spot.</param>
+/// <param name="Radius">Brush radius in image pixels.</param>
 public sealed record BrushStroke(IReadOnlyList<(double X, double Y)> Points, double Radius);
 
 /// <summary>
-/// Ein Füllmodell (LaMa, MI-GAN): bekommt einen quadratischen Ausschnitt und eine Maske und malt die markierte
-/// Fläche passend zur Umgebung neu.
+/// An inpainting model (LaMa, MI-GAN): receives a square crop and a mask and repaints the marked area to match
+/// its surroundings.
 /// </summary>
 public interface IInpaintModel
 {
-    /// <summary>Kantenlänge, mit der das Modell rechnet (512).</summary>
+    /// <summary>Gets the edge length the model works with in pixels (512 for the supported models).</summary>
     int Size { get; }
 
-    /// <param name="rgb">Ausschnitt, R-, G-, B-Ebene hintereinander, sRGB 0 … 1, <see cref="Size"/>².</param>
-    /// <param name="mask">1 = neu malen, 0 = bleibt; <see cref="Size"/>².</param>
-    /// <returns>Ergebnis im selben Aufbau wie <paramref name="rgb"/>.</returns>
+    /// <summary>Repaints the masked area of one crop.</summary>
+    /// <param name="rgb">Crop as R, G and B planes one after another, sRGB 0 … 1, <see cref="Size"/>² values per plane.</param>
+    /// <param name="mask">1 = repaint, 0 = keep; <see cref="Size"/>² values.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <returns>Result in the same layout as <paramref name="rgb"/>.</returns>
     float[] Run(float[] rgb, float[] mask, CancellationToken ct);
 }
 
 /// <summary>
-/// Wasserzeichen, Schrift oder Störendes entfernen: Die markierten Stellen werden in Ausschnitten um die Markierung
-/// vom Modell neu gemalt und weich ins Bild gesetzt. Alles außerhalb der Markierung bleibt Pixel für Pixel, wie es war
-/// (volle Tiefe, Profile, Alpha).
+/// Removes watermarks, text or distracting objects: the model repaints the marked areas in crops around the marking,
+/// and the result is blended softly into the image. Everything outside the marking stays exactly as it was, pixel by
+/// pixel (full bit depth, profiles, alpha).
 /// </summary>
 /// <remarks>
-/// Die Modelle rechnen mit 512 × 512. Ein Ausschnitt ist etwa doppelt so groß wie die Markierung darin — so sieht das
-/// Modell genug Umgebung. Lange, schmale Markierungen (Schriftzug am Rand) werden in Stücke geteilt, sonst würde der
-/// Ausschnitt stark verkleinert und die Füllung unscharf; jedes Stück sieht die schon gefüllten davor als Umgebung.
+/// The models work at 512 × 512. A crop is about twice the size of the marking in it, so the model sees enough of
+/// the surroundings. Long, narrow markings (lettering along an edge) are split into pieces; otherwise the crop would
+/// be reduced strongly and the fill would be blurred. Each piece sees the pieces filled before it as surroundings.
+/// See docs/FEHLERGEDAECHTNIS.md, No. 35.
 /// </remarks>
 public static class Inpainter
 {
     /// <summary>
-    /// Um so viele Pixel wird die Markierung vergrößert: Ein knapp gemalter Strich ließe sonst Ränder des Zeichens
-    /// stehen, die das Modell als Umriss weitermalt.
+    /// Returns the number of pixels by which the marking is enlarged; a tightly painted stroke would otherwise leave
+    /// edges of the mark standing, which the model continues as an outline.
     /// </summary>
+    /// <param name="width">Image width in pixels.</param>
+    /// <param name="height">Image height in pixels.</param>
+    /// <returns>The growth in image pixels: 1/400 of the shorter edge, at least 3.</returns>
     public static double Grow(int width, int height) => Math.Max(3, Math.Min(width, height) / 400.0);
 
-    /// <summary>Kleinste Kante eines Ausschnitts — auch ein winziger Fleck braucht etwas Umgebung.</summary>
+    /// <summary>Smallest edge of a crop; even a tiny spot needs some surroundings.</summary>
     private const int MinCrop = 192;
 
-    /// <summary>Maske der Striche (1 = neu malen), um <paramref name="grow"/> vergrößert.</summary>
+    /// <summary>Rasterises the strokes into a mask, enlarged by <paramref name="grow"/>.</summary>
+    /// <param name="strokes">Brush strokes in image pixels.</param>
+    /// <param name="width">Image width in pixels.</param>
+    /// <param name="height">Image height in pixels.</param>
+    /// <param name="grow">Additional radius in image pixels (<see cref="Grow"/>).</param>
+    /// <returns>One byte per pixel, row by row: 1 = repaint, 0 = keep.</returns>
     public static byte[] Rasterize(IReadOnlyList<BrushStroke> strokes, int width, int height, double grow)
     {
         var mask = new byte[width * height];
@@ -56,7 +69,7 @@ public static class Inpainter
         return mask;
     }
 
-    /// <summary>Alle Pixel, deren Mitte höchstens <paramref name="r"/> von der Strecke a–b entfernt ist.</summary>
+    /// <summary>Marks all pixels whose centre lies at most <paramref name="r"/> from the segment a–b.</summary>
     private static void Capsule(byte[] mask, int width, int height, (double X, double Y) a, (double X, double Y) b, double r)
     {
         var x0 = Math.Max(0, (int)Math.Floor(Math.Min(a.X, b.X) - r));
@@ -74,7 +87,7 @@ public static class Inpainter
         }
     }
 
-    /// <summary>Ganzzahliges Rechteck in Bildpixeln.</summary>
+    /// <summary>Integer rectangle in image pixels.</summary>
     internal readonly record struct Box(int X, int Y, int Width, int Height)
     {
         public int Right => X + Width;
@@ -89,8 +102,8 @@ public static class Inpainter
     }
 
     /// <summary>
-    /// Stücke, die nacheinander gefüllt werden: je Strich sein Rahmen, nahe beieinander liegende zusammengefasst,
-    /// lange schmale geteilt (Stück höchstens doppelt so lang wie breit).
+    /// Pieces that are filled one after another: the bounding box of each stroke, boxes close together merged,
+    /// long narrow ones split (each piece at most twice as long as wide).
     /// </summary>
     internal static List<Box> Pieces(IReadOnlyList<BrushStroke> strokes, int width, int height, double grow)
     {
@@ -106,7 +119,7 @@ public static class Inpainter
             if (x1 > x0 && y1 > y0) boxes.Add(new Box(x0, y0, x1 - x0, y1 - y0));
         }
 
-        // Zusammenfassen, was sich berührt oder dicht beieinander liegt (ein Schriftzug aus mehreren Strichen)
+        // Merge what touches or lies close together (lettering made of several strokes)
         for (var merged = true; merged;)
         {
             merged = false;
@@ -139,7 +152,7 @@ public static class Inpainter
         return pieces;
     }
 
-    /// <summary>Ausschnitt um ein Stück: etwa doppelt so groß, möglichst quadratisch, ganz im Bild.</summary>
+    /// <summary>Crop around a piece: about twice as large, as square as possible, entirely inside the image.</summary>
     internal static Box CropAround(Box piece, int width, int height)
     {
         var side = Math.Max(MinCrop, 2 * Math.Max(piece.Width, piece.Height));
@@ -150,15 +163,25 @@ public static class Inpainter
     }
 
     /// <summary>
-    /// Entfernt, was unter den Strichen liegt. Liefert ein neues Bild; <paramref name="source"/> bleibt unverändert.
+    /// Removes what lies under the strokes.
     /// </summary>
+    /// <param name="source">Image to retouch; it is not modified.</param>
+    /// <param name="strokes">Brush strokes in image pixels.</param>
+    /// <param name="model">Inpainting model.</param>
+    /// <param name="progress">Receives the completed fraction, 0…1, after each piece.</param>
+    /// <param name="ct">Cancels the computation; checked before each piece and passed to the model.</param>
+    /// <returns>
+    /// A new image owned by the caller. CMYK images are converted to sRGB, because the model paints in RGB.
+    /// </returns>
+    /// <remarks>The pieces are processed one after another on the calling thread.</remarks>
     public static MagickImage Run(MagickImage source, IReadOnlyList<BrushStroke> strokes, IInpaintModel model,
         IProgress<double>? progress, CancellationToken ct)
     {
         var result = ImageOps.CloneOf(source);
-        if (result.ColorSpace == ColorSpace.CMYK) result.ColorSpace = ColorSpace.sRGB;   // das Modell malt in RGB
-        // Eigene Pixel erzwingen: Eine frische Kopie teilt sie noch mit dem Original — direkt hineingeschrieben wurde
-        // danach alles außerhalb des Ausschnitts schwarz (Magick.NET 14.17.2). „+ 0“ rechnet jeden Pixel einmal durch.
+        if (result.ColorSpace == ColorSpace.CMYK) result.ColorSpace = ColorSpace.sRGB;   // the model paints in RGB
+        // Force a private pixel buffer: a fresh copy still shares its pixels with the original, and writing into it
+        // directly turned everything outside the written area black (observed with Magick.NET 14.17.2). "+ 0" runs
+        // through every pixel once. See docs/FEHLERGEDAECHTNIS.md, No. 35.
         result.Evaluate(Channels.All, EvaluateOperator.Add, 0);
         int width = (int)result.Width, height = (int)result.Height;
         var grow = Grow(width, height);
@@ -175,10 +198,11 @@ public static class Inpainter
     }
 
     /// <summary>
-    /// Einen Ausschnitt füllen. Das Modell bekommt alle noch offenen Stellen darin; übernommen (und danach als
-    /// gefüllt gezählt) wird aber nur der innere Teil — am Rand des Ausschnitts fehlt dem Modell die Umgebung, dort
-    /// entstanden Nähte und schmale Reste, die MI-GAN dann ins Innere weitermalte. Den Rand füllt das Nachbarstück,
-    /// in dessen Innerem er liegt (jedes Stück liegt im inneren Teil seines eigenen Ausschnitts).
+    /// Fills one crop. The model receives all areas in it that are still open, but only the inner part is taken over
+    /// (and then counted as filled): at the edge of the crop the model lacks the surroundings, which produced seams
+    /// and narrow leftovers that MI-GAN then continued into the interior. The edge is filled by the neighbouring
+    /// piece in whose inner part it lies (each piece lies in the inner part of its own crop).
+    /// See docs/FEHLERGEDAECHTNIS.md, No. 35.
     /// </summary>
     private static void FillPiece(MagickImage image, byte[] hole, Box crop, double grow, IInpaintModel model, CancellationToken ct)
     {
@@ -194,7 +218,7 @@ public static class Inpainter
 
         var bgra = ReadBgra(image, crop);
 
-        // Modell-Eingang: Ausschnitt auf size × size, Maske so, dass jeder berührte Pixel als offen gilt
+        // Model input: crop scaled to size × size, mask such that every touched pixel counts as open
         float[] rgb;
         using (var cropImage = Pixels.ToMagick16(bgra, cw, ch, alpha: false))
         using (var small = ImageOps.Resize(cropImage, size, size, ResampleFilter.Lanczos3, gammaCorrect: false))
@@ -209,14 +233,15 @@ public static class Inpainter
             }
             PixelPool.Return(px);
         }
-        // Lanczos verschmiert beim Verkleinern das Zeichen bis zu drei Modellpixel über den Maskenrand — dieser helle
-        // Saum lag sonst ungelöscht neben der Lücke, und LaMa setzte ihn als Band in die Lücke fort
+        // When reducing, Lanczos smears the mark up to three model pixels beyond the mask edge. Without enlarging the
+        // mask, this bright fringe stays uncleared next to the hole and LaMa continues it as a band into the hole.
+        // See docs/FEHLERGEDAECHTNIS.md, No. 35.
         var bleed = (int)Math.Ceiling(3 * Math.Max(1.0, size / (double)Math.Min(cw, ch)));
         var mask = Dilate(ShrinkMask(cropMask, cw, ch, size), size, bleed);
 
         var output = model.Run(rgb, mask, ct);
 
-        // Zurück auf die Ausschnittgröße
+        // Back to the crop size
         var outBgra = new float[size * size * 4];
         for (var i = 0; i < size * size; i++)
         {
@@ -230,7 +255,7 @@ public static class Inpainter
         using (var back = ImageOps.Resize(outImage, cw, ch, ResampleFilter.Lanczos3, gammaCorrect: false))
             filled = Pixels.FromMagick(back);
 
-        // Weich einsetzen: innen ganz, zum Rand der (vergrößerten) Markierung hin auslaufend
+        // Blend softly: fully inside, fading out towards the edge of the (enlarged) marking
         var alpha = Feather(cropMask, cw, ch, Math.Max(1, (int)Math.Round(grow / 2)));
         for (var y = 0; y < ch; y++)
         for (var x = 0; x < cw; x++)
@@ -245,8 +270,8 @@ public static class Inpainter
     }
 
     /// <summary>
-    /// Innerer Teil eines Ausschnitts (in Ausschnittkoordinaten): ein Viertel der kürzeren Seite Abstand zum Rand —
-    /// außer dort, wo der Ausschnitt an den Bildrand stößt (dahinter gibt es keine Umgebung, die fehlen könnte).
+    /// Inner part of a crop (in crop coordinates): a margin of a quarter of the shorter side from the edge, except
+    /// where the crop meets the image border (there are no missing surroundings beyond it).
     /// </summary>
     internal static Box InnerPart(Box crop, int width, int height)
     {
@@ -258,7 +283,7 @@ public static class Inpainter
         return new Box(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
     }
 
-    /// <summary>Maske auf size × size: offen, sobald ein Pixel im Einzugsbereich offen ist (nichts geht verloren).</summary>
+    /// <summary>Reduces the mask to size × size: open as soon as one pixel in the catchment area is open (nothing is lost).</summary>
     internal static float[] ShrinkMask(byte[] mask, int width, int height, int size)
     {
         var result = new float[size * size];
@@ -278,7 +303,7 @@ public static class Inpainter
         return result;
     }
 
-    /// <summary>Maske um <paramref name="r"/> Pixel vergrößern (Quadrat, getrennt waagerecht und senkrecht).</summary>
+    /// <summary>Dilates the mask by <paramref name="r"/> pixels (square, separately horizontal and vertical).</summary>
     internal static float[] Dilate(float[] mask, int size, int r)
     {
         var tmp = new float[mask.Length];
@@ -298,7 +323,7 @@ public static class Inpainter
         return result;
     }
 
-    /// <summary>Deckkraft beim Einsetzen: Maske zweimal mit einem Kasten von ±<paramref name="radius"/> weichgezeichnet.</summary>
+    /// <summary>Opacity for blending: the mask box-blurred twice with a radius of ±<paramref name="radius"/>.</summary>
     internal static float[] Feather(byte[] mask, int width, int height, int radius)
     {
         var a = new float[mask.Length];
@@ -308,7 +333,7 @@ public static class Inpainter
             a = BoxBlur(a, width, height, radius, horizontal: true);
             a = BoxBlur(a, width, height, radius, horizontal: false);
         }
-        // Was markiert war, kommt ganz vom Modell — weich wird nur der Rand nach außen
+        // What was marked comes entirely from the model; only the outer edge is softened
         for (var i = 0; i < a.Length; i++) a[i] = mask[i] == 1 ? 1 : Math.Min(1, a[i] * 2);
         return a;
     }
@@ -345,10 +370,10 @@ public static class Inpainter
         return px;
     }
 
-    /// <summary>Füllung mit ihrer Deckkraft (Alpha im Puffer) in den Ausschnitt mischen; Alpha und weitere Kanäle bleiben.</summary>
+    /// <summary>Blends the fill with its opacity (alpha in the buffer) into the crop; alpha and further channels are kept.</summary>
     /// <remarks>
-    /// Über die Pixel-API, nicht über Composite: Composite veränderte auch Pixel mit Deckkraft 0 um ±2 Stufen
-    /// (Magick.NET 14.17.2) — außerhalb der Markierung soll aber alles exakt bleiben.
+    /// Uses the pixel API, not Composite: Composite also changed pixels with opacity 0 by ±2 levels (observed with
+    /// Magick.NET 14.17.2), but everything outside the marking must stay exact. See docs/FEHLERGEDAECHTNIS.md, No. 35.
     /// </remarks>
     private static void Insert(MagickImage image, Box crop, float[] bgra)
     {

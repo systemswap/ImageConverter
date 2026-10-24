@@ -4,16 +4,22 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>
-/// Text-Encoder von Stable Diffusion 2.1 (OpenCLIP ViT-H, als <c>CLIPTextModel</c> mit 23 Schichten) — nur für die leere
-/// Beschreibung, mit der PiSA-SR rechnet. Einmal gerechnet, in C# direkt (77 Token, keine ONNX-Datei nötig); das Ergebnis
-/// (1 × 77 × 1024) braucht das UNet als feste Schlüssel/Werte der Kreuz-Aufmerksamkeit.
+/// Text encoder of Stable Diffusion 2.1 (OpenCLIP ViT-H, as <c>CLIPTextModel</c> with 23 layers), used only for the empty
+/// prompt that PiSA-SR works with.
 /// </summary>
+/// <remarks>
+/// It is computed once, directly in C# (77 tokens, no ONNX file needed). The UNet uses the result (1 × 77 × 1024) as fixed
+/// keys and values of its cross-attention.
+/// </remarks>
 public static class ClipText
 {
     private const int Tokens = 77, Width = 1024, Heads = 16, Layers = 23;
-    private const int Bos = 49406, Eos = 49407, Pad = 0;   // Tokenizer von SD 2.x: Auffüllen mit „!“ (0)
+    private const int Bos = 49406, Eos = 49407, Pad = 0;   // SD 2.x tokenizer: padding with "!" (0)
 
-    /// <summary>Letzter verborgener Zustand (nach final_layer_norm) für „“: [77 · 1024].</summary>
+    /// <summary>Computes the last hidden state (after final_layer_norm) for the empty prompt "".</summary>
+    /// <param name="weights">Weights of the SD 2.1 text encoder (names starting with <c>text_model.</c>).</param>
+    /// <returns>77 × 1024 values, token by token.</returns>
+    /// <remarks>Runs on the CPU; the matrix products are parallelised per token, the attention per head.</remarks>
     public static float[] EmptyPrompt(SafeTensors weights)
     {
         var ids = new int[Tokens];
@@ -79,7 +85,7 @@ public static class ClipText
         return y;
     }
 
-    /// <summary>Kausale Selbst-Aufmerksamkeit (jedes Token sieht nur sich und frühere), 16 Köpfe zu 64.</summary>
+    /// <summary>Causal self-attention (each token sees only itself and earlier ones), 16 heads of 64.</summary>
     private static float[] SelfAttention(float[] x, SafeTensors w, string prefix)
     {
         var q = Linear(x, Tokens, w, prefix + "q_proj");
@@ -114,7 +120,7 @@ public static class ClipText
         return Linear(o, Tokens, w, prefix + "out_proj");
     }
 
-    /// <summary>Fehlerfunktion auf etwa 1e-15 genau (erfc mit Tschebyschow-Reihe, Numerical Recipes 3. Aufl. 6.2.2).</summary>
+    /// <summary>Error function accurate to about 1e-15 (erfc with Chebyshev series, Numerical Recipes, 3rd ed., section 6.2.2).</summary>
     private static double Erf(double x)
     {
         var z = Math.Abs(x);

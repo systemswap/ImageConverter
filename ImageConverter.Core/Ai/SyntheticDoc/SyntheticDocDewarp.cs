@@ -6,25 +6,46 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai.SyntheticDoc;
 
 /// <summary>
-/// „KI begradigen“ mit SyntheticDoc: das Modell sagt für ein fotografiertes Blatt die Rückabbildung voraus — ein Gitter von
-/// 121 × 177 Stellen des flachen Blatts, je mit der Stelle im Foto. Zwei Läufe: ein grober auf einem Viertel der Pixel
-/// (720 × 512), nur um das Blatt zu finden, dann der genaue (1440 × 1024, so wurde trainiert) auf dem Ausschnitt um das Blatt
-/// (+ 4 % je Seite) — trainiert wurde nur auf solchen Ausschnitten. Das Seitenverhältnis kennt das Modell nicht: es kommt aus
-/// unserem Blattmodell, dem Gitterzeilen und -spalten als Linien dienen (mit DIN-Einrasten), ersatzweise aus den Bogenlängen.
-/// Der genaue Lauf liefert auch die Schattenkarte (wie viel Licht jede Stelle des Blatts bekam); sie kommt gerade gezogen
-/// und verkleinert ins Gitter (<see cref="DewarpShading"/>) und wird beim Rendern herausgerechnet, wenn eingeschaltet.
+/// AI dewarping with SyntheticDoc: the model predicts the backward mapping of a photographed sheet, a grid of 121 × 177
+/// points of the flat sheet, each with its position in the photo.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Two runs: a coarse one on a quarter of the pixels (512 × 720, width × height), only to locate the sheet, then the
+/// accurate one (1024 × 1440, the training resolution) on the crop around the sheet (+ 4 % per side), because the model
+/// was trained only on such crops.
+/// </para>
+/// <para>
+/// The model does not know the aspect ratio of the page. It comes from the app's own sheet model, for which grid rows
+/// and columns serve as lines (with DIN snapping), or else from the arc lengths of the grid.
+/// </para>
+/// <para>
+/// The accurate run also yields the shading map (how much light each point of the sheet received). It is flattened,
+/// reduced and stored with the grid (<see cref="DewarpShading"/>), and removed when rendering if switched on.
+/// </para>
+/// </remarks>
 public static class SyntheticDocDewarp
 {
+    /// <summary>Model input size of the accurate run in pixels and size of the predicted grid in nodes.</summary>
     public const int InputWidth = 1024, InputHeight = 1440, GridWidth = 177, GridHeight = 121;
 
-    /// <summary>Raster der Schattenkarte im Ergebnis: ein Viertel der Eingabe des Modells (Licht ändert sich langsam).</summary>
+    /// <summary>Sample grid of the shading map in the result: a quarter of the model input, because light changes slowly.</summary>
     public const int ShadingWidth = InputWidth / 4, ShadingHeight = InputHeight / 4;
 
     /// <summary>
-    /// Gitter für das Bild (in der Ansicht, volle Auflösung) — relativ, also für jede Größe des Bildes gültig.
-    /// <paramref name="shadowSession"/>: Modell mit Schattenkarte für den genauen Lauf (null: ohne Schatten, nur das Gitter).
+    /// Computes the dewarping grid for an image (as shown, full resolution).
     /// </summary>
+    /// <param name="session">Session of the grid-only model; used for the coarse run and, without a shadow model, also for the accurate run.</param>
+    /// <param name="shadowSession">Model with shading map for the accurate run; null: no shading, grid only.</param>
+    /// <param name="doc">Photo of the sheet; it is not modified.</param>
+    /// <param name="focal35">35 mm equivalent focal length in mm, used by the sheet model for the aspect ratio.</param>
+    /// <param name="removeShadows">Initial state of <see cref="DewarpShading.On"/>, i.e. whether the shading is removed when rendering.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <returns>
+    /// The grid in relative coordinates, valid for any size of the image; with <see cref="DewarpGrid.Shading"/> set if
+    /// <paramref name="shadowSession"/> was given. If the coarse run finds a sheet smaller than 20 % of the width or
+    /// height, the accurate run uses the whole image.
+    /// </returns>
     public static DewarpGrid Run(InferenceSession session, InferenceSession? shadowSession, MagickImage doc, double focal35,
         bool removeShadows, CancellationToken ct)
     {
@@ -32,7 +53,7 @@ public static class SyntheticDocDewarp
         lock (doc) (w, h) = ((int)doc.Width, (int)doc.Height);
         var (first, _) = Predict(session, doc, 0, 0, w, h, InputWidth / 2, InputHeight / 2, false, ct);
 
-        // Blatt eingrenzen: Umriss des Gitters, 4 % Rand
+        // Locate the sheet: outline of the grid, 4 % margin
         double bx0 = double.MaxValue, by0 = double.MaxValue, bx1 = double.MinValue, by1 = double.MinValue;
         for (var j = 0; j < GridHeight; j++)
         for (var i = 0; i < GridWidth; i++)
@@ -44,19 +65,20 @@ public static class SyntheticDocDewarp
         double mx = 0.04 * (bx1 - bx0), my = 0.04 * (by1 - by0);
         int x0 = (int)Math.Max(0, Math.Floor(bx0 - mx)), y0 = (int)Math.Max(0, Math.Floor(by0 - my));
         int x1 = (int)Math.Min(w, Math.Ceiling(bx1 + mx)), y1 = (int)Math.Min(h, Math.Ceiling(by1 + my));
-        if (x1 - x0 < 0.2 * w || y1 - y0 < 0.2 * h) (x0, y0, x1, y1) = (0, 0, w, h);   // nichts Brauchbares gefunden: ganzes Bild
+        if (x1 - x0 < 0.2 * w || y1 - y0 < 0.2 * h) (x0, y0, x1, y1) = (0, 0, w, h);   // nothing usable found: whole image
         var (grid, light) = Predict(shadowSession ?? session, doc, x0, y0, x1, y1, InputWidth, InputHeight, shadowSession is not null, ct);
         var result = ToGrid(grid, w, h, focal35);
         if (light is null) return result;
         return result with { Shading = Straighten(light, result, w, h, x0, y0, x1, y1, removeShadows) };
     }
 
-    /// <summary>Schattenkarte des genauen Laufs (im Ausschnitt, verkleinert) und die Helligkeit der Eingabe.</summary>
+    /// <summary>Shading map of the accurate run (in the crop, reduced, planar RGB) and the mean brightness of the input.</summary>
     private sealed record Light(float[] Rgb, int Width, int Height, double Brightness);
 
     /// <summary>
-    /// Schattenkarte gerade ziehen: für jede Stelle des Rasters über dem Ergebnis die Stelle im Foto (aus dem Gitter), dort
-    /// in der Karte lesen. Stärke wie bei den Autoren: min(1, 0,4 / mittlere Helligkeit) — helle Fotos weniger, damit nichts ausbrennt.
+    /// Flattens the shading map: for each sample of the raster over the result, finds the position in the photo (from the
+    /// grid) and reads the map there. Strength as used by the authors: min(1, 0.4 / mean brightness), less for bright
+    /// photos so that nothing burns out.
     /// </summary>
     private static DewarpShading Straighten(Light light, DewarpGrid grid, int w, int h, int x0, int y0, int x1, int y1, bool on)
     {
@@ -68,7 +90,7 @@ public static class SyntheticDocDewarp
             for (var a = 0; a < ShadingWidth; a++)
             {
                 var (rx, ry) = map.Source(a / (double)(ShadingWidth - 1), b / (double)(ShadingHeight - 1));
-                // Foto (Pixelkanten) → Karte (Pixelmitten)
+                // Photo (pixel edges) → map (pixel centres)
                 var mx = (rx * w - x0) / cw * light.Width - 0.5;
                 var my = (ry * h - y0) / ch * light.Height - 0.5;
                 var k = (b * ShadingWidth + a) * 3;
@@ -91,13 +113,13 @@ public static class SyntheticDocDewarp
     }
 
     /// <summary>
-    /// Ausschnitt des Bildes → Modell (Eingabe inW × inH) → Gitter als Stellen im Bild (Pixelkanten: 0 und w sind die Ränder),
-    /// mit <paramref name="shadow"/> auch die Schattenkarte (0 … 1, je 4 × 4 gemittelt).
+    /// Image crop → model (input inW × inH) → grid as positions in the image (pixel edges: 0 and w are the borders);
+    /// with <paramref name="shadow"/> also the shading map (0 … 1, averaged over 4 × 4 pixels).
     /// </summary>
     private static ((double X, double Y)[,] Grid, Light? Light) Predict(InferenceSession session, MagickImage doc,
         int x0, int y0, int x1, int y1, int inW, int inH, bool shadow, CancellationToken ct)
     {
-        // Ausschnitt, verkleinert mit Dreiecksfilter (wie das Verkleinern mit Vorfilter beim Training)
+        // Crop, reduced with a triangle filter (like the prefiltered downsampling used in training)
         using var crop = ImageOps.CloneOf(doc);
         crop.Crop(new MagickGeometry(x0, y0, (uint)(x1 - x0), (uint)(y1 - y0)));
         crop.ResetPage();
@@ -111,7 +133,7 @@ public static class SyntheticDocDewarp
                 for (var i = 0; i < inW; i++)
                 {
                     var k = (j * inW + i) * 4;
-                    t[j * inW + i] = px[k + 2] * 2 - 1;                     // R, auf −1 … 1
+                    t[j * inW + i] = px[k + 2] * 2 - 1;                     // R, scaled to −1 … 1
                     t[(inH + j) * inW + i] = px[k + 1] * 2 - 1;             // G
                     t[(2 * inH + j) * inW + i] = px[k] * 2 - 1;             // B
                 }
@@ -129,7 +151,7 @@ public static class SyntheticDocDewarp
         Light? light = null;
         if (shadow)
         {
-            // −1 … 1 → 0 … 1, je 4 × 4 Pixel gemittelt (das Raster im Ergebnis ist ohnehin ein Viertel so fein)
+            // −1 … 1 → 0 … 1, averaged over 4 × 4 pixels (the raster in the result is a quarter as fine anyway)
             int lw = inW / 4, lh = inH / 4;
             var raw = outputs[1];
             var light4 = new float[3 * lw * lh];
@@ -154,7 +176,7 @@ public static class SyntheticDocDewarp
         for (var i = 0; i < GridWidth; i++)
         {
             double vx = bm[j * GridWidth + i], vy = bm[GridHeight * GridWidth + j * GridWidth + i];
-            // wie beim Modell angewendet (align_corners = True): ±1 sind die Mitten der äußersten Pixel des Ausschnitts
+            // As applied with the model (align_corners = True): ±1 are the centres of the outermost pixels of the crop
             grid[j, i] = (x0 + 0.5 + (vx + 1) / 2 * (cw - 1), y0 + 0.5 + (vy + 1) / 2 * (ch - 1));
         }
         return (grid, light);
@@ -163,7 +185,7 @@ public static class SyntheticDocDewarp
     private static DewarpGrid ToGrid((double X, double Y)[,] grid, int w, int h, double focal35)
     {
         static double Dist((double X, double Y) a, (double X, double Y) b) => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
-        // Größe: die längste Gitterzeile in Bildpixeln — am besten abgetasteten Rand ein Ergebnispixel je Bildpixel
+        // Size: the longest grid row in image pixels, so that the best-sampled edge gets one result pixel per image pixel
         double rows = 0, cols = 0, longest = 0;
         for (var j = 0; j < GridHeight; j++)
         {
@@ -174,9 +196,9 @@ public static class SyntheticDocDewarp
         }
         for (var i = 0; i < GridWidth; i++)
         for (var j = 0; j + 1 < GridHeight; j++) cols += Dist(grid[j, i], grid[j + 1, i]);
-        var arcAspect = (cols / GridWidth) / Math.Max(1e-9, rows / GridHeight);   // Höhe / Breite, wie das Foto es zeigt
+        var arcAspect = (cols / GridWidth) / Math.Max(1e-9, rows / GridHeight);   // height / width as the photo shows it
 
-        // Seitenverhältnis aus dem Blattmodell: 9 Gitterzeilen und 4 -spalten als Linien, die äußeren gelten als Blattkanten
+        // Aspect ratio from the sheet model: 9 grid rows and 4 grid columns as lines; the outer ones count as sheet edges
         var lines = new List<WarpLine>();
         foreach (var j in Enumerable.Range(0, 9).Select(k => (int)Math.Round(k * (GridHeight - 1) / 8.0)))
             lines.Add(new WarpLine(WarpLineKind.Horizontal,

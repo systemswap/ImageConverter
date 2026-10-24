@@ -3,37 +3,56 @@ using ImageConverter.Core.Ai.Onnx;
 namespace ImageConverter.Core.Ai.SyntheticDoc;
 
 /// <summary>
-/// SyntheticDoc-Checkpoint → ONNX, ohne Python: baut das Netz aus <c>extern/SyntheticDoc/training/model.py</c> (UVDocNet mit
-/// Schatten-Decoder) Schicht für Schicht nach und setzt die Gewichte ein. BatchNorm wird in die Faltung davor gerechnet.
-/// Unterschiede zum Python-Export: die Eingabegröße ist offen (Höhe und Breite durch 16 teilbar; trainiert wurde 1440 ×
-/// 1024, ein grober Lauf geht auch mit 720 × 512), und die Schattenkarte kommt in Eingabegröße heraus.
-/// <para>Ausgänge: <c>bm_map</c> (1 × 2 × Zeilen × Spalten, −1 … 1, align_corners = True) und <c>shadow_map</c> (1 × 3 × H × W,
-/// −1 … 1; Beleuchtung = Wert · 0,5 + 0,5).</para>
+/// Converts a SyntheticDoc checkpoint to ONNX without Python.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Rebuilds the network from <c>extern/SyntheticDoc/training/model.py</c> (UVDocNet with shadow decoder) layer by layer
+/// and inserts the weights. BatchNorm is folded into the preceding convolution. Differences from the Python export: the
+/// input size is dynamic (height and width divisible by 16; trained at 1440 × 1024 height × width, a coarse run also
+/// works at 720 × 512), and the shading map is output at the input size.
+/// </para>
+/// <para>
+/// Outputs: <c>bm_map</c> (1 × 2 × rows × columns, −1 … 1, align_corners = True) and <c>shadow_map</c> (1 × 3 × H × W,
+/// −1 … 1; illumination = value · 0.5 + 0.5). See docs/KI-BEGRADIGEN.md.
+/// </para>
+/// </remarks>
 public static class SyntheticDocNet
 {
     private const float BnEps = 1e-5f;
 
-    /// <summary>Gitter der Rückabbildung laut Checkpoint (Zeilen, Spalten), sonst 121 × 177.</summary>
+    /// <summary>Returns the grid size of the backward mapping according to the checkpoint.</summary>
+    /// <param name="ckpt">Loaded checkpoint.</param>
+    /// <returns>(rows, columns) from <c>hyper_parameters/data/bm_out_size</c>, otherwise 121 × 177.</returns>
     public static (int Rows, int Cols) GridSize(TorchCheckpoint ckpt) =>
         ckpt.Get("hyper_parameters/data/bm_out_size") is List<object?> { Count: 2 } l
             ? (Convert.ToInt32(l[0]), Convert.ToInt32(l[1]))
             : (121, 177);
 
-    /// <summary>Trainierte Eingabegröße (Höhe, Breite) laut Checkpoint, sonst 1440 × 1024.</summary>
+    /// <summary>Returns the trained input size according to the checkpoint.</summary>
+    /// <param name="ckpt">Loaded checkpoint.</param>
+    /// <returns>(height, width) from <c>hyper_parameters/data/image_size</c>, otherwise 1440 × 1024.</returns>
     public static (int Height, int Width) TrainedInput(TorchCheckpoint ckpt) =>
         ckpt.Get("hyper_parameters/data/image_size") is List<object?> { Count: 2 } l
             ? (Convert.ToInt32(l[0]), Convert.ToInt32(l[1]))
             : (1440, 1024);
 
-    /// <summary>Checkpoint-Datei → ONNX-Datei (Bytes).</summary>
+    /// <summary>Converts a checkpoint file into an ONNX model with grid and shading map.</summary>
+    /// <param name="checkpointPath">Path of the checkpoint.</param>
+    /// <returns>The encoded ONNX model.</returns>
     public static byte[] ToOnnx(string checkpointPath) => ToOnnx(TorchCheckpoint.Load(checkpointPath));
 
+    /// <summary>Converts a loaded checkpoint into an ONNX model.</summary>
+    /// <param name="ckpt">Loaded checkpoint (Lightning checkpoint or plain state_dict).</param>
+    /// <param name="shadow">Whether to include the <c>shadow_map</c> output; ignored if the checkpoint has no shadow decoder.</param>
+    /// <param name="fixedInput">Fixed input size (height, width), or null for a dynamic size.</param>
+    /// <returns>The encoded ONNX model (weights embedded, float32).</returns>
+    /// <exception cref="InvalidDataException">The checkpoint has no weights or lacks a weight the network needs.</exception>
     public static byte[] ToOnnx(TorchCheckpoint ckpt, bool shadow = true, (int Height, int Width)? fixedInput = null)
     {
         var sd = ckpt.StateDict;
         if (sd.Count == 0) throw new InvalidDataException("Im Checkpoint sind keine Gewichte.");
-        // Lightning legt das Netz unter „model.“ ab, ein reiner state_dict nicht
+        // Lightning stores the network under "model.", a plain state_dict does not
         var prefix = sd.Keys.Any(k => k.StartsWith("model.", StringComparison.Ordinal)) ? "model." : "";
         TorchTensor T(string name) => sd.TryGetValue(prefix + name, out var t) ? t : throw new InvalidDataException($"Gewicht {name} fehlt im Checkpoint.");
         bool Has(string name) => sd.ContainsKey(prefix + name);
@@ -43,7 +62,7 @@ public static class SyntheticDocNet
         object ih = fixedInput?.Height ?? (object)"height", iw = fixedInput?.Width ?? (object)"width";
         var x = g.Input("image", 1, 3, ih, iw);
 
-        // Faltung (+ BatchNorm gefaltet); Polster gespiegelt oder mit Nullen
+        // Convolution (+ folded BatchNorm); padding reflected or with zeros
         string Conv(string input, string conv, string? bn, int stride = 1, int dilation = 1, bool reflect = false)
         {
             var w = T(conv + ".weight");
@@ -73,7 +92,7 @@ public static class SyntheticDocNet
         }
         string Relu(string v) => g.Node("Relu", [v]);
 
-        // Größe wie ein anderer Wert (Höhe, Breite), Kanäle wie der eigene
+        // Size like another value (height, width), channels like its own
         string ResizeLike(string v, string like)
         {
             var sizes = g.Node("Concat", [Slice(g.Node("Shape", [v]), 0, 2), Slice(g.Node("Shape", [like]), 2, 4)], ("axis", 0L));
@@ -81,7 +100,7 @@ public static class SyntheticDocNet
         }
         string Slice(string v, long from, long to) => g.Node("Slice", [v, g.Ints(from), g.Ints(to), g.Ints(0)]);
 
-        // Restblock (ResidualBlockWithDilation): oberster mit gewöhnlichen Faltungen (Schritt), die übrigen gedehnt (3)
+        // Residual block (ResidualBlockWithDilation): the first with ordinary convolutions (stride), the others dilated (3)
         string Block(string input, string p, int stride, bool top)
         {
             var c1 = top ? p + ".conv1" : p + ".conv1.0";
@@ -99,14 +118,14 @@ public static class SyntheticDocNet
         }
         int Count(string p) => Enumerable.Range(0, 64).TakeWhile(b => Has($"{p}.{b}.bn1.weight")).Count();
 
-        // Encoder mit Abzweigen
+        // Encoder with skip connections
         var s1 = Relu(Conv(x, "enc_s1.0", "enc_s1.1", 2));
         var s2 = Relu(Conv(s1, "enc_s2.0", "enc_s2.1", 2));
         var s3 = Layer(s2, "enc_s3", Count("enc_s3"), 1);
         var s4 = Layer(s3, "enc_s4", Count("enc_s4"), 2);
         var feat = Layer(s4, "enc_s5", Count("enc_s5"), 2);
 
-        // Brücke: sechs gedehnte Zweige, verbunden und auf die Kanäle zurück
+        // Bridge: six dilated branches, concatenated and reduced back to the channel count
         string Dil(string v, string p, int d) => Relu(Conv(v, p + ".0", p + ".1", 1, d));
         var b1 = Dil(feat, "bridge_1", 1);
         var b2 = Dil(feat, "bridge_2", 2);
@@ -117,7 +136,7 @@ public static class SyntheticDocNet
         var b6 = Chain("bridge_6", [18, 12, 6]);
         var bridge = Relu(Conv(g.Node("Concat", [b1, b2, b3, b4, b5, b6], ("axis", 1L)), "bridge_concat.0", "bridge_concat.1"));
 
-        // Rückabbildung: Kopf, auf 121 × 177 (bzw. 31 × 45 über jeden vierten Knoten von 121 × 177)
+        // Backward mapping: head, resized to 121 × 177 (or 31 × 45 by taking every fourth node of 121 × 177)
         var h = Conv(bridge, "bm_head.0", "bm_head.1", reflect: true);
         h = g.Node("PRelu", [h, g.Weight(T("bm_head.2.weight").Data, 1, 1, 1)]);
         h = g.Node("Tanh", [Conv(h, "bm_head.3", null, reflect: true)]);
@@ -127,7 +146,7 @@ public static class SyntheticDocNet
             bm = g.Node("Slice", [bm, g.Ints(0, 0), g.Ints(121, 177), g.Ints(2, 3), g.Ints(4, 4)]);
         g.Output(bm, "bm_map", 1, 2, rows, cols);
 
-        // Schattenkarte: U-Net-Decoder über die Abzweige, am Ende auf Eingabegröße
+        // Shading map: U-Net decoder over the skip connections, finally resized to the input size
         if (shadow && Has("shd_out.weight"))
         {
             string Dec(string v, string skip, string p, bool resize)

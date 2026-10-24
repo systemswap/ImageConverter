@@ -5,23 +5,30 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai;
 
 /// <summary>
-/// Ort der Modelle auf der Platte: Ordner „KI-Modelle“ neben der .exe bzw. neben der
-/// AppImage-Datei. Ist dort kein Schreiben möglich (z. B. unter C:\Programme), weicht
-/// der Download ins Benutzerverzeichnis aus; gesucht wird an beiden Stellen.
+/// Location of the AI models on disk.
 /// </summary>
+/// <remarks>
+/// By default the folder <c>KI-Modelle</c> next to the .exe or next to the AppImage file. If that folder is not writable
+/// (for example under C:\Program Files), downloads go to the user's local application data folder instead; models are
+/// looked up in both places. Each model lives in a subfolder named after <see cref="AiModel.Id"/>.
+/// </remarks>
 public sealed class AiModelStore
 {
+    /// <summary>Name of the model folder.</summary>
     public const string FolderName = "KI-Modelle";
 
-    /// <param name="folders">Suchorte, der erste beschreibbare nimmt Downloads auf.</param>
+    /// <summary>Creates a store with the given search locations.</summary>
+    /// <param name="folders">Search locations in order of preference; the first writable one receives downloads. Must not be empty.</param>
     public AiModelStore(IReadOnlyList<string> folders) => Folders = folders;
 
+    /// <summary>Gets the search locations in order of preference.</summary>
     public IReadOnlyList<string> Folders { get; }
 
-    /// <summary>Standard: neben dem Programm, ersatzweise im Benutzerverzeichnis.</summary>
+    /// <summary>Creates the default store: next to the program, with the local application data folder as fallback.</summary>
+    /// <returns>A store with these two search locations.</returns>
     public static AiModelStore CreateDefault()
     {
-        // Bei einer AppImage neben der .AppImage-Datei, nicht im schreibgeschützten Inneren.
+        // For an AppImage next to the .AppImage file, not inside the read-only image.
         var baseDir = AppLocations.ProgramFolder;
 
         var fallback = Path.Combine(
@@ -30,16 +37,25 @@ public sealed class AiModelStore
         return new AiModelStore([Path.Combine(baseDir, FolderName), fallback]);
     }
 
-    /// <summary>Wohin heruntergeladen wird: der erste Ordner, in den sich schreiben lässt.</summary>
+    /// <summary>
+    /// Gets the download location: the first folder that is writable, otherwise the last one.
+    /// </summary>
+    /// <remarks>Each access probes the folders by creating them and writing and deleting a test file.</remarks>
     public string DownloadFolder => Folders.FirstOrDefault(IsWritable) ?? Folders[^1];
 
-    /// <summary>Wo das Modell liegt — oder null, wenn es (noch) nicht da ist.</summary>
+    /// <summary>Returns the path of the model's main file.</summary>
+    /// <param name="model">Model to look up.</param>
+    /// <returns>The path of <see cref="AiModel.MainFile"/> in the first search location that has it, or null if the model is not installed.</returns>
     public string? PathOf(AiModel model) =>
         Folders.Select(f => Path.Combine(f, model.Id, model.MainFile)).FirstOrDefault(File.Exists);
 
+    /// <summary>Returns whether the model is installed in one of the search locations.</summary>
+    /// <param name="model">Model to look up.</param>
+    /// <returns>True if <see cref="PathOf"/> finds the main file.</returns>
     public bool IsInstalled(AiModel model) => PathOf(model) is not null;
 
-    /// <summary>Entfernt das Modell überall, wo es liegt.</summary>
+    /// <summary>Deletes the model folder from every search location.</summary>
+    /// <param name="model">Model to delete; models it requires are not deleted.</param>
     public void Delete(AiModel model)
     {
         foreach (var folder in Folders)
@@ -50,10 +66,19 @@ public sealed class AiModelStore
     }
 
     /// <summary>
-    /// Lädt ein Modell herunter. Geschrieben wird erst in eine „.part“-Datei; nur bei
-    /// passender Prüfsumme wird sie zum Modell. Abbruch oder Fehler hinterlassen nichts.
+    /// Downloads a model into <see cref="DownloadFolder"/>.
     /// </summary>
-    /// <param name="progress">Anteil 0…1.</param>
+    /// <remarks>
+    /// The data is written to a ".part" file first; it becomes the model only if the checksum matches. On cancellation
+    /// or error the ".part" file is deleted and an empty model folder is removed, so no half-installed model remains.
+    /// Models listed in <see cref="AiModel.Requires"/> are not downloaded by this method.
+    /// </remarks>
+    /// <param name="model">Model to download.</param>
+    /// <param name="http">HTTP client used for the download; it stays owned by the caller.</param>
+    /// <param name="progress">Receives the downloaded fraction, 0…1.</param>
+    /// <param name="ct">Cancels the download.</param>
+    /// <returns>A task that completes when the model is installed.</returns>
+    /// <exception cref="InvalidDataException">The checksum of the downloaded file does not match <see cref="AiModel.Sha256"/>.</exception>
     public async Task DownloadAsync(AiModel model, HttpClient http, IProgress<double>? progress, CancellationToken ct)
     {
         var dir = Path.Combine(DownloadFolder, model.Id);
@@ -95,16 +120,16 @@ public sealed class AiModelStore
         finally
         {
             if (File.Exists(part)) File.Delete(part);
-            // Leerer Ordner nach Abbruch soll nicht als „halbes Modell“ liegen bleiben
+            // An empty folder after cancellation must not remain as a "half model"
             if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
                 Directory.Delete(dir);
         }
     }
 
     /// <summary>
-    /// Entpackt nur Dateien, ohne Unterordner — Pfade aus dem Archiv werden nicht
-    /// übernommen (kein Schreiben außerhalb des Modellordners). Das Hauptmodell
-    /// kommt zuletzt, damit es erst „vorhanden“ ist, wenn alles da ist.
+    /// Extracts only files, without subfolders. Paths from the archive are discarded, so nothing can be written
+    /// outside the model folder. The .onnx files come last, so that the main model counts as installed only when
+    /// everything else is in place.
     /// </summary>
     private static void ExtractFlat(string zipPath, string dir)
     {

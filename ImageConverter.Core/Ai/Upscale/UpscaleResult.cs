@@ -4,27 +4,36 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai.Upscale;
 
-/// <summary>Rechteck in Pixeln des Originals (das Ergebnis ist <see cref="UpscaleResult.Factor"/>-mal so groß).</summary>
+/// <summary>Rectangle in pixels of the original (the result is <see cref="UpscaleResult.Factor"/> times as large).</summary>
+/// <param name="X">Left edge.</param>
+/// <param name="Y">Top edge.</param>
+/// <param name="Width">Width.</param>
+/// <param name="Height">Height.</param>
 public readonly record struct SourceRect(int X, int Y, int Width, int Height)
 {
+    /// <summary>Gets whether the rectangle has no area.</summary>
     public bool IsEmpty => Width <= 0 || Height <= 0;
 }
 
 /// <summary>
-/// Ergebnis eines Upscalers in vierfacher Größe, roh (so wie das Modell es liefert), dazu das Original. Treue und Details
-/// werden erst beim Zusammensetzen eingerechnet (<see cref="Compose"/>, <see cref="ComposeRegion"/>) — die Regler lassen
-/// sich ändern, ohne das Modell neu zu rechnen. Ein Alphakanal kommt nie aus dem Modell, sondern mit Lanczos aus dem
-/// Original. Während der Rechnung ist das Ergebnis schon da und füllt sich; fertige Flächen meldet der Lauf einzeln.
+/// Result of an upscaler at four times the size, raw (as the model delivers it), together with the original.
 /// </summary>
+/// <remarks>
+/// Fidelity and details are applied only when composing (<see cref="Compose"/>, <see cref="ComposeRegion"/>), so the
+/// controls can be changed without running the model again. An alpha channel never comes from the model but is
+/// enlarged from the original with Lanczos. During the run the result already exists and fills up; the run reports
+/// finished areas one by one.
+/// </remarks>
 public sealed class UpscaleResult
 {
+    /// <summary>Magnification of every upscaler.</summary>
     public const int Factor = 4;
 
-    private readonly ushort[] _source;   // Original, verschachtelt (RGB oder RGBA)
+    private readonly ushort[] _source;   // original, interleaved (RGB or RGBA)
     private readonly int _channels;
-    private readonly MagickImage _meta;  // Profile und Auflösung (1 × 1 Pixel)
+    private readonly MagickImage _meta;  // profiles and density (1 × 1 pixel)
 
-    // Farbangleich je Kanal (PiSA-SR: AdaIN), beim Lesen des Roh-Ergebnisses angewandt: v · Gain + Offset
+    // Colour matching per channel (PiSA-SR: AdaIN), applied when reading the raw result: v · gain + offset
     private readonly float[] _gain = [1, 1, 1];
     private readonly float[] _offset = [0, 0, 0];
 
@@ -42,32 +51,50 @@ public sealed class UpscaleResult
         }
     }
 
+    /// <summary>Gets the width of the original in pixels.</summary>
     public int SourceWidth { get; }
+
+    /// <summary>Gets the height of the original in pixels.</summary>
     public int SourceHeight { get; }
+
+    /// <summary>Gets the width of the result in pixels.</summary>
     public int Width => SourceWidth * Factor;
+
+    /// <summary>Gets the height of the result in pixels.</summary>
     public int Height => SourceHeight * Factor;
+
+    /// <summary>Gets whether the original, and therefore the composed result, has an alpha channel.</summary>
     public bool HasAlpha => _channels == 4;
 
-    /// <summary>Roh-Ergebnis des Modells (RGB, ×4, 16 Bit), wird vom Lauf gefüllt.</summary>
+    /// <summary>Raw model result (RGB, ×4, 16 bit), filled by the run.</summary>
     internal ushort[] Raw { get; }
 
     internal void SetColorFix(int channel, float gain, float offset) => (_gain[channel], _offset[channel]) = (gain, offset);
 
     /// <summary>
-    /// Speicherbedarf grob in Bytes für ein Original dieser Größe: Roh-Ergebnis (RGB, 16 Bit), zusammengesetztes Ergebnis
-    /// (bis RGBA) und das Bild daraus (ImageMagick, 16 Bit) — je in vierfacher Kantenlänge.
+    /// Returns the approximate memory need for an original of this size: raw result (RGB, 16 bit), composed result
+    /// (up to RGBA) and the image made from it (ImageMagick, 16 bit), each at four times the edge length.
     /// </summary>
+    /// <param name="sourceWidth">Width of the original in pixels.</param>
+    /// <param name="sourceHeight">Height of the original in pixels.</param>
+    /// <returns>The estimate in bytes.</returns>
     public static long MemoryNeed(int sourceWidth, int sourceHeight) => (long)sourceWidth * sourceHeight * Factor * Factor * (6 + 8 + 8);
 
-    /// <summary>Fertiges Bild in vierfacher Größe.</summary>
-    /// <param name="fidelity">0 … 1: Treue-Sicherung (1 = verkleinert ergibt das Ergebnis wieder das Original).</param>
-    /// <param name="details">0 … 1: Anteil der KI gegenüber einfachem Vergrößern (Lanczos); 1 = nur KI.</param>
+    /// <summary>Composes the finished image at four times the size.</summary>
+    /// <param name="fidelity">0 … 1: fidelity constraint (1 = the result, reduced, gives the original again).</param>
+    /// <param name="details">0 … 1: share of the AI against plain enlargement (Lanczos); 1 = AI only.</param>
+    /// <param name="ct">Cancels the composition.</param>
+    /// <returns>
+    /// A new image owned by the caller, with the profiles of the original and the density multiplied by
+    /// <see cref="Factor"/> (the print size stays the same).
+    /// </returns>
     public MagickImage Compose(double fidelity, double details, CancellationToken ct = default)
     {
-        // In Bändern direkt ins Bild statt erst ein Feld in voller Größe (bei 192 MP 1,15 GB) und dann kopieren. Die Bänder
-        // sind ein Vielfaches der Kacheln von ComposeRegion (128 Quellzeilen) und lesen den Rand für die Treue aus dem
-        // ganzen Ergebnis (known) — jedes Pixel wird genau so gerechnet wie in einem Stück.
-        // Mit Alphakanal in einem Stück: Extent verrechnet ganz durchsichtige Pixel mit dem Hintergrund (Farbe wird 0)
+        // In bands directly into the image instead of a full-size array first (1.15 GB at 192 MP) and a copy afterwards. The
+        // bands are a multiple of the ComposeRegion tiles (128 source rows) and read the margin for the fidelity constraint
+        // from the whole result (known), so every pixel is computed exactly as in one piece.
+        // With an alpha channel in one piece: Extent combines fully transparent pixels with the background (the colour
+        // becomes 0). See docs/FEHLERGEDAECHTNIS.md, No. 75.
         var map = HasAlpha ? "RGBA" : "RGB";
         var all = new SourceRect(0, 0, SourceWidth, SourceHeight);
         var first = HasAlpha ? SourceHeight : Math.Min(BandRows, SourceHeight);
@@ -75,7 +102,7 @@ public sealed class UpscaleResult
             first * Factor, map);
         if (first < SourceHeight)
         {
-            // auf volle Höhe bringen (unten leer), dann die übrigen Bänder einsetzen
+            // Extend to full height (empty at the bottom), then insert the remaining bands
             image.Extent((uint)Width, (uint)Height, Gravity.North, HasAlpha ? MagickColors.Transparent : MagickColors.Black);
             using var pixels = image.GetPixelsUnsafe();
             for (var y = first; y < SourceHeight; y += BandRows)
@@ -91,14 +118,23 @@ public sealed class UpscaleResult
         return image;
     }
 
-    /// <summary>Quellzeilen je Band beim Zusammensetzen — ein Vielfaches der Kacheln (128) von <see cref="ComposeRegion"/>.</summary>
+    /// <summary>Source rows per band when composing; a multiple of the tiles (128) of <see cref="ComposeRegion"/>.</summary>
     private const int BandRows = 512;
 
     /// <summary>
-    /// Ein Ausschnitt fertig zusammengesetzt: Pixel (verschachtelt RGB bzw. RGBA, 16 Bit) für das Rechteck ×4.
-    /// Für die Treue-Sicherung wird ein Rand um den Ausschnitt mitgelesen — höchstens bis <paramref name="known"/>: während
-    /// der Rechnung ist das Roh-Ergebnis daneben noch leer (sonst helle Linien an den Kachelrändern).
+    /// Composes one region.
     /// </summary>
+    /// <remarks>
+    /// For the fidelity constraint a margin around the region is read as well, but at most up to <paramref name="known"/>:
+    /// during the run the raw result next to it is still empty, which would cause bright lines at the tile edges.
+    /// See docs/FEHLERGEDAECHTNIS.md, No. 61. Tiles of 128 source pixels are computed in parallel.
+    /// </remarks>
+    /// <param name="region">Region in pixels of the original.</param>
+    /// <param name="fidelity">0 … 1: fidelity constraint.</param>
+    /// <param name="details">0 … 1: share of the AI against plain enlargement (Lanczos).</param>
+    /// <param name="ct">Cancels the composition.</param>
+    /// <param name="known">Area whose raw result is finished; null = the whole image.</param>
+    /// <returns>Pixels (interleaved RGB or RGBA, 16 bit) for the region ×4, row by row.</returns>
     public ushort[] ComposeRegion(SourceRect region, double fidelity, double details, CancellationToken ct = default,
         SourceRect? known = null)
     {
@@ -108,7 +144,7 @@ public sealed class UpscaleResult
         var d = (float)Math.Clamp(details, 0, 1);
         int regionW = region.Width * Factor, regionH = region.Height * Factor;
         var output = new ushort[(long)regionW * regionH * ch];
-        const int core = 128, margin = 16;   // in Quellpixeln; Rückprojektion (3 Runden) reicht ca. 15 Pixel weit
+        const int core = 128, margin = 16;   // in source pixels; the back projection (3 rounds) reaches about 15 pixels
         var tilesX = (region.Width + core - 1) / core;
         var tilesY = (region.Height + core - 1) / core;
         float Src(int c, int x, int y) =>

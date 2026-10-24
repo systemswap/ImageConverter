@@ -5,32 +5,36 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Ai;
 
 /// <summary>
-/// Gesichter, mit voller Wirkung verbessert, aber noch nicht ins Bild gemischt (<see cref="AiFaces.Run"/>).
-/// Mischt Stärke, Hautstruktur, Falten und Korn beliebig oft neu — für die Vorschau auf einer verkleinerten
-/// Fassung (schnell genug für jede Reglerbewegung), beim Übernehmen in voller Größe.
+/// Faces restored at full strength but not yet blended into the image (<see cref="AiFaces.Run"/>).
 /// </summary>
+/// <remarks>
+/// Strength, skin texture, folds and grain can be blended again as often as needed: for the preview on a
+/// reduced copy (fast enough for every slider movement), when applying at full size. The reduced copy
+/// and the grain patches are cached; the grain cache is guarded by a lock, the preview cache is not.
+/// </remarks>
 public sealed class FaceRun : IAiRun
 {
     /// <summary>
-    /// Ein verbessertes Gesicht: Ausschnitt vorher, Ergebnis des Modells, dessen grobe Fassung (RGB planar 0…1),
-    /// was das Modell an Falten geglättet hat (Helligkeit), wo Falten zurückdürfen (0…1) und welcher Anteil Korn
-    /// bis zum Foto fehlt (<see cref="FaceDetails.GrainGain"/>).
+    /// One restored face: crop before the model, model result and its coarse version (planar RGB 0…1),
+    /// image → crop transform and crop size, the folds the model smoothed away (brightness), where folds may
+    /// come back (0…1), what stays from the model (eyes, brows, lips, teeth; 0…1, for the map) and the share
+    /// of grain still missing compared with the photo (<see cref="FaceDetails.GrainGain"/>).
     /// </summary>
     internal sealed record Face(float[] Crop, float[] Enhanced, float[] Low, Similarity ToCrop, int Size,
         float[] Folds, float[] FoldMask, float[] Kept, float GrainGain = 1);
 
-    private readonly float[] _image;      // Bild davor, RGB verschachtelt 0…1
-    private readonly ushort[] _pixels;    // Bild davor mit Alpha, wie gelesen
+    private readonly float[] _image;      // image before the model, interleaved RGB 0…1
+    private readonly ushort[] _pixels;    // image before the model including alpha, as read
     private readonly int _w, _h, _channels;
     private readonly string _mapping;
     private readonly IReadOnlyList<Face> _faces;
-    private readonly MagickImage _meta;   // Profile und Auflösung des Bildes davor (1 × 1 Pixel)
-    private float[]? _highPass;           // feine Struktur in voller Größe — erst beim ersten Bedarf
+    private readonly MagickImage _meta;   // profiles and density of the image before the model (1 × 1 pixel)
+    private float[]? _highPass;           // fine structure at full size, computed on first use
 
-    // Vorschau: verkleinerte Fassung und ihre feine Struktur, je Vorschaugröße einmal gerechnet
+    // Preview: reduced copy and its fine structure, computed once per preview size
     private (AiPreviewSize Size, float K, float[] Image, float[] HighPass)? _small;
 
-    // Korn je Gesicht, Korngröße und Maßstab (null = volle Größe) — einmal gerechnet, beim Ziehen wiederverwendet
+    // Grain per face, grain size and scale (null = full size); computed once and reused while dragging a slider
     private readonly Dictionary<(int Face, double Size, AiPreviewSize? Preview), AiFaces.GrainPatch> _grain = [];
 
     internal FaceRun(MagickImage source, float[] image, ushort[] pixels, int w, int h, string mapping, int channels,
@@ -45,16 +49,22 @@ public sealed class FaceRun : IAiRun
         }
     }
 
+    /// <inheritdoc/>
     public int Width => _w;
+
+    /// <inheritdoc/>
     public int Height => _h;
 
+    /// <inheritdoc/>
     public bool SupportsDetails => true;
 
+    /// <summary>Gets the number of restored faces.</summary>
     public int FaceCount => _faces.Count;
 
-    /// <summary>Kornprofil des Fotos, vor der KI gemessen.</summary>
+    /// <summary>Gets the grain profile of the photo, measured before the model ran.</summary>
     public GrainProfile Grain { get; }
 
+    /// <inheritdoc/>
     public AiPixels Preview(AiBlend blend, AiPreviewSize size)
     {
         var small = Small(size);
@@ -62,16 +72,20 @@ public sealed class FaceRun : IAiRun
     }
 
     /// <summary>
-    /// Karte zum Anschauen: das Ergebnis blass, darüber rot, wo Falten aus dem Original zurückkommen (je kräftiger,
-    /// desto mehr), blau, was vom Modell bleibt (Augen, Brauen, Lippen, Zähne).
+    /// Builds a map for inspection: the blended result, desaturated and darkened, overlaid with red where folds
+    /// come back from the original (the stronger, the more) and blue where the model result stays (eyes, brows,
+    /// lips, teeth).
     /// </summary>
+    /// <param name="blend">Blend settings for the underlying result.</param>
+    /// <param name="size">Size of the map.</param>
+    /// <returns>The map as a pixel buffer of the image pipeline.</returns>
     public AiPixels Map(AiBlend blend, AiPreviewSize size)
     {
         var small = Small(size);
         var image = Mix(small.Image, small.HighPass, size.Width, size.Height, small.K, blend, size);
         int w = size.Width, h = size.Height;
 
-        // blass und etwas dunkler, damit die Farben gut zu sehen sind
+        // Pale and slightly darker so that the overlay colours stand out
         for (long i = 0; i < image.Length; i += 3)
         {
             var g = 0.2126f * image[i] + 0.7152f * image[i + 1] + 0.0722f * image[i + 2];
@@ -111,6 +125,7 @@ public sealed class FaceRun : IAiRun
         image[i + 2] += (color.B - image[i + 2]) * amount;
     }
 
+    /// <inheritdoc/>
     public MagickImage Compose(AiBlend blend)
     {
         if (blend.Texture > 0) _highPass ??= AiFaces.HighPass(_image, _w, _h);
@@ -130,7 +145,7 @@ public sealed class FaceRun : IAiRun
         return result;
     }
 
-    /// <summary>Alle Gesichter in eine Kopie von <paramref name="source"/> setzen (Maßstab <paramref name="k"/> zur vollen Größe).</summary>
+    /// <summary>Pastes all faces into a copy of <paramref name="source"/> (<paramref name="k"/> = scale relative to full size).</summary>
     private float[] Mix(float[] source, float[]? highPass, int w, int h, float k, AiBlend blend, AiPreviewSize? preview)
     {
         var image = (float[])source.Clone();
@@ -143,12 +158,12 @@ public sealed class FaceRun : IAiRun
         return image;
     }
 
-    /// <summary>Bild → Ausschnitt auf dem Maßstab der Vorschau: erst auf volle Größe zurück (÷ K).</summary>
+    /// <summary>Image → crop transform at preview scale: first back to full size (÷ k).</summary>
     private static Similarity Scaled(Similarity t, float k) => k == 1 ? t : new Similarity(t.A / k, t.B / k, t.Tx, t.Ty);
 
     /// <summary>
-    /// Korn eines Gesichts: in voller Größe aus der gemessenen Korngröße, für die Vorschau daraus verkleinert
-    /// (Flächenmittel) — so wirkt es dort, wie es nach dem Übernehmen verkleinert aussähe.
+    /// Grain of one face: generated at full size from the measured grain size and, for the preview, reduced
+    /// from it (area average), so that the preview shows it as it would look after applying and scaling down.
     /// </summary>
     private AiFaces.GrainPatch GrainFor(int f, double sizeFactor, AiPreviewSize? preview, float k, int w, int h)
     {
@@ -172,13 +187,13 @@ public sealed class FaceRun : IAiRun
 
         lock (_grain)
         {
-            if (_grain.Count > 24) _grain.Clear();   // Korngröße oft verstellt: nicht endlos sammeln
+            if (_grain.Count > 24) _grain.Clear();   // grain size changed often: do not accumulate without limit
             _grain[(f, factor, preview)] = patch;
         }
         return patch;
     }
 
-    /// <summary>Korn auf den Maßstab <paramref name="k"/> verkleinern: Mittel über die Bildpixel jedes Vorschaupixels.</summary>
+    /// <summary>Reduces grain to scale <paramref name="k"/>: average over the image pixels of each preview pixel.</summary>
     private static AiFaces.GrainPatch Shrink(AiFaces.GrainPatch full, float k, int w, int h)
     {
         if (k >= 1) return full;
@@ -224,7 +239,7 @@ public sealed class FaceRun : IAiRun
         return new AiPixels(bgra, sw, sh);
     }
 
-    /// <summary>Verkleinerte Fassung (wie die normale Vorschau) und ihre feine Struktur.</summary>
+    /// <summary>Reduced copy (scaled like the normal preview) and its fine structure.</summary>
     private (AiPreviewSize Size, float K, float[] Image, float[] HighPass) Small(AiPreviewSize size)
     {
         if (_small is { } s && s.Size == size) return s;

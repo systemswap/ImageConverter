@@ -3,18 +3,31 @@ using ImageConverter.Core.Ai.Onnx;
 namespace ImageConverter.Core.Ai.Upscale;
 
 /// <summary>
-/// PiSA-SR auf der Platte: geladen werden die Gewichte (<see cref="AiModelCatalog.PiSaSr"/> mit den Teilen von Stable
-/// Diffusion 2.1); die leere Beschreibung und die drei ONNX-Dateien baut die App beim ersten Gebrauch (knapp eine Minute,
-/// 3,6 GB) neben die LoRA — neu, wenn eine Quelle jünger ist. Wie <see cref="SyntheticDoc.SyntheticDocModel"/>.
+/// PiSA-SR on disk: the downloaded weights and the ONNX files built from them.
 /// </summary>
+/// <remarks>
+/// The weights are <see cref="AiModelCatalog.PiSaSr"/> with the parts of Stable Diffusion 2.1. On first use the app builds
+/// the empty-prompt embedding and the three ONNX files next to the LoRA (just under a minute, 3.6 GB), and again whenever
+/// one of the sources is newer. Works like <see cref="SyntheticDoc.SyntheticDocModel"/>.
+/// </remarks>
 public static class PiSaSrModel
 {
-    /// <summary>Leere Beschreibung (1 × 77 × 1024), aus dem Text-Encoder gerechnet oder aus einer Sicherung.</summary>
+    /// <summary>File name of the empty-prompt embedding (1 × 77 × 1024), computed from the text encoder or taken from a saved copy.</summary>
     public const string EmbeddingFile = "leere-beschreibung.safetensors";
 
+    /// <summary>Paths of the source files.</summary>
+    /// <param name="Lora">PiSA-SR checkpoint with the LoRA weights.</param>
+    /// <param name="Unet">SD 2.1 UNet weights.</param>
+    /// <param name="Vae">SD 2.1 VAE weights.</param>
+    /// <param name="Text">SD 2.1 text encoder weights, or null if not installed.</param>
     public sealed record Sources(string Lora, string Unet, string Vae, string? Text);
 
-    /// <summary>Die Quelldateien, wenn alle da sind (der Text-Encoder nur, solange die leere Beschreibung fehlt).</summary>
+    /// <summary>Returns the source files if all needed ones are installed.</summary>
+    /// <param name="store">Model store to search.</param>
+    /// <returns>
+    /// The sources, or null if one is missing. The text encoder is required only as long as the empty-prompt embedding
+    /// does not exist.
+    /// </returns>
     public static Sources? Find(AiModelStore store)
     {
         if (store.PathOf(AiModelCatalog.PiSaSr) is not { } lora
@@ -25,10 +38,15 @@ public static class PiSaSrModel
         return new Sources(lora, unet, vae, text);
     }
 
-    /// <summary>Wo die ONNX-Dateien liegen: neben der LoRA.</summary>
+    /// <summary>Returns the folder of the ONNX files: the folder of the LoRA.</summary>
+    /// <param name="s">Source files.</param>
+    /// <returns>The folder path.</returns>
     public static string FolderOf(Sources s) => Path.GetDirectoryName(s.Lora)!;
 
-    /// <param name="half">Halbe Genauigkeit (Grafikkarte) — eigene Dateien „-fp16“, gebaut nur bei Bedarf.</param>
+    /// <summary>Returns whether the ONNX files have to be built (again).</summary>
+    /// <param name="s">Source files.</param>
+    /// <param name="half">Half precision (graphics card): separate "-fp16" files, built only when needed.</param>
+    /// <returns>True if one of the four files (encoder, decoder, UNet and its external data) is missing or older than LoRA, UNet or VAE.</returns>
     public static bool NeedsBuild(Sources s, bool half = false)
     {
         var dir = FolderOf(s);
@@ -38,7 +56,13 @@ public static class PiSaSrModel
             .Any(p => !File.Exists(p) || File.GetLastWriteTimeUtc(p) < stamp);
     }
 
-    /// <summary>Die drei ONNX-Dateien (Encoder, UNet, Decoder); fehlen sie, werden sie gebaut.</summary>
+    /// <summary>Returns the three ONNX files (encoder, UNet, decoder), building them if necessary.</summary>
+    /// <param name="s">Source files.</param>
+    /// <param name="progress">Receives the build progress, 0…1; not called if nothing needs to be built.</param>
+    /// <param name="ct">Cancels the build between its stages.</param>
+    /// <param name="half">Half precision (graphics card): separate "-fp16" files.</param>
+    /// <returns>Paths of the VAE encoder, the UNet and the VAE decoder.</returns>
+    /// <exception cref="FileNotFoundException">The embedding is missing and the text encoder is not installed.</exception>
     public static (string Encoder, string Unet, string Decoder) OnnxFor(Sources s, IProgress<double>? progress = null,
         CancellationToken ct = default, bool half = false)
     {

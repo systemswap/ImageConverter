@@ -3,12 +3,15 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Ai;
 
-/// <summary>Zwischenstand während einer KI-Berechnung: kleines Bild (8-Bit-BGRA) zum Anzeigen.</summary>
+/// <summary>Intermediate frame during an AI computation: a small image for display.</summary>
+/// <param name="Bgra">Pixels as 8-bit BGRA, row by row, <paramref name="Width"/> × <paramref name="Height"/> × 4 bytes.</param>
+/// <param name="Width">Width in pixels.</param>
+/// <param name="Height">Height in pixels.</param>
 public sealed record AiPreviewFrame(byte[] Bgra, int Width, int Height);
 
 /// <summary>
-/// Liefert höchstens alle <see cref="Interval"/> einen Zwischenstand — das Zusammensetzen
-/// kostet Zeit, die sonst der Berechnung fehlt.
+/// Delivers an intermediate frame at most once per <see cref="Interval"/>, because assembling a frame takes
+/// time that would otherwise be lost to the computation.
 /// </summary>
 internal sealed class AiPreviewSink(Action<AiPreviewFrame>? target, int maxEdge)
 {
@@ -18,8 +21,9 @@ internal sealed class AiPreviewSink(Action<AiPreviewFrame>? target, int maxEdge)
     public bool IsDue => target is not null && _since.Elapsed >= Interval;
 
     /// <summary>
-    /// Baut das Vorschaubild aus einem Bild der Größe <paramref name="width"/> × <paramref name="height"/>;
-    /// <paramref name="pixel"/> liefert RGBA 0…1 für eine Bildkoordinate.
+    /// Builds the preview frame from an image of <paramref name="width"/> × <paramref name="height"/> pixels
+    /// (nearest-neighbour reduction to the maximum edge); <paramref name="pixel"/> returns RGBA 0…1 for an
+    /// image coordinate and is called in parallel.
     /// </summary>
     public void Emit(int width, int height, PixelReader pixel)
     {

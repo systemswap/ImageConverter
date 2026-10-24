@@ -4,17 +4,27 @@ using Microsoft.ML.OnnxRuntime;
 namespace ImageConverter.Core.Ai;
 
 /// <summary>
-/// Geöffnete Modelle. Das Laden großer Modelle dauert Sekunden und belegt Hunderte MB —
-/// deshalb bleibt immer nur ein großes Modell (plus die kleine Gesichtserkennung) offen.
-/// <para>
-/// Grafikkarte (<see cref="UseGpu"/>): Windows über DirectML (jeder Hersteller, DirectX 12); eine eigene Laufzeit unter
-/// Linux mit MIGraphX/ROCm (AMD), CUDA (NVIDIA) oder WebGPU wird ebenso genutzt, wenn sie in <c>Tools/OnnxRuntime</c>
-/// liegt. Geht das Öffnen auf der Grafikkarte schief, rechnet das Modell auf der CPU (<see cref="GpuProblem"/>).
-/// </para>
+/// Cache of open ONNX Runtime sessions, one per model file.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Loading a large model takes seconds and occupies hundreds of MB, so only one large model is kept open at a time
+/// (all files of that model, plus the small helper models such as face detection). <see cref="Get"/>, <see cref="Release"/>
+/// and <see cref="Dispose"/> are synchronised with a lock.
+/// </para>
+/// <para>
+/// Graphics card (<see cref="UseGpu"/>): on Windows through DirectML (any vendor, DirectX 12); on Linux a separate
+/// runtime with MIGraphX/ROCm (AMD), CUDA (NVIDIA) or WebGPU is used in the same way if it is installed in
+/// <c>Tools/OnnxRuntime</c>. If opening on the graphics card fails, the model runs on the CPU (<see cref="GpuProblem"/>).
+/// Only models with <see cref="AiModel.Gpu"/> set are opened on the graphics card.
+/// </para>
+/// </remarks>
 public sealed class OnnxSessions : IDisposable
 {
-    /// <summary>Was die Laufzeit an Grafikkarten-Anbindung mitbringt (in dieser Reihenfolge bevorzugt), sonst null.</summary>
+    /// <summary>
+    /// Gets the graphics card execution provider of the runtime (preferred in the order DirectML, MIGraphX, ROCm, CUDA,
+    /// WebGPU), or null if there is none or the runtime cannot be loaded.
+    /// </summary>
     public static string? GpuProvider { get; } = FindGpuProvider();
 
     private static string? FindGpuProvider()
@@ -28,11 +38,11 @@ public sealed class OnnxSessions : IDisposable
         }
         catch (Exception)
         {
-            return null;   // Laufzeit fehlt (z. B. Tests ohne native Bibliothek)
+            return null;   // runtime missing (for example tests without the native library)
         }
     }
 
-    /// <summary>Lesbarer Name der Anbindung („DirectML“ …), null ohne.</summary>
+    /// <summary>Gets the readable name of the execution provider ("DirectML" …), or null without one.</summary>
     public static string? GpuName => GpuProvider switch
     {
         "DmlExecutionProvider" => "DirectML",
@@ -43,7 +53,10 @@ public sealed class OnnxSessions : IDisposable
         _ => null,
     };
 
-    /// <summary>Auf der Grafikkarte rechnen, wenn möglich. Ändern schließt die offenen Modelle (werden neu geöffnet).</summary>
+    /// <summary>
+    /// Gets or sets whether models run on the graphics card when possible. Changing the value closes the open models
+    /// (they are reopened on the next <see cref="Get"/>) and clears <see cref="GpuProblem"/>.
+    /// </summary>
     public bool UseGpu
     {
         get;
@@ -57,8 +70,9 @@ public sealed class OnnxSessions : IDisposable
     } = true;
 
     /// <summary>
-    /// Letzter Geschwindigkeitstest (Einstellungen). War die CPU auf diesem Rechner schneller, öffnen die Modelle auf der
-    /// CPU. Ändern schließt die offenen Modelle (werden neu geöffnet).
+    /// Gets or sets the last speed test (settings). If the CPU was faster on this computer, the models open on the CPU.
+    /// Changing the value closes the open models only if it changes that choice (they are reopened on the next
+    /// <see cref="Get"/>).
     /// </summary>
     public SpeedMeasure? Measured
     {
@@ -72,28 +86,43 @@ public sealed class OnnxSessions : IDisposable
         }
     }
 
-    /// <summary>Laut Test (oder ohne Test) die Grafikkarte.</summary>
+    /// <summary>The graphics card according to the test (or without a test).</summary>
     private bool PreferGpu => SpeedMeasure.PreferGpu(Measured, SpeedTest.AiMachine(GpuProvider));
 
-    /// <summary>Laut Geschwindigkeitstest rechnet auf diesem Rechner die CPU schneller.</summary>
+    /// <summary>Gets whether, according to the speed test, the CPU is faster on this computer (false without a graphics card provider).</summary>
     public bool CpuFasterHere => GpuProvider is not null && !PreferGpu;
 
-    /// <summary>Rechnen die offenen Modelle gerade auf der Grafikkarte?</summary>
+    /// <summary>
+    /// Gets whether models cleared for the graphics card (<see cref="AiModel.Gpu"/>) currently run there: enabled,
+    /// provider present, no error while opening and preferred by the speed test.
+    /// </summary>
     public bool OnGpu => UseGpu && GpuProvider is not null && GpuProblem is null && PreferGpu;
 
-    /// <summary>Warum die Grafikkarte nicht genutzt wird (Fehler beim Öffnen), sonst null.</summary>
+    /// <summary>Gets why the graphics card is not used (error message from opening a model), otherwise null.</summary>
     public string? GpuProblem { get; private set; }
 
     private readonly Dictionary<string, InferenceSession> _open = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _modelOf = new(StringComparer.Ordinal);   // Pfad → Modell-Id
+    private readonly Dictionary<string, string> _modelOf = new(StringComparer.Ordinal);   // path → model ID
     private readonly Lock _lock = new();
 
-    // Obergrenze geändert: die Stränge gelten erst beim Öffnen — beim nächsten Holen neu öffnen (nicht sofort schließen,
-    // ein laufender Auftrag rechnet vielleicht noch mit den offenen)
+    /// <summary>Creates an empty session cache.</summary>
+    /// <remarks>
+    /// When the CPU limit changes, the thread count takes effect only when a session is opened, so the open sessions are
+    /// reopened on the next <see cref="Get"/>. They are not closed immediately, because a running job may still be
+    /// using them.
+    /// </remarks>
     public OnnxSessions() => ComputeLimits.Changed += (_, _) => _stale = true;
 
     private volatile bool _stale;
 
+    /// <summary>Returns the open session for a model file, opening it if necessary.</summary>
+    /// <param name="model">Catalogue entry of the model.</param>
+    /// <param name="path">Path of the model file (<see cref="AiModelStore.PathOf"/> or a file derived from it).</param>
+    /// <returns>The session; it is owned by this cache and must not be disposed by the caller.</returns>
+    /// <remarks>
+    /// Opening a file of a model that is not a helper closes the files of all other large models. Opening takes seconds
+    /// for large models.
+    /// </remarks>
     public InferenceSession Get(AiModel model, string path)
     {
         lock (_lock)
@@ -109,7 +138,7 @@ public sealed class OnnxSessions : IDisposable
 
             if (!StaysOpen(model.Kind))
             {
-                // anderes großes Modell schließen; Dateien desselben Modells (SyntheticDoc: mit und ohne Schatten) bleiben
+                // Close other large models; files of the same model (SyntheticDoc: with and without shadow) stay open
                 foreach (var (key, other) in _open.Where(p => !IsHelper(p.Key) && _modelOf.GetValueOrDefault(p.Key) != model.Id).ToList())
                 {
                     other.Dispose();
@@ -127,9 +156,10 @@ public sealed class OnnxSessions : IDisposable
     }
 
     /// <summary>
-    /// Alle offenen Dateien eines Modells schließen (nach einem Upscaling: PiSA-SR hält sonst rund 3,6 GB, während das
-    /// Ergebnis zusammengesetzt und exportiert wird). Der nächste Lauf öffnet es neu (wenige Sekunden).
+    /// Closes all open files of a model, for example after upscaling: PiSA-SR otherwise holds about 3.6 GB while the
+    /// result is assembled and exported. The next run reopens it (a few seconds).
     /// </summary>
+    /// <param name="modelId">ID of the model (<see cref="AiModel.Id"/>).</param>
     public void Release(string modelId)
     {
         lock (_lock)
@@ -143,7 +173,7 @@ public sealed class OnnxSessions : IDisposable
         }
     }
 
-    /// <summary>Öffnen — mit Grafikkarte, wenn gewünscht, vorhanden und für das Modell freigegeben; scheitert das, auf der CPU.</summary>
+    /// <summary>Opens a session on the graphics card if enabled, available and allowed for the model; if that fails, on the CPU.</summary>
     private InferenceSession Open(string path, bool allowGpu)
     {
         if (allowGpu && UseGpu && GpuProvider is { } provider && GpuProblem is null && PreferGpu)
@@ -162,7 +192,7 @@ public sealed class OnnxSessions : IDisposable
         return new InferenceSession(path, cpu);
     }
 
-    /// <summary>Für die CPU: so viele Stränge, wie die Obergrenze erlaubt (Einstellungen › Leistung).</summary>
+    /// <summary>Options for the CPU: as many threads as the limit allows (Settings › Performance).</summary>
     internal static SessionOptions CpuOptions()
     {
         var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
@@ -173,12 +203,12 @@ public sealed class OnnxSessions : IDisposable
     internal static SessionOptions GpuOptions(string provider)
     {
         var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
-        // auch auf der Grafikkarte rechnet ein Teil auf der CPU (Formen, Übergänge)
+        // Even on the graphics card, part of the work runs on the CPU (shape computations, transfers)
         if (ComputeLimits.OnnxThreads is { } threads) o.IntraOpNumThreads = threads;
         switch (provider)
         {
             case "DmlExecutionProvider":
-                // DirectML verlangt: kein Speichermuster, der Reihe nach
+                // DirectML requires memory patterns off and sequential execution
                 o.EnableMemoryPattern = false;
                 o.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
                 o.AppendExecutionProvider_DML(0);
@@ -186,7 +216,7 @@ public sealed class OnnxSessions : IDisposable
             case "MIGraphXExecutionProvider": o.AppendExecutionProvider_MIGraphX(0); break;
             case "ROCMExecutionProvider": o.AppendExecutionProvider_ROCm(0); break;
             case "CUDAExecutionProvider": o.AppendExecutionProvider_CUDA(0); break;
-            // preserveDevice: sonst stürzt das Schließen ab, wenn mehrere Sitzungen auf der Karte liegen (PiSA-SR: drei)
+            // preserveDevice: otherwise closing crashes when several sessions live on the card (PiSA-SR: three)
             case "WebGpuExecutionProvider": o.AppendExecutionProvider("WebGPU", new Dictionary<string, string> { ["preserveDevice"] = "1" }); break;
         }
         return o;
@@ -195,8 +225,9 @@ public sealed class OnnxSessions : IDisposable
     private static bool _telemetryOff;
 
     /// <summary>
-    /// Keine Nutzungsdaten an Microsoft: die Variable vor dem Start der Laufzeit (falls
-    /// <see cref="NativeLibraries.Configure"/> nicht lief, z. B. in Tests), danach auch über die API.
+    /// No usage data to Microsoft: sets the environment variable before the runtime starts (in case
+    /// <see cref="NativeLibraries.Configure"/> did not run, for example in tests), then also disables it through the API.
+    /// See docs/FEHLERGEDAECHTNIS.md, No. 1.
     /// </summary>
     private static void EnsureNoTelemetry()
     {
@@ -209,9 +240,10 @@ public sealed class OnnxSessions : IDisposable
     private static bool IsHelper(string path) =>
         AiModelCatalog.All.Any(m => StaysOpen(m.Kind) && path.EndsWith(m.MainFile, StringComparison.Ordinal));
 
-    /// <summary>Kleine Hilfsmodelle bleiben offen und schließen keine anderen.</summary>
+    /// <summary>Small helper models stay open and do not close others.</summary>
     private static bool StaysOpen(AiModelKind kind) => kind is AiModelKind.Helper;
 
+    /// <summary>Closes all open sessions. The cache stays usable; the next <see cref="Get"/> opens them again.</summary>
     public void Dispose()
     {
         lock (_lock)
@@ -223,9 +255,14 @@ public sealed class OnnxSessions : IDisposable
     }
 
     /// <summary>
-    /// Ein Durchlauf; <paramref name="ct"/> bricht auch eine laufende Berechnung ab.
-    /// Liefert die erste Ausgabe als float-Array.
+    /// Runs the model once and returns the first output as a float array; <paramref name="ct"/> also stops a running
+    /// computation (then <see cref="OperationCanceledException"/> is thrown).
     /// </summary>
+    /// <remarks>
+    /// The run options are held in a <c>using</c> variable on purpose. Created as a temporary in the call, the garbage
+    /// collector may free them while ONNX Runtime is still computing, causing an access violation that .NET cannot catch.
+    /// See docs/FEHLERGEDAECHTNIS.md, No. 69.
+    /// </remarks>
     internal static float[] Run(InferenceSession session, IReadOnlyDictionary<string, OrtValue> inputs, CancellationToken ct)
     {
         using var runOptions = new RunOptions();
@@ -243,7 +280,7 @@ public sealed class OnnxSessions : IDisposable
         }
     }
 
-    /// <summary>Wie <see cref="Run"/>, aber die genannten Ausgaben (SyntheticDoc: Gitter und Schattenkarte).</summary>
+    /// <summary>Like <see cref="Run(InferenceSession, IReadOnlyDictionary{string, OrtValue}, CancellationToken)"/>, but returns the named outputs (SyntheticDoc: grid and shadow map).</summary>
     internal static float[][] Run(InferenceSession session, IReadOnlyDictionary<string, OrtValue> inputs, IReadOnlyList<string> outputNames,
         CancellationToken ct)
     {
@@ -261,7 +298,7 @@ public sealed class OnnxSessions : IDisposable
         }
     }
 
-    /// <summary>Wie <see cref="Run"/>, aber für Modelle mit Byte-Ausgabe (MI-GAN).</summary>
+    /// <summary>Like <see cref="Run(InferenceSession, IReadOnlyDictionary{string, OrtValue}, CancellationToken)"/>, but for models with byte output (MI-GAN).</summary>
     internal static byte[] RunBytes(InferenceSession session, IReadOnlyDictionary<string, OrtValue> inputs, CancellationToken ct)
     {
         using var runOptions = new RunOptions();
@@ -279,7 +316,7 @@ public sealed class OnnxSessions : IDisposable
         }
     }
 
-    /// <summary>Alle Ausgaben (für die Gesichtserkennung mit zwölf Ausgaben).</summary>
+    /// <summary>Returns all outputs (for the face detector with twelve outputs); cannot be cancelled.</summary>
     internal static float[][] RunAll(InferenceSession session, string inputName, OrtValue input)
     {
         using var runOptions = new RunOptions();
@@ -288,12 +325,18 @@ public sealed class OnnxSessions : IDisposable
     }
 }
 
-/// <summary>Kachelmodell über ONNX (Real-ESRGAN u. ä.): NCHW, RGB, 0…1.</summary>
+/// <summary>Tile model through ONNX Runtime (Real-ESRGAN and similar): NCHW, RGB, 0…1.</summary>
+/// <param name="session">Open session of the model; it stays owned by the caller.</param>
+/// <param name="model">Catalogue entry that supplies scale and tile size.</param>
 public sealed class OnnxTileModel(InferenceSession session, AiModel model) : ITileModel
 {
+    /// <inheritdoc/>
     public int Scale => model.Scale;
+
+    /// <inheritdoc/>
     public int TileSize => model.TileSize;
 
+    /// <inheritdoc/>
     public float[] Run(float[] input, int width, int height, CancellationToken ct)
     {
         using var value = OrtValue.CreateTensorValueFromMemory(input, [1, 3, height, width]);
@@ -301,18 +344,25 @@ public sealed class OnnxTileModel(InferenceSession session, AiModel model) : ITi
     }
 }
 
-/// <summary>Gesichtsmodell über ONNX (GFPGAN, CodeFormer, RestoreFormer++): 512 × 512, RGB, −1…1.</summary>
+/// <summary>Face model through ONNX Runtime (GFPGAN, CodeFormer, RestoreFormer++): 512 × 512, RGB, −1…1.</summary>
+/// <param name="session">Open session of the model; it stays owned by the caller.</param>
+/// <param name="model">Catalogue entry that supplies the crop size.</param>
 public sealed class OnnxFaceModel(InferenceSession session, AiModel model) : IFaceModel
 {
-    /// <summary>CodeFormer: 0 = stärkste Verbesserung, 1 = möglichst nah am Original.</summary>
+    /// <summary>
+    /// Gets the CodeFormer fidelity weight: 0 = strongest restoration, 1 = as close to the original as possible.
+    /// Used only by models with a "weight" input.
+    /// </summary>
     public double Fidelity { get; init; } = 0.6;
 
+    /// <inheritdoc/>
     public int Size => model.TileSize;
 
+    /// <inheritdoc/>
     public float[] Run(float[] input, CancellationToken ct)
     {
         using var image = OrtValue.CreateTensorValueFromMemory(input, [1, 3, Size, Size]);
-        // Bildeingang: „input“ bei GFPGAN/CodeFormer — bei anderen Modellen der erste, der nicht „weight“ heißt
+        // Image input: "input" for GFPGAN/CodeFormer; for other models the first one not named "weight"
         var name = session.InputNames.First(n => n != "weight");
         var inputs = new Dictionary<string, OrtValue> { [name] = image };
 
@@ -331,14 +381,22 @@ public sealed class OnnxFaceModel(InferenceSession session, AiModel model) : IFa
 }
 
 /// <summary>
-/// Füllmodell über ONNX. LaMa: Bild und Maske als float (Bild 0 … 1, Maske 1 = füllen), Ergebnis 0 … 255; die zu
-/// füllende Fläche muss im Bild schon gelöscht sein, sonst malt LaMa das Alte durchscheinend nach.
-/// MI-GAN (Pipeline): Bytes, Maske umgekehrt (255 = bleibt, 0 = füllen), Ergebnis 0 … 255.
+/// Inpainting model through ONNX Runtime.
 /// </summary>
+/// <remarks>
+/// LaMa: image and mask as float (image 0 … 1, mask 1 = fill), result 0 … 255. The area to be filled must already be
+/// cleared in the image; otherwise LaMa repaints the old content translucently. MI-GAN (pipeline export): bytes, mask
+/// inverted (255 = keep, 0 = fill), result 0 … 255. <see cref="Run"/> converts both to the 0 … 1 layout of
+/// <see cref="IInpaintModel"/>. See docs/FEHLERGEDAECHTNIS.md, No. 35.
+/// </remarks>
+/// <param name="session">Open session of the model; it stays owned by the caller.</param>
+/// <param name="model">Catalogue entry that supplies the crop size.</param>
 public sealed class OnnxInpaintModel(InferenceSession session, AiModel model) : IInpaintModel
 {
+    /// <inheritdoc/>
     public int Size => model.TileSize;
 
+    /// <inheritdoc/>
     public float[] Run(float[] rgb, float[] mask, CancellationToken ct)
     {
         var s = Size;
