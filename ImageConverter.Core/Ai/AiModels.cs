@@ -331,7 +331,7 @@ public static class AiModelCatalog
     public static AiModel PiSaSr { get; } = new(
         "pisasr",
         "PiSA-SR",
-        "Upscaling langsam, wie Referenzwerkzeug – erfindet feine Details (Nadeln, Blätter, Haut)",
+        "Upscaling langsam – erfindet feine Details (Nadeln, Blätter, Haut)",
         "PiSA-SR (Lingchen Sun u. a., CVPR 2025): Ein-Schritt-Diffusion auf Stable Diffusion 2.1. Ergänzt glaubhafte feine " +
         "Strukturen, wo das Original nur Matsch hat; die Treue-Sicherung hält Formen und Farben am Original. Sehr langsam auf " +
         "der CPU (Minuten je Megapixel). Lädt Stable Diffusion 2.1 (2,6 GB) mit und wird beim ersten Gebrauch umgewandelt.",

@@ -805,7 +805,7 @@
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Luminanz'}" />
                                     <Slider Grid.Column="1" Minimum="-100" Maximum="200" Value="{Binding MatchLuminance}"
-                                            ToolTip.Tip="{l:T 'Wie „Gleiche Farbe“ in Referenzwerkzeug CS5: rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus. Über 200 % (bis 300 %) vor allem zusammen mit dem Zielwert: dann erreichen auch tiefe Schatten das Ziel, Mitteltöne bleiben ruhig.'}" />
+                                            ToolTip.Tip="{l:T 'Rechnet die Helligkeit hoch statt sie nur anzuheben — das Bild wird leuchtender, die Kontraste bleiben. Weiß läuft weich aus, nichts frisst aus. Über 200 % (bis 300 %) vor allem zusammen mit dem Zielwert: dann erreichen auch tiefe Schatten das Ziel, Mitteltöne bleiben ruhig.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MatchLuminanceLabel}" />
                                 </Grid>
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsEnabled="{Binding CanLimitLuminance}">
@@ -875,7 +875,7 @@
                                 <Grid Classes="row" ColumnDefinitions="76,*,Auto">
                                     <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Verlauf'}" />
                                     <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding MaskCurve}"
-                                            ToolTip.Tip="{l:T 'Weich: auch Felder und Himmel bekommen etwas mit. Steil: nur das wirklich Dunkle (wie Darks II, III in Referenzwerkzeug).'}" />
+                                            ToolTip.Tip="{l:T 'Weich: auch Felder und Himmel bekommen etwas mit. Steil: nur das wirklich Dunkle.'}" />
                                     <TextBlock Grid.Column="2" Classes="value" Text="{Binding MaskCurveLabel}" />
                                 </Grid>
                                 <CheckBox Margin="76,0,0,4" IsChecked="{Binding ShowMask}" Content="{l:T 'Maske zeigen'}"
@@ -1354,7 +1354,7 @@
                         <ToggleButton Classes="corner" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12"
                                       IsVisible="{Binding HasImage}"
                                       IsChecked="{Binding ShowEditList}"
-                                      ToolTip.Tip="{l:T 'Bearbeitungen: alle Funktionen, die an diesem Bild wirken. Mit dem Auge eine Funktion aus „Nachher“ und dem Export ausschalten — wie in Referenzwerkzeug.'}">
+                                      ToolTip.Tip="{l:T 'Bearbeitungen: alle Funktionen, die an diesem Bild wirken. Mit dem Auge eine Funktion aus „Nachher“ und dem Export ausschalten.'}">
                             <Path Data="M 12,2 L 2,7 L 12,12 L 22,7 Z M 2,12 L 12,17 L 22,12 M 2,17 L 12,22 L 22,17" />
                         </ToggleButton>
 

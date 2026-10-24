@@ -28,7 +28,7 @@ public sealed record UpscaleOption(UpscaleMethod Method)
     {
         UpscaleMethod.Fast => Tr.T("Real-ESRGAN x4v3: entfernt Rauschen und JPEG-Blöcke und macht Kanten klar. Sekunden je Bild, erfindet kaum etwas."),
         UpscaleMethod.Medium => Tr.T("4x-UltraSharpV2: schärfer und feiner als Real-ESRGAN x4v3, bleibt nah am Original. Deutlich langsamer — die geschätzte Zeit steht am Knopf „Skalieren“."),
-        UpscaleMethod.Generative => Tr.T("PiSA-SR (Stable Diffusion): ergänzt glaubhafte feine Details wie Nadeln, Blätter, Haut — wie Referenzwerkzeug, aber lokal. Sehr langsam — die geschätzte Zeit steht am Knopf „Skalieren“."),
+        UpscaleMethod.Generative => Tr.T("PiSA-SR (Stable Diffusion): ergänzt glaubhafte feine Details wie Nadeln, Blätter, Haut — lokal auf diesem Rechner. Sehr langsam — die geschätzte Zeit steht am Knopf „Skalieren“."),
         _ => Tr.T("Wie bisher: der Filter oben rechnet die Pixel hoch. Sofort, erfindet nichts — wird aber weich."),
     };
 
