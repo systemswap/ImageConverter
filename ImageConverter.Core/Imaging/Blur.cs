@@ -2,28 +2,35 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Gauß-Weichzeichner auf Fließkomma-Ebenen mit beliebig vielen Kanälen (verschachtelt,
-/// z. B. B,G,R,B,G,R …). Gebraucht vom Schärfen (3 Kanäle) und von Tiefen/Lichter
-/// (1 Kanal Helligkeit).
-///
-/// Kleine Radien mit echtem Gauß-Kernel, größere mit drei Boxfilter-Durchgängen
-/// (Kutskir/Wells) — die Laufzeit hängt dann nicht vom Radius ab.
+/// Gaussian blur on floating-point planes with any number of interleaved channels (for example B,G,R,B,G,R …). Used by
+/// sharpening (3 channels) and by shadows/highlights (1 brightness channel).
 /// </summary>
+/// <remarks>
+/// Small radii use a true Gaussian kernel, larger ones three box-filter passes (Kutskir/Wells), so that the run time does
+/// not depend on the radius.
+/// </remarks>
 internal static class Blur
 {
-    /// <summary>Ab hier reicht die Box-Näherung; darunter echter Gauß.</summary>
+    /// <summary>From this sigma upwards the box approximation is sufficient; below it a true Gaussian is used.</summary>
     internal const double ExactGaussBelow = 2.0;
 
-    /// <summary>Zeichnet <paramref name="data"/> an Ort und Stelle weich.</summary>
+    /// <summary>Blurs <paramref name="data"/> in place.</summary>
+    /// <param name="data">Interleaved planes of length width × height × channels.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="sigma">Standard deviation in pixels.</param>
+    /// <param name="channels">Number of interleaved channels.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="data"/> does not match the
+    /// dimensions.</exception>
     public static void Gauss(float[] data, int width, int height, double sigma, int channels = 1)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(data.Length, width * height * channels, nameof(data));
-        var tmp = PixelPool.Rent(data.Length);   // wird vor dem Lesen vollständig geschrieben
+        var tmp = PixelPool.Rent(data.Length);   // completely written before it is read
 
         if (sigma < ExactGaussBelow)
         {
-            // Kleine Radien (typisch fürs Schärfen von Fotos): die Box-Näherung kann so
-            // feine Weichzeichnung nicht darstellen. Bei ≤ 6 Abgriffen billig.
+            // Small radii (typical for sharpening photos): the box approximation cannot represent such a fine blur.
+            // Cheap: sigma below 2 gives a kernel radius of at most 6 taps.
             var kernel = GaussKernel(sigma);
             ConvolveHorizontal(data, tmp, width, height, channels, kernel);
             ConvolveVertical(tmp, data, width, height, channels, kernel);
@@ -90,7 +97,8 @@ internal static class Blur
         });
     }
 
-    /// <summary>Boxradien, deren Hintereinanderausführung einen Gauß mit <paramref name="sigma"/> ergibt.</summary>
+    /// <summary>Box radii whose successive application approximates a Gaussian with <paramref name="sigma"/>
+    /// (Kutskir/Wells).</summary>
     internal static int[] BoxRadii(double sigma, int passes)
     {
         var wIdeal = Math.Sqrt(12 * sigma * sigma / passes + 1);
@@ -106,7 +114,7 @@ internal static class Blur
         return radii;
     }
 
-    // Laufende Summe je Zeile; Ränder werden mit dem Randpixel fortgesetzt.
+    // Running sum per row; the borders are extended with the edge pixel.
     private static void BoxHorizontal(float[] src, float[] dst, int w, int h, int ch, int r)
     {
         if (r <= 0) { Array.Copy(src, dst, src.Length); return; }
@@ -132,7 +140,7 @@ internal static class Blur
         });
     }
 
-    // Spaltenweise in Blöcken von 64 Spalten, Zeile für Zeile — speicherfreundlich.
+    // Column-wise in blocks of 64 columns, row by row, for cache-friendly memory access.
     private static void BoxVertical(float[] src, float[] dst, int w, int h, int ch, int r)
     {
         if (r <= 0) { Array.Copy(src, dst, src.Length); return; }

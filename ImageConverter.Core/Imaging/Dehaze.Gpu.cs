@@ -4,23 +4,23 @@ using ILGPU.Runtime;
 
 namespace ImageConverter.Core.Imaging;
 
-// Dunst auf der Grafikkarte: die beiden Schleifen über das ganze Bild (Modell je Durchlauf, LookTone) — dieselben Formeln
-// wie in Dehaze.Apply und DehazeLook.LookTone, je Pixel ein Faden. Die Schätzungen auf der kleinen Fassung (Luftlicht,
-// Durchlässigkeit, Guided Filter) bleiben auf der CPU, ihre Karten kommen hoch. Tabellen (sRGB ↔ linear) wie auf der
-// CPU; die Kubikwurzel gibt es dort nicht — Potenz ⅓ mit einem Newton-Schritt. Abweichung nur in der Rundung (siehe
-// gleich-probe, docs/TEMPO.md).
+// Dehaze on the GPU: the two loops over the whole image (the model per pass, LookTone), with the same formulas as in
+// Dehaze.Apply and DehazeLook.LookTone, one thread per pixel. The estimates on the small copy (air light, transmission,
+// guided filter) stay on the CPU; their maps are uploaded. Tables (sRGB ↔ linear) as on the CPU; there is no cube root
+// on the GPU, so power ⅓ with one Newton step is used. The results differ from the CPU only in rounding (see
+// docs/TEMPO.md and the test DehazeTests.Dehaze_GpuAndCpu_Agree).
 internal static partial class Dehaze
 {
-    /// <summary>Feste Werte des Modell-Kernels.</summary>
+    /// <summary>Constant parameters of the model kernel.</summary>
     internal readonly record struct ModelParams(int Width, int Height, int F, int Sw, int Sh, int HasStrong,
         float Mix, float K, float CastRemoval, float Strength);
 
-    /// <summary>Feste Werte des LookTone-Kernels.</summary>
+    /// <summary>Constant parameters of the LookTone kernel.</summary>
     internal readonly record struct ToneParams(int Width, int Height, int F, int Sw, int Sh, int HasScene, int SceneW, int SceneH,
         int SceneFactor, float Clarity, float Curve, float Vibrance, float VibranceSky);
 
-    // Tabellen hintereinander in einem Puffer: Srgb.Decode (4097), Oklab ToLinear (4097), Oklab ToSrgb (4097) — Größen wie
-    // dort (GpuTables prüft das)
+    // Tables one after another in a single buffer: Srgb.Decode (4097), Oklab ToLinear (4097), Oklab ToSrgb (4097); the
+    // sizes must match the CPU tables (BuildGpuTables checks this).
     private const int DecodeSize = 4096;
     private const int DecodeAt = 0, OkLinearAt = DecodeSize + 1, OkSrgbAt = OkLinearAt + TableSizeOk + 1;
 
@@ -43,10 +43,11 @@ internal static partial class Dehaze
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
         ToneParams>? _toneKernel;
 
-    /// <summary>Geladene Kernel gehören zur Grafikkarte — nach deren Schließen neu laden.</summary>
+    /// <summary>Loaded kernels belong to the GPU accelerator; after it is closed they must be loaded again.</summary>
     internal static void ForgetGpuKernels() => (_modelKernel, _toneKernel) = (null, null);
 
-    /// <summary>Die Pixelschleife des Modells (nur Physik: ohne Klarheit/Schärfe/Kurve/Dynamik) — null: auf der CPU.</summary>
+    /// <summary>Runs the pixel loop of the model on the GPU (physics only: without clarity/sharpening/curve/vibrance).
+    /// Returns a buffer from the <see cref="PixelPool"/>, or null if the CPU has to compute it.</summary>
     private static float[]? ModelOnGpu(float[] bgra, int width, int height, int f, int sw, int sh, float[] air, float[] sky,
         (float[] A, float[] B) plain, (float[] A, float[] B) strong, (float[] A, float[] B) gain, float[] airLab, float mix, float k,
         float castRemoval, float strength)
@@ -81,7 +82,8 @@ internal static partial class Dehaze
         return null;
     }
 
-    /// <summary>LookTone auf der Grafikkarte, Pixel an Ort und Stelle. false: auf der CPU rechnen.</summary>
+    /// <summary>Runs LookTone on the GPU, modifying the pixels in place. Returns false if the CPU has to compute
+    /// it.</summary>
     private static bool ToneOnGpu(float[] px, int width, int height, int f, int sw, int sh, (float[] A, float[] B) baseL,
         SceneMap? scene, LookSettings s) =>
         GpuFilters.TryRun(acc =>
@@ -100,7 +102,7 @@ internal static partial class Dehaze
             dPx.CopyToCPU(px);
         });
 
-    // ------------------------------------------------------------ Kernel
+    // ------------------------------------------------------------ Kernels
 
     private static void ModelKernel(Index1D index, ArrayView<float> bgra, ArrayView<float> result, ArrayView<float> air,
         ArrayView<float> sky, ArrayView<float> plainA, ArrayView<float> plainB, ArrayView<float> strongA, ArrayView<float> strongB,
@@ -208,7 +210,7 @@ internal static partial class Dehaze
         px[i] = b; px[i + 1] = g; px[i + 2] = r;
     }
 
-    // ------------------------------------------------------------ Hilfen (wie auf der CPU)
+    // ------------------------------------------------------------ Helpers (as on the CPU)
 
     private const int TableSizeOk = 4096;
 
@@ -268,7 +270,7 @@ internal static partial class Dehaze
         return XMath.Clamp(smooth + (t - smooth) * land, MinTransmission, 1f);
     }
 
-    /// <summary>Kubikwurzel: Potenz ⅓, ein Newton-Schritt (die Grafikkarte kennt kein Cbrt).</summary>
+    /// <summary>Cube root: power ⅓ followed by one Newton step (the GPU has no Cbrt).</summary>
     private static float GpuCbrt(float v)
     {
         if (v == 0) return 0;

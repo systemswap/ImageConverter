@@ -1,19 +1,24 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Geometrie fürs Entzerren: Ein Viereck (vier Ecken in Bildpixeln, Reihenfolge oben links, oben rechts,
-/// unten rechts, unten links) liegt auf etwas, das in Wirklichkeit rechteckig ist — es wird zum Rechteck.
+/// Geometry for perspective correction: a quadrilateral that lies on something rectangular in reality is mapped to a
+/// rectangle.
 /// </summary>
+/// <remarks>
+/// A quadrilateral consists of four corners in image pixels in the order top left, top right, bottom right, bottom left.
+/// </remarks>
 public static class PerspectiveGeometry
 {
-    /// <summary>Kleinste sinnvolle Seite in Pixeln.</summary>
+    /// <summary>Smallest useful side length in pixels.</summary>
     public const double MinSide = 4;
 
     /// <summary>
-    /// Ist das Viereck brauchbar: vier Ecken, keine Überkreuzung, nicht eingedellt (konvex), nicht zu klein,
-    /// im Uhrzeigersinn (oben links → oben rechts → unten rechts → unten links)? Andersherum käme ein
-    /// gespiegeltes Bild heraus.
+    /// Determines whether the quadrilateral is usable: four corners, not self-intersecting, not concave, no side shorter
+    /// than <see cref="MinSide"/>, and clockwise (top left → top right → bottom right → bottom left). The opposite order
+    /// would produce a mirrored image.
     /// </summary>
+    /// <param name="quad">Corners in image pixels.</param>
+    /// <returns>True if the quadrilateral can be used for correction.</returns>
     public static bool IsValid(IReadOnlyList<(double X, double Y)> quad)
     {
         if (quad.Count != 4) return false;
@@ -23,17 +28,19 @@ public static class PerspectiveGeometry
             var b = quad[(i + 1) % 4];
             var c = quad[(i + 2) % 4];
             if (Distance(a, b) < MinSide) return false;
-            // Bildschirm (y nach unten): im Uhrzeigersinn ist das Kreuzprodukt positiv
+            // Screen coordinates (y pointing down): for clockwise order the cross product is positive.
             var cross = (b.X - a.X) * (c.Y - b.Y) - (b.Y - a.Y) * (c.X - b.X);
-            if (cross < 1e-6) return false;   // eingedellt, überkreuzt, gespiegelt oder drei Ecken auf einer Linie
+            if (cross < 1e-6) return false;   // concave, self-intersecting, mirrored or three corners on one line
         }
         return true;
     }
 
     /// <summary>
-    /// Größe des Ergebnisses: Mittel der gegenüberliegenden Kanten — die nahe (lange) und die ferne (kurze)
-    /// Kante gleichen sich aus. Das wahre Seitenverhältnis lässt sich aus vier Punkten allein nicht bestimmen.
+    /// Computes the size of the result as the mean of opposite edges, so that the near (long) and the far (short) edge
+    /// balance out. The true aspect ratio cannot be determined from four points alone.
     /// </summary>
+    /// <param name="quad">Four corners in image pixels, in the order described in the class remarks.</param>
+    /// <returns>Width and height in pixels, at least 1 each.</returns>
     public static (int Width, int Height) TargetSize(IReadOnlyList<(double X, double Y)> quad)
     {
         var w = (Distance(quad[0], quad[1]) + Distance(quad[3], quad[2])) / 2;
@@ -42,13 +49,17 @@ public static class PerspectiveGeometry
     }
 
     /// <summary>
-    /// Projektive Abbildung (Homographie), die <paramref name="from"/>[i] auf <paramref name="to"/>[i] bringt
-    /// (je vier Punkte). Ergebnis zeilenweise h0 … h8 mit h8 = 1:
-    /// x' = (h0·x + h1·y + h2) / (h6·x + h7·y + 1), y' = (h3·x + h4·y + h5) / (h6·x + h7·y + 1).
+    /// Computes the projective mapping (homography) that maps <paramref name="from"/>[i] to <paramref name="to"/>[i].
     /// </summary>
+    /// <param name="from">Four source points.</param>
+    /// <param name="to">Four target points.</param>
+    /// <returns>The matrix row by row as h0 … h8 with h8 = 1:
+    /// x' = (h0·x + h1·y + h2) / (h6·x + h7·y + 1), y' = (h3·x + h4·y + h5) / (h6·x + h7·y + 1).</returns>
+    /// <exception cref="ArgumentException">The linear system is singular, for example because the points lie on one
+    /// line.</exception>
     public static double[] Homography(IReadOnlyList<(double X, double Y)> from, IReadOnlyList<(double X, double Y)> to)
     {
-        // 8 Gleichungen, 8 Unbekannte
+        // 8 equations, 8 unknowns.
         var a = new double[8, 9];
         for (var i = 0; i < 4; i++)
         {
@@ -59,7 +70,7 @@ public static class PerspectiveGeometry
             a[r + 1, 3] = x; a[r + 1, 4] = y; a[r + 1, 5] = 1; a[r + 1, 6] = -v * x; a[r + 1, 7] = -v * y; a[r + 1, 8] = v;
         }
 
-        // Gauß mit Spaltenpivot
+        // Gaussian elimination with partial (column) pivoting.
         for (var col = 0; col < 8; col++)
         {
             var pivot = col;
@@ -81,7 +92,11 @@ public static class PerspectiveGeometry
         return h;
     }
 
-    /// <summary>Punkt durch die Homographie schicken.</summary>
+    /// <summary>Maps a point through a homography.</summary>
+    /// <param name="h">Homography from <see cref="Homography"/>.</param>
+    /// <param name="x">X coordinate of the point.</param>
+    /// <param name="y">Y coordinate of the point.</param>
+    /// <returns>The mapped point.</returns>
     public static (double X, double Y) Apply(double[] h, double x, double y)
     {
         var w = h[6] * x + h[7] * y + h[8];
@@ -89,9 +104,13 @@ public static class PerspectiveGeometry
     }
 
     /// <summary>
-    /// Punkt im Viereck an der Stelle (u, v) des späteren Rechtecks (0 … 1) — perspektivisch richtig. Für das
-    /// Hilfsgitter: Linien bei u = ⅓, ⅔ zeigen, wo im Ergebnis die Drittel liegen.
+    /// Returns the point in the quadrilateral that corresponds to position (u, v) of the resulting rectangle, with correct
+    /// perspective. Used for the guide grid: lines at u = ⅓ and ⅔ show where the thirds of the result lie.
     /// </summary>
+    /// <param name="quad">Four corners in image pixels, in the order described in the class remarks.</param>
+    /// <param name="u">Horizontal position in the rectangle, 0 … 1.</param>
+    /// <param name="v">Vertical position in the rectangle, 0 … 1.</param>
+    /// <returns>The point in image pixels.</returns>
     public static (double X, double Y) PointAt(IReadOnlyList<(double X, double Y)> quad, double u, double v)
     {
         var h = Homography([(0, 0), (1, 0), (1, 1), (0, 1)], quad);

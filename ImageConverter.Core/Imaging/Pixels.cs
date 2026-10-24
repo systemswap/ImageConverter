@@ -4,20 +4,24 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Der Pixelpuffer der Bildkette: 32-Bit-Fließkomma je Kanal (B, G, R, A), Werte 0–1, sRGB-kodiert.
-/// Zwischen den Schritten wird nicht gerundet; auf 8 Bit erst für die Anzeige und beim Speichern in
-/// 8-Bit-Formate — einmal, mit Dither, damit dabei keine neuen Stufen entstehen.
+/// Conversions for the pixel buffer of the image pipeline: 32-bit floating point per channel (B, G, R, A), values 0–1,
+/// sRGB-encoded.
 /// </summary>
 /// <remarks>
-/// Bewusst sRGB-kodiert und nicht linear: Kurven, Schärfen, Tiefen/Lichter und Dynamik sind auf
-/// kodierte Werte abgestimmt (so abgenommen); die physikalischen Schritte (Dunst, Skalieren) rechnen
-/// intern linear. In 32 Bit ist beides gleich genau — linear gespeichert hieße nur doppelt umrechnen.
-/// Aus Magick (Q16) kommen die Werte direkt mit 16 Bit, ohne Umweg über 8 Bit.
+/// Values are not rounded between steps; they are reduced to 8 bits only for display and when saving to 8-bit formats,
+/// once and with dither, so that no new banding appears.
+/// The buffer is deliberately sRGB-encoded rather than linear: curves, sharpening, shadows/highlights and vibrance are
+/// tuned to encoded values; the physical steps (dehaze, scaling) work in linear light internally. In 32 bits both are
+/// equally precise, so storing linear values would only mean converting twice.
+/// Values from Magick (Q16) are taken directly at 16 bits, without a detour via 8 bits.
 /// </remarks>
 public static class Pixels
 {
     private const float Q16 = 65535f;
 
+    /// <summary>Converts 8-bit BGRA bytes into a new floating-point buffer.</summary>
+    /// <param name="bgra">Pixels as B, G, R, A bytes.</param>
+    /// <returns>A new buffer of the same length with values 0–1.</returns>
     public static float[] FromBytes(byte[] bgra)
     {
         var px = new float[bgra.Length];
@@ -32,7 +36,11 @@ public static class Pixels
         return px;
     }
 
-    /// <summary>Die Pixel eines Magick-Bildes mit voller Tiefe (Q16). Das Bild bleibt unverändert.</summary>
+    /// <summary>Reads the pixels of a Magick image at full depth (Q16). The image is not modified.</summary>
+    /// <param name="image">Source image; it is locked while being read.</param>
+    /// <returns>A buffer from <see cref="PixelPool"/> with width × height × 4 values (B, G, R, A); the caller may return
+    /// it to the pool after use.</returns>
+    /// <exception cref="InvalidOperationException">ImageMagick could not provide the pixels.</exception>
     public static float[] FromMagick(MagickImage image)
     {
         lock (image)
@@ -40,7 +48,7 @@ public static class Pixels
             int w = (int)image.Width, h = (int)image.Height;
             var px = PixelPool.Rent(w * h * 4);
             using var pixels = image.GetPixelsUnsafe();
-            // In Streifen lesen: ein 16-Bit-Zwischenpuffer des ganzen Bildes wären bei 28 MP weitere 230 MB
+            // Read in strips: a 16-bit intermediate buffer of the whole image would take another 230 MB at 28 MP.
             for (var y0 = 0; y0 < h; y0 += StripRows)
             {
                 var rows = Math.Min(StripRows, h - y0);
@@ -56,12 +64,16 @@ public static class Pixels
         }
     }
 
-    /// <summary>Zeilen je Streifen beim Lesen aus Magick.</summary>
+    /// <summary>Rows per strip when reading from and writing to Magick.</summary>
     private const int StripRows = 256;
 
-    /// <summary>Ein neues Magick-Bild mit 16 Bit je Kanal aus dem Puffer — in Streifen geschrieben, ohne
-    /// 16-Bit-Kopie des ganzen Bildes.</summary>
-    /// <param name="alpha">Ob das Ergebnis einen Alphakanal haben soll (sonst wird er verworfen).</param>
+    /// <summary>Creates a new Magick image with 16 bits per channel from the buffer. It is written in strips, without a
+    /// 16-bit copy of the whole image.</summary>
+    /// <param name="px">Pixel buffer (B, G, R, A, values 0–1); values outside are clamped.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="alpha">Whether the result has an alpha channel; otherwise the alpha values are discarded.</param>
+    /// <returns>A new image owned by the caller.</returns>
     public static MagickImage ToMagick16(float[] px, int width, int height, bool alpha)
     {
         var image = new MagickImage(MagickColors.Black, (uint)width, (uint)height);
@@ -69,7 +81,7 @@ public static class Pixels
         image.Depth = 16;
         using var pixels = image.GetPixelsUnsafe();
         var channels = (int)pixels.Channels;
-        // Reihenfolge der Kanäle im Bild (meist R, G, B[, A]) → Quelle im Puffer (B, G, R, A)
+        // Channel order in the image (usually R, G, B[, A]) → source in the buffer (B, G, R, A).
         var from = new int[channels];
         for (var c = 0; c < channels; c++) from[c] = 3;
         foreach (var (channel, source) in new[] { (PixelChannel.Blue, 0), (PixelChannel.Green, 1), (PixelChannel.Red, 2), (PixelChannel.Alpha, 3) })
@@ -96,9 +108,12 @@ public static class Pixels
         return image;
     }
 
-    /// <param name="dither">Dreieck-Rauschen von ±1 Stufe vor dem Runden (TPDF): Ein weicher Verlauf
-    /// zwischen zwei 8-Bit-Stufen wird so zu einem feinen Korn statt zu einer sichtbaren Kante.
-    /// Fest je Pixelort — die Vorschau flimmert nicht.</param>
+    /// <summary>Converts the buffer to 8-bit BGRA bytes.</summary>
+    /// <param name="px">Pixel buffer (B, G, R, A, values 0–1).</param>
+    /// <param name="dither">Adds triangular noise of ±1 level before rounding (TPDF) to the colour channels, so that a
+    /// smooth gradient between two 8-bit levels becomes fine grain instead of a visible edge. The noise is fixed per
+    /// pixel position, so the preview does not flicker. Alpha is only rounded.</param>
+    /// <returns>A new byte array of the same length.</returns>
     public static byte[] ToBytes(float[] px, bool dither)
     {
         var bgra = new byte[px.Length];
@@ -117,15 +132,17 @@ public static class Pixels
     }
 
     /// <summary>
-    /// Ein 16-Bit-Bild für ein 8-Bit-Format vorbereiten: jeden Farbkanal mit Dither auf eine 8-Bit-Stufe
-    /// setzen (an Ort und Stelle, Profile und Metadaten bleiben). Magick rundet danach verlustfrei.
+    /// Prepares a 16-bit image for an 8-bit format: every colour channel is set to an 8-bit level with dither, in place;
+    /// profiles and metadata are kept. Magick's subsequent reduction to 8 bits is then lossless.
     /// </summary>
+    /// <param name="image">Image to modify; its depth is set to 8 afterwards.</param>
+    /// <exception cref="InvalidOperationException">ImageMagick could not provide the pixels.</exception>
     public static void DitherTo8Bit(MagickImage image)
     {
         using var pixels = image.GetPixelsUnsafe();
         var data = pixels.GetValues() ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
         var channels = (int)pixels.Channels;
-        // Farbkanäle: bei Graustufen der erste, sonst die ersten drei; Alpha wird nur gerundet
+        // Colour channels: the first one for greyscale, otherwise the first three; alpha is only rounded.
         var colour = channels >= 3 ? 3 : 1;
         Parallel.For(0, data.Length / channels, ComputeLimits.Options, p =>
         {
@@ -144,9 +161,8 @@ public static class Pixels
     private static byte ToByte(float v) => (byte)(v <= 0 ? 0 : v >= 255 ? 255 : v + 0.5f);
 
     /// <summary>
-    /// TPDF-Rauschen (−1 … +1 Stufe) für einen Wert in 8-Bit-Stufen. Werte, die schon genau auf einer
-    /// Stufe liegen, bleiben unverändert — ein unbearbeitetes 8-Bit-Bild ändert sich so nicht; Schwarz
-    /// und Weiß bleiben rein (das Rauschen läuft zu den Enden hin aus).
+    /// TPDF noise (−1 … +1 level) for a value in 8-bit levels. Values that already lie exactly on a level stay unchanged,
+    /// so an unedited 8-bit image does not change; black and white stay pure (the noise fades out towards both ends).
     /// </summary>
     private static float Dither(float v, uint key)
     {
@@ -154,7 +170,7 @@ public static class Pixels
         return (Noise(key) + Noise(key ^ 0x9E3779B9u) - 1) * Math.Clamp(Math.Min(v, 255 - v), 0, 1);
     }
 
-    /// <summary>Gleichverteilte Zahl 0 … 1 aus einem Ganzzahl-Schlüssel (Hash, ohne Zustand).</summary>
+    /// <summary>Uniformly distributed number in [0, 1) from an integer key (stateless hash).</summary>
     internal static float Noise(uint key)
     {
         key ^= key >> 16; key *= 0x7FEB352Du;

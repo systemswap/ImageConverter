@@ -3,19 +3,60 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>Einfärben des ganzen Bildes (Kachel „Tools“).</summary>
+/// <summary>Tinting of the whole image ("Tools" tile).</summary>
 public enum Tint
 {
+    /// <summary>No tinting.</summary>
     None,
+    /// <summary>Black and white.</summary>
     BlackWhite,
-    /// <summary>Einfarbig im Farbton <see cref="Adjustments.TintHue"/>.</summary>
+    /// <summary>Monochrome in the hue <see cref="Adjustments.TintHue"/>.</summary>
     Color,
 }
 
 /// <summary>
-/// Licht und Farbe aus der Kachel „Tools“. Jeder Regler läuft von −100 bis +100,
-/// 0 heißt unverändert; <see cref="TintHue"/> ist ein Farbwinkel 0–360°.
+/// Light and colour settings from the "Tools" tile.
 /// </summary>
+/// <remarks>
+/// For every slider 0 means unchanged. Values outside the stated ranges are clamped when applied.
+/// </remarks>
+/// <param name="Brightness">Brightness −100 … +100 (gamma on the midtones).</param>
+/// <param name="Contrast">Contrast −100 … +100 (S-curve around the midpoint).</param>
+/// <param name="Shadows">Shadows −100 … +100 (local, see <see cref="Adjust"/>).</param>
+/// <param name="Highlights">Highlights −100 … +100 (local, see <see cref="Adjust"/>).</param>
+/// <param name="Saturation">Saturation −100 … +100.</param>
+/// <param name="Tint">Tinting mode.</param>
+/// <param name="Vibrance">Vibrance −100 … +100.</param>
+/// <param name="TintHue">Hue for <see cref="Imaging.Tint.Color"/> in degrees 0–360; only relevant with that mode.</param>
+/// <param name="Dehaze">Dehaze −100 … +300; negative values add haze.</param>
+/// <param name="MatchLuminance">"Match colour", luminance −100 … +200 (factor 1–300 %).</param>
+/// <param name="Neutralize">"Match colour", neutralise colour cast 0–100 %.</param>
+/// <param name="Warmth">"Match colour", colour −100 (cool) … +100 (warm).</param>
+/// <param name="DehazePasses">Dehaze fine-tuning: number of passes (1 … 10).</param>
+/// <param name="DehazeClarity">Dehaze fine-tuning: clarity share in percent.</param>
+/// <param name="DehazeContrast">Dehaze fine-tuning: contrast (curve) share in percent.</param>
+/// <param name="DehazeVibrance">Dehaze fine-tuning: vibrance share in percent.</param>
+/// <param name="DehazeSharpen">Dehaze fine-tuning: fine sharpening share in percent.</param>
+/// <param name="DehazeEdge">Dehaze fine-tuning: edge sharpening 0–100 %.</param>
+/// <param name="DehazeBrightness">Dehaze fine-tuning: brightness compensation in percent.</param>
+/// <param name="DehazeDeband">Dehaze fine-tuning: debanding 0–100 %.</param>
+/// <param name="DehazeCast">Dehaze fine-tuning: removal of the haze colour cast 0–100 %.</param>
+/// <param name="WbNeutral">White balance eyedropper for neutral grey (averaged measurements); null = not used.</param>
+/// <param name="WbBlack">White balance eyedropper for black; null = not used.</param>
+/// <param name="WbWhite">White balance eyedropper for white; null = not used.</param>
+/// <param name="MatchLimit">"Match colour", luminance threshold (percent brightness of the regions, 5–100): brighter
+/// regions stay unchanged; 100 = no threshold. Only when brightening.</param>
+/// <param name="MatchTarget">"Match colour", luminance target (percent brightness, 5–100): dark regions are lifted only
+/// up to this value (per region, at most by the luminance factor); 0 = off, everything in the same ratio as in
+/// Referenzwerkzeug.</param>
+/// <param name="MatchGlobal">"Match colour", luminance "Overall" −100 … +100: makes the whole image brighter or darker
+/// once more (like Referenzwerkzeug 1–200 %), without masks, after the region luminance. The region luminance evens out regions
+/// but does not make the image brighter as a whole.</param>
+/// <param name="MaskAmount">Luminosity mask (own group, like the luminosity masks in Referenzwerkzeug): strength 0–200 (% more
+/// light in the darkest tones).</param>
+/// <param name="MaskEnd">Luminosity mask: fade-out point (percent brightness, 5–100); nothing above it.</param>
+/// <param name="MaskCurve">Luminosity mask: gradient 0–100 (soft … steep), see <see cref="LumMask.Power"/>.</param>
+/// <param name="MaskPreview">Preview only: shows the mask as greyscale instead of the image; never used for export.</param>
 public sealed record Adjustments(
     double Brightness = 0,
     double Contrast = 0,
@@ -29,8 +70,7 @@ public sealed record Adjustments(
     double MatchLuminance = 0,
     double Neutralize = 0,
     double Warmth = 0,
-    // Dunst, Feineinstellung: Durchläufe und die Wahrnehmungsanteile in Prozent.
-    // Die Vorgaben sind die Werte, die bis 0.4.40 fest eingebaut waren; Entstufen (Debanding) seit 0.4.44.
+    // Dehaze fine-tuning: passes and the perception shares in percent.
     int DehazePasses = Imaging.Dehaze.DefaultPasses,
     double DehazeClarity = Imaging.Dehaze.DefaultClarity,
     double DehazeContrast = Imaging.Dehaze.DefaultCurve,
@@ -40,42 +80,39 @@ public sealed record Adjustments(
     double DehazeBrightness = Imaging.Dehaze.DefaultBrightness,
     double DehazeDeband = Imaging.Dehaze.DefaultDeband,
     double DehazeCast = Imaging.Dehaze.DefaultCast,
-    // Weißabgleich mit Pipetten (Gruppe „Weißabgleich“): gemittelte Messungen; null = Pipette nicht benutzt
+    // White balance with eyedroppers ("White balance" group): averaged measurements; null = eyedropper not used.
     WbSample? WbNeutral = null,
     WbSample? WbBlack = null,
     WbSample? WbWhite = null,
-    // Gleiche Farbe, Luminanz: Schwellwert (Prozent Helligkeit der Bereiche) — hellere Bereiche bleiben, 100 = keine
-    // Grenze; nur beim Aufhellen. („Ferne schonen“ 0.5.38–0.5.49 ist entfallen: Luminanz entscheidet nach Helligkeit.)
+    // "Match colour", luminance: threshold, target and "Overall" (see the parameter documentation above). Luminance
+    // decides by brightness only, not by distance.
     double MatchLimit = 100,
-    // Luminanz: Ziel (Prozent Helligkeit) — dunkle Bereiche werden nur bis hierher angehoben (je Bereich, höchstens um
-    // den Luminanz-Faktor); 0 = aus, alles im selben Verhältnis wie in Referenzwerkzeug
     double MatchTarget = 0,
-    // Luminanz „Gesamt“: das ganze Bild noch einmal heller/dunkler (wie Referenzwerkzeug 1–200 %), ohne Masken, nach der
-    // Bereichs-Luminanz — die gleicht Bereiche an, macht das Bild insgesamt aber nicht heller (Wunsch 0.5.44)
     double MatchGlobal = 0,
-    // Luminanzmaske (eigene Gruppe, wie die Luminanzmasken in Referenzwerkzeug): Stärke 0–200 (% mehr Licht im Dunkelsten),
-    // Auslaufen ab (% Helligkeit, darüber nichts), Verlauf 0–100 (weich … steil). MaskPreview nur für die Vorschau:
-    // die Maske als Graustufen statt des Bildes — nie im Export.
+    // Luminosity mask; MaskPreview is for the preview only and never applies to the export.
     double MaskAmount = 0,
     double MaskEnd = 75,
     double MaskCurve = 30,
     bool MaskPreview = false)
 {
-    /// <summary>Voreinstellung beim Färben: warmes Braun wie ein alter Fotoabzug.</summary>
+    /// <summary>Default hue for tinting: warm brown like an old photographic print.</summary>
     public const double SepiaHue = 30;
 
+    /// <summary>No adjustments.</summary>
     public static readonly Adjustments None = new();
 
-    /// <summary>Nichts zu tun — der Farbton zählt nur, wenn auch gefärbt wird, die Dunst-Feineinstellung nur mit Dunst.</summary>
+    /// <summary>True if there is nothing to do. The hue counts only when tinting is active, the dehaze fine-tuning only
+    /// with dehaze, and threshold, target and mask settings only when they have an effect.</summary>
     public bool IsNone => Normalized == None;
 
-    /// <summary>Ohne Einstellungen, die gerade nicht wirken (Farbton ohne Färben, Dunst-Feineinstellung ohne Dunst).</summary>
+    /// <summary>The settings with all values that currently have no effect reset to their defaults (hue without tinting,
+    /// dehaze fine-tuning without dehaze, threshold/target without luminance, mask settings without mask).</summary>
     private Adjustments Normalized
     {
         get
         {
             var n = Tint == Tint.Color ? this : this with { TintHue = SepiaHue };
-            if (MatchLuminance <= 0 || MatchLimit >= 100) n = n with { MatchLimit = 100 };   // wirkt nur beim Aufhellen
+            if (MatchLuminance <= 0 || MatchLimit >= 100) n = n with { MatchLimit = 100 };   // only has an effect when brightening
             if (MatchLuminance <= 0 || MatchTarget <= 0) n = n with { MatchTarget = 0 };
             if (MaskAmount <= 0 && !MaskPreview) n = n with { MaskAmount = 0, MaskEnd = None.MaskEnd, MaskCurve = None.MaskCurve };
             return Dehaze == 0 ? n with { DehazePasses = None.DehazePasses, DehazeClarity = None.DehazeClarity, DehazeContrast = None.DehazeContrast,
@@ -83,7 +120,7 @@ public sealed record Adjustments(
         }
     }
 
-    /// <summary>Nur die Teile, von denen <see cref="Adjust.Prepare"/> abhängt — Schlüssel für die Vorschau.</summary>
+    /// <summary>Only the parts that <see cref="Adjust.Prepare"/> depends on; used as a cache key for the preview.</summary>
     public Adjustments PrepareKey => None with
     {
         Shadows = Shadows, Highlights = Highlights, Dehaze = Normalized.Dehaze,
@@ -91,81 +128,101 @@ public sealed record Adjustments(
         DehazeVibrance = Normalized.DehazeVibrance, DehazeSharpen = Normalized.DehazeSharpen, DehazeEdge = Normalized.DehazeEdge,
         DehazeBrightness = Normalized.DehazeBrightness, DehazeDeband = Normalized.DehazeDeband, DehazeCast = Normalized.DehazeCast,
         WbNeutral = WbNeutral, WbBlack = WbBlack, WbWhite = WbWhite,
-        // Nur ob die Bereichskarten gebraucht werden, nicht die Reglerstände — die wirken erst in Apply (flüssig)
+        // Only whether the region maps are needed, not the slider values; those take effect only in Apply (fast).
         MatchLimit = NeedsRegions ? 0 : 100,
     };
 
     /// <summary>
-    /// Nur die Teile, von denen <see cref="Adjust.Dehazed"/> abhängt (Weißabgleich und Dunst) — Schlüssel der teuersten
-    /// Stufe: Tiefen/Lichter und die Bereichskarten kommen danach und brauchen den Dunst nicht neu.
+    /// Only the parts that <see cref="Adjust.Dehazed"/> depends on (white balance and dehaze); the cache key of the most
+    /// expensive stage. Shadows/highlights and the region maps come afterwards and do not require dehaze to be recomputed.
     /// </summary>
     public Adjustments DehazeKey => PrepareKey with { Shadows = 0, Highlights = 0, MatchLimit = 100 };
 
-    /// <summary>Braucht Luminanz die Bereichskarten (<see cref="LuminanceRegions"/>)?</summary>
+    /// <summary>True if luminance (threshold or target) or the luminosity mask needs the region maps
+    /// (<see cref="LuminanceRegions"/>).</summary>
     public bool NeedsRegions => Normalized is var n
         && ((n.MatchLuminance > 0 && (n.MatchLimit < 100 || n.MatchTarget > 0)) || n.MaskAmount > 0 || n.MaskPreview);
 
-    /// <summary>Wirkt die Luminanzmaske (oder wird sie gezeigt)?</summary>
+    /// <summary>True if the luminosity mask has an effect or is shown.</summary>
     public bool HasLumMask => Normalized is { } n && (n.MaskAmount > 0 || n.MaskPreview);
 
     /// <summary>
-    /// Kräftige Tonwert-Bearbeitung, die weiche Verläufe spreizt — dann lohnen 16 Bit je Kanal (Empfehlung beim Speichern):
-    /// Dunst ab 20, Kontrast, Tiefen oder Lichter ab ±25, Helligkeit ab ±30, Luminanz oder Luminanzmaske ab 20, Luminanz
-    /// „Gesamt“ ab ±25. Darunter reicht 8 Bit mit Dither — die Datei bliebe halb so groß.
+    /// True for strong tonal editing that spreads smooth gradients, where 16 bits per channel are worthwhile
+    /// (recommendation when saving).
     /// </summary>
+    /// <remarks>
+    /// Thresholds: dehaze from 20, contrast, shadows or highlights from ±25, brightness from ±30, luminance or luminosity
+    /// mask from 20, luminance "Overall" from ±25. Below that, 8 bits with dither are sufficient and the file stays half
+    /// the size.
+    /// </remarks>
     public bool SpreadsTones => Normalized is var n
         && (n.Dehaze >= 20 || Math.Abs(n.Contrast) >= 25 || Math.Abs(n.Shadows) >= 25 || Math.Abs(n.Highlights) >= 25
             || Math.Abs(n.Brightness) >= 30 || n.MatchLuminance >= 20 || n.MaskAmount >= 20 || Math.Abs(n.MatchGlobal) >= 25);
 
-    /// <summary>Wird ein Weißabgleich gerechnet?</summary>
+    /// <summary>True if a white balance is computed.</summary>
     public bool HasWhiteBalance => WhiteBalance.IsActive(WbNeutral, WbBlack, WbWhite);
 }
 
 /// <summary>
-/// Wendet <see cref="Adjustments"/> auf 8-Bit-BGRA-Pixel an — wie <see cref="Sharpen"/>
-/// für Vorschau und Export dieselbe Funktion, damit man exportiert, was man gesehen hat.
-///
-/// Reihenfolge: Weißabgleich (Pipetten) → Dunst → Tiefen/Lichter → Helligkeit → Kontrast → Gleiche Farbe
-/// (Ausgleichen, Luminanz) → Dynamik → Sättigung → Färben.
-/// Tiefen und Lichter wirken lokal wie in Referenzwerkzeug: Ob eine Stelle als dunkel oder hell
-/// gilt, entscheidet ihre Umgebung auf jeder Größenordnung (Local Laplacian Filter, wie
-/// Referenzwerkzeug), nicht das einzelne Pixel. Ein dunkles
-/// Detail in einer hellen Fläche bleibt so dunkel, und das Bild wird nicht flau.
+/// Applies <see cref="Adjustments"/> to pixel buffers. Like <see cref="Sharpen"/>, preview and export use the same
+/// function, so that the export matches what was shown.
 /// </summary>
+/// <remarks>
+/// Order: white balance (eyedroppers) → dehaze → shadows/highlights → "Match colour" (neutralise, colour, luminance,
+/// overall) → luminosity mask → brightness and contrast → vibrance → saturation → tint.
+/// Shadows and highlights act locally as in Referenzwerkzeug: whether an area counts as dark or bright is decided by its
+/// surroundings at every scale (local Laplacian filter, as in Referenzwerkzeug), not by the single pixel. A dark detail in a
+/// bright area therefore stays dark, and the image does not become flat.
+/// </remarks>
 public static class Adjust
 {
-    /// <summary>Weite Umgebung relativ zur längsten Kante: Ein Bereich zählt nur als dunkel
-    /// (bzw. hell), wenn auch sie es ist. Kleine dunkle Stellen in hellen Flächen — Pupillen,
-    /// Nasenlöcher, Haarsträhnen im Gesicht — bleiben so unverändert. Relativ, damit es in
-    /// der kleinen Vorschau und im Export gleich wirkt.</summary>
+    /// <summary>Wide surroundings relative to the longest edge: an area counts as dark (or bright) only if these
+    /// surroundings are as well. Small dark spots in bright areas (pupils, nostrils, strands of hair in a face) therefore
+    /// stay unchanged. Relative, so that it has the same effect in the small preview and in the export.</summary>
     private const double WideNeighbourhoodPerEdge = 0.03;
 
-    /// <summary>Ab diesem Helligkeitsabstand zur Umgebung gilt ein Übergang als Kante,
-    /// über die Tiefen/Lichter nicht hinweg wirken.</summary>
+    /// <summary>From this brightness difference to the surroundings onwards, a transition counts as an edge across which
+    /// shadows/highlights do not act.</summary>
     private const float EdgeContrast = 0.15f;
 
-    // Gewichte der Helligkeit (Rec. 709) auf den sRGB-Werten
+    // Luminance weights (ITU-R BT.709) applied to the sRGB values.
     private const float Kr = 0.2126f, Kg = 0.7152f, Kb = 0.0722f;
 
-    /// <summary>8-Bit-Zugang (Tests, einfache Aufrufer): rechnet in 32 Bit, rundet am Ende mit Dither.</summary>
+    /// <summary>8-bit entry point (tests, simple callers): computes in 32 bits and rounds with dither at the end.</summary>
+    /// <param name="bgra">Pixels as B, G, R, A bytes; not modified.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="a">Adjustments to apply.</param>
+    /// <param name="plan">Progress and cancellation; null = none.</param>
+    /// <returns>A new byte array with the result.</returns>
     public static byte[] Apply(byte[] bgra, int width, int height, Adjustments a, WorkPlan? plan = null) =>
         Pixels.ToBytes(Apply(Pixels.FromBytes(bgra), width, height, a, plan), dither: true);
 
-    /// <param name="px">Pixelpuffer (B, G, R, A, sRGB-kodiert 0–1, siehe <see cref="Pixels"/>); bleibt unverändert.</param>
+    /// <summary>Applies the adjustments: <see cref="Prepare"/> followed by
+    /// <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/>.</summary>
+    /// <param name="px">Pixel buffer (B, G, R, A, sRGB-encoded 0–1, see <see cref="Pixels"/>); not modified.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="a">Adjustments to apply.</param>
+    /// <param name="plan">Progress and cancellation; null = none.</param>
+    /// <returns>A new buffer from the <see cref="PixelPool"/>.</returns>
     public static float[] Apply(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var prepared = Prepare(px, width, height, a, plan);
         var result = Apply(prepared, width, height, a, plan);
-        if (!ReferenceEquals(prepared.Source, px)) PixelPool.Return(prepared.Source);   // Zwischenstand, gehört uns
+        if (!ReferenceEquals(prepared.Source, px)) PixelPool.Return(prepared.Source);   // intermediate result owned by this method
         return result;
     }
 
     /// <summary>
-    /// Trägt die Schritte von <see cref="Prepare"/> und <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/>
-    /// in den Fortschritt ein — in derselben Reihenfolge, in der sie dort beginnen.
+    /// Registers the steps of <see cref="Prepare"/> and <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/> in
+    /// the progress plan, in the same order in which they start there.
     /// </summary>
-    /// <param name="megapixels">Bildgröße, für den geschätzten Aufwand.</param>
-    /// <param name="withDehaze">false: der Dunst liegt schon fertig vor (Zwischenspeicher), nur der Rest wird gerechnet.</param>
+    /// <param name="a">Adjustments that will be applied.</param>
+    /// <param name="plan">Plan to add the steps to.</param>
+    /// <param name="megapixels">Image size in megapixels, for the estimated effort.</param>
+    /// <param name="withDehaze">False if the dehazed image is already available (cache) and only the rest is
+    /// computed.</param>
     public static void PlanSteps(Adjustments a, WorkPlan plan, double megapixels, bool withDehaze = true)
     {
         if (a.IsNone) return;
@@ -183,24 +240,44 @@ public static class Adjust
         plan.Add(Tr.T("Licht und Farbe"), WorkPlan.ToolsCost * megapixels);
     }
 
-    /// <summary>Ergebnis des teuren Teils: Bild nach „Dunst entfernen“ und die Zielhelligkeit
-    /// aus Tiefen/Lichtern (null, wenn beide auf 0).</summary>
-    /// <param name="Regions">Bereichskarten für Luminanz mit Schwellwert / Ferne schonen; null = nicht gebraucht.</param>
+    /// <summary>Result of the expensive part of the adjustments.</summary>
+    /// <param name="Source">Image after white balance and dehaze.</param>
+    /// <param name="Toned">Target brightness from shadows/highlights; null if both are 0.</param>
+    /// <param name="Regions">Region maps for luminance with threshold or target and for the luminosity mask; null = not
+    /// needed.</param>
     public sealed record Prepared(float[] Source, float[]? Toned, LuminanceRegions? Regions = null);
 
     /// <summary>
-    /// Der teure Teil — Dunst entfernen und Tiefen/Lichter über den Local Laplacian Filter.
-    /// Hängt nur von Bild, Dunst, Tiefen und Lichtern ab; die Vorschau merkt sich das
-    /// Ergebnis, damit die übrigen Regler flüssig bleiben. Zwei Stufen: <see cref="Dehazed"/>, dann <see cref="Finish"/>.
+    /// Computes the expensive part: white balance, dehaze and shadows/highlights via the local Laplacian filter.
     /// </summary>
+    /// <param name="px">Pixel buffer (B, G, R, A, sRGB-encoded 0–1); not modified.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="a">Adjustments; only the parts in <see cref="Adjustments.PrepareKey"/> are used.</param>
+    /// <param name="plan">Progress and cancellation; null = none.</param>
+    /// <returns>The intermediate result for <see cref="Apply(Prepared, int, int, Adjustments, WorkPlan?)"/>.</returns>
+    /// <remarks>
+    /// Depends only on the image, white balance, dehaze, shadows and highlights (and on whether region maps are needed);
+    /// the preview keeps the result so that the other sliders stay responsive. Two stages: <see cref="Dehazed"/>, then
+    /// <see cref="Finish"/>.
+    /// </remarks>
     public static Prepared Prepare(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null) =>
         Finish(Dehazed(px, width, height, a, plan), width, height, a, plan);
 
     /// <summary>
-    /// Zweite Stufe von <see cref="Prepare"/>: Tiefen/Lichter und die Bereichskarten auf dem Ergebnis von
-    /// <see cref="Dehazed"/>. Hängt vom Dunst nur über dieses Bild ab — wer es aufhebt (Vorschau, Größenschätzung),
-    /// rechnet beim Ziehen an Tiefen oder Lichtern nur noch diese Stufe.
+    /// Second stage of <see cref="Prepare"/>: shadows/highlights and the region maps on the result of
+    /// <see cref="Dehazed"/>.
     /// </summary>
+    /// <param name="dehazed">Result of <see cref="Dehazed"/>; it becomes <see cref="Prepared.Source"/>.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="a">Adjustments.</param>
+    /// <param name="plan">Progress and cancellation; null = none.</param>
+    /// <returns>The intermediate result.</returns>
+    /// <remarks>
+    /// Depends on dehaze only through this image; callers that keep it (preview, size estimate) recompute only this stage
+    /// while shadows or highlights are being dragged.
+    /// </remarks>
     public static Prepared Finish(float[] dehazed, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         if (a.Shadows != 0 || a.Highlights != 0) plan?.Next();
@@ -209,66 +286,70 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Erste Stufe von <see cref="Prepare"/>: Weißabgleich und Dunst — der teuerste Teil, hängt nur von
-    /// <see cref="Adjustments.DehazeKey"/> ab. Ohne beides <paramref name="px"/> selbst, sonst ein neuer Puffer.
+    /// First stage of <see cref="Prepare"/>: white balance and dehaze, the most expensive part. Depends only on
+    /// <see cref="Adjustments.DehazeKey"/>.
     /// </summary>
-    /// <param name="workEdge">Kante der kleinen Fassung, auf der der Dunst geschätzt wird; 0 = wie immer (1024). Kleiner
-    /// nur für die grobe Vorschau beim Ziehen — ein Viertel der Arbeit, das Ergebnis weicht leicht ab.</param>
+    /// <param name="px">Pixel buffer (B, G, R, A, sRGB-encoded 0–1); not modified.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="a">Adjustments.</param>
+    /// <param name="plan">Progress and cancellation; null = none.</param>
+    /// <param name="workEdge">Edge of the small copy on which the haze is estimated; 0 = default (1024). Smaller only for
+    /// the coarse preview while dragging: a quarter of the work, with a slightly different result.</param>
+    /// <returns><paramref name="px"/> itself if neither white balance nor dehaze is active; otherwise a new buffer.</returns>
     public static float[] Dehazed(float[] px, int width, int height, Adjustments a, WorkPlan? plan = null, int workEdge = 0)
     {
         var dehaze = (float)Math.Clamp(a.Dehaze / 100, -1, 3);   // −100 … +300
         var source = px;
 
-        // Weißabgleich zuerst: Er wirkt auf dasselbe Bild, an dem die Pipetten gemessen haben, und alles
-        // Weitere (Dunst, Licht, Farbe) arbeitet schon mit den richtigen Farben
+        // White balance first: it acts on the same image on which the eyedroppers measured, and everything after it
+        // (dehaze, light, colour) already works with the correct colours.
         if (a.HasWhiteBalance)
             source = WhiteBalance.Apply(px, width, height, a.WbNeutral, a.WbBlack, a.WbWhite);
         if (dehaze != 0)
         {
-            // Durchläufe wie das Auge: Dunst entfernen, das Ergebnis als Ausgang nehmen, wieder
-            // schätzen — wo er weg ist, findet die Schätzung nichts mehr, die Ferne wird weiter
-            // klar. Luftlicht und Himmel stammen aus dem ersten Durchlauf, der Himmel bleibt danach
-            // unverändert (sonst körnig).
+            // Passes like the eye: remove haze, take the result as the new input and estimate again. Where the haze is
+            // gone, the estimate finds nothing more, while the distance keeps getting clearer. Air light and sky come
+            // from the first pass; the sky stays unchanged afterwards (otherwise it becomes grainy).
             //
-            // Alles in 32-Bit-Fließkomma, gerundet wird einmal am Schluss (mit Dither): Mit 8 Bit
-            // zwischen den Schritten verlor jeder Durchlauf Zwischenstufen, und der Kontrast zog die
-            // übrigen auseinander — bei 3 Durchläufen Treppen im Himmel.
+            // Everything in 32-bit floating point, rounded once at the end (with dither): with 8 bits between the steps,
+            // every pass loses intermediate levels and the contrast pulls the remaining ones apart, giving banding in
+            // the sky with 3 passes.
             //
-            // Reihenfolge: Erst die Quelle entstufen (die 8-Bit-Stufen des JPEG werden zu Zwischenwerten,
-            // bevor der Kontrast sie spreizt), dann je Durchlauf Dunst → Kontrast/Dynamik → Entstufen →
-            // Schärfe. Schärfe zuletzt: Vor dem Entstufen hätte sie die Stufenkanten betont.
+            // Order: first deband the source (the 8-bit levels of the JPEG become intermediate values before the
+            // contrast spreads them), then per pass dehaze → contrast/vibrance → deband → sharpening. Sharpening comes
+            // last because before debanding it would emphasise the band edges.
             var settings = new Dehaze.Settings(
                 (float)(a.DehazeClarity / 100), (float)(a.DehazeSharpen / 100), (float)(a.DehazeContrast / 100),
                 (float)(a.DehazeVibrance / 100), (float)(a.DehazeBrightness / 100), (float)Math.Clamp(a.DehazeCast / 100, 0, 1));
             var pass = new Dehaze.Pass();
             var deband = (float)Math.Clamp(a.DehazeDeband / 100, 0, 1);
-            // Zwischenstände kommen aus dem Pool und gehen dorthin zurück, sobald der nächste da ist —
-            // nie der Eingang (gehört dem Aufrufer, in der Vorschau liegt er im Zwischenspeicher)
+            // Intermediate results come from the pool and go back as soon as the next one exists, but never the input
+            // (it belongs to the caller; in the preview it lives in the cache).
             float[] Replace(float[] old, float[] next)
             {
                 if (!ReferenceEquals(old, next) && !ReferenceEquals(old, px)) PixelPool.Return(old);
                 return next;
             }
             var work = Deband.Apply(source, width, height, deband * Dehaze.SourceDebandShare, seed: 0);
-            // Ergebnis des Weißabgleichs (gehört uns) wird ab hier nicht mehr gelesen — sonst blieb es bis zur nächsten
-            // vollen Speicherbereinigung liegen (Panorama: 450 MB)
+            // The white balance result (owned by this method) is no longer read from here on; return it now, otherwise
+            // it stays in memory until the next full garbage collection (450 MB for the panorama).
             if (!ReferenceEquals(work, source) && !ReferenceEquals(source, px)) PixelPool.Return(source);
-            plan?.Next();   // Entstufen der Quelle zählt zum ersten Schritt
+            plan?.Next();   // debanding the source counts towards the first step
             if (dehaze < 0)
             {
-                work = Replace(work, Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f, workEdge));   // Dunst hinzufügen: ein Schritt
+                work = Replace(work, Dehaze.Apply(work, width, height, dehaze, pass, settings, 1f, workEdge));   // add haze: one step
             }
             else
             {
-                // Je Durchlauf ein sachter Schritt: Dunst weg, dann Kontrast, Dynamik und Schärfe auf das
-                // Ergebnis — der nächste Durchlauf schätzt den Rest neu. Mehr Durchläufe bauen darauf auf.
-                // Mit der vollen Stärke je Durchlauf (0.4.43) war schon bei 2 Durchläufen und Dunst 60
-                // Schluss, die Dynamik viel zu stark.
+                // A gentle step per pass: remove haze, then contrast, vibrance and sharpening on the result; the next
+                // pass estimates the remainder anew. More passes build on this. With the full strength in every pass,
+                // two passes at dehaze 60 are already the limit and vibrance becomes far too strong.
                 var passes = Math.Clamp(a.DehazePasses, 1, Dehaze.MaxPasses);
-                var t = dehaze;   // 0 … 3: Reglerstand / 100
-                // Physik und Look getrennt (Phase 4): Der Dunstfilter rechnet nur das Modell (Luftlicht,
-                // Durchlässigkeit, Rückrechnung, Helligkeitsausgleich, Farbe), der Look folgt an einer
-                // Stelle — je Feinregler ein Mechanismus, Himmel und Lichthof über die Szenenkarte geschont.
+                var t = dehaze;   // 0 … 3: slider value / 100
+                // Physics and look are separate: the dehaze filter computes only the model (air light, transmission,
+                // recovery, brightness compensation, colour); the look follows in one place, with one mechanism per
+                // fine slider, and the scene map protects the sky and the halo of light sources.
                 var physics = settings with { Clarity = 0, Sharpen = 0, Curve = 0, Vibrance = 0 };
                 var look = new Dehaze.LookSettings(
                     Clarity: (float)(a.DehazeClarity / 100 * Dehaze.LookClarity * t),
@@ -286,12 +367,12 @@ public static class Adjust
                     Dehaze.LookDetail(work, width, height, pass.Scene, look);
                 }
             }
-            source = work;   // bleibt in 32 Bit; gerundet wird erst für Anzeige oder Datei
+            source = work;   // stays in 32 bits; rounded only for display or file
         }
         return source;
     }
 
-    /// <summary>Kurve zwischen ihren Stützstellen linear gelesen — ohne Rundung auf eine Stufe.</summary>
+    /// <summary>Reads the curve with linear interpolation between its nodes, without rounding to a level.</summary>
     private static float Lookup(float[] curve, float v)
     {
         var x = Math.Clamp(v, 0, 1) * (CurveSize - 1);
@@ -309,7 +390,15 @@ public static class Adjust
             : null;
     }
 
-    /// <param name="prepared">Ergebnis von <see cref="Prepare"/> für dasselbe Bild.</param>
+    /// <summary>Applies the fast part of the adjustments to a prepared image.</summary>
+    /// <param name="prepared">Result of <see cref="Prepare"/> for the same image.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="a">Adjustments to apply.</param>
+    /// <param name="plan">Progress and cancellation; null = none.</param>
+    /// <returns>A new buffer from the <see cref="PixelPool"/>; <paramref name="prepared"/> is not modified.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The size of <paramref name="prepared"/> does not match the
+    /// dimensions.</exception>
     public static float[] Apply(Prepared prepared, int width, int height, Adjustments a, WorkPlan? plan = null)
     {
         var (bgra, toned, regions) = (prepared.Source, prepared.Toned, prepared.Regions);
@@ -323,23 +412,23 @@ public static class Adjust
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
-        // Wie Referenzwerkzeug 1–200 %, darüber bis 300 % (0.5.43: 400 %, mit „Gesamt“ in 0.5.45 auf 300 % zurück — insgesamt
-        // heller macht jetzt „Gesamt“): sinnvoll mit Zielwert, der Faktor ist dann nur die Obergrenze für tiefe Schatten
+        // As in Referenzwerkzeug 1–200 %, extended up to 300 %: useful with a target value, where the factor is only the upper
+        // limit for deep shadows. Brightening the image as a whole is the job of "Overall" (MatchGlobal).
         var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 2));
         var limit = (float)Math.Clamp(a.MatchLimit / 100, 0.05, 1);
         var target = a.MatchTarget > 0 ? (float)Math.Clamp(a.MatchTarget / 100, 0.05, 1) : 0f;
-        if (luminance <= 1 || !a.NeedsRegions) regions = null;   // Schwellwert und Zielwert nur beim Aufhellen
-        // Gleiche Farbe, Ausgleichen (0–100 %) und Farbe (kühl − … + warm): als Verschiebung in Oklab
+        if (luminance <= 1 || !a.NeedsRegions) regions = null;   // threshold and target only when brightening
+        // "Match colour", neutralise (0–100 %) and colour (cool − … + warm): as a shift in Oklab.
         var neutralize = (float)Math.Clamp(a.Neutralize / 100, 0, 1);
         var (castA, castB) = neutralize > 0 ? ColourCast(bgra, width, height) : (0f, 0f);
         var warmth = (float)Math.Clamp(a.Warmth / 100, -1, 1);
         var shiftA = -castA * neutralize + warmth * WarmthA;
         var shiftB = -castB * neutralize + warmth * WarmthB;
-        // Reihenfolge wie in Referenzwerkzeug: erst Weißabgleich und Belichtung (Gleiche Farbe), dann Kontrastkurve, dann
-        // Dynamik/Sättigung — ein Farbstich soll weg sein, bevor Kontrast und Buntheit ihn verstärken (0.5.27)
+        // Order as in Referenzwerkzeug: first white balance and exposure ("Match colour"), then the contrast curve, then
+        // vibrance/saturation, so that a colour cast is gone before contrast and chroma amplify it.
         var global = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchGlobal / 100, -1, 1));
         var balance = luminance != 1 || global != 1 || shiftA != 0 || shiftB != 0;
-        // Luminanzmaske: nach „Gleiche Farbe“, pixelgenau; die Bereichskarte gibt 30 % Struktur dazu
+        // Luminosity mask: after "Match colour", pixel-accurate; the region map contributes 30 % structure.
         var lumMask = a.HasLumMask;
         var areaMap = lumMask ? prepared.Regions : null;
         var maskGain = 1 + (float)Math.Clamp(a.MaskAmount / 100, 0, 2);
@@ -347,7 +436,7 @@ public static class Adjust
         var maskPower = LumMask.Power(a.MaskCurve);
         var chroma = vibrance != 0 || saturation != 0;
 
-        // Pixel nach Tiefen/Lichtern (Zielhelligkeit aus Prepare, Farbton bleibt)
+        // Pixel after shadows/highlights (target brightness from Prepare, hue kept).
         (float R, float G, float B) Toned(int p)
         {
             var i = p * 4;
@@ -355,15 +444,14 @@ public static class Adjust
             if (toned is null) return (r, g, b);
             var lum = Kr * r + Kg * g + Kb * b;
             var target = Math.Clamp(toned[p], 0, 1);
-            if (lum <= 1f / 512) return (target, target, target);   // fast schwarz: kein Farbton zu erhalten
-            var f = Math.Min(target / lum, 8f);                       // Farbton behalten: alle Kanäle im selben Verhältnis
+            if (lum <= 1f / 512) return (target, target, target);   // almost black: no hue to preserve
+            var f = Math.Min(target / lum, 8f);                       // keep the hue: all channels in the same ratio
             return (r * f, g * f, b * f);
         }
 
-        // Luminanz mit Schwellwert / Ferne schonen: Original und aufgehellte Fassung je Größenstufe gemischt
-        // (Laplace-Pyramide, wie die Belichtungsverschmelzung nach Mertens bzw. in Googles HDR+) — grobe Helligkeit
-        // über große Flächen, Kanten über wenige Pixel. Pixelweise gemischt blieb an weichen Maskenrändern ein
-        // heller Saum (0.5.38).
+        // Luminance with threshold or target: original and brightened version blended per scale (Laplacian pyramid,
+        // like exposure fusion after Mertens or in Google's HDR+), coarse brightness over large areas, edges over a
+        // few pixels. Blending per pixel leaves a bright fringe at soft mask edges.
         var lifted = regions is not null ? LiftByRegions(Toned, width, height, luminance, regions, limit, target) : null;
 
         Parallel.For(0, height, ComputeLimits.Options, y =>
@@ -375,11 +463,11 @@ public static class Adjust
 
                 if (balance)
                 {
-                    // Gleiche Farbe in Oklab (vor der Kontrastkurve, wie der Weißabgleich in Referenzwerkzeug)
+                    // "Match colour" in Oklab (before the contrast curve, like the white balance in Referenzwerkzeug).
                     var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
                     if (shiftA != 0 || shiftB != 0)
                     {
-                        // Ausgleichen + Farbe. Ganz Dunkles bleibt neutral, sonst würde Schwarz farbig.
+                        // Neutralise + colour. Very dark tones stay neutral, otherwise black would become coloured.
                         var w = Math.Min(1, L / 0.3f);
                         oa += shiftA * w;
                         ob += shiftB * w;
@@ -387,15 +475,15 @@ public static class Adjust
                     var factor = 1f;
                     if (luminance != 1 && L > 1e-4f)
                     {
-                        // Luminanz: wie mehr Licht — Helligkeit und Buntheit im selben Verhältnis (in Oklab
-                        // exakt eine stärkere Beleuchtung). Nur die Helligkeit zu heben ließ die Farben blass wirken.
+                        // Luminance: like more light, lightness and chroma in the same ratio (in Oklab exactly a
+                        // stronger illumination). Raising only the lightness makes the colours look pale.
                         var target = lifted is not null ? Math.Clamp(lifted[p], 0, 1) : Shoulder(L * luminance);
                         factor = target / L;
                         L = target;
                     }
                     if (global != 1 && L > 1e-4f)
                     {
-                        // Gesamt: auf das Ergebnis der Bereichs-Luminanz, für das ganze Bild gleich
+                        // "Overall": applied to the result of the region luminance, the same for the whole image.
                         var all = Shoulder(L * global);
                         factor *= all / L;
                         L = all;
@@ -409,7 +497,7 @@ public static class Adjust
                     var m = LumMask.Weight(L, areaMap?.AreaBrightness(x, y) ?? L, maskEnd, maskPower);
                     if (a.MaskPreview)
                     {
-                        // Maske zeigen: weiß = bekommt alles, schwarz = nichts — wie eine Maske in Referenzwerkzeug
+                        // Show the mask: white = receives everything, black = nothing, like a mask in Referenzwerkzeug.
                         result[i] = result[i + 1] = result[i + 2] = m;
                         continue;
                     }
@@ -424,7 +512,7 @@ public static class Adjust
 
                 if (chroma)
                 {
-                    // In Oklab: Buntheit ändern lässt Farbton und Helligkeit stehen
+                    // In Oklab, changing chroma leaves hue and lightness unchanged.
                     var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
                     var factor = 1f;
                     if (vibrance != 0) factor *= VibranceFactor(L, oa, ob, vibrance);
@@ -445,11 +533,11 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Zielhelligkeit (Oklab-L) für Luminanz mit Bereichen: Original und voll aufgehellte Fassung, je Größenstufe einer
-    /// Laplace-Pyramide mit der geglätteten Bereichsmaske gemischt (Burt/Adelson, wie bei der Belichtungsverschmelzung).
+    /// Target brightness (Oklab L) for luminance with regions: original and fully brightened version, blended per scale
+    /// of a Laplacian pyramid with the weighting map (Burt/Adelson, as in exposure fusion).
     /// </summary>
-    /// <param name="target">Ziel als Oklab-L (0 = aus): Faktor je Bereich so, dass er bis hierher angehoben wird —
-    /// höchstens <paramref name="luminance"/>, nie unter 1.</param>
+    /// <param name="target">Target as Oklab L (0 = off): the gain per region is chosen so that the region is lifted up to
+    /// this value, at most <paramref name="luminance"/> and never below 1.</param>
     private static float[] LiftByRegions(Func<int, (float R, float G, float B)> pixel, int width, int height,
         float luminance, LuminanceRegions regions, float limit, float target)
     {
@@ -465,8 +553,8 @@ public static class Adjust
             {
                 var (r, g, b) = pixel(p);
                 var (l, oa, ob) = Oklab.FromSrgb(r, g, b);
-                // Ziel: je Bereich (nicht je Pixel — die Struktur im Baum bleibt) nur so stark, wie es bis zum Ziel braucht;
-                // ein dunkler Baum bekommt viel, eine Wiese im Mittelton kaum etwas
+                // Target: per region (not per pixel, so the structure in the tree is kept) only as strong as needed to
+                // reach the target; a dark tree receives a lot, a meadow in the midtones hardly anything.
                 var gain = LuminanceRegions.TargetGain(regions.AreaBrightness(x, y), target, luminance);
                 var lift = l > 1e-4f ? Shoulder(l * gain) : l;
                 var weightHere = weighting.Weight(x, y, l, oa, ob);
@@ -476,9 +564,9 @@ public static class Adjust
                 cap[p] = l + (lift - l) * weightHere;
             }
         });
-        // Die Pyramide mischt grobe Helligkeit großflächig — auch über echte Kanten hinweg (Himmel neben dem Baum würde
-        // heller, der bekannte großflächige Hof der Belichtungsverschmelzung). Die Gewichtung je Pixel ist deshalb die
-        // Obergrenze; die Pyramide glättet nur nach unten (weiche Übergänge ohne Saum).
+        // The pyramid blends coarse brightness over large areas, also across real edges (the sky next to the tree would
+        // become brighter: the well-known large-area halo of exposure fusion). The per-pixel weighting is therefore the
+        // upper limit; the pyramid only smooths downwards (soft transitions without a fringe).
         var blended = PyramidBlend.Blend(plain, bright, weight, width, height);
         Parallel.For(0, n, ComputeLimits.Options, p => blended[p] = Math.Clamp(blended[p], plain[p], Math.Max(plain[p], cap[p])));
         PixelPool.Return(plain);
@@ -488,27 +576,27 @@ public static class Adjust
         return blended;
     }
 
-    /// <summary>Wirkung bei ±100: zwei Blendenstufen.</summary>
+    /// <summary>Effect at ±100 with negative shadows or positive highlights: two stops.</summary>
     private const float MaxStops = 2f;
 
-    /// <summary>
-    /// Zielhelligkeit eines Pixels. Tiefen hebt (oder senkt) dort, wo die Umgebung dunkel
-    /// ist, Lichter dort, wo sie hell ist — als Belichtung in Blendenstufen, bei den
-    /// Lichtern von Weiß aus gerechnet, damit nichts ausfrisst.
-    /// </summary>
-    /// <remarks>
-    /// Die Bereiche sind bewusst schmal: Tiefen wirkt voll im wirklich Dunklen und endet
-    /// bei Umgebungshelligkeit 0,4 (kaum noch ab 0,35), Lichter beginnt erst bei 0,6. Gesichter in
-    /// Innenräumen liegen typisch bei 0,4–0,6 und bleiben so unberührt (gemessen an einem
-    /// Familienfoto: Flur 0,08, Türrahmen 0,15, Haare/Augenpartie 0,36–0,40, Wangen 0,6).
-    /// Vorher reichte Tiefen bis 0,6 und hellte Gesichter merklich mit auf.
-    /// </remarks>
-    /// <summary>Bis hierher (von Schwarz bzw. Weiß aus) wirken Tiefen bzw. Lichter.</summary>
+    /// <summary>Reach of shadows (from black) and highlights (from white).</summary>
     private const float ToneReach = 0.4f;
 
-    /// <summary>Stärke der Anhebung; ≤ 3 hält die Kurve monoton (Steigung ≥ 1 − Lift/3).</summary>
+    /// <summary>Strength of the lift; ≤ 3 keeps the curve monotonic (slope ≥ 1 − Lift/3).</summary>
     private const float Lift = 2.5f;
 
+    /// <summary>
+    /// Target brightness of a pixel for the shadows slider (and, in <see cref="HighlightCurve"/>, for highlights).
+    /// Shadows raise (or lower) where the surroundings are dark, highlights where they are bright. Raising shadows and
+    /// lowering highlights use <see cref="Raise"/> (mirrored from white for highlights); lowering shadows and raising
+    /// highlights act as an exposure in stops, for highlights computed from white so that nothing clips.
+    /// </summary>
+    /// <remarks>
+    /// The ranges are deliberately narrow: shadows act fully in truly dark areas and end at a surrounding brightness of
+    /// 0.4 (hardly any effect from 0.35), highlights start only at 0.6. Faces indoors typically lie at 0.4–0.6 and thus
+    /// stay untouched (measured on a family photo: hallway 0.08, door frame 0.15, hair/eye area 0.36–0.40, cheeks 0.6).
+    /// If shadows reach up to 0.6, they noticeably brighten faces as well.
+    /// </remarks>
     internal static float ShadowCurve(float x, float shadows) => shadows >= 0
         ? Math.Clamp(x + shadows * Raise(x), 0, 1)
         : Math.Clamp(x * MathF.Pow(2, MaxStops * shadows * (1 - SmoothStep(0.02f, ToneReach, x))), 0, 1);
@@ -518,9 +606,8 @@ public static class Adjust
         : Math.Clamp(1 - (1 - x) * MathF.Pow(2, -MaxStops * highlights * SmoothStep(1 - ToneReach, 0.98f, x)), 0, 1);
 
     /// <summary>
-    /// Anhebung der Tiefen: x·(1 − x/Reichweite)²·Lift, null ab der Reichweite. Bewusst
-    /// keine Belichtung (x·2^…): die kippte bei starken Werten — 0,25 wurde heller als 0,30,
-    /// die Tonwerte drehten sich um.
+    /// Lift of the shadows: x·(1 − x/reach)²·Lift, zero from the reach onwards. Deliberately not an exposure (x·2^…):
+    /// with strong values that inverts, 0.25 becomes brighter than 0.30 and the tonal order flips.
     /// </summary>
     private static float Raise(float x)
     {
@@ -530,9 +617,8 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Zielhelligkeit je Pixel: Tiefen- und Lichter-Kurve über den Local Laplacian Filter,
-    /// jeweils mit der weiten Umgebung als zweitem Maßstab (Tiefen: der hellere, Lichter:
-    /// der dunklere der beiden Umgebungswerte).
+    /// Target brightness per pixel: shadows and highlights curve via the local Laplacian filter, each with the wide
+    /// surroundings as a second scale (shadows: the brighter, highlights: the darker of the two surrounding values).
     /// </summary>
     private static float[] ShadowsHighlights(float[] bgra, int width, int height, float shadows, float highlights)
     {
@@ -543,7 +629,7 @@ public static class Adjust
                 lum[p] = Kb * bgra[p * 4] + Kg * bgra[p * 4 + 1] + Kr * bgra[p * 4 + 2];
         });
 
-        // Pyramidenstufe, deren Glättung etwa der weiten Umgebung entspricht (Stufe l ≈ 2^l px)
+        // Pyramid level whose smoothing roughly corresponds to the wide surroundings (level l ≈ 2^l px).
         var wideLevel = Math.Max(1, (int)Math.Round(Math.Log2(Math.Max(2, WideNeighbourhoodPerEdge * Math.Max(width, height)))));
 
         Func<Pyramid, int, float[]> Guide(Func<float, float, float> pick) => (p, l) =>
@@ -560,8 +646,8 @@ public static class Adjust
         {
             var input = lum;
             lum = LocalLaplacian.Apply(input, width, height, s => ShadowCurve(s, shadows), EdgeContrast, Guide(Math.Max));
-            // Was selbst hell ist, ändert Tiefen nicht stärker, als die Kurve es für diesen
-            // Wert täte (also gar nicht) — sonst bleibt an harten Kanten ein heller Saum
+            // Shadows do not change what is bright itself more than the curve would for this value (that is, not at
+            // all); otherwise a bright fringe remains at hard edges.
             Bound(input, lum, s => ShadowCurve(s, shadows), v => SmoothStep(0.35f, 0.6f, v));
         }
         if (highlights != 0)
@@ -574,8 +660,8 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Begrenzt die Änderung je Pixel auf die der Kurve für den eigenen Wert — mit Anteil
-    /// <paramref name="strength"/> (0 = Filter frei, 1 = voll begrenzt).
+    /// Limits the change per pixel to that of the curve for the pixel's own value, with the share
+    /// <paramref name="strength"/> (0 = filter unrestricted, 1 = fully limited).
     /// </summary>
     private static void Bound(float[] input, float[] output, Func<float, float> curve, Func<float, float> strength)
     {
@@ -594,15 +680,9 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Dynamik wie in Referenzwerkzeug: verstärkt blasse Farben stark, kräftige kaum und schont
-    /// Hauttöne — Bilder werden lebendiger, Gesichter nicht orange. Nach links werden
-    /// zuerst die blassen Farben grau, kräftige bleiben länger.
-    /// </summary>
-    /// <summary>
-    /// „Gleiche Farbe“ (Referenzwerkzeug CS5, ohne Quellbild), Regler Luminanz: Helligkeit wird
-    /// <em>multipliziert</em> wie in Referenzwerkzeug (Lab-L, 1–200 %) — die Kontrastverhältnisse
-    /// bleiben, das Bild wirkt leuchtender als mit einem Gamma, das nur die Mitten anhebt.
-    /// Über 0,8 läuft es weich gegen Weiß aus, damit nichts ausfrisst.
+    /// "Match colour" (Referenzwerkzeug CS5, without source image), luminance slider: the brightness is <em>multiplied</em> as in
+    /// Referenzwerkzeug (Lab L, 1–200 %), so the contrast ratios are kept and the image looks more luminous than with a gamma
+    /// that only raises the midtones. Above 0.8 it rolls off smoothly towards white so that nothing clips.
     /// </summary>
     private static float Shoulder(float l)
     {
@@ -611,10 +691,9 @@ public static class Adjust
     }
 
     /// <summary>
-    /// „Gleiche Farbe“, Ausgleichen: Farbstich als mittlere Oklab-Farbrichtung der nicht
-    /// kräftig bunten, nicht zu dunklen/hellen Bildteile (Grauwelt-Annahme). Kräftige Farben
-    /// — ein rotes T-Shirt, blauer Himmel — zählen nicht, sonst würden sie „ausgeglichen“.
-    /// Rechnet auf jedem 4. Pixel jeder 4. Zeile, das reicht für einen Mittelwert.
+    /// "Match colour", neutralise: the colour cast as the mean Oklab colour direction of the image parts that are not
+    /// strongly coloured and not too dark or bright (grey-world assumption). Strong colours (a red T-shirt, blue sky) do
+    /// not count, otherwise they would be "neutralised". Uses every 4th pixel of every 4th row, which is enough for a mean.
     /// </summary>
     internal static (float A, float B) ColourCast(float[] bgra, int width, int height)
     {
@@ -631,15 +710,20 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Regler Farbe bei ±100: Verschiebung in Oklab entlang der Farbtemperatur — b nach
-    /// Gelb (warm) bzw. Blau (kühl), a etwas mit (Kunstlicht ist gelb-rötlich).
+    /// Colour slider at ±100: shift in Oklab along the colour temperature, b towards yellow (warm) or blue (cool), a
+    /// slightly along with it (artificial light is yellowish red).
     /// </summary>
     private const float WarmthB = 0.04f, WarmthA = 0.008f;
 
-    /// <summary>Buntheit, ab der eine Farbe als kräftig gilt (Oklab-C; sRGB-Primärfarben ≈ 0,26–0,32).</summary>
+    /// <summary>Chroma from which a colour counts as strong (Oklab C; sRGB primaries ≈ 0.26–0.32).</summary>
     private const float StrongChroma = 0.2f;
 
-    /// <returns>Faktor für die Buntheit in Oklab (1 = unverändert).</returns>
+    /// <summary>
+    /// Vibrance as in Referenzwerkzeug: strongly boosts pale colours, strong colours hardly at all, and protects skin tones, so
+    /// that images become livelier without faces turning orange. Towards the left, pale colours turn grey first, strong
+    /// colours last longer.
+    /// </summary>
+    /// <returns>Factor for the chroma in Oklab (1 = unchanged).</returns>
     internal static float VibranceFactor(float L, float a, float b, float vibrance)
     {
         var chroma = MathF.Sqrt(a * a + b * b);
@@ -648,19 +732,19 @@ public static class Adjust
         if (vibrance < 0)
             return Math.Max(0, 1 + vibrance * (1 - 0.6f * sat));
 
-        var room = MathF.Pow(1 - sat, 1.5f);                  // blass: viel Spielraum
+        var room = MathF.Pow(1 - sat, 1.5f);                  // pale: much headroom
         return 1 + 1.5f * vibrance * room * (1 - 0.75f * SkinTone(L, a, b, chroma));
     }
 
     /// <summary>
-    /// Wie sehr eine Farbe nach Haut aussieht (0–1): Oklab-Farbwinkel um 55°
-    /// (orange-rötlich), nicht zu dunkel, mäßig bunt — alle Hauttypen liegen auf dieser Achse.
+    /// How much a colour looks like skin (0–1): Oklab hue around 55° (orange-reddish), not too dark, moderately coloured;
+    /// all skin types lie on this axis.
     /// </summary>
     private static float SkinTone(float L, float a, float b, float chroma)
     {
         if (chroma < 1e-3f) return 0;
         var onHue = Math.Clamp(1 - MathF.Abs(Oklab.Hue(a, b) - 55) / 30, 0, 1);
-        var onChroma = 1 - SmoothStep(0.12f, 0.18f, chroma);    // sehr kräftig = keine Haut
+        var onChroma = 1 - SmoothStep(0.12f, 0.18f, chroma);    // very strong = not skin
         var onLight = SmoothStep(0.25f, 0.4f, L);
         return onHue * onChroma * onLight;
     }
@@ -668,8 +752,8 @@ public static class Adjust
     private const int CurveSize = 4096;
 
     /// <summary>
-    /// Helligkeit als Gamma auf die Mitten (Schwarz und Weiß bleiben), Kontrast als
-    /// S-Kurve um die Mitte. Als Tabelle, damit der Export großer Bilder schnell bleibt.
+    /// Brightness as a gamma on the midtones (black and white stay fixed), contrast as an S-curve around the midpoint. As
+    /// a table, so that exporting large images stays fast.
     /// </summary>
     internal static float[] ToneCurve(double brightness, double contrast)
     {
@@ -686,15 +770,15 @@ public static class Adjust
     }
 
     /// <summary>
-    /// Verlauf Schwarz → Tönung → Weiß. Die Tönung ist eine gedämpfte Farbe im gewählten
-    /// Farbton (HSL mit S 0,38, L 0,48 — bei 30° das klassische Sepia, bei 210° kühles Blau).
+    /// Gradient black → tint → white. The tint is a muted colour in the chosen hue (HSL with S 0.38, L 0.48; at 30° the
+    /// classic sepia, at 210° a cool blue).
     /// </summary>
     private static (float R, float G, float B) Colorize(float lum, Tint tint, float hue)
     {
         if (tint == Tint.BlackWhite) return (lum, lum, lum);
         var (mr, mg, mb) = Hsl(hue, 0.38f, 0.48f);
 
-        // Mitte so verschieben, dass die Tönung bei ihrer eigenen Helligkeit liegt
+        // Shift the midpoint so that the tint lies at its own brightness.
         var mid = Kr * mr + Kg * mg + Kb * mb;
         if (lum <= mid)
         {
@@ -708,7 +792,7 @@ public static class Adjust
         }
     }
 
-    /// <summary>HSL → RGB, Farbwinkel in Grad, S und L 0–1.</summary>
+    /// <summary>HSL → RGB, hue in degrees, S and L 0–1.</summary>
     internal static (float R, float G, float B) Hsl(float hue, float s, float l)
     {
         var h = ((hue % 360) + 360) % 360 / 60f;

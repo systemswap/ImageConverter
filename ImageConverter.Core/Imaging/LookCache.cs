@@ -4,16 +4,21 @@ using ImageMagick;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Zwischenstände von <see cref="ImageExporter.Render(MagickImage, ExportOptions, WorkPlan?, LookCache?)"/> für Läufe, die
-/// dasselbe Bild immer wieder mit leicht anderen Einstellungen rechnen — die Größenschätzung nach jeder Reglerbewegung.
-/// Stufen wie in der Vorschau: skaliert + entrauscht → Weißabgleich + Dunst → Tiefen/Lichter → Licht und Farbe; Schärfen
-/// und Körnung danach jedes Mal (schnell). Ein Regler weiter hinten rechnet so nur ab seiner Stufe neu, das Ergebnis ist
-/// dasselbe wie ohne Zwischenspeicher. Nicht für gleichzeitige Läufe; die gespeicherten Puffer gehören dem Speicher.
+/// Intermediate results of <see cref="ImageExporter.Render(MagickImage, ExportOptions, WorkPlan?, LookCache?)"/> for runs
+/// that render the same image again and again with slightly different settings, such as the size estimate after every
+/// slider movement.
 /// </summary>
+/// <remarks>
+/// The stages match the preview: scaled + denoised → white balance + dehaze → shadows/highlights → light and colour;
+/// sharpening and grain are applied every time afterwards (fast). A slider further down the pipeline therefore recomputes
+/// only from its own stage onwards; the result is the same as without the cache. Not thread-safe: not for concurrent
+/// runs. The stored buffers are owned by the cache. <see cref="Dispose"/> (or
+/// <see cref="Clear"/>) releases the stored scaled images.
+/// </remarks>
 public sealed class LookCache : IDisposable
 {
-    // Je Stufe wenige Einträge, zuletzt benutzt vorn. Die Schätzung rechnet zwei Proben je Stand (zwei Größen): zwei
-    // Einträge halten den aktuellen Stand, beim Dunst vier, damit auch der vorige Dunst-Stand noch da ist.
+    // A few entries per stage, most recently used first. The estimate renders two samples per state (two sizes): two
+    // entries hold the current state, four for dehaze, so that the previous dehaze state is still available.
     private const int InputSize = 2, DehazedSize = 4, PreparedSize = 2, AdjustedSize = 2;
 
     private readonly List<(InputKey Key, Input Value)> _input = [];
@@ -21,7 +26,7 @@ public sealed class LookCache : IDisposable
     private readonly List<((InputKey, Adjustments), Adjust.Prepared)> _prepared = [];
     private readonly List<((InputKey, Adjustments), float[])> _adjusted = [];
 
-    /// <summary>Das Bild, aus dem gerechnet wird, nach Identität (MagickImage vergleicht sonst die Pixel).</summary>
+    /// <summary>The source image, compared by identity (MagickImage equality would otherwise compare the pixels).</summary>
     internal readonly struct SourceRef(MagickImage image) : IEquatable<SourceRef>
     {
         public MagickImage Image { get; } = image;
@@ -30,14 +35,14 @@ public sealed class LookCache : IDisposable
         public override int GetHashCode() => RuntimeHelpers.GetHashCode(Image);
     }
 
-    /// <summary>Alles, wovon das skalierte und entrauschte Bild abhängt.</summary>
+    /// <summary>Everything the scaled and denoised image depends on.</summary>
     internal readonly record struct InputKey(SourceRef Source, int Width, int Height, ResampleFilter Filter, bool Gamma,
         double Denoise, double ColorDenoise);
 
-    /// <summary>Skaliertes Bild (für Profile, Alpha, Dichte) und seine Pixel nach dem Entrauschen.</summary>
+    /// <summary>Scaled image (for profiles, alpha, density) and its pixels after denoising.</summary>
     internal sealed record Input(MagickImage Resized, float[] Pixels, bool Processed);
 
-    /// <summary>Zahl der Stufen, die beim letzten Lauf neu gerechnet wurden (für Tests).</summary>
+    /// <summary>Number of stages that were recomputed in the last run (for tests).</summary>
     internal int Computed { get; private set; }
 
     internal void BeginRun() => Computed = 0;
@@ -76,7 +81,7 @@ public sealed class LookCache : IDisposable
         return value;
     }
 
-    /// <summary>Alles verwerfen (anderes Bild).</summary>
+    /// <summary>Discards all entries and disposes the stored scaled images; call this when the source image changes.</summary>
     public void Clear()
     {
         foreach (var (_, input) in _input) input.Resized.Dispose();
@@ -86,5 +91,6 @@ public sealed class LookCache : IDisposable
         _adjusted.Clear();
     }
 
+    /// <summary>Releases all entries, see <see cref="Clear"/>.</summary>
     public void Dispose() => Clear();
 }

@@ -1,31 +1,34 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Szenenkarte: wo Himmel, Lichthof einer Lichtquelle (Sonne) und Landschaft liegen — einmal am
-/// Anfang aus dem Bild bestimmt, auf der kleinen Arbeitsfassung (≤ 1024 px), mit weichen Übergängen.
-/// Alle Schritte, die Himmel oder Sonne schonen, lesen diese eine Karte, statt eigene Regeln zu
-/// rechnen (Phase 3 des Neubaus; bis 0.4.50 steckte sie im ersten Dunst-Durchlauf).
+/// Scene map: where the sky, the halo of a light source (sun) and the landscape lie. It is determined once at the start
+/// from the image, on the small working copy (by default at most 1024 px), with soft transitions. All steps that protect
+/// the sky or the sun read this single map instead of computing their own rules.
 /// </summary>
 /// <remarks>
-/// Kodierung wie bisher: 0 Landschaft, 1 Himmel, Werte über 1 Lichthof (1 + Hof). Daraus
-/// <see cref="Land"/> = 1 − min(1, Himmel) und <see cref="Halo"/> = min(1, max(0, Himmel − 1)).
+/// Encoding: 0 landscape, 1 sky, values above 1 halo (1 + halo strength). From this,
+/// <see cref="Land"/> = 1 − min(1, sky) and <see cref="Halo"/> = min(1, max(0, sky − 1)).
 /// </remarks>
 internal sealed class SceneMap
 {
-    /// <summary>Himmel je Feld der kleinen Fassung (0 … 2, siehe oben).</summary>
+    /// <summary>Sky value per cell of the small copy (0 … 2, see the remarks).</summary>
     public float[] Sky { get; }
     public int W { get; }
     public int H { get; }
 
-    /// <summary>Ein Feld der Karte entspricht <see cref="Factor"/> × <see cref="Factor"/> Bildpixeln.</summary>
+    /// <summary>One cell of the map covers <see cref="Factor"/> × <see cref="Factor"/> image pixels.</summary>
     public int Factor { get; }
 
     private SceneMap(float[] sky, int w, int h, int factor) => (Sky, W, H, Factor) = (sky, w, h, factor);
 
-    /// <param name="small">Kleine Fassung in linearem Licht (B, G, R je Feld).</param>
+    /// <summary>Builds the map from the small working copy.</summary>
+    /// <param name="small">Small copy in linear light (B, G, R per cell).</param>
+    /// <param name="w">Width of the small copy in cells.</param>
+    /// <param name="h">Height of the small copy in cells.</param>
+    /// <param name="factor">Downscaling factor from the image to the small copy.</param>
     public static SceneMap Of(float[] small, int w, int h, int factor) => new(Dehaze.SkyMap(small, w, h), w, h, factor);
 
-    /// <summary>Himmelswert (0 … 2) an einem Bildpixel, bilinear aus der Karte.</summary>
+    /// <summary>Sky value (0 … 2) at an image pixel, bilinearly interpolated from the map.</summary>
     public float SkyAt(int x, int y)
     {
         var sx = Math.Clamp((x + 0.5f) / Factor - 0.5f, 0, W - 1);
@@ -38,9 +41,9 @@ internal sealed class SceneMap
         return top * (1 - fy) + bottom * fy;
     }
 
-    /// <summary>1 = Landschaft, 0 = Himmel oder Lichthof.</summary>
+    /// <summary>1 = landscape, 0 = sky or halo.</summary>
     public static float Land(float sky) => 1 - Math.Clamp(sky, 0, 1);
 
-    /// <summary>1 = mitten im Lichthof einer Lichtquelle.</summary>
+    /// <summary>1 = in the centre of the halo of a light source.</summary>
     public static float Halo(float sky) => Math.Clamp(sky - 1, 0, 1);
 }

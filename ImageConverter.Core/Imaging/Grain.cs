@@ -4,88 +4,103 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Einstellungen der Gruppe „Körnung“ — unabhängig von der Körnung bei „Haut &amp; Details“.
+/// Settings of the "Grain" group, independent of the grain in "Skin &amp; details".
 /// </summary>
-/// <param name="Amount">Stärke 0–100 % (Streuung im Mittelton, quadratisch: unten fein einstellbar).</param>
-/// <param name="Size">Korngröße 0–100 (fein … grob), in Pixeln der Ausgabe — siehe <see cref="SigmaFor"/>.</param>
-/// <param name="Roughness">Rauheit 0 (gleichmäßig) … 100 (klumpig wie Film).</param>
-/// <param name="Color">Farbanteil 0 (reines Helligkeitskorn) … 100 % (jeder Kanal für sich).</param>
-/// <param name="Hardness">Härte 0 (weiche Tupfen, wie der Gauß sie gibt) … 100 (scharf begrenzte Körner, körniger) — siehe <see cref="Grain.Harden"/>.</param>
+/// <param name="Amount">Strength 0–100 % (spread in the midtones, quadratic so that low values can be set finely).</param>
+/// <param name="Size">Grain size 0–100 (fine … coarse), in output pixels; see <see cref="SigmaFor"/>. Values down to
+/// <see cref="MinSize"/> give grain finer than one pixel.</param>
+/// <param name="Roughness">Roughness 0 (uniform) … 100 (clumpy like film).</param>
+/// <param name="Color">Colour share 0 (pure luminance grain) … 100 % (each channel on its own).</param>
+/// <param name="Hardness">Hardness 0 (soft dots as produced by the Gaussian) … 100 (sharply bounded grains, grainier);
+/// see <see cref="Grain.Harden"/>.</param>
 public sealed record GrainSettings(double Amount, double Size = 40, double Roughness = 30, double Color = 0, double Hardness = 0)
 {
+    /// <summary>No grain.</summary>
     public static readonly GrainSettings None = new(0);
 
-    /// <summary>Streuung im Mittelton bei 100 % (0,12 ≈ 31 Stufen von 255 — kräftiges Filmkorn).</summary>
+    /// <summary>Spread (standard deviation) in the midtones at 100 % (0.12 ≈ 31 of 255 levels, strong film grain).</summary>
     public const double MaxStd = 0.12;
 
+    /// <summary>True if the strength is too low to have an effect (below 0.5 %).</summary>
     public bool IsNone => Amount < 0.5;
 
-    /// <summary>Streuung des Korns im Mittelton (0…1).</summary>
+    /// <summary>Spread of the grain in the midtones (0…1).</summary>
     public double MidStd => MaxStd * Math.Pow(Math.Clamp(Amount, 0, 100) / 100, 2);
 
-    /// <summary>Korngröße als Gauß-Sigma in Pixeln der Ausgabe.</summary>
+    /// <summary>Grain size as a Gaussian sigma in output pixels.</summary>
     public double Sigma => SigmaFor(Size);
 
-    /// <summary>Kleinster Reglerstand: 0,1 px (feiner als ein Pixel, siehe <see cref="Grain.Field"/>).</summary>
+    /// <summary>Lowest slider value: 0.1 px (finer than one pixel, see <see cref="Grain.Field"/>).</summary>
     public const double MinSize = -27;
 
-    /// <summary>Feinstes Korn in Pixeln der Ausgabe.</summary>
+    /// <summary>Finest grain in output pixels.</summary>
     public const double FinestSigma = 0.1;
 
-    /// <summary>Ab hier hat jedes Pixel sein eigenes Korn (weißes Rauschen); darunter wird es noch feiner.</summary>
+    /// <summary>At this sigma every pixel has its own grain (white noise); below it the grain becomes even finer.</summary>
     public const double PixelSigma = 0.25;
 
     /// <summary>
-    /// Regler → Sigma: 0 = 0,25 px (Pixel für Pixel), je 20 doppelt so groß, 100 = 8 px; unter 0 bis
-    /// <see cref="MinSize"/> = 0,1 px (feiner als ein Pixel).
+    /// Converts the size slider into a sigma: 0 = 0.25 px (pixel by pixel), doubling every 20, 100 = 8 px; below 0 down to
+    /// <see cref="MinSize"/> = 0.1 px (finer than one pixel).
     /// </summary>
+    /// <param name="size">Slider value; clamped to <see cref="MinSize"/> … 100.</param>
+    /// <returns>Sigma in output pixels, at least <see cref="FinestSigma"/>.</returns>
     public static double SigmaFor(double size) =>
         Math.Max(FinestSigma, PixelSigma * Math.Pow(2, Math.Clamp(size, MinSize, 100) / 20));
 
-    /// <summary>Umkehrung von <see cref="SigmaFor"/>.</summary>
+    /// <summary>Inverse of <see cref="SigmaFor"/> for the slider range 0 … 100.</summary>
+    /// <param name="sigma">Sigma in output pixels.</param>
+    /// <returns>Slider value 0 … 100; 0 for sigma ≤ 0.25 px.</returns>
     public static double SizeFor(double sigma) => sigma <= 0.25 ? 0 : Math.Clamp(20 * Math.Log2(sigma / 0.25), 0, 100);
 
-    /// <summary>Stärke (Regler), die im Mittelton diese Streuung ergibt.</summary>
+    /// <summary>Returns the strength (slider value) that gives this spread in the midtones.</summary>
+    /// <param name="midStd">Spread in the midtones (0…1).</param>
+    /// <returns>Strength 0–100.</returns>
     public static double AmountFor(double midStd) => Math.Clamp(100 * Math.Sqrt(Math.Max(0, midStd) / MaxStd), 0, 100);
 }
 
 /// <summary>
-/// Körnung über das fertige Bild — immer der letzte Schritt der Kette: nach Entrauschen und Schärfen, auch nach KI
-/// und „Haut &amp; Details“ (sonst glättet das eine das Korn des anderen wieder weg).
+/// Grain over the finished image, always the last step of the pipeline: after denoising and sharpening, also after AI
+/// and "Skin &amp; details" (otherwise one step smooths away the grain of the other).
 /// </summary>
 /// <remarks>
-/// Korn wie bei Film: Stärke als Funktion der Helligkeit (Mitteltöne am meisten, Schwarz und Weiß fast nichts, wie das
-/// Kornprofil in <see cref="FaceDetails"/> und AV1 Film Grain), Gauß-gefiltertes weißes Rauschen fest je Bildpixel
-/// (gleiches Korn bei jeder Rechnung, kein Flimmern). Rauheit mischt eine gröbere Stufe dazu und lässt die Stärke
-/// großflächig schwanken (Klumpen); Farbanteil mischt je Kanal eigenes Korn unter das gemeinsame.
-/// Größe und Stärke gelten in Pixeln der Ausgabe. Eine kleinere Fassung (Vorschau, verkleinerter Druck) bekommt das
-/// Korn so, wie es nach dem Verkleinern des Exports aussähe: größer verwischt, schwächer (<see cref="AtScale"/>).
+/// Grain as in film: strength as a function of brightness (most in the midtones, almost none in black and white, like the
+/// grain profile in <see cref="FaceDetails"/> and AV1 film grain), Gaussian-filtered white noise fixed per image pixel
+/// (the same grain on every computation, no flicker). Roughness mixes in a coarser level and lets the strength vary over
+/// large areas (clumps); the colour share mixes separate grain per channel into the shared grain.
+/// Size and strength apply in output pixels. A smaller version (preview, downscaled print) receives the grain as it
+/// would look after downscaling the export: blurred over a larger area and weaker (<see cref="AtScale"/>).
 /// </remarks>
 public static class Grain
 {
     private const int StripRows = 256;
 
-    // Rauheit: gröbere Stufe (2,5 × Korngröße) und großflächige Schwankung der Stärke (6 ×)
+    // Roughness: coarser level (2.5 × grain size) and large-area variation of the strength (6 ×).
     private const double CoarseFactor = 2.5;
     private const double CoarseWeight = 1.2;
     private const double ClumpFactor = 6;
     private const double ClumpDepth = 0.7;
 
-    /// <summary>Weichzeichnen beim Verkleinern um den Faktor k: Gauß mit DownscaleBlur / k Pixeln der Ausgabe (an Lanczos 3
-    /// abgeglichen, GrainTests.Preview_LooksLikeTheDownscaledExport: 1 px 1,00, 2,8 px 0,92).</summary>
+    /// <summary>Blur caused by downscaling by the factor k: a Gaussian with DownscaleBlur / k output pixels (matched to
+    /// Lanczos 3, GrainTests.Preview_LooksLikeTheDownscaledExport: 1 px 1.00, 2.8 px 0.92).</summary>
     internal const double DownscaleBlur = 0.28;
 
-    /// <summary>Streuung von weißem Rauschen, ausgedrückt als Gauß-Sigma (1 / (2 √π)).</summary>
+    /// <summary>Spread of white noise expressed as a Gaussian sigma (1 / (2 √π)).</summary>
     private const double WhiteSigma = 0.2821;
 
-    /// <summary>E[tanh(Z)²] für Z ~ N(0, 1): mittlere Leistung der Klumpen-Schwankung.</summary>
+    /// <summary>E[tanh(Z)²] for Z ~ N(0, 1): mean power of the clump variation.</summary>
     private static readonly double TanhPower = TanhSquaredMean();
 
     /// <summary>
-    /// Körnung auf einen Pixelpuffer (B, G, R, A, sRGB-kodiert 0…1). Liefert einen neuen Puffer aus dem
-    /// <see cref="PixelPool"/>; ohne Wirkung den Puffer selbst. <paramref name="pixels"/> bleibt unverändert.
+    /// Applies grain to a pixel buffer.
     /// </summary>
-    /// <param name="scale">Größe dieses Bildes relativ zur Ausgabe (Vorschau &lt; 1); 1 = das Bild ist die Ausgabe.</param>
+    /// <param name="pixels">Pixel buffer (B, G, R, A, sRGB-encoded 0…1); not modified.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="grain">Grain settings; null or <see cref="GrainSettings.IsNone"/> means no grain.</param>
+    /// <param name="scale">Size of this image relative to the output (preview &lt; 1); 1 = the image is the output.</param>
+    /// <returns>A new buffer from the <see cref="PixelPool"/>; if there is no effect, <paramref name="pixels"/>
+    /// itself.</returns>
     public static float[] Apply(float[] pixels, int width, int height, GrainSettings? grain, double scale = 1)
     {
         if (grain is null || grain.IsNone || width <= 0 || height <= 0) return pixels;
@@ -96,7 +111,7 @@ public static class Grain
         var fineSigma = grain.Sigma;
         var hard = Hardening.For(grain.Hardness);
 
-        // Stufen in Pixeln dieses Bildes, mit der Abschwächung durchs Verkleinern
+        // Levels in pixels of this image, with the attenuation caused by downscaling.
         var (fine, fineAmp) = AtScale(fineSigma, scale);
         var (coarse, coarseAmp) = AtScale(fineSigma * CoarseFactor, scale);
         var clump = fineSigma * ClumpFactor * Math.Min(1, scale);
@@ -157,9 +172,9 @@ public static class Grain
     }
 
     /// <summary>
-    /// Härte als Kennlinie: k = 4 · Härte/100, Korn → tanh(k · Korn), Streuung zurück auf 1. Bei 0 bleibt alles, wie es
-    /// war; je größer k, desto flacher die Kuppen und steiler die Ränder der Körner — aus weichen Gauß-Tupfen werden
-    /// scharf begrenzte Körner, bei 100 fast nur noch hell oder dunkel.
+    /// Hardness as a transfer curve: k = 4 · hardness/100, grain → tanh(k · grain), spread normalised back to 1. At 0
+    /// nothing changes; the larger k, the flatter the tops and the steeper the edges of the grains, so soft Gaussian dots
+    /// become sharply bounded grains, at 100 almost only bright or dark.
     /// </summary>
     internal readonly record struct Hardening(float K, float Gain)
     {
@@ -170,7 +185,7 @@ public static class Grain
         }
     }
 
-    /// <summary>Korn (Streuung 1) an Ort und Stelle härten; ohne Härte unverändert.</summary>
+    /// <summary>Hardens grain (spread 1) in place; unchanged without hardness. Returns <paramref name="field"/>.</summary>
     internal static float[] Harden(float[] field, Hardening hard)
     {
         if (hard.K <= 0) return field;
@@ -183,7 +198,7 @@ public static class Grain
         return field;
     }
 
-    /// <summary>Stärke je Helligkeit wie bei Film: Mitteltöne 1, zu Schwarz und Weiß hin auslaufend.</summary>
+    /// <summary>Strength per brightness as in film: 1 in the midtones, fading out towards black and white.</summary>
     internal static float Weight(float lum)
     {
         var t = 4 * lum * (1 - lum);
@@ -191,11 +206,17 @@ public static class Grain
     }
 
     /// <summary>
-    /// Korn der Größe <paramref name="sigma"/> (Pixel der Ausgabe), gesehen in einem um <paramref name="scale"/>
-    /// verkleinerten Bild: Sigma in dessen Pixeln und wie viel von der Streuung übrig bleibt. Verkleinern wirkt wie ein
-    /// Gauß von <see cref="DownscaleBlur"/>/scale; gefiltertes Rauschen hat eine Streuung umgekehrt proportional zum
-    /// Sigma (weißes Rauschen zählt wie Sigma <see cref="WhiteSigma"/>).
+    /// Describes grain of size <paramref name="sigma"/> (output pixels) as seen in an image scaled by
+    /// <paramref name="scale"/>.
     /// </summary>
+    /// <param name="sigma">Grain sigma in output pixels.</param>
+    /// <param name="scale">Size of the image relative to the output.</param>
+    /// <returns>The sigma in pixels of the scaled image and the share of the spread that remains (1 for
+    /// <paramref name="scale"/> ≥ 1).</returns>
+    /// <remarks>
+    /// Downscaling acts like a Gaussian of <see cref="DownscaleBlur"/>/scale; filtered noise has a spread inversely
+    /// proportional to its sigma (white noise counts as sigma <see cref="WhiteSigma"/>).
+    /// </remarks>
     public static (double Sigma, double Amplitude) AtScale(double sigma, double scale)
     {
         if (scale >= 1) return (sigma * scale, 1);
@@ -205,14 +226,14 @@ public static class Grain
     }
 
     /// <summary>
-    /// Korn mit Streuung 1 für die Zeilen <paramref name="y0"/> … der vollen Bildbreite: weißes Rauschen fest je
-    /// Bildpixel, mit <paramref name="sigma"/> weichgezeichnet. Streifenweise mit Rand gerechnet — dasselbe Ergebnis wie
-    /// für das ganze Bild auf einmal, aber ohne Ebenen in voller Bildgröße.
+    /// Grain with spread 1 for the rows <paramref name="y0"/> … over the full image width: white noise fixed per image
+    /// pixel, blurred with <paramref name="sigma"/>. Computed strip by strip with a margin, giving the same result as for
+    /// the whole image at once but without planes of full image size. Returns a buffer from the <see cref="PixelPool"/>.
     /// </summary>
     internal static float[] Field(int y0, int width, int rows, double sigma, int seed)
     {
         var blur = sigma >= 0.3;
-        var finer = FinerShare(sigma);   // unter 0,25 px: Anteil Hochpass
+        var finer = FinerShare(sigma);   // below 0.25 px: share of the high-pass
         var pad = blur ? (int)Math.Ceiling(3.5 * sigma) + 2 : finer > 0 ? (int)Math.Ceiling(3.5 * FinerBlur) + 2 : 0;
         int pw = width + 2 * pad, ph = rows + 2 * pad;
         var field = PixelPool.Rent(pw * ph);
@@ -225,9 +246,9 @@ public static class Grain
         var result = PixelPool.Rent(width * rows);
         if (finer > 0)
         {
-            // Feiner als ein Pixel: weißes Rauschen minus ein Teil seiner weichgezeichneten Fassung — die groben Anteile
-            // (zufällige Häufungen über mehrere Pixel, die wie Flecken wirken) fallen weg, Nachbarn laufen leicht
-            // gegeneinander, wie bei Korn, das kleiner ist als ein Pixel. Streuung analytisch zurück auf 1.
+            // Finer than one pixel: white noise minus part of its blurred version. The coarse components (random
+            // clusters over several pixels that look like blotches) disappear, and neighbours become slightly
+            // anti-correlated, as with grain smaller than one pixel. The spread is normalised back to 1 analytically.
             var low = PixelPool.Rent(pw * ph);
             Array.Copy(field, low, pw * ph);
             Blur.Gauss(low, pw, ph, FinerBlur);
@@ -247,7 +268,7 @@ public static class Grain
         else
         {
             Blur.Gauss(field, pw, ph, sigma);
-            var gain = (float)(1 / KernelEnergy(sigma));   // Streuung nach dem Weichzeichnen zurück auf 1
+            var gain = (float)(1 / KernelEnergy(sigma));   // normalise the spread back to 1 after blurring
             Parallel.For(0, rows, ComputeLimits.Options, row =>
             {
                 var from = (row + pad) * pw + pad;
@@ -259,22 +280,22 @@ public static class Grain
     }
 
     /// <summary>
-    /// Streuung von weißem Rauschen (Streuung 1) nach <see cref="Blur.Gauss"/> mit diesem Sigma: Σk² des 1-D-Kerns,
-    /// für zwei Richtungen einmal (Varianz (Σk²)², Streuung Σk²). Mit demselben Kern bzw. denselben Boxen wie dort.
+    /// Spread of white noise (spread 1) after <see cref="Blur.Gauss"/> with this sigma: Σk² of the 1-D kernel, applied
+    /// once for both directions (variance (Σk²)², spread Σk²). Uses the same kernel or the same boxes as there.
     /// </summary>
     internal static double KernelEnergy(double sigma) => Kernel1D(sigma).Sum(v => v * v);
 
-    /// <summary>Weichzeichnen für das Korn unter einem Pixel: was davon abgezogen wird, sind Häufungen über etwa 1 px.</summary>
+    /// <summary>Blur for grain below one pixel: what is subtracted are clusters over about 1 px.</summary>
     private const double FinerBlur = 1.0;
 
-    /// <summary>Anteil des Hochpasses: 0 bei 0,25 px (weißes Rauschen), 1 bei 0,1 px.</summary>
+    /// <summary>Share of the high-pass: 0 at 0.25 px (white noise), 1 at 0.1 px.</summary>
     internal static double FinerShare(double sigma) =>
         sigma >= GrainSettings.PixelSigma ? 0
             : Math.Clamp((GrainSettings.PixelSigma - sigma) / (GrainSettings.PixelSigma - GrainSettings.FinestSigma), 0, 1);
 
     /// <summary>
-    /// Varianz von n − a·G(n) für weißes Rauschen n (Varianz 1) und den 2-D-Gauß G = g ⊗ g von <see cref="Blur.Gauss"/>:
-    /// Σ(δ − aG)² = 1 − 2a·G(0, 0) + a²·ΣG², mit G(0, 0) = g₀² und ΣG² = (Σg²)².
+    /// Variance of n − a·G(n) for white noise n (variance 1) and the 2-D Gaussian G = g ⊗ g of <see cref="Blur.Gauss"/>:
+    /// Σ(δ − aG)² = 1 − 2a·G(0, 0) + a²·ΣG², with G(0, 0) = g₀² and ΣG² = (Σg²)².
     /// </summary>
     internal static double FinerEnergy(double a)
     {
@@ -284,7 +305,8 @@ public static class Grain
         return 1 - 2 * a * g0 * g0 + a * a * g2 * g2;
     }
 
-    /// <summary>Der 1-D-Kern von <see cref="Blur.Gauss"/> mit diesem Sigma — derselbe Kern bzw. dieselben Boxen wie dort.</summary>
+    /// <summary>The 1-D kernel of <see cref="Blur.Gauss"/> with this sigma: the same kernel or the same boxes as
+    /// there.</summary>
     private static double[] Kernel1D(double sigma)
     {
         double[] kernel;
@@ -309,8 +331,8 @@ public static class Grain
     }
 
     /// <summary>
-    /// Normalverteilt genug, Streuung 1, fest je Pixelort: Summe von vier gleichverteilten 16-Bit-Zahlen aus zwei
-    /// Hashes (Irwin-Hall) — billiger als Box-Muller, für Korn nicht zu unterscheiden.
+    /// Sufficiently normally distributed noise with spread 1, fixed per pixel position: the sum of four uniformly
+    /// distributed 16-bit numbers from two hashes (Irwin-Hall). Cheaper than Box-Muller and indistinguishable for grain.
     /// </summary>
     private static float Noise(int x, int y, int seed)
     {
@@ -318,7 +340,7 @@ public static class Grain
         var h2 = Hash(h1 ^ 0x9E3779B9u);
         const float unit = 1f / 65536;
         var sum = (h1 & 0xFFFF) * unit + (h1 >> 16) * unit + (h2 & 0xFFFF) * unit + (h2 >> 16) * unit;
-        return (sum - 2) * 1.7320508f;   // Streuung von 4 × U(0, 1) ist 1/√3
+        return (sum - 2) * 1.7320508f;   // the spread of the sum of 4 × U(0, 1) is 1/√3
     }
 
     private static uint Hash(uint v)
@@ -329,10 +351,10 @@ public static class Grain
         return v;
     }
 
-    /// <summary>E[tanh(k·Z)²] für Z ~ N(0, 1).</summary>
+    /// <summary>E[tanh(k·Z)²] for Z ~ N(0, 1).</summary>
     private static double TanhSquaredMean(double k = 1)
     {
-        // ∫ tanh(k·z)² φ(z) dz, Trapez über ±8
+        // ∫ tanh(k·z)² φ(z) dz, trapezoidal rule over ±8
         double sum = 0;
         const double step = 0.001;
         for (var z = -8.0; z <= 8; z += step)
@@ -343,22 +365,28 @@ public static class Grain
         return sum * step / Math.Sqrt(2 * Math.PI);
     }
 
-    // ------------------------------------------------------------ Aus dem Foto ermitteln
+    // ------------------------------------------------------------ Measuring from the photo
 
-    /// <summary>Höchstens so viele Pixel messen (Mitte des Bildes) — Korn ist überall gleich, das spart Zeit und Speicher.</summary>
+    /// <summary>Maximum number of pixels measured (centre of the image); grain is the same everywhere, so this saves time
+    /// and memory.</summary>
     private const int MeasureMaxPixels = 12_000_000;
 
     private const int Block = 16;
 
     /// <summary>
-    /// Korn des Fotos messen und in Regler umrechnen: Stärke und Größe aus dem Kornprofil
-    /// (<see cref="FaceDetails.MeasureGrain"/>, ruhigste Stellen je Helligkeit), Farbanteil aus dem Zusammenhang der
-    /// drei Kanäle an denselben Stellen (gleich laufend = Helligkeitskorn, unabhängig = Farbkorn). Rauheit lässt sich so
-    /// nicht messen — das Korn eines Fotos ist gleichmäßig, also 0.
+    /// Measures the grain of the photo and converts it into slider values.
     /// </summary>
-    /// <param name="pixels">Foto (B, G, R, A, 0…1), möglichst vor dem Entrauschen und vor der KI.</param>
-    /// <param name="outputScale">Größe der Ausgabe relativ zu diesem Foto (kleiner &lt; 1).</param>
-    /// <returns>null: kein Korn messbar (zu klein, ganz glatt).</returns>
+    /// <remarks>
+    /// Strength and size come from the grain profile (<see cref="FaceDetails.MeasureGrain"/>, quietest areas per
+    /// brightness), the colour share from the correlation of the three channels at the same places (moving together =
+    /// luminance grain, independent = colour grain). Roughness cannot be measured this way; the grain of a photo is
+    /// uniform, so it is 0. Hardness cannot be measured either and is 0 (soft).
+    /// </remarks>
+    /// <param name="pixels">Photo (B, G, R, A, 0…1), preferably before denoising and before AI.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="outputScale">Size of the output relative to this photo (smaller &lt; 1).</param>
+    /// <returns>The measured settings, or null if no grain can be measured (too small, completely smooth).</returns>
     public static GrainSettings? Measure(float[] pixels, int width, int height, double outputScale)
     {
         var (rgb, w, h) = CenterRgb(pixels, width, height);
@@ -367,7 +395,7 @@ public static class Grain
 
         var color = MeasureColorShare(rgb, w, h);
 
-        // Kurve Weight() an das gemessene Profil legen (kleinste Quadrate über die Helligkeitsstufen)
+        // Fit the Weight() curve to the measured profile (least squares over the brightness levels).
         double num = 0, den = 0;
         var levels = profile.SigmaByLevel.Length;
         for (var l = 0; l < levels; l++)
@@ -378,21 +406,22 @@ public static class Grain
         }
         var lumaStd = den > 0 ? num / den : 0;
 
-        // Gemessen ist die Streuung der Helligkeit; Farbkorn je Kanal trägt nur zum Teil dazu bei
+        // The measured value is the spread of the luminance; colour grain per channel contributes only partly to it.
         const double lumaWeights2 = 0.2126 * 0.2126 + 0.7152 * 0.7152 + 0.0722 * 0.0722;
         var channelStd = lumaStd / Math.Sqrt((1 - color) + color * lumaWeights2);
 
-        // In Pixel und Stärke der Ausgabe umrechnen
+        // Convert to output pixels and output strength.
         var (sigma, amp) = AtScale(profile.GrainSigma, outputScale);
         return new GrainSettings(
             Math.Round(GrainSettings.AmountFor(channelStd * amp)),
             Math.Round(GrainSettings.SizeFor(sigma)),
             0,
             Math.Round(color * 100),
-            0);   // Härte lässt sich nicht messen: weich wie bisher
+            0);   // hardness cannot be measured: soft
     }
 
-    /// <summary>RGB verschachtelt (für <see cref="FaceDetails.MeasureGrain"/>), höchstens <see cref="MeasureMaxPixels"/> aus der Mitte.</summary>
+    /// <summary>Interleaved RGB (for <see cref="FaceDetails.MeasureGrain"/>), at most <see cref="MeasureMaxPixels"/> from
+    /// the centre.</summary>
     private static (float[] Rgb, int W, int H) CenterRgb(float[] bgra, int width, int height)
     {
         var f = Math.Min(1, Math.Sqrt((double)MeasureMaxPixels / ((long)width * height)));
@@ -414,8 +443,8 @@ public static class Grain
     }
 
     /// <summary>
-    /// Farbanteil 0…1: 1 − mittlerer Zusammenhang (Korrelation) der Kanäle im Hochpass, in den ruhigsten 20 % der
-    /// Blöcke — dort ist nur Korn. Im Modell von <see cref="Apply"/> ist die Korrelation genau 1 − Farbanteil.
+    /// Colour share 0…1: 1 − the mean correlation of the channels in the high-pass, in the quietest 20 % of the blocks,
+    /// where there is only grain. In the model of <see cref="Apply"/> the correlation is exactly 1 − colour share.
     /// </summary>
     internal static double MeasureColorShare(float[] rgb, int w, int h)
     {
@@ -429,7 +458,7 @@ public static class Grain
         {
             for (var bx = 0; bx < bw; bx++)
             {
-                // Summen: r, g, b, rr, gg, bb, rg, gb, rb, Helligkeit
+                // Sums: r, g, b, rr, gg, bb, rg, gb, rb, luminance
                 var s = new double[10];
                 double mean = 0;
                 for (var yy = by * Block; yy < (by + 1) * Block; yy++)

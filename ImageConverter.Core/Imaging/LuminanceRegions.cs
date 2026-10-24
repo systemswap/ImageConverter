@@ -2,37 +2,41 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Karten für „Gleiche Farbe → Luminanz“ mit Schwellwert und Zielwert, in kleiner Auflösung gerechnet: die
-/// <b>Bereichshelligkeit</b> — die Helligkeit kantentreu eingeebnet (selbstgeführter Guided Filter). Ein Baum ist als
-/// Ganzes dunkel, der Himmel als Ganzes hell, die Kante dazwischen bleibt scharf. Schwellwert und Zielwert gelten für
-/// diese Bereiche, nicht je Pixel — so wird ein dunkler Baum ganz aufgehellt, und neben ihm leuchtet kein Hof in den
-/// Himmel. Dazu Farbe und Helligkeit klein, für die Karte „was liegt dahinter“ (Durchblicke zwischen Ästen).
+/// Maps for "Match colour → Luminance" with threshold and target value, computed at low resolution.
 /// </summary>
 /// <remarks>
-/// Am Panorama mit dunklem Vordergrund ausgewählt (0.5.38): weichgezeichnete Masken gaben deutliche Höfe am Himmel,
-/// mehrere Durchläufe (Rolling Guidance) machten die Maske klumpig und brachten die Höfe zurück; die eingeebnete
-/// Helligkeit hielt die Pixel neben den Bäumen praktisch unverändert (+0,003 statt +0,31 Oklab-L ohne Grenze).
-/// Gemischt wird über eine Laplace-Pyramide (<see cref="PyramidBlend"/>, 0.5.39).
-/// „Ferne schonen“ (über Dunst bzw. KI-Tiefenkarte, 0.5.38–0.5.49) ist entfallen (0.5.50, Entscheidung des Benutzers):
-/// Luminanz entscheidet nach Helligkeit — Sonne und Spiegelungen können auch im Vordergrund liegen; Nähe und Ferne sind
-/// dafür das falsche Merkmal. Den Mittelton (Tal) hält der Zielwert ruhig.
+/// The main map is the <b>region brightness</b>: the brightness smoothed edge-preservingly (self-guided guided filter). A
+/// tree is dark as a whole, the sky bright as a whole, and the edge between them stays sharp. Threshold and target value
+/// apply to these regions, not per pixel, so a dark tree is lifted completely and no halo glows into the sky next to it.
+/// In addition, colour and brightness are kept at low resolution for the "what lies behind" map (gaps between branches).
+/// The approach was chosen on a panorama with a dark foreground: blurred masks gave clear halos in the sky, several passes
+/// (rolling guidance) made the mask lumpy and brought the halos back, while the smoothed brightness kept the pixels next
+/// to the trees practically unchanged (+0.003 instead of +0.31 Oklab L without a threshold).
+/// The result is blended via a Laplacian pyramid (<see cref="PyramidBlend"/>).
+/// Distance (from haze or a depth map) is deliberately not used as a criterion: luminance decides by brightness, and the
+/// sun and reflections can also lie in the foreground, so near and far are the wrong feature. The target value keeps the
+/// midtones (valley) calm.
 /// </remarks>
 public sealed class LuminanceRegions
 {
-    /// <summary>Längste Kante der Karten — genug für Bereiche, schnell genug für die Vorschau.</summary>
+    /// <summary>Longest edge of the maps: enough for regions, fast enough for the preview.</summary>
     private const int MapEdge = 1200;
 
-    /// <summary>Breite des Übergangs um den Schwellwert (Oklab-L, nach beiden Seiten).</summary>
+    /// <summary>Width of the transition around the threshold (Oklab L, on each side).</summary>
     private const float Soft = 0.08f;
 
     private readonly float[] _base, _l, _a, _b;
     private readonly int _w, _h;
-    private readonly float _scale;   // Bildpixel je Kartenpixel
+    private readonly float _scale;   // image pixels per map pixel
 
     private LuminanceRegions(float[] baseMap, float[] l, float[] a, float[] b, int w, int h, float scale) =>
         (_base, _l, _a, _b, _w, _h, _scale) = (baseMap, l, a, b, w, h, scale);
 
-    /// <summary>Die Karten zu einem Pixelpuffer (B, G, R, A; sRGB 0–1).</summary>
+    /// <summary>Computes the maps for a pixel buffer.</summary>
+    /// <param name="bgra">Pixel buffer (B, G, R, A; sRGB 0–1).</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <returns>The maps, with a longest edge of at most 1200 cells.</returns>
     public static LuminanceRegions Compute(float[] bgra, int width, int height)
     {
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)MapEdge));
@@ -44,11 +48,11 @@ public sealed class LuminanceRegions
         for (var i = 0; i < n; i++) (l[i], la[i], lb[i]) = Oklab.FromSrgb(small[i * 3 + 2], small[i * 3 + 1], small[i * 3]);
 
         var radius = Math.Max(2, Math.Max(w, h) / 60);
-        var baseMap = Guided(l, l, w, h, radius, 0.01f);   // Bereiche: Struktur weg, große Kanten bleiben
+        var baseMap = Guided(l, l, w, h, radius, 0.01f);   // regions: structure removed, large edges kept
         return new LuminanceRegions(baseMap, l, la, lb, w, h, f);
     }
 
-    /// <summary>Verkleinern durch Mitteln je f × f; Ergebnis B, G, R je Pixel.</summary>
+    /// <summary>Downscales by averaging each f × f block; the result has B, G, R per pixel.</summary>
     private static float[] Shrink(float[] bgra, int width, int height, int f, int w, int h)
     {
         var small = new float[w * h * 3];
@@ -72,22 +76,30 @@ public sealed class LuminanceRegions
         return small;
     }
 
-    /// <summary>Anteil des Bereichs am Schwellwert (1 = darunter, wird aufgehellt; 0 = darüber).</summary>
+    /// <summary>Share of the region below the threshold (1 = below, is lifted; 0 = above).</summary>
     private static float BelowLimit(float area, float limit) => limit < 1 ? 1 - SmoothStep(limit - Soft, limit + Soft, area) : 1;
 
-    /// <summary>Faktor des Zielwerts für einen Bereich: so viel, wie es bis zum Ziel braucht, 1 … Luminanz.</summary>
+    /// <summary>Computes the gain needed to bring a region to the target value.</summary>
+    /// <param name="area">Region brightness (Oklab L).</param>
+    /// <param name="target">Target value as Oklab L; 0 disables the target.</param>
+    /// <param name="luminance">Luminance factor; upper limit of the gain.</param>
+    /// <returns>The gain needed to reach the target, clamped to 1 … <paramref name="luminance"/>; with the target disabled,
+    /// <paramref name="luminance"/>.</returns>
     public static float TargetGain(float area, float target, float luminance) =>
         target > 0 ? Math.Clamp(target / Math.Max(area, 0.02f), 1, luminance) : luminance;
 
     /// <summary>
-    /// Gewichtung für feste Reglerstände (Schwellwert, Zielwert, Luminanz). Rechnet einmal die Karte „was liegt
-    /// dahinter“: Farbe und Helligkeit der Flächen, die nicht (oder kaum) aufgehellt werden — über dem Schwellwert oder
-    /// schon am Zielwert, z. B. Himmel —, in die aufgehellten Bereiche hinein fortgesetzt (normierte Faltung). Damit
-    /// lassen sich Durchblicke zwischen Ästen erkennen.
+    /// Creates the weighting for fixed slider values (threshold, target value, luminance).
     /// </summary>
-    /// <param name="limit">Schwellwert als Oklab-L (1 = keine Grenze): hellere Bereiche bleiben.</param>
-    /// <param name="target">Zielwert als Oklab-L (0 = aus).</param>
-    /// <param name="luminance">Luminanz-Faktor (&gt; 1).</param>
+    /// <remarks>
+    /// Computes the "what lies behind" map once: colour and brightness of the areas that are not (or hardly) lifted,
+    /// because they are above the threshold or already at the target value (for example the sky), extended into the
+    /// lifted regions (normalised convolution). This makes gaps between branches detectable.
+    /// </remarks>
+    /// <param name="limit">Threshold as Oklab L (1 = no threshold): brighter regions are left unchanged.</param>
+    /// <param name="target">Target value as Oklab L (0 = off).</param>
+    /// <param name="luminance">Luminance factor (&gt; 1).</param>
+    /// <returns>The weighting; it references these maps.</returns>
     public Weighting For(float limit, float target, float luminance)
     {
         var n = _w * _h;
@@ -119,12 +131,12 @@ public sealed class LuminanceRegions
     }
 
     /// <summary>
-    /// Reichweite der Karte „was liegt dahinter“: ein Fünfzigstel der längsten Kante — Durchblicke gibt es am Rand eines
-    /// Baums, nicht tief im dichten Busch. Mit einem Zwanzigstel galten sonnige Blätter mitten im Busch als Durchblick.
+    /// Reach of the "what lies behind" map: one fiftieth of the longest edge, because gaps occur at the edge of a tree,
+    /// not deep inside a dense bush. With one twentieth, sunlit leaves in the middle of a bush count as gaps.
     /// </summary>
     private const int BehindReach = 50;
 
-    /// <summary>Gewichtung je Pixel für feste Reglerstände (siehe <see cref="For"/>).</summary>
+    /// <summary>Per-pixel weighting for fixed slider values (see <see cref="For"/>).</summary>
     public sealed class Weighting
     {
         private readonly LuminanceRegions _maps;
@@ -134,8 +146,14 @@ public sealed class LuminanceRegions
         internal Weighting(LuminanceRegions maps, float limit, float[] cover, float[] l, float[] a, float[] b) =>
             (_maps, _limit, _cover, _behindL, _behindA, _behindB) = (maps, limit, cover, l, a, b);
 
-        /// <summary>Wie stark ein Pixel aufgehellt wird (0 … 1), aus Schwellwert, Schutz heller Pixel und Durchblicken.</summary>
-        /// <param name="l">Oklab des Pixels selbst (L, a, b).</param>
+        /// <summary>Computes how strongly a pixel is lifted, from the threshold, the protection of bright pixels and the
+        /// gaps.</summary>
+        /// <param name="x">X coordinate in image pixels.</param>
+        /// <param name="y">Y coordinate in image pixels.</param>
+        /// <param name="l">Oklab L of the pixel itself.</param>
+        /// <param name="a">Oklab a of the pixel itself.</param>
+        /// <param name="b">Oklab b of the pixel itself.</param>
+        /// <returns>Weight 0 … 1.</returns>
         public float Weight(int x, int y, float l, float a, float b)
         {
             var m = _maps;
@@ -145,20 +163,20 @@ public sealed class LuminanceRegions
             var w = BelowLimit(area, _limit);
             if (_limit < 1)
             {
-                // Fester Schutz sehr heller Pixel (bleibt als Rückfall, wo nichts „dahinter“ bekannt ist)
+                // Fixed protection of very bright pixels (a fallback where nothing "behind" is known).
                 var protect = Math.Max(0.62f, _limit + 0.12f);
                 w *= 1 - SmoothStep(protect, protect + 0.18f, l);
             }
 
-            // Durchblick: heller als der Bereich und in der Farbe dessen, was dahinter liegt (Himmel, Tal) — nur dieser
-            // Anteil bleibt. Sonnige Nadeln sind auch heller, haben aber eine andere Farbe und werden aufgehellt.
+            // Gap: brighter than the region and in the colour of what lies behind (sky, valley); only this share is left
+            // unchanged. Sunlit needles are also brighter but have a different colour and are lifted.
             var cover = SmoothStep(0.03f, 0.15f, m.Read(_cover, fx, fy));
             if (cover > 0)
             {
                 float bl = m.Read(_behindL, fx, fy), ba = m.Read(_behindA, fx, fy), bb = m.Read(_behindB, fx, fy);
-                var share = Math.Clamp((l - area) / Math.Max(0.05f, bl - area), 0, 1);   // Anteil „dahinter“ nach Helligkeit
-                // Ein Durchblick (Mischung aus dunklem Ast und Hintergrund) ist nie heller als der Hintergrund — was heller
-                // ist, ist sonniges Laub. Ohne diese Grenze galten Blätter vor grünen Wiesen als Durchblick.
+                var share = Math.Clamp((l - area) / Math.Max(0.05f, bl - area), 0, 1);   // share of "behind" by brightness
+                // A gap (a mix of dark branch and background) is never brighter than the background; anything brighter
+                // is sunlit foliage. Without this limit, leaves in front of green meadows count as gaps.
                 var notBrighter = 1 - SmoothStep(bl + 0.01f, bl + 0.06f, l);
                 var chroma = MathF.Sqrt((a - ba) * (a - ba) + (b - bb) * (b - bb));
                 w *= 1 - cover * share * notBrighter * (1 - SmoothStep(ChromaSame, ChromaOther, chroma));
@@ -167,10 +185,14 @@ public sealed class LuminanceRegions
         }
     }
 
-    /// <summary>Farbabstand (Oklab a/b) zu „dahinter“: bis hier gleiche Farbe (Durchblick), ab hier eine andere.</summary>
+    /// <summary>Colour distance (Oklab a/b) to "behind": up to <c>ChromaSame</c> the same colour (gap), from
+    /// <c>ChromaOther</c> a different one.</summary>
     private const float ChromaSame = 0.03f, ChromaOther = 0.08f;
 
-    /// <summary>Helligkeit des Bereichs an einem Bildpixel (eingeebnet, Oklab-L).</summary>
+    /// <summary>Returns the region brightness at an image pixel.</summary>
+    /// <param name="x">X coordinate in image pixels.</param>
+    /// <param name="y">Y coordinate in image pixels.</param>
+    /// <returns>Smoothed Oklab L, bilinearly interpolated from the map.</returns>
     public float AreaBrightness(int x, int y)
     {
         var (fx, fy) = MapPoint(x, y);
@@ -194,7 +216,8 @@ public sealed class LuminanceRegions
         return t * t * (3 - 2 * t);
     }
 
-    /// <summary>Guided Filter (He, Sun, Tang 2010) mit grauer Führung; Kastenfilter über laufende Summen.</summary>
+    /// <summary>Guided filter (He, Sun, Tang 2010) with a greyscale guide; box filter via running sums. The result is
+    /// clamped to 0 … 1.</summary>
     internal static float[] Guided(float[] p, float[] guide, int w, int h, int r, float eps)
     {
         var n = w * h;
@@ -220,7 +243,7 @@ public sealed class LuminanceRegions
         return q;
     }
 
-    /// <summary>Mittelwert über ±r (Rand: nur, was im Bild liegt).</summary>
+    /// <summary>Mean over ±r (at the border only what lies inside the image).</summary>
     private static float[] Box(float[] src, int w, int h, int r)
     {
         var tmp = new float[src.Length];

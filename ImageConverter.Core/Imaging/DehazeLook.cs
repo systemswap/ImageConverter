@@ -2,33 +2,33 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Look je Durchlauf (Phase 4 des Neubaus): Klarheit, Kontrast, Dynamik, feine Schärfe und Kanten —
-/// je Wirkung ein Mechanismus, an einer Stelle, nach der Physik (<see cref="Apply(float[], int, int, float, Pass?, Settings, float)"/>
-/// mit ausgeschalteter Wahrnehmung). Bis 0.4.51 wirkte jeder Feinregler doppelt: im Dunstfilter
-/// (Sinus-Kurve, Dynamik, 3×3-Schärfe) und danach über die Tools-Kette (Kontrast je Kanal, Dynamik,
-/// Unscharfmaskierung) — die Dynamik war so zu stark, und die Tools-Schritte trafen auch den Himmel.
+/// Look per pass: clarity, contrast, vibrance, fine sharpening and edges. There is one mechanism per effect, in one place,
+/// applied after the physical model (<see cref="Apply(float[], int, int, float, Pass?, Settings, float, int)"/> with
+/// perception disabled). If the fine sliders acted both inside the dehaze filter and again in a separate tool chain
+/// (per-channel contrast, vibrance, unsharp mask), every effect would be applied twice: vibrance becomes too strong, and the
+/// tool steps also hit the sky.
 /// </summary>
 /// <remarks>
-/// Die Szenenkarte bestimmt, wo was wirkt: Klarheit und Dynamik in der Landschaft (Dynamik im Himmel
-/// nur ein kleiner Anteil, wie bisher über die Tools), die Kurve überall außer im Lichthof (ihre
-/// Schulter staucht die Strahlen), Schärfe in Landschaft und Lichthof (die Strahlen sind Struktur),
-/// nicht im glatten Himmel.
+/// The scene map (<see cref="SceneMap"/>) determines where each effect acts: clarity and vibrance in the landscape (only a
+/// small share of vibrance in the sky), the curve everywhere but reduced in the halo of a light source (its shoulder
+/// compresses the rays), sharpening fully in the landscape and the halo (the rays are structure) and only a share in the
+/// smooth sky.
 /// </remarks>
 internal static partial class Dehaze
 {
-    /// <summary>Stärken eines Durchlaufs (schon mit Regler und Dunststärke verrechnet).</summary>
+    /// <summary>Strengths for one pass, already combined with the slider values and the dehaze strength.</summary>
     internal sealed record LookSettings(float Clarity, float Curve, float Vibrance, float VibranceSky, float Sharpen, float Edge)
     {
         public bool IsNone => Clarity <= 0 && Curve == 0 && Vibrance <= 0 && VibranceSky <= 0 && Sharpen <= 0 && Edge <= 0;
     }
 
-    /// <summary>Klarheit, Kurve und Dynamik (vor dem Entstufen), an Ort und Stelle.</summary>
+    /// <summary>Applies clarity, curve and vibrance (before debanding) in place.</summary>
     internal static void LookTone(float[] px, int width, int height, SceneMap? scene, LookSettings s, int workEdge = 0)
     {
         if (s.Clarity <= 0 && s.Curve == 0 && s.Vibrance <= 0 && s.VibranceSky <= 0) return;
 
-        // Grundhelligkeit für die Klarheit: Oklab-L, kantentreu geglättet (Guided Filter auf der kleinen
-        // Fassung, Führungsbild das Bild selbst) — ein einfacher Weichzeichner gäbe Lichthöfe an Kanten
+        // Base lightness for clarity: Oklab L, smoothed edge-preservingly (guided filter on the small copy, with the image
+        // itself as the guide). A plain blur would produce halos at edges.
         var f = Math.Max(1, (int)Math.Ceiling(Math.Max(width, height) / (double)(workEdge > 0 ? workEdge : WorkEdge)));
         (float[] A, float[] B) baseL = default;
         int sw = 0, sh = 0;
@@ -44,7 +44,7 @@ internal static partial class Dehaze
             baseL = GuidedColor.Coefficients(Encode(small), l, sw, sh, Math.Max(1.0, ClarityPerEdge * Math.Max(sw, sh)), eps: 1e-3f);
         }
 
-        // Grafikkarte: dieselbe Schleife je Pixel
+        // GPU: the same per-pixel loop.
         if (ToneOnGpu(px, width, height, f, sw, sh, baseL, scene, s)) return;
 
         Parallel.For(0, height, ComputeLimits.Options, y =>
@@ -65,14 +65,14 @@ internal static partial class Dehaze
                     L += s.Clarity * land * (L - cell.Sample(baseL, b, g, r));
                 }
                 L = Math.Clamp(L, 0, 1);
-                // Im Lichthof halbe Kurve: ganz ohne fehlte den Strahlen der Kontrast, den bisher die Tools-Kurve
-                // gab; voll staucht ihre Schulter die Strahlen
+                // In the halo the curve is reduced by HaloCurveShare (to 75 % at the centre): without any curve the rays lack
+                // contrast; at full strength its shoulder compresses the rays.
                 L = Curve(L, s.Curve * (1 - HaloCurveShare * halo));
 
                 var chroma = MathF.Sqrt(oa * oa + ob * ob);
                 var vibrance = s.Vibrance * land + s.VibranceSky * Math.Min(1, sky) * (1 - halo);
                 var factor = (1 + vibrance * (1 - Math.Min(1, chroma / VibranceFull)))
-                             * (1 + CurveChroma * s.Curve * (1 - halo));   // wie die Kurve je Kanal bis 0.4.51
+                             * (1 + CurveChroma * s.Curve * (1 - halo));   // chroma gain of a per-channel curve, see CurveChroma
                 (r, g, b) = Oklab.ToSrgb(L, oa * factor, ob * factor);
                 px[i] = b; px[i + 1] = g; px[i + 2] = r;
             }
@@ -80,14 +80,14 @@ internal static partial class Dehaze
     }
 
     /// <summary>
-    /// Drehpunkt der S-Kurve in Oklab-L. Bis 0.4.51 wirkten zwei Kurven: die Sinus-Kurve um L 0,5 und die
-    /// Tools-Kurve je Kanal um sRGB 0,5 (L ≈ 0,6) — zusammen etwa hier. Mit 0,5 allein wurden Bilder mit
-    /// dunkler Mitte gut eine Stufe heller als bisher.
+    /// Pivot of the S-curve in Oklab L. The value lies between the pivots of a sine curve around L 0.5 and a per-channel
+    /// curve around sRGB 0.5 (L ≈ 0.6) and reproduces their combined effect. With a pivot of 0.5 alone, images with dark
+    /// midtones become noticeably brighter.
     /// </summary>
     private const float CurvePivot = 0.56f;
 
-    /// <summary>Sanfte S-Kurve um <see cref="CurvePivot"/>: beide Hälften auf 0 … ½ bzw. ½ … 1 gestreckt, darauf
-    /// die Sinus-Kurve (Steigung im Drehpunkt 1 + <paramref name="k"/>, Enden fest).</summary>
+    /// <summary>Gentle S-curve around <see cref="CurvePivot"/>: both halves are stretched to 0 … ½ and ½ … 1, then the
+    /// sine curve is applied (slope at the pivot 1 + <paramref name="k"/>, end points fixed).</summary>
     private static float Curve(float L, float k)
     {
         if (k == 0) return L;
@@ -97,19 +97,19 @@ internal static partial class Dehaze
     }
 
     /// <summary>
-    /// Buntheit, die mit der Kurve steigt: Die Tools-Kurve je Kanal (bis 0.4.51) spreizte die Kanäle und hob
-    /// so nebenbei die Buntheit; die Kurve auf der Helligkeit tut das nicht — ohne Ausgleich fehlten im
-    /// Smog (Photo175) 10 % Farbe. Über mehr Dynamik im Himmel ausgeglichen, kippten blasse Hügel ins Türkis.
+    /// Chroma that rises with the curve. A per-channel curve spreads the channels and thereby raises chroma as a side
+    /// effect; a curve on lightness does not. Without compensation, a smoggy test photo lost 10 % of its colour.
+    /// Compensating with more vibrance in the sky instead turned pale hills turquoise.
     /// </summary>
     private const float CurveChroma = 0.3f;
 
-    /// <summary>Anteil der Schärfe im glatten Himmel.</summary>
+    /// <summary>Share of the sharpening applied in the smooth sky.</summary>
     private const float SkySharpenShare = 0.4f;
 
-    /// <summary>Um diesen Anteil wird die Kurve im Lichthof zurückgenommen.</summary>
+    /// <summary>Share by which the curve is reduced in the halo of a light source.</summary>
     private const float HaloCurveShare = 0.25f;
 
-    /// <summary>Feine Schärfe und Kanten (nach dem Entstufen), an Ort und Stelle — im glatten Himmel nur ein Anteil.</summary>
+    /// <summary>Applies fine sharpening and edges (after debanding) in place; in the smooth sky only a share.</summary>
     internal static void LookDetail(float[] px, int width, int height, SceneMap? scene, LookSettings s)
     {
         if (s.Sharpen > 0) WeightedSharpen(px, width, height, scene, s.Sharpen, FineSigma);
@@ -124,8 +124,9 @@ internal static partial class Dehaze
             for (int x = 0, p = y * width; x < width; x++, p++)
             {
                 var sky = scene?.SkyAt(x, y) ?? 0;
-                // Landschaft und Lichthof voll (die Strahlen sind Struktur), im Himmel ein Anteil: voll betonte
-                // er JPEG-Blöcke und Rauschen (Stufen im Himmel 0,79 statt 0,59), ganz ohne fehlten die Strahlen
+                // Full strength in the landscape and the halo (the rays are structure), a share in the sky: at full
+                // strength it emphasises JPEG blocks and noise (banding in the sky 0.79 instead of 0.59); without any,
+                // the rays are missing.
                 var land = SceneMap.Land(sky);
                 var halo = SceneMap.Halo(sky);
                 var w = land + (1 - land) * SkySharpenShare + halo * (1 - SkySharpenShare);

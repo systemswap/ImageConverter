@@ -2,33 +2,34 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Local Laplacian Filter (Paris, Hasinoff, Kautz 2011; schnelle Fassung nach Aubry u. a.
-/// 2014) — das Verfahren hinter Tiefen/Lichter/Klarheit in Referenzwerkzeug und Referenzwerkzeug.
-///
-/// Eine Tonkurve wird nicht Pixel für Pixel angewendet, sondern Schicht für Schicht einer
-/// Laplace-Pyramide: Jede Detailschicht übernimmt die Kurve passend zur Helligkeit der
-/// Umgebung auf ihrer Größenordnung. Feine Details bleiben erhalten (die Kurve wird um den
-/// Umgebungswert herum linear angewendet), und über Kanten hinweg wirkt sie nicht — Werte,
-/// die weiter als <c>sigma</c> vom Umgebungswert entfernt sind, bleiben unverändert.
-/// Dadurch keine Lichthöfe und keine flauen Flächen.
-///
-/// Schnelle Fassung: Statt für jedes Pixel eine eigene Pyramide zu rechnen, wird die Kurve
-/// für <see cref="Levels"/> feste Umgebungswerte gerechnet und zwischen den beiden
-/// nächsten Ergebnissen linear gemischt.
+/// Local Laplacian filter (Paris, Hasinoff, Kautz 2011; fast variant after Aubry et al. 2014), the technique behind
+/// shadows/highlights/clarity in Referenzwerkzeug and Referenzwerkzeug.
 /// </summary>
+/// <remarks>
+/// A tone curve is not applied pixel by pixel but layer by layer of a Laplacian pyramid: each detail layer takes on the
+/// curve according to the brightness of its surroundings at its own scale. Fine details are preserved (the curve is
+/// applied linearly around the surrounding value), and the curve does not act across edges: values further than
+/// <c>sigma</c> from the surrounding value stay unchanged. This avoids halos and flat areas.
+/// Fast variant: instead of computing a separate pyramid for every pixel, the curve is computed for <see cref="Levels"/>
+/// fixed surrounding values, and the two nearest results are blended linearly.
+/// </remarks>
 internal static class LocalLaplacian
 {
-    /// <summary>Anzahl der festen Umgebungswerte zwischen 0 und 1.</summary>
+    /// <summary>Number of fixed surrounding values between 0 and 1.</summary>
     private const int Levels = 8;
 
-    /// <summary>Kleinste Kante der gröbsten Pyramidenstufe.</summary>
+    /// <summary>Minimum short edge of the coarsest pyramid level.</summary>
     private const int CoarsestEdge = 4;
 
-    /// <param name="lum">Helligkeit 0–1 (sRGB-kodiert, also wahrnehmungsnah).</param>
-    /// <param name="curve">Tonkurve für den Umgebungswert.</param>
-    /// <param name="sigma">Ab diesem Abstand zum Umgebungswert gilt ein Wert als Kante.</param>
-    /// <param name="guide">Umgebungswert je Pyramidenstufe aus der Gauß-Pyramide der
-    /// Eingabe — z. B. um zusätzlich eine weite Umgebung zu berücksichtigen.</param>
+    /// <summary>Applies <paramref name="curve"/> locally to a brightness plane.</summary>
+    /// <param name="lum">Brightness 0–1 (sRGB-encoded, hence close to perception). Not modified.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <param name="curve">Tone curve for the surrounding value, defined on 0 … 1.</param>
+    /// <param name="sigma">From this distance to the surrounding value onwards a value counts as an edge.</param>
+    /// <param name="guide">Surrounding value per pyramid level, derived from the Gaussian pyramid of the input, for
+    /// example to also take wider surroundings into account. Without it, the Gaussian level itself is used.</param>
+    /// <returns>A new buffer with the filtered brightness plane.</returns>
     public static float[] Apply(float[] lum, int width, int height, Func<float, float> curve, float sigma,
         Func<Pyramid, int, float[]>? guide = null)
     {
@@ -36,11 +37,11 @@ internal static class LocalLaplacian
         var top = gauss.Count - 1;
         var guides = Enumerable.Range(0, gauss.Count).Select(l => guide?.Invoke(gauss, l) ?? gauss[l]).ToArray();
 
-        // Ausgabe-Pyramide: Laplace-Stufen 0 … top-1, Rest auf der gröbsten Stufe
+        // Output pyramid: Laplacian levels 0 … top-1, residual on the coarsest level.
         var output = gauss.EmptyLike();
         var step = 1f / (Levels - 1);
-        // Gewicht „nah am Umgebungswert“ exp(−d²/2σ²) als Tabelle über d ∈ [−1, 1] — vorher je Pixel und
-        // Umgebungswert eine Exponentialfunktion (bei 28 MP über 200 Millionen je Filter)
+        // Weight "close to the surrounding value" exp(−d²/2σ²) as a table over d ∈ [−1, 1]; otherwise every pixel and
+        // surrounding value needs one exponential function (over 200 million per filter at 28 MP).
         var nearTable = NearTable(sigma);
         float[]? remapped = null;
 
@@ -50,15 +51,15 @@ internal static class LocalLaplacian
             var target = curve(gamma);
             var slope = Slope(curve, gamma);
 
-            // Bild so umgerechnet, als läge überall die Umgebung gamma vor
-            remapped ??= PixelPool.Rent(lum.Length);   // einmal, für alle Umgebungswerte (vollständig geschrieben)
+            // Image remapped as if the surrounding value were gamma everywhere.
+            remapped ??= PixelPool.Rent(lum.Length);   // once, for all surrounding values (completely written)
             Parallel.For(0, height, ComputeLimits.Options, y =>
             {
                 for (int x = 0, i = y * width; x < width; x++, i++)
                 {
                     var d = lum[i] - gamma;
-                    var curved = target + slope * d;                     // Kurve, um gamma linearisiert
-                    var near = Near(nearTable, d);                         // 1 nah, 0 jenseits der Kante
+                    var curved = target + slope * d;                     // curve, linearised around gamma
+                    var near = Near(nearTable, d);                         // 1 close, 0 beyond the edge
                     remapped[i] = lum[i] + (curved - lum[i]) * near;
                 }
             });
@@ -66,7 +67,7 @@ internal static class LocalLaplacian
             var r = Pyramid.Gaussian(remapped, width, height, gauss.Count);
             for (var l = 0; l <= top; l++)
             {
-                var band = l < top ? r.Laplacian(l) : r[top];   // Laplace-Stufe aus dem Pool, unten zurück
+                var band = l < top ? r.Laplacian(l) : r[top];   // Laplacian level from the pool, returned below
                 var g = guides[l];
                 var o = output[l];
                 Parallel.For(0, o.Length / 4096 + 1, ComputeLimits.Options, chunk =>
@@ -80,11 +81,11 @@ internal static class LocalLaplacian
                 });
                 if (l < top) PixelPool.Return(band);
             }
-            r.ReturnLevels(from: 1);   // Stufe 0 ist remapped, wird weiterverwendet
+            r.ReturnLevels(from: 1);   // level 0 is remapped and is reused
         }
 
         PixelPool.Return(remapped);
-        gauss.ReturnLevels(from: 1);   // Stufe 0 ist der Eingang
+        gauss.ReturnLevels(from: 1);   // level 0 is the input
         return output.Collapse();
     }
 
@@ -102,7 +103,7 @@ internal static class LocalLaplacian
         return table;
     }
 
-    /// <summary>Tabelle linear gelesen; d liegt zwischen −1 und 1 (Helligkeiten 0–1).</summary>
+    /// <summary>Reads the table with linear interpolation; d lies between −1 and 1 (brightness values 0–1).</summary>
     private static float Near(float[] table, float d)
     {
         var x = (Math.Clamp(d, -1, 1) + 1) * (NearSize / 2f);
@@ -127,9 +128,10 @@ internal static class LocalLaplacian
 }
 
 /// <summary>
-/// Gauß-Pyramide einer Fließkomma-Ebene: Stufe 0 ist das Bild, jede weitere halb so groß
-/// (5er-Binomialfilter 1-4-6-4-1, Ränder gespiegelt fortgesetzt).
+/// Gaussian pyramid of a floating-point plane: level 0 is the image, each further level is half the size (5-tap binomial
+/// filter 1-4-6-4-1; when downsampling, the borders are extended by mirroring).
 /// </summary>
+/// <remarks>Levels above 0 are rented from <see cref="PixelPool"/>; level 0 is the caller's buffer.</remarks>
 internal sealed class Pyramid
 {
     private readonly List<(float[] Data, int W, int H)> _levels = [];
@@ -153,7 +155,7 @@ internal sealed class Pyramid
         return p;
     }
 
-    /// <summary>Leere Pyramide gleicher Größen (für die Ausgabe).</summary>
+    /// <summary>Creates an empty pyramid with the same level sizes (for the output).</summary>
     public Pyramid EmptyLike()
     {
         var p = new Pyramid();
@@ -161,7 +163,7 @@ internal sealed class Pyramid
         return p;
     }
 
-    /// <summary>Detailschicht: Stufe minus die vergrößerte nächstgröbere Stufe (Puffer aus dem Pool).</summary>
+    /// <summary>Detail layer: the level minus the upsampled next coarser level (buffer from the pool).</summary>
     public float[] Laplacian(int level)
     {
         var (fine, w, h) = _levels[level];
@@ -171,13 +173,14 @@ internal sealed class Pyramid
         return band;
     }
 
-    /// <summary>Stufen ab <paramref name="from"/> zurück in den Pool (die Pyramide ist danach unbrauchbar).</summary>
+    /// <summary>Returns the levels from <paramref name="from"/> onwards to the pool; the pyramid is unusable
+    /// afterwards.</summary>
     public void ReturnLevels(int from)
     {
         for (var l = from; l < _levels.Count; l++) PixelPool.Return(_levels[l].Data);
     }
 
-    /// <summary>Gröbste Stufe auf die Größe von <paramref name="level"/> vergrößert.</summary>
+    /// <summary>Level <paramref name="coarse"/> upsampled step by step to the size of <paramref name="level"/>.</summary>
     public float[] UpsampledFrom(int coarse, int level)
     {
         var (data, w, h) = _levels[coarse];
@@ -189,7 +192,7 @@ internal sealed class Pyramid
         return data;
     }
 
-    /// <summary>Laplace-Pyramide (Stufen 0 … n-2) plus Rest zurück zum Bild.</summary>
+    /// <summary>Collapses a Laplacian pyramid (levels 0 … n-2) plus residual back into the image.</summary>
     public float[] Collapse()
     {
         var top = Count - 1;
@@ -234,7 +237,7 @@ internal sealed class Pyramid
         return (dst, cw, ch);
     }
 
-    /// <summary>Vergrößern auf fw × fh: Nullen einfügen und mit doppeltem Kernel glätten.</summary>
+    /// <summary>Upsamples to fw × fh: inserts zeros and smooths with the doubled kernel (borders clamped).</summary>
     private static float[] Up(float[] src, int cw, int ch, int fw, int fh)
     {
         var rows = PixelPool.Rent(fw * ch);
@@ -243,7 +246,7 @@ internal sealed class Pyramid
             for (var x = 0; x < fw; x++)
             {
                 float acc = 0;
-                // Beiträge der groben Pixel i mit 2i nahe x
+                // Contributions of the coarse pixels i with 2i close to x.
                 for (var k = -2; k <= 2; k++)
                 {
                     var t = x + k;

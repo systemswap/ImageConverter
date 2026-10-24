@@ -3,33 +3,47 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>Skalierungsfilter, wie sie in der Oberfläche angeboten werden.</summary>
+/// <summary>Resampling filters as offered in the user interface; see <see cref="ImageOps.ToMagick"/> for the ImageMagick
+/// filter behind each one.</summary>
 public enum ResampleFilter
 {
+    /// <summary>Lanczos with 3 lobes.</summary>
     Lanczos3,
+    /// <summary>Soft cubic filter with few ringing artefacts (ImageMagick Robidoux).</summary>
     Bicubic,
+    /// <summary>Catmull-Rom cubic spline.</summary>
     CatmullRom,
+    /// <summary>Mitchell-Netravali cubic filter.</summary>
     Mitchell,
+    /// <summary>B-spline filter.</summary>
     Spline,
+    /// <summary>Bilinear (triangle) filter.</summary>
     Bilinear,
+    /// <summary>Box filter.</summary>
     Box,
+    /// <summary>Nearest neighbour (point sampling).</summary>
     Nearest,
 }
 
 /// <summary>
-/// Bildoperationen auf ImageMagick-Bildern. Jede Operation liefert ein neues Bild
-/// und lässt die Quelle unverändert — so kann der Verlauf alte Stände behalten.
+/// Image operations on ImageMagick images.
 /// </summary>
+/// <remarks>
+/// Every operation returns a new image owned by the caller and leaves the source unchanged, so that the history can keep
+/// earlier states.
+/// </remarks>
 public static class ImageOps
 {
-    // ------------------------------------------------------------- Anzeige
+    // ------------------------------------------------------------- Display
 
-    /// <summary>8-Bit-BGRA-Pixel (nicht vormultipliziert) für die Anzeige.</summary>
+    /// <summary>Returns 8-bit BGRA pixels (not premultiplied) for display.</summary>
+    /// <param name="image">Source image; it is locked while being read and not modified.</param>
+    /// <returns>A new array with width × height × 4 bytes.</returns>
+    /// <exception cref="InvalidOperationException">ImageMagick could not provide the pixels.</exception>
     /// <remarks>
-    /// Bewusst über die Pixel-API statt <c>ToByteArray(MagickFormat.Bgra)</c>:
-    /// Letzteres verändert intern das Quellbild — danach liefert jedes Skalieren
-    /// nur noch schwarz-transparente Pixel (gemessen mit Magick.NET 14.17.2).
-    /// Die Pixel-API liefert außerdem immer volle 8 Bit, auch bei 1-Bit-Dateien.
+    /// Deliberately uses the pixel API instead of <c>ToByteArray(MagickFormat.Bgra)</c>: the latter modifies the source
+    /// image internally, after which every resize returns only black transparent pixels (observed with Magick.NET 14.17.2).
+    /// The pixel API also always returns full 8 bits, even for 1-bit files.
     /// </remarks>
     public static byte[] ToBgra(MagickImage image)
     {
@@ -43,12 +57,13 @@ public static class ImageOps
 
     // ------------------------------------------------------------- Threads
     //
-    // Auf dasselbe Bild greifen bis zu drei Hintergrundaufgaben gleichzeitig zu:
-    // Vorschau, Größenschätzung und Bearbeiten/Export. Jede arbeitet auf einer
-    // eigenen Kopie — nur das Kopieren und Auslesen der gemeinsamen Quelle wird
-    // gegeneinander gesperrt. Danach ist jede Kopie nur noch in einem Thread.
+    // Up to three background tasks access the same image at the same time: preview, size estimate and editing/export.
+    // Each works on its own copy; only copying and reading the shared source are locked against each other (the image
+    // object itself is the lock). After that, each copy is used by one thread only.
 
-    /// <summary>Thread-sichere Kopie: alle Operationen kopieren über diesen Weg.</summary>
+    /// <summary>Creates a thread-safe copy; all operations copy via this method.</summary>
+    /// <param name="source">Image to copy; it is locked during the copy.</param>
+    /// <returns>A new copy owned by the caller.</returns>
     public static MagickImage CloneOf(MagickImage source)
     {
         lock (source)
@@ -56,10 +71,11 @@ public static class ImageOps
     }
 
     /// <summary>
-    /// Wie <see cref="ToBgra"/>, aber für den Bildschirm: Bilder mit eigenem Profil
-    /// (Adobe RGB …) werden nach sRGB umgerechnet, damit die Farben stimmen.
-    /// Das Bild selbst bleibt in seinem Farbraum.
+    /// Like <see cref="ToBgra"/>, but for the screen: images with their own profile (Adobe RGB …) are converted to sRGB so
+    /// that the colours are correct. The image itself stays in its colour space.
     /// </summary>
+    /// <param name="image">Source image; not modified.</param>
+    /// <returns>A new array with width × height × 4 bytes in sRGB.</returns>
     public static byte[] ToDisplayBgra(MagickImage image)
     {
         IColorProfile? profile;
@@ -72,7 +88,10 @@ public static class ImageOps
         return ToBgra(display);
     }
 
-    /// <summary>Wie <see cref="ToDisplayBgra"/>, aber als 32-Bit-Puffer mit voller Tiefe (siehe <see cref="Pixels"/>).</summary>
+    /// <summary>Like <see cref="ToDisplayBgra"/>, but as a 32-bit buffer at full depth (see <see cref="Pixels"/>).</summary>
+    /// <param name="image">Source image; not modified.</param>
+    /// <returns>A buffer from <see cref="PixelPool"/> with width × height × 4 values in sRGB, see
+    /// <see cref="Pixels.FromMagick"/>.</returns>
     public static float[] ToDisplayPixels(MagickImage image)
     {
         IColorProfile? profile;
@@ -85,7 +104,11 @@ public static class ImageOps
         return Pixels.FromMagick(display);
     }
 
-    /// <summary>Liest 8-Bit-BGRA-Pixel zurück in ein ImageMagick-Bild (z. B. nach dem Schärfen).</summary>
+    /// <summary>Reads 8-bit BGRA pixels back into an ImageMagick image (for example after sharpening).</summary>
+    /// <param name="bgra">Pixels as B, G, R, A bytes.</param>
+    /// <param name="width">Width in pixels.</param>
+    /// <param name="height">Height in pixels.</param>
+    /// <returns>A new image owned by the caller.</returns>
     public static MagickImage FromBgra(byte[] bgra, int width, int height)
     {
         var image = new MagickImage();
@@ -93,8 +116,12 @@ public static class ImageOps
         return image;
     }
 
-    // ------------------------------------------------------------- Geometrie
+    // ------------------------------------------------------------- Geometry
 
+    /// <summary>Rotates by 90 degrees.</summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <param name="clockwise">True for clockwise, false for counter-clockwise.</param>
+    /// <returns>A new rotated image.</returns>
     public static MagickImage Rotate90(MagickImage source, bool clockwise)
     {
         var result = CloneOf(source);
@@ -104,11 +131,21 @@ public static class ImageOps
     }
 
     /// <summary>
-    /// Frei drehen und zuschneiden in einem Schritt. Der Rahmen (<paramref name="x"/> … <paramref name="height"/>)
-    /// gilt im ungedrehten Koordinatensystem der Vorschau um die Bildmitte (siehe <see cref="RotationGeometry"/>);
-    /// er sollte ganz im gedrehten Bild liegen, sonst bleiben die Ecken außerhalb leer (transparent).
-    /// Positive Winkel drehen im Uhrzeigersinn. Radius wie bei <see cref="Crop"/>.
+    /// Rotates freely and crops in one step.
     /// </summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <param name="degrees">Rotation angle in degrees; positive angles rotate clockwise. At practically 0° the image is only cropped.</param>
+    /// <param name="x">Left edge of the frame in pixels.</param>
+    /// <param name="y">Top edge of the frame in pixels.</param>
+    /// <param name="width">Width of the frame in pixels.</param>
+    /// <param name="height">Height of the frame in pixels.</param>
+    /// <param name="radius">Corner radius in pixels, as in <see cref="Crop"/>.</param>
+    /// <returns>A new image with the size of the frame.</returns>
+    /// <remarks>
+    /// The frame applies in the unrotated coordinate system of the preview about the image centre (see
+    /// <see cref="RotationGeometry"/>). It should lie entirely within the rotated image; otherwise the corners outside
+    /// stay empty (transparent).
+    /// </remarks>
     public static MagickImage RotateAndCrop(MagickImage source, double degrees, int x, int y, int width, int height,
         double radius)
     {
@@ -117,26 +154,32 @@ public static class ImageOps
 
         var hadAlpha = source.HasAlpha;
         using var rotated = CloneOf(source);
-        // Nur die Kantenpixel außerhalb des Rahmens berühren den Hintergrund
+        // Only the edge pixels outside the frame touch the background.
         rotated.BackgroundColor = MagickColors.Transparent;
         rotated.Rotate(degrees);
         rotated.ResetPage();
 
-        // Die Drehmitte bleibt die Mitte: Die Fläche wächst nach allen Seiten gleich
+        // The centre of rotation stays the centre: the canvas grows equally on all sides.
         var dx = (rotated.Width - (double)source.Width) / 2;
         var dy = (rotated.Height - (double)source.Height) / 2;
         var result = Crop(rotated, (int)Math.Round(x + dx), (int)Math.Round(y + dy), width, height, radius);
 
-        // Bild ohne Transparenz: auch ohne Alphakanal zurückgeben (sonst wird z. B. ein PNG größer)
+        // Image without transparency: return it without an alpha channel as well (otherwise a PNG, for example, becomes
+        // larger).
         if (!hadAlpha && radius < 0.5) result.Alpha(AlphaOption.Off);
         return result;
     }
 
     /// <summary>
-    /// Entzerren: Das Viereck (oben links, oben rechts, unten rechts, unten links; in Bildpixeln) wird zum
-    /// geraden Rechteck in der Größe von <see cref="PerspectiveGeometry.TargetSize"/> — z. B. ein schräg
-    /// fotografiertes Blatt. Nur der Inhalt des Vierecks bleibt.
+    /// Corrects perspective: the quadrilateral becomes an upright rectangle of the size given by
+    /// <see cref="PerspectiveGeometry.TargetSize"/>, for example a sheet of paper photographed at an angle. Only the
+    /// content of the quadrilateral is kept.
     /// </summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <param name="quad">Corners in image pixels: top left, top right, bottom right, bottom left.</param>
+    /// <returns>A new image with the corrected content.</returns>
+    /// <exception cref="ArgumentException">The corners do not form a usable quadrilateral (see
+    /// <see cref="PerspectiveGeometry.IsValid"/>).</exception>
     public static MagickImage Straighten(MagickImage source, IReadOnlyList<(double X, double Y)> quad)
     {
         if (!PerspectiveGeometry.IsValid(quad))
@@ -147,8 +190,8 @@ public static class ImageOps
         var result = CloneOf(source);
         result.VirtualPixelMethod = VirtualPixelMethod.Transparent;
 
-        // Paare Quelle → Ziel; ImageMagick rechnet für jedes Zielpixel zurück (gute Glättung, kein Treppeneffekt).
-        // Pixelmitten: Die Ecke des Vierecks ist die Außenkante, im Ziel also (0,0) bis (w,h).
+        // Pairs source → target; ImageMagick maps every target pixel back (good smoothing, no staircase effect).
+        // Pixel centres: the corner of the quadrilateral is the outer edge, so in the target it is (0,0) to (w,h).
         double[] corners = [0, 0, w, 0, w, h, 0, h];
         var args = new double[16];
         for (var i = 0; i < 4; i++)
@@ -162,11 +205,15 @@ public static class ImageOps
         result.Distort(new DistortSettings(DistortMethod.Perspective) { Viewport = new MagickGeometry(0, 0, (uint)w, (uint)h) }, args);
         result.ResetPage();
 
-        // Das Viereck liegt im Bild (die Griffe bleiben drin) — ohne Transparenz geladen, ohne Alphakanal zurück
+        // The quadrilateral lies within the image (the handles stay inside), so an image loaded without transparency is
+        // returned without an alpha channel.
         if (!hadAlpha) result.Alpha(AlphaOption.Off);
         return result;
     }
 
+    /// <summary>Mirrors the image horizontally (left ↔ right).</summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <returns>A new mirrored image.</returns>
     public static MagickImage FlipHorizontal(MagickImage source)
     {
         var result = CloneOf(source);
@@ -175,11 +222,17 @@ public static class ImageOps
     }
 
     /// <summary>
-    /// Schneidet den Bereich aus. Mit Radius werden die Ecken abgerundet und alles
-    /// außerhalb der Rundung wird transparent; das Ergebnis bleibt rechteckig.
-    /// Rundung wie in der Vorschau: kreisrund bis zur halben kürzeren Seite,
-    /// danach elliptisch bis zur vollen Ellipse (bei Quadrat: Kreis).
+    /// Crops the area. With a radius, the corners are rounded and everything outside the rounding becomes transparent;
+    /// the result stays rectangular.
     /// </summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <param name="x">Left edge in pixels; clamped to the image.</param>
+    /// <param name="y">Top edge in pixels; clamped to the image.</param>
+    /// <param name="width">Width in pixels; clamped to 1 … the remaining width.</param>
+    /// <param name="height">Height in pixels; clamped to 1 … the remaining height.</param>
+    /// <param name="radius">Corner radius in pixels; below 0.5 the corners stay square. Rounding as in the preview:
+    /// circular up to half the shorter side, then elliptical up to the full ellipse (a circle for a square).</param>
+    /// <returns>A new cropped image; with rounded corners it has an alpha channel.</returns>
     public static MagickImage Crop(MagickImage source, int x, int y, int width, int height, double radius)
     {
         x = Math.Clamp(x, 0, (int)source.Width - 1);
@@ -195,7 +248,7 @@ public static class ImageOps
         var ry = Math.Min(radius, height / 2.0);
         if (rx < 0.5 || ry < 0.5) return result;
 
-        // Maske: weiß, Alpha = Abdeckung der abgerundeten Form (kantengeglättet)
+        // Mask: white, alpha = coverage of the rounded shape (anti-aliased).
         var coverage = RoundedCoverage(width, height, rx, ry);
         var maskPixels = new byte[width * height * 4];
         for (var i = 0; i < coverage.Length; i++)
@@ -208,13 +261,13 @@ public static class ImageOps
         using var mask = new MagickImage();
         mask.ReadPixels(maskPixels, new PixelReadSettings((uint)width, (uint)height, StorageType.Char, "RGBA"));
 
-        // DstIn: vorhandene Transparenz bleibt erhalten und wird mit der Form multipliziert
+        // DstIn: existing transparency is kept and multiplied by the shape.
         result.Alpha(AlphaOption.Set);
         result.Composite(mask, CompositeOperator.DstIn);
         return result;
     }
 
-    /// <summary>Deckung 0–255 je Pixel für ein Rechteck mit elliptischen Ecken (4×4-Supersampling).</summary>
+    /// <summary>Coverage 0–255 per pixel for a rectangle with elliptical corners (4×4 supersampling).</summary>
     internal static byte[] RoundedCoverage(int width, int height, double rx, double ry)
     {
         var alpha = new byte[width * height];
@@ -223,7 +276,7 @@ public static class ImageOps
         var cw = (int)Math.Ceiling(rx);
         var ch = (int)Math.Ceiling(ry);
 
-        // Ein Viertel rechnen, auf alle vier Ecken spiegeln
+        // Compute one corner and mirror it to all four corners.
         var corner = new byte[cw * ch];
         Parallel.For(0, ch, ComputeLimits.Options, ly =>
         {
@@ -259,12 +312,15 @@ public static class ImageOps
         return alpha;
     }
 
-    // ------------------------------------------------------------- Qualität
+    // ------------------------------------------------------------- Quality
 
+    /// <summary>Maps a resampling filter to the ImageMagick filter type.</summary>
+    /// <param name="filter">Filter from the user interface.</param>
+    /// <returns>The ImageMagick filter; Lanczos for unknown values.</returns>
     public static FilterType ToMagick(ResampleFilter filter) => filter switch
     {
         ResampleFilter.Lanczos3 => FilterType.Lanczos,
-        // "Bicubic" als weicher, saumarmer Kubik-Filter (Keys-Familie)
+        // "Bicubic" as a soft cubic filter with little ringing (Keys family).
         ResampleFilter.Bicubic => FilterType.Robidoux,
         ResampleFilter.CatmullRom => FilterType.Catrom,
         ResampleFilter.Mitchell => FilterType.Mitchell,
@@ -276,10 +332,16 @@ public static class ImageOps
     };
 
     /// <summary>
-    /// Skaliert auf genau <paramref name="width"/> × <paramref name="height"/>.
-    /// Gamma-korrekt heißt: in linearem Licht rechnen, so wie das Auge Helligkeit
-    /// mischt — feine helle Strukturen werden beim Verkleinern nicht zu dunkel.
+    /// Scales to exactly <paramref name="width"/> × <paramref name="height"/>.
     /// </summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <param name="width">Target width in pixels.</param>
+    /// <param name="height">Target height in pixels.</param>
+    /// <param name="filter">Resampling filter.</param>
+    /// <param name="gammaCorrect">Compute in linear light, the way the eye mixes brightness, so that fine bright structures
+    /// do not become too dark when downscaling.</param>
+    /// <returns>A new image; a plain copy if the size is unchanged.</returns>
+    /// <remarks>sRGB images from <see cref="ParallelMinPixels"/> pixels upwards are scaled in parallel strips.</remarks>
     public static MagickImage Resize(MagickImage source, int width, int height, ResampleFilter filter, bool gammaCorrect)
     {
         bool sameSize, large;
@@ -299,27 +361,25 @@ public static class ImageOps
         result.Resize(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
         if (gammaCorrect)
         {
-            result.ColorSpace = ColorSpace.sRGB;                 // zurück
-            // Der Umweg über linear entfernt das Farbprofil (z. B. Adobe RGB) —
-            // die Pixel sind aber wieder im Ausgangsraum, also Profil zurücksetzen.
+            result.ColorSpace = ColorSpace.sRGB;                 // back
+            // The detour via linear removes the colour profile (for example Adobe RGB), but the pixels are back in the
+            // original colour space, so the profile is restored.
             ImageExporter.CopyProfiles(source, result);
         }
 
         return result;
     }
 
-    // ------------------------------------------------------- Paralleles Skalieren
+    // ------------------------------------------------------- Parallel scaling
     //
-    // Bis 0.6.5 war ImageMagick ohne OpenMP eingebunden (Magick.NET-Q16-AnyCPU, ein Kern; seit 0.6.6 die
-    // Mehrkern-Fassung, siehe Directory.Packages.props). Damals: Ein
-    // 24-Megapixel-Foto gamma-korrekt auf 2048 px zu verkleinern dauerte 2,8 s (1,6 s
-    // davon die Umrechnung nach linear, 1 s das Skalieren). Skalieren ist trennbar:
-    // erst waagerecht (jede Zeile für sich), dann senkrecht (jede Spalte für sich).
-    // Deshalb Zeilenstreifen bzw. Spaltenstreifen parallel rechnen — ohne Überlappung,
-    // denn in der jeweils anderen Richtung bleibt die Größe gleich. Die Umrechnung
-    // sRGB ↔ linear übernimmt eine Tabelle mit denselben Formeln wie ImageMagick.
+    // This path does not depend on ImageMagick using several cores itself (which ImageMagick package is used, single-core
+    // or with OpenMP, is set in Directory.Packages.props). With a single-core ImageMagick, downscaling a 24-megapixel
+    // photo gamma-correctly to 2048 px took 2.8 s (1.6 s of it the conversion to linear, 1 s the scaling). Scaling is
+    // separable: first horizontally (each row on its own), then vertically (each column on its own). Therefore row strips
+    // and then column strips are computed in parallel, without overlap, because the size in the other direction stays
+    // the same. The sRGB ↔ linear conversion uses a table with the same formulas as ImageMagick.
 
-    /// <summary>Darunter lohnt das Aufteilen nicht; es gilt der einfache Weg.</summary>
+    /// <summary>Below this pixel count, splitting does not pay off and the simple path is used.</summary>
     internal const long ParallelMinPixels = 1_000_000;
 
     private const int Quantum = 65535;   // Q16
@@ -330,7 +390,7 @@ public static class ImageOps
         for (var i = 0; i <= Quantum; i++)
         {
             var x = (double)i / Quantum;
-            // wie DecodePixelGamma / EncodePixelGamma in ImageMagick (gamma-private.h)
+            // as DecodePixelGamma / EncodePixelGamma in ImageMagick (gamma-private.h)
             var lin = x <= 0.0404482362771076 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4);
             var srgb = x <= 0.0031306684425005883 ? 12.92 * x : 1.055 * Math.Pow(x, 1.0 / 2.4) - 0.055;
             toLinear[i] = (ushort)Math.Clamp(Math.Round(lin * Quantum), 0, Quantum);
@@ -339,11 +399,11 @@ public static class ImageOps
         return (toLinear, toSrgb);
     });
 
-    // Zerschneiden und Zusammensetzen über ImageMagick (CloneArea, Append) kostete selbst
-    // rund 1 s auf einem Kern — deshalb laufen die Streifen über Pixel-Arrays.
+    // Splitting and joining via ImageMagick (CloneArea, Append) costs about 1 s on one core by itself, so the strips are
+    // handled as pixel arrays.
     private static MagickImage ResizeInStrips(MagickImage image, int width, int height, FilterType filter, bool gammaCorrect)
     {
-        // Die Quelle ist oft das gemeinsame Original (siehe CloneOf) — nur gesperrt auslesen
+        // The source is often the shared original (see CloneOf), so it is read only under the lock.
         int sw, sh;
         uint depth;
         string map;
@@ -357,8 +417,9 @@ public static class ImageOps
         var ch = map.Length;
         var (toLinear, toSrgb) = gammaCorrect ? GammaTables.Value : default;
 
-        // 1) Zeilenstreifen: nach linear, waagerecht auf die Zielbreite. Jeder Streifen liest nur seine Zeilen (gesperrt) —
-        // vorher eine Kopie des ganzen Bildes vorab (beim Panorama 168 MB, bei jeder ersten Vorschau eines Bildes)
+        // 1) Row strips: to linear, horizontally to the target width. Each strip reads only its own rows (under the lock),
+        // so that no copy of the whole image is needed up front (168 MB for the panorama, at every first preview of an
+        // image).
         var wide = new ushort[(long)width * sh * ch];
         Parallel.ForEach(Strips(sh), ComputeLimits.Options, r =>
         {
@@ -374,7 +435,7 @@ public static class ImageOps
             scaled.CopyTo(wide, (long)r.Start * width * ch);
         });
 
-        // 2) Spaltenstreifen: senkrecht auf die Zielhöhe, zurück nach sRGB
+        // 2) Column strips: vertically to the target height, back to sRGB.
         var result = new ushort[(long)width * height * ch];
         Parallel.ForEach(Strips(width), ComputeLimits.Options, c =>
         {
@@ -391,12 +452,13 @@ public static class ImageOps
 
         var resized = new MagickImage();
         resized.ReadPixels(result, new PixelReadSettings((uint)width, (uint)height, StorageType.Quantum, map));
-        resized.Depth = depth;                     // 8-Bit-Quelle bleibt 8 Bit (z. B. als PNG)
-        ImageExporter.CopyProfiles(image, resized);  // EXIF, ICC … wie beim Schärfen
+        resized.Depth = depth;                     // an 8-bit source stays 8 bits (for example as PNG)
+        ImageExporter.CopyProfiles(image, resized);  // EXIF, ICC … as for sharpening
         return resized;
     }
 
-    /// <summary>Teilt eine Länge in so viele Stücke wie Kerne (mindestens 64 Pixel je Stück).</summary>
+    /// <summary>Splits a length into as many pieces as there are cores (at least 64 pixels per piece, at most 32
+    /// pieces).</summary>
     private static List<(int Start, int Length)> Strips(int total)
     {
         var count = Math.Clamp(Math.Min(Environment.ProcessorCount, total / 64), 1, 32);
@@ -409,7 +471,7 @@ public static class ImageOps
         return list;
     }
 
-    /// <summary>Ein Streifen als eigenes Bild skaliert; liefert seine Pixel.</summary>
+    /// <summary>Scales one strip as a separate image and returns its pixels.</summary>
     private static ushort[] Scale(ushort[] data, int offset, int count, int w, int h,
         int toWidth, int toHeight, string map, FilterType filter)
     {
@@ -422,7 +484,7 @@ public static class ImageOps
         return pixels.ToShortArray(map) ?? throw new InvalidOperationException(Tr.T("Pixel konnten nicht gelesen werden."));
     }
 
-    /// <summary>Wendet eine Tabelle auf Rot, Grün und Blau an (Alpha bleibt).</summary>
+    /// <summary>Applies a table to red, green and blue (alpha is unchanged).</summary>
     private static void MapColor(Span<ushort> data, int channels, ushort[] table)
     {
         for (var p = 0; p < data.Length; p += channels)
@@ -433,7 +495,11 @@ public static class ImageOps
         }
     }
 
-    /// <summary>Rauschminderung (Wavelet), <paramref name="strength"/> 0–3 wie der Regler.</summary>
+    /// <summary>Reduces noise with ImageMagick's wavelet denoise.</summary>
+    /// <param name="source">Source image; not modified.</param>
+    /// <param name="strength">Strength 0–3 as on the slider; the threshold is <paramref name="strength"/> × 3 percent.
+    /// At 0.01 or below, a plain copy is returned.</param>
+    /// <returns>A new image.</returns>
     public static MagickImage Denoise(MagickImage source, double strength)
     {
         var result = CloneOf(source);
