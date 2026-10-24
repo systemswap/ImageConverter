@@ -10,51 +10,51 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-// Zuschneiden, Drehen, Spiegeln und der Verlauf dafür.
+// Cropping, rotating, flipping and the undo history for them.
 public partial class MainViewModel
 {
     /// <summary>
-    /// Ein Schritt im Verlauf: der Stand <b>vor</b> der Änderung. Bei Bildänderungen
-    /// (KI, Entfernen) ist <see cref="Image"/> das Bild davor und
-    /// <see cref="FilePath"/> die Datei; beim Ausrichten (Drehen, Zuschnitt …) ist <see cref="Recipe"/> das Rezept
-    /// davor; bei reinen Einstellungsänderungen ist alles drei null.
+    /// One step in the history: the state <b>before</b> the change. For image changes
+    /// (AI, removal) <see cref="Image"/> is the image before and
+    /// <see cref="FilePath"/> the file; for geometry changes (rotation, crop …) <see cref="Recipe"/> is the recipe
+    /// before; for pure settings changes <see cref="Image"/> and <see cref="Recipe"/> are null.
     /// </summary>
     private sealed record Snapshot(string? FilePath, MagickImage? Image, SettingsState Settings,
         bool? ApplyToAll = null, IReadOnlyDictionary<string, SettingsState>? FileSettings = null,
         SettingsState? Template = null, MainViewModel.ImageStep? Step = null, GeometryRecipe? Recipe = null);
 
-    /// <summary>Das Bild einer Datei: Original, aktuelles Pixelbild und das Ausrichten als Rezept.</summary>
+    /// <summary>The image of one file: original, current pixel image and the geometry as a recipe.</summary>
     private sealed class EditHistory(MagickImage original)
     {
         public MagickImage Original { get; } = original;
 
-        /// <summary>Pixelbild: Original plus KI und Entfernen — ungedreht und unbeschnitten.</summary>
+        /// <summary>Pixel image: the original plus AI and removal edits, not rotated and not cropped.</summary>
         public MagickImage Current { get; set; } = original;
 
-        /// <summary>Ausrichten (Entzerren, Gerade richten, Zuschnitt, Drehen/Spiegeln) — erst beim Anzeigen und Speichern angewandt.</summary>
+        /// <summary>Geometry (perspective, levelling, crop, rotate/flip); applied only when displaying and saving.</summary>
         public GeometryRecipe Recipe { get; set; } = GeometryRecipe.None;
 
         public long FileBytes { get; init; }
         public string FormatName { get; init; } = "";
         public double Dpi { get; init; } = ImageLoader.DefaultDpi;
 
-        /// <summary>Weicht vom geladenen Bild ab (zugeschnitten, gedreht, KI …).</summary>
+        /// <summary>Differs from the loaded image (cropped, rotated, AI …).</summary>
         public bool IsEdited => !ReferenceEquals(Current, Original) || !Recipe.IsNone;
     }
 
-    // Ein gemeinsamer Verlauf für alles: Einstellungen gelten für alle Bilder,
-    // Bildänderungen merken sich ihre Datei. „Rückgängig" nimmt immer den
-    // letzten Schritt zurück — notfalls auch an einem anderen Bild.
+    // One shared history for everything: settings steps and image changes both remember
+    // their file. "Undo" always reverts the latest step, switching to another
+    // image if necessary.
     private readonly Stack<Snapshot> _undo = new();
     private readonly Stack<Snapshot> _redo = new();
 
     private readonly Dictionary<string, EditHistory> _histories = new(StringComparer.Ordinal);
     private EditHistory? _history;
 
-    // Während eines Bearbeitungsschritts (z. B. KI) nicht: das Ergebnis gehört zum Bild davor
-    /// <summary>Drehen und Spiegeln: nur mit Bild und nicht, während skaliert wird.</summary>
+    /// <summary>Rotating and flipping: only with an image and not while upscaling is running.</summary>
     public bool CanTransform => HasImage && !IsUpscaling;
 
+    // Not during an editing step (for example AI): its result belongs to the image before.
     public bool CanUndo => !IsEditing && !IsUpscaling && (_undo.Count > 0 || HasPendingSettings);
     public bool CanRedo => !IsEditing && !IsUpscaling && _redo.Count > 0 && !HasPendingSettings;
 
@@ -73,16 +73,16 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Bild für „Vorher“: im Verlauf dieser Datei zurück, solange die Form gleich bleibt —
-    /// also vor KI-Schritten, nicht aber vor einem Zuschnitt oder Drehen (andere Form).
-    /// Ein Vergrößern per KI (gleiches Seitenverhältnis) zählt mit. null: kein früherer Stand.
+    /// Image for "Before": goes back through the history of this file as long as the shape stays the same,
+    /// that is before AI steps but not before a crop or rotation (different shape).
+    /// An AI enlargement (same aspect ratio) is included. Returns null if there is no earlier state.
     /// </summary>
     private MagickImage? FindBeforeImage()
     {
         if (_history is not { } h || CurrentPath is not { } path) return null;
 
         var before = h.Current;
-        foreach (var step in _undo)   // neuester zuerst
+        foreach (var step in _undo)   // newest first
         {
             if (step.FilePath != path || step.Image is not { } image) continue;
             if (!SameShape(image, before)) break;
@@ -92,7 +92,7 @@ public partial class MainViewModel
         return ReferenceEquals(before, h.Current) ? null : before;
     }
 
-    /// <summary>Gleiches Seitenverhältnis (auf einen Pixel genau).</summary>
+    /// <summary>Same aspect ratio, to within one pixel.</summary>
     private static bool SameShape(MagickImage a, MagickImage b) =>
         Math.Abs((double)a.Width * b.Height - (double)b.Width * a.Height) <= Math.Max(a.Width, b.Width);
 
@@ -101,18 +101,17 @@ public partial class MainViewModel
         foreach (var s in _redo)
         {
             s.Image?.Dispose();
-            // KI ohne Haut & Details: gehört nur zu diesem Schritt, der jetzt wegfällt
+            // AI result without "Skin & details": belongs only to this step, which is now discarded
             if (s.Step?.Plain is { } plain && !_undo.Any(u => ReferenceEquals(u.Step, s.Step))) plain.Dispose();
         }
         _redo.Clear();
     }
 
-    /// <summary>Muss die Datei im Speicher bleiben, weil der Verlauf noch auf sie zeigt?</summary>
+    /// <summary>Determines whether the file must stay in memory because the edit state or the history still refers to it.</summary>
     /// <remarks>
-    /// Nur Bild- und Ausrichtschritte brauchen das Bild im Speicher (sie tauschen Pixelbild bzw. Rezept). Reglerschritte
-    /// nicht: „Rückgängig“ wechselt zur Datei und lädt sie dabei neu, die Regler stehen je Datei in den Einstellungen.
-    /// Vorher hielt jede Reglerbewegung das Bild fest — beim Durchblättern von 20 Fotos mit 12 MP wuchs der Speicher von
-    /// 1,4 auf 4,4 GB.
+    /// Only image and geometry steps need the image in memory (they swap the pixel image or the recipe). Slider steps
+    /// do not: "Undo" switches to the file and reloads it, and the slider values are stored per file in the settings.
+    /// If every slider step kept its image, memory grew from 1.4 to 4.4 GB when browsing through 20 photos of 12 MP.
     /// </remarks>
     private bool IsReferencedByHistory(string path, EditHistory h) =>
         h.IsEdited
@@ -127,27 +126,31 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Der Ausschnitt wird zum neuen Bild. Bei runden Ecken ist alles außerhalb
-    /// der Rundung danach transparent; das Bild bleibt rechteckig.
+    /// Cropping is possible with a selection, with a valid quadrilateral in the perspective tool, or in the "Curved page"
+    /// tool with lines or an applied straightening.
     /// </summary>
-    /// <summary>Zuschneiden geht mit Auswahl — oder beim Entzerren mit einem brauchbaren Viereck.</summary>
     public bool CanCropToSelection => !IsUpscaling && HasCropSelection || (PerspectiveTool && IsPerspectiveValid)
         || (DewarpTool && (HasDewarpLines || CurrentRecipe.HasDewarp));
 
+    /// <summary>
+    /// Applies the open tool as one recipe step: the lines of "Curved page", the perspective quadrilateral, the free
+    /// rotation with its frame, or otherwise the selection as a crop. With rounded corners everything outside the
+    /// rounding becomes transparent; the image stays rectangular.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanCropToSelection))]
     private async Task CropToSelection()
     {
         if (_history is not { } h) return;
         var (pw, ph) = PixelSize();
 
-        // Gewölbtes Blatt: die Linien ins Rezept
+        // Curved page: write the lines into the recipe
         if (DewarpTool && DewarpLines is { } lines)
         {
             await ApplyDewarpAsync(lines);
             return;
         }
 
-        // Entzerren: Viereck in der Ansicht des Werkzeugs (Bild nach der Wölbung, nur gedreht/gespiegelt) ins Rezept
+        // Perspective: write the quadrilateral of the tool view (image after the page flattening, only rotated/flipped) into the recipe
         if (PerspectiveTool && PerspectiveQuad is { } quad)
         {
             var pts = AsTuples(quad);
@@ -163,7 +166,7 @@ public partial class MainViewModel
         if (CropSelection is not { } sel) return;
         var radius = CornerRadius;
 
-        // Frei drehen: Winkel und Rahmen der Ansicht (ohne Drehung und Zuschnitt) ersetzen die bisherigen
+        // Free rotation: angle and frame of the view (without rotation and crop) replace the previous ones
         if (RotationTool)
         {
             var next = h.Recipe.LevelledInView(RotationAngle, sel.X, sel.Y, sel.Width, sel.Height, radius, pw, ph);
@@ -174,7 +177,7 @@ public partial class MainViewModel
             return;
         }
 
-        // Zuschnitt im angezeigten Bild: enger schneiden — oder, wenn der Zuschnitt ausgeschaltet ist, ihn ersetzen
+        // Crop in the displayed image: crop further, or replace the crop if it is switched off
         var cropped = h.Recipe.CroppedInResult(sel.X, sel.Y, sel.Width, sel.Height, radius, pw, ph, StagesShown(HiddenSteps));
         await CommitRecipeAsync(cropped,
             new ImageStep(ImageStepKind.Crop, Tr.T("Zuschnitt"), $"{(int)Math.Round(sel.Width)} × {(int)Math.Round(sel.Height)} px", null),
@@ -182,9 +185,13 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Ein Schritt des Ausrichtens: neues Rezept, das alte kommt auf den Rückgängig-Stapel (mit den Einstellungen davor).
-    /// Das Pixelbild bleibt — angezeigt wird es mit dem neuen Rezept.
+    /// A geometry step: sets the new recipe and pushes the old one onto the undo stack (with the settings before).
+    /// The pixel image stays; it is displayed with the new recipe.
     /// </summary>
+    /// <param name="next">The new recipe.</param>
+    /// <param name="step">Description of the step for the "Edits" list.</param>
+    /// <param name="settingsAfter">Settings change belonging to the same step; null leaves the settings unchanged.</param>
+    /// <returns>false if there is no image or an editing step is running.</returns>
     private async Task<bool> CommitRecipeAsync(GeometryRecipe next, ImageStep step, Func<SettingsState, SettingsState>? settingsAfter = null)
     {
         if (_history is not { } h || IsEditing || _fileIndex < 0) return false;
@@ -200,7 +207,7 @@ public partial class MainViewModel
         return true;
     }
 
-    // Werkzeug zu, ohne die Ansicht dafür noch einmal umzurechnen (gleich folgt das neue Rezept)
+    // Closes the tool without recomputing its view, because the new recipe follows right away.
     private bool _quietTools;
 
     private void CloseToolsQuietly()
@@ -218,15 +225,15 @@ public partial class MainViewModel
         }
     }
 
-    // ------------------------------------------------------------ Frei drehen
+    // ------------------------------------------------------------ Free rotation
 
-    /// <summary>Werkzeug „Frei drehen“: Regler unten in der Vorschau; der Auswahlrahmen gehört dazu.</summary>
+    /// <summary>"Free rotation" tool: a slider at the bottom of the preview; the selection frame belongs to it.</summary>
     [ObservableProperty] public partial bool RotationTool { get; set; }
 
     /// <summary>
-    /// Noch nicht übernommene freie Drehung in Grad (−180 … +180, positiv = im Uhrzeigersinn). Die Vorschau zeigt
-    /// sie, übernommen wird sie zusammen mit dem Rahmen beim Zuschneiden. Der Rahmen gilt im ungedrehten
-    /// Koordinatensystem um die Bildmitte (<see cref="RotationGeometry"/>).
+    /// Free rotation not yet applied, in degrees (−180 … +180, positive = clockwise). The preview shows
+    /// it; it is applied together with the frame when cropping. The frame is defined in the unrotated
+    /// coordinate system around the image centre (<see cref="RotationGeometry"/>).
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRotationPending))]
@@ -238,47 +245,47 @@ public partial class MainViewModel
     {
         if (value)
         {
-            PerspectiveTool = false;              // immer nur ein Werkzeug
+            PerspectiveTool = false;              // only one tool at a time
             DewarpTool = false;
-            SelectionTool = true;                 // ohne Rahmen kein Zuschnitt nach dem Drehen
+            SelectionTool = true;                 // without a frame there is no crop after rotating
             if (!_quietTools) _ = EnterRotationViewAsync();
         }
         else
         {
             if (IsRotationPending) DiscardRotation();
             CropSelection = null;
-            if (!_quietTools) _ = ShowDocumentAsync();   // zurück zum fertigen Bild
+            if (!_quietTools) _ = ShowDocumentAsync();   // back to the finished image
         }
     }
 
     /// <summary>
-    /// Ansicht für „Frei drehen“: das Bild ohne freie Drehung und Zuschnitt, Winkel und Rahmen des Rezepts vorbelegt —
-    /// so lässt sich ein Zuschnitt auch wieder erweitern.
+    /// View for "Free rotation": the image without free rotation and crop, pre-filled with the angle and frame of the
+    /// recipe, so that a crop can also be widened again.
     /// </summary>
     private async Task EnterRotationViewAsync()
     {
         if (_history is not { } h) return;
         await ShowDocumentAsync();
-        if (!RotationTool) return;   // inzwischen wieder zu
+        if (!RotationTool) return;   // closed again in the meantime
         var (pw, ph) = PixelSize();
         var (angle, frame) = h.Recipe.LevelInView(pw, ph);
         if (Math.Abs(angle) > 1e-9) RotationAngle = Math.Round(angle, 1);
         if (frame is { } f) CropSelection = new Rect(Math.Round(f.X), Math.Round(f.Y), Math.Round(f.W), Math.Round(f.H));
     }
 
-    // ------------------------------------------------------------ Entzerren
+    // ------------------------------------------------------------ Perspective
 
-    /// <summary>Werkzeug „Entzerren“: Viereck mit frei verschiebbaren Ecken auf etwas Rechteckiges legen.</summary>
+    /// <summary>"Straighten" (perspective) tool: place a quadrilateral with freely movable corners on something rectangular.</summary>
     [ObservableProperty] public partial bool PerspectiveTool { get; set; }
 
-    /// <summary>Die vier Ecken (oben links, oben rechts, unten rechts, unten links) in Bildpixeln; null = Werkzeug aus.</summary>
+    /// <summary>The four corners (top left, top right, bottom right, bottom left) in image pixels; null if the tool is off.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPerspectiveValid), nameof(PerspectiveInfo), nameof(CanCropToSelection))]
     public partial IReadOnlyList<Point>? PerspectiveQuad { get; set; }
 
     public bool IsPerspectiveValid => PerspectiveQuad is { Count: 4 } q && PerspectiveGeometry.IsValid(AsTuples(q));
 
-    /// <summary>Unten in der Leiste: Größe des Ergebnisses oder was am Viereck nicht stimmt.</summary>
+    /// <summary>Shown at the bottom of the panel: size of the result or what is wrong with the quadrilateral.</summary>
     public string PerspectiveInfo
     {
         get
@@ -304,13 +311,13 @@ public partial class MainViewModel
         else
         {
             PerspectiveQuad = null;
-            if (!_quietTools) _ = ShowDocumentAsync();   // zurück zum fertigen Bild
+            if (!_quietTools) _ = ShowDocumentAsync();   // back to the finished image
         }
         OnPropertyChanged(nameof(CanCropToSelection));
         CropToSelectionCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Ansicht für „Entzerren“: das Pixelbild, nur gedreht/gespiegelt; das bisherige Viereck vorbelegt.</summary>
+    /// <summary>View for "Straighten": the pixel image, only rotated/flipped, pre-filled with the quadrilateral of the recipe.</summary>
     private async Task EnterPerspectiveViewAsync()
     {
         if (_history is not { } h) return;
@@ -323,15 +330,15 @@ public partial class MainViewModel
 
     partial void OnPerspectiveQuadChanged(IReadOnlyList<Point>? value)
     {
-        if (value is null && PerspectiveTool) PerspectiveTool = false;   // Esc in der Vorschau
+        if (value is null && PerspectiveTool) PerspectiveTool = false;   // Esc in the preview
         CropToSelectionCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Ecken an den Anfang: ein Zehntel vom Bildrand nach innen.</summary>
+    /// <summary>Resets the corners to their initial position, one tenth of the image size inside the edges.</summary>
     [RelayCommand]
     private void ResetPerspectiveQuad()
     {
-        // Größe der angezeigten Ansicht (beim Entzerren das Pixelbild, nur gedreht/gespiegelt)
+        // Size of the displayed view (for perspective correction the pixel image, only rotated/flipped)
         double w = DocumentSize.Width > 0 ? DocumentSize.Width : SourceWidth, h = DocumentSize.Height > 0 ? DocumentSize.Height : SourceHeight;
         double ix = w * 0.1, iy = h * 0.1;
         PerspectiveQuad = [new Point(ix, iy), new Point(w - ix, iy), new Point(w - ix, h - iy), new Point(ix, h - iy)];
@@ -339,15 +346,15 @@ public partial class MainViewModel
 
     partial void OnRotationAngleChanged(double value)
     {
-        // Auf −180 … +180 und Zehntelgrad — Regler und Zahlenfeld zeigen dasselbe
+        // Normalise to −180 … +180 and tenths of a degree so that slider and number field show the same value.
         var tidy = double.IsFinite(value) ? Math.Round(RotationGeometry.Normalize(value), 1) : 0;
         if (tidy != value) { RotationAngle = tidy; return; }
 
-        // Steht eine Drehung an (z. B. nach Rückgängig), gehört der Regler sichtbar dazu
+        // If a rotation is pending (for example after undo), the slider must be visible with it.
         if (IsRotationPending && !RotationTool) RotationTool = true;
     }
 
-    /// <summary>Drehung verwerfen: Winkel 0, Rahmen weg (Esc in der Vorschau tut dasselbe).</summary>
+    /// <summary>Discards the rotation: angle 0, frame removed (Esc in the preview does the same).</summary>
     [RelayCommand]
     private void DiscardRotation()
     {
@@ -355,7 +362,7 @@ public partial class MainViewModel
         CropSelection = null;
     }
 
-    // Drehen und Spiegeln: nur das Rezept (netto Vierteldrehungen), ein Rückgängig-Schritt je Klick
+    // Rotating and flipping change only the recipe (net quarter turns), one undo step per click.
     [RelayCommand(CanExecute = nameof(CanTransform))]
     private Task RotateLeft() => Orient(r => r.Rotated(false), new ImageStep(ImageStepKind.Rotate, Tr.T("Links gedreht"), "90°", null));
 
@@ -368,48 +375,50 @@ public partial class MainViewModel
     private async Task Orient(Func<GeometryRecipe, GeometryRecipe> change, ImageStep step)
     {
         if (_history is not { } h) return;
-        if (RotationTool || PerspectiveTool || DewarpTool) CloseToolsQuietly();   // offenes Werkzeug verwerfen
+        if (RotationTool || PerspectiveTool || DewarpTool) CloseToolsQuietly();   // discard an open tool
         if (IsRotationPending) DiscardRotation();
-        // Ist Drehen/Spiegeln ausgeschaltet, gilt erst einmal nur der neue Klick — sichtbar wird es auf jeden Fall
+        // If rotate/flip is switched off, only the new click applies; in any case the step becomes visible again.
         var basis = (HiddenSteps & EditSteps.Orient) != 0 ? h.Recipe with { Turns = 0, Flip = false } : h.Recipe;
         await CommitRecipeAsync(change(basis), step, s => s with { Hidden = s.Hidden & ~EditSteps.Orient });
     }
 
     /// <summary>
-    /// Ein Bearbeitungsschritt auf dem echten Bild (ImageMagick, im Hintergrund).
-    /// Das Ergebnis wird das neue Bild; Bild und Einstellungen davor kommen
-    /// als ein Schritt auf den Rückgängig-Stapel.
+    /// An editing step on the actual pixel image (ImageMagick, in the background).
+    /// The result becomes the new image; the image and settings before it are pushed
+    /// onto the undo stack as one step.
     /// </summary>
-    /// <param name="settingsAfter">Einstellungen danach (z. B. Look auf null) — im selben Schritt; null: bleiben.</param>
-    /// <param name="step">Was der Schritt war — für die Liste „Bearbeitungen“ (und zum Wiederholen auf anderem Bild).</param>
-    /// <param name="recipeAfter">Ausrichten danach (im selben Schritt, z. B. „Neu anwenden“); null: bleibt.</param>
+    /// <param name="operation">Computes the new image from the current one.</param>
+    /// <param name="settingsAfter">Settings afterwards (for example a neutral look), in the same step; null leaves them unchanged.</param>
+    /// <param name="step">What the step was, for the "Edits" list (and for repeating it on another image).</param>
+    /// <param name="recipeAfter">Geometry afterwards (in the same step, for example "Apply selection"); null leaves it unchanged.</param>
+    /// <returns>true on success; false if nothing was done, the step was cancelled or failed.</returns>
     private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation,
         Func<SettingsState, SettingsState>? settingsAfter, ImageStep step, GeometryRecipe? recipeAfter = null)
     {
         if (_history is not { } h || IsEditing || _fileIndex < 0) return false;
 
-        CommitPendingSettings();   // offene Reglerbewegungen sind ein eigener Schritt davor
+        CommitPendingSettings();   // pending slider movements become a separate step before this one
         IsEditing = true;
         try
         {
-            // Lange Schritte (KI): inzwischen kann ein anderes Bild angezeigt werden
+            // Long steps (AI): another image may be displayed in the meantime.
             var path = _files[_fileIndex];
             var source = h.Current;
             var before = CaptureSettings();
             var result = await Task.Run(() => operation(source));
 
-            await StopPreviewAsync();   // Wiederholen-Bilder könnten gerade gelesen werden
+            await StopPreviewAsync();   // redo images might be being read right now
             _undo.Push(new Snapshot(path, source, before, Step: step, Recipe: recipeAfter is null ? null : h.Recipe));
             ClearRedo();
             h.Current = result;
             if (recipeAfter is not null) h.Recipe = recipeAfter;
-            if (settingsAfter is not null) ChangeSettings(path, settingsAfter);   // gehört zu diesem Schritt (Snapshot hat den Stand davor)
+            if (settingsAfter is not null) ChangeSettings(path, settingsAfter);   // belongs to this step (the snapshot holds the state before)
             if (h == _history) await ShowCurrentAsync();
             return true;
         }
         catch (OperationCanceledException)
         {
-            // abgebrochen — Bild bleibt, wie es war
+            // cancelled: the image stays as it was
             return false;
         }
         catch (Exception ex)
@@ -425,7 +434,7 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Einstellungen einer Datei ändern, ohne eigenen Rückgängig-Schritt — gehört zum Bildschritt davor.
+    /// Changes the settings of a file without a separate undo step; the change belongs to the preceding image step.
     /// </summary>
     private void ChangeSettings(string path, Func<SettingsState, SettingsState> change)
     {
@@ -441,16 +450,17 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Für Erweiterungen (z. B. KI): ein Bearbeitungsschritt auf dem aktuellen Bild,
-    /// mit Rückgängig/Wiederholen wie Zuschneiden und Drehen. Abbruch über
-    /// <see cref="OperationCanceledException"/> lässt das Bild unverändert. Liefert true bei Erfolg.
+    /// For extensions (for example AI): an editing step on the current image,
+    /// with undo/redo like cropping and rotating. Cancelling via
+    /// <see cref="OperationCanceledException"/> leaves the image unchanged.
     /// </summary>
-    /// <param name="operation">Liefert das Ergebnis und, falls es Haut &amp; Details gibt, dieselbe KI ohne sie.</param>
-    /// <param name="label">Name in der Liste „Bearbeitungen“ (z. B. „KI: Gesichter – CodeFormer“).</param>
-    /// <param name="detail">Kurzinfo dazu (Stärke).</param>
-    /// <param name="skinDetail">Kurzinfo für die Zeile „Haut &amp; Details“; null = keine.</param>
-    /// <param name="lookAfter">Look, der danach gilt (z. B. neutral, wenn er ins Bild gerechnet wurde) — im selben
-    /// Schritt, Rückgängig bringt Bild und Regler zusammen zurück. null: Regler bleiben.</param>
+    /// <param name="operation">Returns the result and, if there is a "Skin &amp; details" part, the same AI result without it.</param>
+    /// <param name="label">Name in the "Edits" list (for example "AI: Faces – CodeFormer").</param>
+    /// <param name="detail">Short info on it (strength).</param>
+    /// <param name="skinDetail">Short info for the "Skin &amp; details" row; null for none.</param>
+    /// <param name="lookAfter">Look that applies afterwards (for example neutral, if it was baked into the image), in the same
+    /// step, so that undo restores image and sliders together. null leaves the sliders unchanged.</param>
+    /// <returns>true on success.</returns>
     internal Task<bool> ApplyImageEditAsync(Func<MagickImage, (MagickImage Result, MagickImage? Plain)> operation,
         string label, string? detail, string? skinDetail, Look? lookAfter = null)
     {
@@ -465,15 +475,18 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Für das Entfernen (Tab „Entfernen“): ein Bildschritt mit Rückgängig wie Zuschneiden und Drehen. Die Operation
-    /// bekommt das aktuelle Bild, darf aber von einem früheren Stand aus rechnen (neuer Versuch mit anderem Modell) —
-    /// Rückgängig führt dann zum vorigen Ergebnis zurück.
+    /// For removal ("Remove" tab): an image step with undo like cropping and rotating. The operation
+    /// receives the current image but may compute from an earlier state (new attempt with another model);
+    /// undo then returns to the previous result.
     /// </summary>
-    /// <param name="replaces">Neuer Versuch vom Bild vor dem letzten Entfernen — ersetzt es in der Liste „Bearbeitungen“.</param>
+    /// <param name="operation">Computes the new image from the current one.</param>
+    /// <param name="detail">Short info for the "Edits" list.</param>
+    /// <param name="replaces">New attempt from the image before the last removal; replaces that step in the "Edits" list.</param>
+    /// <returns>true on success.</returns>
     internal Task<bool> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces) =>
         ApplyEditAsync(operation, null, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces });
 
-    /// <summary>Das aktuelle Bild in voller Auflösung (mit allen Bearbeitungen) — nur lesen.</summary>
+    /// <summary>The current pixel image in full resolution (with AI and removal edits, without geometry); read only.</summary>
     internal MagickImage? CurrentImage => _history?.Current;
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
@@ -496,12 +509,12 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Stellt einen Schritt wieder her und liefert sein Gegenstück für den anderen
-    /// Stapel (Rückgängig ↔ Wiederholen) — gleicher Art, mit dem Stand von jetzt.
+    /// Restores a step and returns its counterpart for the other
+    /// stack (undo ↔ redo): of the same kind, holding the current state.
     /// </summary>
     private async Task<Snapshot> RestoreAsync(Snapshot step)
     {
-        // Gehört der Schritt zu einem anderen Bild, erst dorthin wechseln
+        // If the step belongs to another image, switch to it first.
         if (step.FilePath is { } path && path != CurrentPath)
         {
             var index = _files.IndexOf(path);
@@ -510,7 +523,7 @@ public partial class MainViewModel
 
         var settingsNow = CaptureSettings();
 
-        // Bildschritt: Bild tauschen; Ausrichten: Rezept tauschen
+        // Image step: swap the image; geometry step: swap the recipe
         MagickImage? imageNow = null;
         GeometryRecipe? recipeNow = null;
         if ((step.Image is not null || step.Recipe is not null) && step.FilePath is not null && _histories.TryGetValue(step.FilePath, out var h))
@@ -533,7 +546,7 @@ public partial class MainViewModel
             }
         }
 
-        // Umschalten „für alle / einzeln": Modus und alle Einzelstände zurück
+        // Switching between "for all" and "per image": restore the mode and all per-image states
         bool? modeNow = null;
         SettingsState? templateNow = null;
         Dictionary<string, SettingsState>? fileSettingsNow = null;
@@ -557,18 +570,18 @@ public partial class MainViewModel
         return new Snapshot(step.FilePath, imageNow, settingsNow, modeNow, fileSettingsNow, templateNow, step.Step, recipeNow);
     }
 
-    /// <summary>Zeigt das aktuelle Bild der Datei; Pixelmaße beginnen wieder beim Bild.</summary>
+    /// <summary>Shows the current image of the file; the pixel dimensions are reset to those of the image.</summary>
     private async Task ShowCurrentAsync()
     {
         if (_history is not { } h) return;
-        CommitPendingSettings();   // z. B. Regler bewegt, während die KI rechnete
+        CommitPendingSettings();   // for example a slider was moved while the AI was computing
 
-        // Pixelbild + Rezept im Hintergrund (Entzerren eines großen Bildes dauert)
+        // Pixel image + recipe in the background (perspective correction of a large image takes time)
         DropGeometryDocsExcept(CurrentPath);
         var shown = await Task.Run(() => ShownDocument) ?? h.Current;
         var result = await Task.Run(() => ResultDocument) ?? h.Current;
         EmptyGeometryTrash();
-        await SetDocumentAsync(shown);   // bei ausgeblendeter KI das Bild ohne sie
+        await SetDocumentAsync(shown);   // with AI hidden, the image without it
 
         int w, hgt;
         lock (result) (w, hgt) = ((int)result.Width, (int)result.Height);
@@ -582,7 +595,7 @@ public partial class MainViewModel
         RequestPreview();
     }
 
-    /// <summary>Zeile unter dem Dateinamen: Maße, Größe, Format.</summary>
+    /// <summary>Line below the file name: dimensions, file size, format.</summary>
     private void UpdateFileDetails()
     {
         if (_history is not { } h) return;
@@ -594,10 +607,10 @@ public partial class MainViewModel
             : $"{doc.Width} × {doc.Height} px  ·  {FormatBytes(h.FileBytes)}  ·  {h.FormatName}";
     }
 
-    /// <summary>Alles freigeben — jedes Bild genau einmal, auch wenn es mehrfach referenziert ist.</summary>
+    /// <summary>Releases everything, disposing each image exactly once even if it is referenced several times.</summary>
     private void DisposeAllHistories()
     {
-        ClearWithoutAi();   // Bilder ohne KI — vor dem Verlauf, der sie noch kennt
+        ClearWithoutAi();   // images without AI, before the history that still refers to them
         ClearGeometryDocs();
         var images = new HashSet<MagickImage>(ReferenceEqualityComparer.Instance);
         foreach (var h in _histories.Values) { images.Add(h.Original); images.Add(h.Current); }
@@ -616,9 +629,9 @@ public partial class MainViewModel
         NotifyUndoRedo();
     }
 
-    // ----------------------------------------------------------- Zuschnitt
+    // ----------------------------------------------------------- Crop
 
-    /// <summary>Auswahl in Bildpixeln; null = keine Auswahl. Kommt vom CropView.</summary>
+    /// <summary>Selection in image pixels; null if there is no selection. Set by the CropView.</summary>
     [ObservableProperty] public partial Rect? CropSelection { get; set; }
 
     [ObservableProperty] public partial string SelectedAspectPreset { get; set; }
@@ -627,10 +640,10 @@ public partial class MainViewModel
     [ObservableProperty] public partial int CropWidth { get; set; }
     [ObservableProperty] public partial int CropHeight { get; set; }
 
-    // Verhindert Ping-Pong zwischen Auswahlrahmen und Zahlenfeldern
+    // Prevents ping-pong between the selection frame and the number fields.
     private bool _isSyncingCrop;
 
-    /// <summary>Eckenradius in Bildpixeln.</summary>
+    /// <summary>Corner radius in image pixels.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CornerRadiusLabel), nameof(ShowTransparencyWarning))]
     public partial double CornerRadius { get; set; }
@@ -638,8 +651,8 @@ public partial class MainViewModel
     public bool HasCropSelection => CropSelection is not null;
 
     /// <summary>
-    /// Maximum = halbe längste Seite. Am Anschlag wird die Auswahl zur Ellipse,
-    /// bei einer quadratischen Auswahl zum Kreis.
+    /// Maximum = half the longest side. At the maximum the selection becomes an ellipse,
+    /// or a circle for a square selection.
     /// </summary>
     public double MaxCornerRadius =>
         CropSelection is { } s ? Math.Max(1, Math.Max(s.Width, s.Height) / 2) : 1;
@@ -655,7 +668,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Runde Ecken werden transparent — JPEG und BMP können das nicht.</summary>
+    /// <summary>Rounded corners become transparent, which JPEG and BMP cannot store.</summary>
     public bool ShowTransparencyWarning =>
         CornerRadius >= 0.5 && SelectedFormat is "JPEG" or "BMP";
 
@@ -704,7 +717,7 @@ public partial class MainViewModel
     {
         if (_isSyncingCrop || CropSelection is null) return;
 
-        // Größe der angezeigten Ansicht (bei „Frei drehen“ das Bild ohne Drehung und Zuschnitt)
+        // Size of the displayed view (for "Free rotation" the image without rotation and crop)
         int vw = DocumentSize.Width > 0 ? DocumentSize.Width : SourceWidth, vh = DocumentSize.Height > 0 ? DocumentSize.Height : SourceHeight;
         var x = Math.Clamp(CropX, 0, vw - 1);
         var y = Math.Clamp(CropY, 0, vh - 1);
@@ -712,7 +725,7 @@ public partial class MainViewModel
         var h = Math.Clamp(CropHeight, 1, vh - y);
         var rect = new Rect(x, y, w, h);
 
-        // Beim Drehen: nicht über die schrägen Kanten hinaus — um die Mitte verkleinern
+        // When rotating: not beyond the slanted edges; shrink around the centre
         if (IsRotationPending)
         {
             var (fx, fy, fw, fh) = RotationGeometry.ShrinkInside(vw, vh, RotationAngle, x, y, w, h);
@@ -724,10 +737,10 @@ public partial class MainViewModel
         _isSyncingCrop = true;
         CropSelection = rect;
         _isSyncingCrop = false;
-        if (rect != new Rect(x, y, w, h)) OnCropSelectionChanged(rect);   // Zahlenfelder auf den verkleinerten Rahmen
+        if (rect != new Rect(x, y, w, h)) OnCropSelectionChanged(rect);   // update the number fields to the shrunk frame
     }
 
-    /// <summary>Auswahl aufheben — beim Drehen auch die Drehung, denn der Rahmen gehört zu ihr.</summary>
+    /// <summary>Clears the selection; while rotating also the rotation, because the frame belongs to it.</summary>
     [RelayCommand]
     private void ClearSelection()
     {

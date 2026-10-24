@@ -11,22 +11,22 @@ using ImageConverter.Models;
 
 namespace ImageConverter.ViewModels;
 
-// Rückgängig für Einstellungen.
+// Undo for settings.
 //
-// Jede Einstellung, die man in der linken Spalte (oder per Auswahlrahmen) ändert,
-// lässt sich zurücknehmen. Ein Schritt entsteht pro Bedienvorgang, nicht nach Zeit:
-// – Alles, was ein Vorgang ändert, gehört zusammen (z. B. Breite samt verknüpfter Höhe,
-//   DPI samt neu berechneter Pixel).
-// – Regler und Eingabefelder: aufeinanderfolgende Vorgänge am selben Element werden ein
-//   Schritt — Hin- und Herschieben, Pausen und erneutes Anfassen ergeben nur einen.
-//   Abgeschlossen wird er, sobald etwas anderes bedient wird, bei Rückgängig,
-//   Bildwechsel, Bearbeiten oder Export.
-// – Auswahlrahmen: jedes Loslassen der Maus ist ein Schritt (CommitSettingsStep).
-// – Haken und Auswahllisten: jeder Vorgang ist ein eigener Schritt.
-// Ein Schritt speichert den kompletten Stand der Einstellungen davor.
+// Every setting changed in the left-hand column (or with the selection frame)
+// can be undone. One step is created per user action, not by time:
+// – Everything one action changes belongs together (for example the width with the linked
+//   height, the DPI with the recalculated pixels).
+// – Sliders and input fields: consecutive actions on the same control become one
+//   step; moving back and forth, pauses and grabbing it again produce only one.
+//   The step is completed as soon as something else is operated, on undo,
+//   image switch, editing or export.
+// – Selection frame: each release of the mouse button is a step (CommitSettingsStep).
+// – Check boxes and drop-down lists: each action is a separate step.
+// A step stores the complete settings state before it.
 public partial class MainViewModel
 {
-    /// <summary>Vollständiger Stand aller Einstellungen, die Rückgängig zurückholen kann.</summary>
+    /// <summary>Complete state of all settings that undo can restore.</summary>
     internal sealed record SettingsState(
         string SelectedFormat, double Quality, bool Lossless,
         string SelectedSizeUnit, bool KeepAspectRatio, bool WidthIsLeading,
@@ -40,36 +40,36 @@ public partial class MainViewModel
         string SelectedTint, double TintHue, double MatchLuminance, double Neutralize, double Warmth,
         string SelectedMetadataMode, string SelectedColorMode,
         string OutputFolder, string NamePattern,
-        int SourceWidth, int SourceHeight,   // Bildgröße, für die dieser Stand gilt
+        int SourceWidth, int SourceHeight,   // image size this state applies to
         double DehazePasses, double DehazeClarity, double DehazeContrast, double DehazeVibrance,
         double DehazeSharpen, double DehazeEdge, double DehazeBrightness, double DehazeDeband, double DehazeCast,
         bool HighBitDepth,
-        EditSteps Hidden = EditSteps.None,    // ausgeschaltete Funktionen (Liste „Bearbeitungen“)
+        EditSteps Hidden = EditSteps.None,    // switched-off functions ("Edits" list)
         double ColorNoiseReduction = 0,
-        double RotationAngle = 0,             // noch nicht übernommene freie Drehung — gehört zum Rahmen
-        WbSample? WbNeutral = null,           // Weißabgleich: gemittelte Pipetten-Messungen
+        double RotationAngle = 0,             // free rotation not yet applied; belongs to the frame
+        WbSample? WbNeutral = null,           // white balance: averaged eyedropper measurements
         WbSample? WbBlack = null,
         WbSample? WbWhite = null,
-        double MatchLimit = 100,            // Luminanz: Schwellwert der Bereiche, hellere bleiben
-        double MatchTarget = 0,             // Luminanz: Zielwert
-        double MatchGlobal = 0,             // Luminanz: Gesamt
-        double MaskAmount = 0,              // Luminanzmaske: Stärke, Auslaufen ab, Verlauf
+        double MatchLimit = 100,            // luminance: threshold of the areas; brighter ones stay unchanged
+        double MatchTarget = 0,             // luminance: target value
+        double MatchGlobal = 0,             // luminance: global
+        double MaskAmount = 0,              // luminosity mask: strength, fade-out start, gradient
         double MaskEnd = 75,
         double MaskCurve = 30,
-        double GrainAmount = 0,             // Körnung: Stärke, Korngröße, Rauheit, Farbanteil, Härte
+        double GrainAmount = 0,             // grain: strength, grain size, roughness, colour share, hardness
         double GrainSize = 40,
         double GrainRoughness = 30,
         double GrainColor = 0,
         double GrainHardness = 0,
-        UpscaleMethod Upscaler = UpscaleMethod.Filter,   // Upscaling: Verfahren, Treue, Details
+        UpscaleMethod Upscaler = UpscaleMethod.Filter,   // upscaling: method, fidelity, details
         double UpscaleFidelity = 1,
         double UpscaleDetails = 1,
-        bool UpscaleTwice = true);                       // über 4×: zwei KI-Durchgänge
+        bool UpscaleTwice = true);                       // above 4×: two AI passes
 
     /// <summary>
-    /// Eigenschaften, deren Änderung einen Rückgängig-Schritt erzeugt. Der Wert ist die
-    /// Gruppe für stufenlose Elemente (Regler, Eingabefelder) — Vorgänge derselben Gruppe
-    /// hintereinander werden zusammengefasst. null: jeder Vorgang ist ein eigener Schritt.
+    /// Properties whose change creates an undo step. The value is the
+    /// group for continuous controls (sliders, input fields); consecutive actions in the same group
+    /// are merged. null: each action is a separate step.
     /// </summary>
     private static readonly Dictionary<string, string?> TrackedSettings = new()
     {
@@ -86,8 +86,8 @@ public partial class MainViewModel
         [nameof(Dpi)] = "DPI",
         [nameof(SelectedAspectPreset)] = null,
         [nameof(CropSelection)] = "Auswahl",
-        [nameof(RotationAngle)] = "Auswahl",   // dreht den Rahmen mit — ein Schritt
-        [nameof(WbNeutral)] = null,            // jeder Pipetten-Klick ein Schritt
+        [nameof(RotationAngle)] = "Auswahl",   // rotates the frame as well: one step
+        [nameof(WbNeutral)] = null,            // each eyedropper click is one step
         [nameof(WbBlack)] = null,
         [nameof(WbWhite)] = null,
         [nameof(CornerRadius)] = "Ecken",
@@ -139,20 +139,20 @@ public partial class MainViewModel
     };
 
     /// <summary>
-    /// true (App): Änderungen innerhalb eines Bedienvorgangs werden gesammelt und erst
-    /// danach ausgewertet. Tests setzen false — dann zählt jede Änderung sofort.
+    /// true (app): changes within one user action are collected and evaluated only
+    /// afterwards. Tests set false, so that every change counts immediately.
     /// </summary>
     internal bool DeferHistoryTurns { get; init; } = true;
 
-    private SettingsState? _committedSettings;   // Stand nach dem letzten Schritt
-    private SettingsState? _settled;             // Stand nach dem letzten Bedienvorgang
-    private SettingsState? _pendingBaseline;     // Stand vor dem noch offenen Schritt
-    private string? _pendingGroup;               // Gruppe des offenen Schritts (null: abgeschlossen bei nächster Aktion)
+    private SettingsState? _committedSettings;   // state after the last step
+    private SettingsState? _settled;             // state after the last user action
+    private SettingsState? _pendingBaseline;     // state before the step that is still open
+    private string? _pendingGroup;               // group of the open step (null: completed on the next action)
 
-    // Laufender Bedienvorgang: Stand davor und was er geändert hat
+    // Current user action: the state before it and what it changed
     private SettingsState? _turnBaseline;
     private readonly HashSet<string> _turnProperties = [];
-    private int _suppressHistory;                // > 0: Änderungen kommen vom Programm, nicht vom Nutzer
+    private int _suppressHistory;                // > 0: changes come from the program, not from user input
 
     internal bool HasPendingSettings => _pendingBaseline is not null || _turnBaseline is not null;
 
@@ -162,14 +162,14 @@ public partial class MainViewModel
         if (e.PropertyName is { } name && TrackedSettings.ContainsKey(name))
         {
             OnSettingChanged(name);
-            RequestEditRows();   // Liste „Bearbeitungen“ folgt den Reglern
+            RequestEditRows();   // the "Edits" list follows the sliders
         }
     }
 
     private void OnSettingChanged(string name)
     {
         if (_suppressHistory > 0 || _settled is null) return;
-        TickHighBitDepthIfRecommended(name);   // 16 Bit bei kräftiger Tonwert-Bearbeitung (still, gehört zu diesem Schritt)
+        TickHighBitDepthIfRecommended(name);   // 16 bits for strong tonal editing (silent, belongs to this step)
 
         var first = _turnBaseline is null;
         _turnBaseline ??= _settled;
@@ -181,14 +181,14 @@ public partial class MainViewModel
         }
         else if (first)
         {
-            // Folgeänderungen (verknüpfte Höhe …) laufen noch im selben Aufruf;
-            // ausgewertet wird, wenn der Vorgang durch ist — vor der nächsten Eingabe.
+            // Follow-up changes (linked height …) still run within the same call;
+            // evaluation happens once the action is complete, before the next input.
             Dispatcher.UIThread.Post(EndTurn, DispatcherPriority.Normal);
             NotifyUndoRedo();
         }
     }
 
-    /// <summary>Ein Bedienvorgang ist durch: zum offenen Schritt dazu oder neuer Schritt.</summary>
+    /// <summary>A user action is complete: adds it to the open step or starts a new step.</summary>
     private void EndTurn()
     {
         if (_turnBaseline is not { } before) return;
@@ -198,7 +198,7 @@ public partial class MainViewModel
         _turnBaseline = null;
         _turnProperties.Clear();
 
-        // Anderes Element (oder Haken/Liste) bedient: offenen Schritt abschließen
+        // Another control (or a check box/list) was operated: complete the open step.
         if (_pendingBaseline is not null && (group is null || group != _pendingGroup))
             FinishPending(before);
 
@@ -212,7 +212,7 @@ public partial class MainViewModel
         NotifyUndoRedo();
     }
 
-    /// <summary>Legt den offenen Schritt ab; <paramref name="after"/> ist der Stand danach.</summary>
+    /// <summary>Stores the open step; <paramref name="after"/> is the state after it.</summary>
     private void FinishPending(SettingsState after)
     {
         if (_pendingBaseline is not { } before) return;
@@ -220,15 +220,15 @@ public partial class MainViewModel
         _pendingGroup = null;
         _committedSettings = after;
 
-        // Hin und zurück geschoben, ohne dass sich unterm Strich etwas geändert hat
+        // moved back and forth without any net change
         if (after == before) return;
 
-        // Im Einzelmodus gehört der Schritt zum aktuellen Bild — Rückgängig springt dorthin
+        // In per-image mode the step belongs to the current image; undo jumps to it.
         _undo.Push(new Snapshot(ApplyToAll ? null : CurrentPath, null, before));
         ClearRedo();
     }
 
-    /// <summary>Offene Einstellungsänderungen jetzt als Schritt ablegen.</summary>
+    /// <summary>Stores pending settings changes as a step now.</summary>
     internal void CommitPendingSettings()
     {
         EndTurn();
@@ -237,11 +237,11 @@ public partial class MainViewModel
         NotifyUndoRedo();
     }
 
-    /// <summary>Ende einer Geste (z. B. Maus losgelassen am Auswahlrahmen): eigener Schritt.</summary>
+    /// <summary>End of a gesture (for example the mouse button released on the selection frame): a separate step.</summary>
     [RelayCommand]
     private void CommitSettingsStep() => CommitPendingSettings();
 
-    /// <summary>Ab hier zählen Änderungen neu — nach Laden, Rückgängig, Bildwechsel.</summary>
+    /// <summary>Changes count afresh from here on: after loading, undo, image switch.</summary>
     private void ResetHistoryBaseline()
     {
         _turnBaseline = null;
@@ -270,17 +270,17 @@ public partial class MainViewModel
         GrainAmount, GrainSize, GrainRoughness, GrainColor, GrainHardness,
         SelectedUpscaler.Method, UpscaleFidelity, UpscaleDetails, UpscaleTwice);
 
-    /// <summary>Stellt einen gespeicherten Stand wieder her, ohne neue Schritte zu erzeugen.</summary>
+    /// <summary>Restores a saved state without creating new steps.</summary>
     private void ApplySettings(SettingsState s)
     {
-        // Stand für ein anders großes Bild (z. B. „für alle" nach Bildwechsel):
-        // Größe passend umrechnen, statt fremde Pixelmaße zu übernehmen
+        // State for an image of a different size (for example "for all" after an image switch):
+        // convert the size to fit instead of taking over pixel dimensions of another image
         if (s.SourceWidth != SourceWidth || s.SourceHeight != SourceHeight)
             s = AdaptToImage(s, SourceWidth, SourceHeight);
 
         using (SuppressHistory())
         {
-            _isSyncingSize = true;   // nichts nachrechnen — der Stand ist vollständig
+            _isSyncingSize = true;   // do not recalculate anything: the state is complete
             try
             {
                 SelectedFormat = s.SelectedFormat;
@@ -299,12 +299,12 @@ public partial class MainViewModel
                 SelectedFilter = s.SelectedFilter;
                 GammaCorrect = s.GammaCorrect;
                 SelectedAspectPreset = s.SelectedAspectPreset;
-                RotationAngle = s.RotationAngle;   // vor der Auswahl: der Winkel setzt sonst den automatischen Rahmen
+                RotationAngle = s.RotationAngle;   // before the selection; otherwise the angle sets the automatic frame
                 WbNeutral = s.WbNeutral;
                 WbBlack = s.WbBlack;
                 WbWhite = s.WbWhite;
                 CropSelection = s.CropSelection;
-                CornerRadius = s.CornerRadius;   // nach der Auswahl, die den Radius sonst begrenzt
+                CornerRadius = s.CornerRadius;   // after the selection, which would otherwise limit the radius
                 SharpenAmount = s.SharpenAmount;
                 SharpenRadius = s.SharpenRadius;
                 NoiseReduction = s.NoiseReduction;
@@ -363,7 +363,7 @@ public partial class MainViewModel
         ResetHistoryBaseline();
     }
 
-    /// <summary>Für Änderungen durch das Programm (Laden, Zuschnitt, Rückgängig selbst).</summary>
+    /// <summary>For changes made by the program (loading, cropping, undo itself), which must not create undo steps.</summary>
     private HistorySuppression SuppressHistory() => new(this);
 
     private readonly struct HistorySuppression : IDisposable

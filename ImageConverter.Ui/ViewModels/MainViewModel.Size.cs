@@ -7,18 +7,18 @@ using ImageConverter.Models;
 
 namespace ImageConverter.ViewModels;
 
-// Pixelmaße, Seitenverhältnis-Kette, DPI und Druckgröße.
+// Pixel dimensions, aspect ratio chain, DPI and print size.
 public partial class MainViewModel
 {
-    // Verhindert, dass das Nachrechnen einer Größe das Nachrechnen der anderen
-    // erneut anstößt (Breite → Höhe → Breite …).
+    // Prevents the recalculation of one dimension from triggering the recalculation of the other
+    // again (width → height → width …).
     private bool _isSyncingSize;
 
     private ResizeCalculator _calc = new(4000, 3000);
 
-    // Druckgröße in Zoll als Kommazahl. Beim Ziehen am DPI-Regler werden die
-    // Pixel daraus neu gerechnet — nie aus den gerundeten Pixelwerten, sonst
-    // wandern sie bei langem Ziehen weg.
+    // Print size in inches as a floating-point number. While the DPI slider is dragged, the
+    // pixels are recalculated from it, never from the rounded pixel values; otherwise
+    // they drift away during long dragging.
     private double _printWidthIn = 4000 / 72.0;
     private double _printHeightIn = 3000 / 72.0;
 
@@ -33,7 +33,7 @@ public partial class MainViewModel
     [ObservableProperty] public partial int TargetWidth { get; set; }
     [ObservableProperty] public partial int TargetHeight { get; set; }
 
-    /// <summary>Welche Kante wurde zuletzt getippt — die andere ist die abgeleitete.</summary>
+    /// <summary>Which edge was typed last; the other one is derived.</summary>
     [ObservableProperty] public partial bool WidthIsLeading { get; set; } = true;
 
     partial void OnTargetWidthChanged(int value)
@@ -70,8 +70,8 @@ public partial class MainViewModel
 
     partial void OnKeepAspectRatioChanged(bool value)
     {
-        // Kette nachträglich geschlossen: Verhältnis der aktuellen Werte
-        // übernehmen, damit nichts springt.
+        // Chain closed afterwards: take over the ratio of the current values
+        // so that nothing jumps.
         _calc = value
             ? new ResizeCalculator(Math.Max(1, TargetWidth), Math.Max(1, TargetHeight))
             : new ResizeCalculator(SourceWidth, SourceHeight);
@@ -81,7 +81,7 @@ public partial class MainViewModel
 
     partial void OnGammaCorrectChanged(bool value) => RequestPreview();
 
-    /// <summary>Neues Bild bzw. neuer Stand nach Zuschnitt/Drehen: Ziel = Original.</summary>
+    /// <summary>New image or new state after crop/rotation: target = original.</summary>
     private void ApplySourceSize(int width, int height)
     {
         _isSyncingSize = true;
@@ -94,18 +94,18 @@ public partial class MainViewModel
 
         _calc = new ResizeCalculator(width, height);
         UpdatePrintSizeFromPixels();
-        RotationAngle = 0;        // eine noch nicht übernommene Drehung gilt nur für den Stand davor
-        PerspectiveTool = false;  // die Ecken zum Entzerren ebenso
-        if (!_keepDewarpTool) DewarpTool = false;   // und die Linien der Wölbung (nicht beim eigenen „Gerade ziehen“: Ergebnis zeigen)
-        ResetWbForNewImage();     // Messstellen gehören zum Bild davor (die Messwerte bleiben, gleiches Licht)
+        RotationAngle = 0;        // a rotation not yet applied belongs only to the previous state
+        PerspectiveTool = false;  // as do the perspective corners
+        if (!_keepDewarpTool) DewarpTool = false;   // and the curved-page lines (not during the tool's own "Straighten out", which shows the result)
+        ResetWbForNewImage();     // measuring points belong to the previous image (the measured values stay: same light)
         CropSelection = null;
         OnPropertyChanged(nameof(AspectRatio));
         NotifySizeDerived();
     }
 
     /// <summary>
-    /// Format des fertigen Bildes geändert, ohne neuen Bildstand (eine Stufe des Ausrichtens ein/aus): Die Quelle folgt,
-    /// das Ziel nur, wenn es noch dem Bild entsprach — eine eingestellte Größe bleibt. Werkzeuge bleiben offen.
+    /// Dimensions of the finished image changed without a new image state (a geometry stage switched on/off): the source
+    /// follows, the target only if it still matched the image, so a set size stays. Tools stay open.
     /// </summary>
     private void FollowSourceSize(int width, int height)
     {
@@ -147,20 +147,20 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(FieldHeight));
         OnPropertyChanged(nameof(PixelEquivalent));
         OnPropertyChanged(nameof(ViewOutputSize));
-        SyncScaleChoices();   // Richtung: andere Einträge in „Verfahren“
+        SyncScaleChoices();   // direction: different entries in "Method"
         RequestPreview();
     }
 
-    // ------------------------------------------------- Einheit Pixel / mm
+    // ------------------------------------------------- Unit pixels / mm
 
     private const double MmPerInch = 25.4;
 
     public IReadOnlyList<string> SizeUnits { get; } = ["Pixel", "mm"];
 
     /// <summary>
-    /// „Pixel": die Pixelzahl ist maßgeblich.
-    /// „mm": die Druckgröße ist maßgeblich — eingegebene Millimeter bleiben exakt
-    /// stehen; Pixel (bzw. bei „Nur Metadaten" die DPI) werden daraus abgeleitet.
+    /// "Pixel": the pixel count is decisive.
+    /// "mm": the print size is decisive; entered millimetres stay exactly
+    /// as entered, and the pixels are derived from them and the DPI.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsMillimeter), nameof(SizeFormat), nameof(SizeMinimum),
@@ -171,21 +171,21 @@ public partial class MainViewModel
     public string SizeFormat => IsMillimeter ? "0.#" : "0";
     public decimal SizeMinimum => IsMillimeter ? 0.1m : 1m;
 
-    /// <summary>Breite im Eingabefeld — in der gewählten Einheit.</summary>
+    /// <summary>Width in the input field, in the selected unit.</summary>
     public decimal FieldWidth
     {
         get => IsMillimeter ? ToMm(_printWidthIn) : TargetWidth;
         set => SetFieldSize(value, isWidth: true);
     }
 
-    /// <summary>Höhe im Eingabefeld — in der gewählten Einheit.</summary>
+    /// <summary>Height in the input field, in the selected unit.</summary>
     public decimal FieldHeight
     {
         get => IsMillimeter ? ToMm(_printHeightIn) : TargetHeight;
         set => SetFieldSize(value, isWidth: false);
     }
 
-    /// <summary>Im mm-Modus: welche Pixelmaße daraus entstehen.</summary>
+    /// <summary>In mm mode: the pixel dimensions that result.</summary>
     public string? PixelEquivalent => IsMillimeter ? Tr.T("= {0} × {1} px bei {2} DPI", TargetWidth, TargetHeight, Dpi) : null;
     public bool HasPixelEquivalent => IsMillimeter;
 
@@ -197,18 +197,18 @@ public partial class MainViewModel
 
         if (!IsMillimeter)
         {
-            // Pixel: bestehende Logik inkl. Kette
+            // Pixels: the usual logic including the chain
             if (isWidth) TargetWidth = (int)Math.Round(value);
             else TargetHeight = (int)Math.Round(value);
             return;
         }
 
-        // Millimeter: Druckgröße ist maßgeblich und bleibt exakt wie eingegeben
+        // Millimetres: the print size is decisive and stays exactly as entered
         var inches = (double)value / MmPerInch;
         _isSyncingSize = true;
         WidthIsLeading = isWidth;
 
-        // Pixel = Druckgröße × DPI
+        // pixels = print size × DPI
         if (isWidth)
         {
             _printWidthIn = inches;
@@ -229,10 +229,11 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Standardformat wählen (A4, Fotoabzug …): Einheit auf mm, Hoch- oder Querformat wie das Bild, bei
-    /// geschlossener Kette ganz hinein (eine Kante füllt das Format), sonst genau das Format. Die DPI bleibt, die Pixel
-    /// folgen (Pixel = Druckgröße × DPI).
+    /// Selects a standard format (A4, photo print …): unit set to mm, portrait or landscape like the image; with the
+    /// chain closed the image fits inside (one edge fills the format), otherwise exactly the format. The DPI stays, the
+    /// pixels follow (pixels = print size × DPI).
     /// </summary>
+    /// <param name="key">Key of the format in <see cref="PaperFormats"/>.</param>
     [RelayCommand]
     private void ApplyPaperFormat(string key)
     {
@@ -252,7 +253,8 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Maße auf das <paramref name="factor"/>-Fache des Bildes (Menü der Formate: 2×, 4×, 16×).</summary>
+    /// <summary>Sets the dimensions to <paramref name="factor"/> times those of the image (format menu: 2×, 4×, 16×).</summary>
+    /// <param name="factor">Integer factor as text; invalid values or values below 1 are ignored.</param>
     [RelayCommand]
     private void ApplyScaleFactor(string factor)
     {
@@ -260,14 +262,14 @@ public partial class MainViewModel
         SetTargetPixels(SourceWidth * f, SourceHeight * f);
     }
 
-    /// <summary>Skalierung zurücksetzen: Maße wieder wie das Bild.</summary>
+    /// <summary>Resets the scaling: dimensions as those of the image again.</summary>
     [RelayCommand(CanExecute = nameof(HasSizeChange))]
     private void ResetScale() => SetTargetPixels(SourceWidth, SourceHeight);
 
-    /// <summary>Beide Kanten setzen (ein Rückgängig-Schritt), Seitenverhältnis des Bildes, Druckgröße folgt.</summary>
+    /// <summary>Sets both edges (one undo step) with the aspect ratio of the image; the print size follows.</summary>
     private void SetTargetPixels(int width, int height)
     {
-        CommitPendingSettings();   // eigener Rückgängig-Schritt, nicht mit Tippen in die Maße zusammengefasst
+        CommitPendingSettings();   // a separate undo step, not merged with typing into the dimension fields
         _isSyncingSize = true;
         TargetWidth = Math.Max(1, width);
         TargetHeight = Math.Max(1, height);
@@ -279,33 +281,33 @@ public partial class MainViewModel
         CommitPendingSettings();
     }
 
-    /// <summary>Einträge im Menü der Formate: „2×  ·  1000 × 600 px“.</summary>
+    /// <summary>Entries in the format menu: "2×  ·  1000 × 600 px".</summary>
     public string ScaleTwiceText => Tr.T("{0}×  ·  {1} × {2} px", 2, SourceWidth * 2, SourceHeight * 2);
     public string ScaleFourText => Tr.T("{0}×  ·  {1} × {2} px", 4, SourceWidth * 4, SourceHeight * 4);
-    public string ScaleSixteenText => Tr.T("{0}×  ·  {1} × {2} px", 16, SourceWidth * 16, SourceHeight * 16);   // KI: zwei Durchgänge
+    public string ScaleSixteenText => Tr.T("{0}×  ·  {1} × {2} px", 16, SourceWidth * 16, SourceHeight * 16);   // AI: two passes
 
-    /// <summary>Tooltip von „Zurücksetzen“ mit der Originalgröße.</summary>
+    /// <summary>Tooltip of "Reset" with the original size.</summary>
     public string ResetScaleTip => Tr.T("Skalierung zurücksetzen: wieder die Größe des Bildes ({0} × {1} px).", SourceWidth, SourceHeight);
 
     public string SizeSummary =>
         $"{SourceWidth} × {SourceHeight} → {TargetWidth} × {TargetHeight} px";
 
-    /// <summary>Zielgröße, die gerechnet wird (bei ausgeblendeter Größe das Bild selbst).</summary>
+    /// <summary>Target size that is computed (the image size itself if the size step is switched off).</summary>
     private (int Width, int Height) EffectiveTarget()
     {
-        if (!Shows(EditSteps.Resize)) return (Math.Max(1, SourceWidth), Math.Max(1, SourceHeight));   // Größe ausgeblendet
+        if (!Shows(EditSteps.Resize)) return (Math.Max(1, SourceWidth), Math.Max(1, SourceHeight));   // size switched off
         return EffectiveResize();
     }
 
     private (int Width, int Height) EffectiveResize() => (Math.Max(1, TargetWidth), Math.Max(1, TargetHeight));
 
-    // ---------------------------------------------------------- DPI / Druck
+    // ---------------------------------------------------------- DPI / print
 
     [ObservableProperty] public partial int Dpi { get; set; } = (int)ImageLoader.DefaultDpi;
 
     /// <summary>
-    /// Die Einheit entscheidet, was die DPI ändert: bei Pixel bleiben die Pixel (nur die Druckgröße folgt, verlustfrei),
-    /// bei mm bleibt die Druckgröße und die Pixel werden neu berechnet.
+    /// The unit decides what the DPI changes: with pixels the pixels stay (only the print size follows, losslessly);
+    /// with mm the print size stays and the pixels are recalculated.
     /// </summary>
     private bool DpiMetadataOnly => !IsMillimeter;
 
@@ -317,12 +319,12 @@ public partial class MainViewModel
 
         if (DpiMetadataOnly)
         {
-            // Pixel bleiben, nur die Druckgröße ändert sich
+            // pixels stay, only the print size changes
             UpdatePrintSizeFromPixels();
         }
         else
         {
-            // Druckgröße bleibt, Pixel werden neu berechnet
+            // print size stays, pixels are recalculated
             _isSyncingSize = true;
             TargetWidth = Math.Max(1, (int)Math.Round(_printWidthIn * value));
             TargetHeight = Math.Max(1, (int)Math.Round(_printHeightIn * value));
@@ -332,7 +334,7 @@ public partial class MainViewModel
         NotifySizeDerived();
     }
 
-    /// <summary>DPI setzen, ohne dass Pixel neu gerechnet werden (z. B. Wert aus der Datei).</summary>
+    /// <summary>Sets the DPI without recalculating the pixels (for example the value from the file).</summary>
     private void SetDpiSilently(int dpi)
     {
         _isSyncingSize = true;
@@ -345,10 +347,10 @@ public partial class MainViewModel
     public string PrintSize =>
         Tr.T("Druckgröße {0:F1} × {1:F1} cm", _printWidthIn * 2.54, _printHeightIn * 2.54);
 
-    /// <summary>Tooltip des DPI-Felds: wofür der Wert taugt und was die DPI je nach Einheit ändert.</summary>
+    /// <summary>Tooltip of the DPI field: what the value is suitable for and what the DPI changes depending on the unit.</summary>
     public string DpiTip => Tr.T("{0}. Bei der Einheit Pixel ändert die DPI nur die Druckgröße — die Pixel bleiben. Bei mm bleibt die Druckgröße, die Pixel werden neu berechnet. Üblich: 72–96 Bildschirm · 150 einfacher Druck · 300 Fotodruck · 600 Kunstdruck · 1200 Strichzeichnungen; bis 2400 möglich.", DpiPurpose);
 
-    /// <summary>Wofür sich die eingestellte Auflösung eignet — als Orientierung unter dem Regler.</summary>
+    /// <summary>What the set resolution is suitable for, as guidance below the slider.</summary>
     public string DpiPurpose => Dpi switch
     {
         <= 100 => Tr.T("Bildschirm und Web"),

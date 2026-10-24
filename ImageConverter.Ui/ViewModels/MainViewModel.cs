@@ -15,12 +15,21 @@ using ImageConverter.Models;
 namespace ImageConverter.ViewModels;
 
 /// <summary>
-/// Hauptansicht. Aufgeteilt auf mehrere Dateien:
+/// View model of the main window. Split across several files:
 /// <list type="bullet">
-/// <item>MainViewModel.cs — Dateien, Format, Metadaten, Ausgabe</item>
-/// <item>MainViewModel.Editing.cs — Zuschneiden, Drehen, Rückgängig/Wiederholen</item>
-/// <item>MainViewModel.Size.cs — Pixelmaße, Kette, DPI, Druckgröße</item>
-/// <item>MainViewModel.Preview.cs — Live-Vorschau für Skalieren, Entrauschen, Schärfen</item>
+/// <item>MainViewModel.cs: opening and browsing files</item>
+/// <item>MainViewModel.Export.cs: format, metadata, colour, output, export and size estimate</item>
+/// <item>MainViewModel.Editing.cs: crop, rotation, flip, perspective, image steps and undo/redo</item>
+/// <item>MainViewModel.History.cs: undo steps for settings</item>
+/// <item>MainViewModel.Edits.cs: the "Edits" list, switching functions off, geometry views</item>
+/// <item>MainViewModel.PerImage.cs: shared or per-image settings, data for the export window</item>
+/// <item>MainViewModel.Size.cs: pixel dimensions, aspect ratio chain, DPI, print size</item>
+/// <item>MainViewModel.Preview.cs: display and live preview of the settings chain</item>
+/// <item>MainViewModel.Tools.cs: light, colour, dehaze, luminosity mask, grain</item>
+/// <item>MainViewModel.WhiteBalance.cs: white balance with eyedroppers</item>
+/// <item>MainViewModel.Look.cs: the look as a whole, for extensions (AI)</item>
+/// <item>MainViewModel.Dewarp.cs: curved-page tool and straightening with AI</item>
+/// <item>MainViewModel.Upscale.cs: AI upscaling and inspection view</item>
 /// </list>
 /// </summary>
 public partial class MainViewModel : ViewModelBase
@@ -28,7 +37,7 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Formats = ["WebP", "PNG", "JPEG", "AVIF", "JPEG XL", "TIFF", "BMP", "ICO"];
-        SelectedFormat = "PNG";   // Vorgabe (Wunsch vom 13.10.2026; vorher WebP)
+        SelectedFormat = "PNG";   // default output format
 
         Filters = FilterOption.All;
         SelectedFilter = Filters[0];
@@ -42,34 +51,34 @@ public partial class MainViewModel : ViewModelBase
         AspectPresets = ["Frei", "Original", "1:1", "4:3", "3:2", "16:9"];
         SelectedAspectPreset = "Frei";
 
-        // Maße des Platzhalterbilds, solange nichts geladen ist
+        // Dimensions of the placeholder image while nothing is loaded
         ApplySourceSize(4000, 3000);
 
-        // Ausgangszustand für neue Bilder (siehe ResetToStart)
+        // Initial state for newly opened images (see ResetToStart)
         _startSettings = CaptureSettings();
 
-        // Ab hier zählen Änderungen als Rückgängig-Schritte
+        // From here on, changes count as undo steps.
         ResetHistoryBaseline();
 
-        // KI-Modul (abtrennbar, siehe Ordner Ai/)
+        // AI module (separable, see the Ai/ folder)
         Ai = new AiViewModel(this);
         Retouch = new RetouchViewModel(this, Ai);
-        PropertyChanged += OnUpscaleRelevantChange;   // Upscaling folgt Bild und Größe
+        PropertyChanged += OnUpscaleRelevantChange;   // upscaling follows the image and the size
 
-        // Sprachwechsel: berechnete Texte (Hinweise, Druckgröße …) neu abfragen lassen
+        // Language change: have computed texts (hints, print size …) queried again.
         Tr.Instance.PropertyChanged += (_, _) => RefreshTexts();
     }
 
-    /// <summary>KI-Verbesserung — eigenes Modul mit GroupBox und Einstellungs-Tab.</summary>
+    /// <summary>AI enhancement: a separate module with its own group box and settings tab.</summary>
     public AiViewModel Ai { get; }
 
-    /// <summary>Entfernen (Wasserzeichen, Schrift …) mit Pinsel und Füllmodell — gehört zum KI-Modul.</summary>
+    /// <summary>Removal (watermarks, text …) with a brush and an inpainting model; part of the AI module.</summary>
     public RetouchViewModel Retouch { get; }
 
-    /// <summary>Tab „Sprache“ in den Einstellungen.</summary>
+    /// <summary>"Language" tab of the settings.</summary>
     public LanguageViewModel Language { get; } = new();
 
-    /// <summary>Nach einem Sprachwechsel: alle Bindungen neu lesen, gemerkte Texte neu bilden.</summary>
+    /// <summary>After a language change: rereads all bindings and rebuilds cached texts.</summary>
     private void RefreshTexts()
     {
         OnPropertyChanged(string.Empty);
@@ -85,9 +94,9 @@ public partial class MainViewModel : ViewModelBase
     private CancellationTokenSource? _releaseCts;
 
     /// <summary>
-    /// Nach dem Freigeben eines Bildes: Speicher ans System zurückgeben, aber erst, wenn zwei Sekunden lang nicht weiter
-    /// geblättert wurde, und im Hintergrund — die gründliche Bereinigung hält das Programm kurz an (etwa 0,1 s). Beim
-    /// Durchblättern von 20 Fotos mit 12 MP blieb der Speicher so bei 2–2,5 statt 3,3 GB.
+    /// After an image has been released, returns memory to the operating system, but only once no further image has
+    /// been selected for two seconds, and in the background, because the thorough clean-up pauses the program briefly
+    /// (about 0.1 s). When browsing through 20 photos of 12 MP, memory stayed at 2–2.5 GB instead of 3.3 GB.
     /// </summary>
     private void ReleaseMemorySoon()
     {
@@ -102,12 +111,12 @@ public partial class MainViewModel : ViewModelBase
             }
             catch (OperationCanceledException)
             {
-                // weiter geblättert — der nächste Wechsel räumt auf
+                // another image was selected; the next switch cleans up
             }
         });
     }
 
-    /// <summary>Von der Ansicht abonniert: öffnet das Einstellungsfenster (auf der genannten Seite, sonst wie zuletzt).</summary>
+    /// <summary>Subscribed by the view: opens the settings window on the given page, otherwise on the last page shown.</summary>
     public event Func<SettingsPage?, Task>? SettingsRequested;
 
     [RelayCommand]
@@ -119,15 +128,15 @@ public partial class MainViewModel : ViewModelBase
     public ObservableCollection<string> ColorModes { get; }
     public ObservableCollection<string> AspectPresets { get; }
 
-    // ------------------------------------------------------------- Dateien
+    // ------------------------------------------------------------- Files
 
     private readonly List<string> _files = [];
     private int _fileIndex = -1;
 
-    // Bricht ein noch laufendes Laden ab, wenn schon das nächste Bild gewünscht ist.
+    // Cancels a load still in progress when the next image has already been requested.
     private CancellationTokenSource? _loadCts;
 
-    /// <summary>Kurzliste für den leeren Zustand — nur, was ImageMagick hier wirklich liest.</summary>
+    /// <summary>Short list of formats for the empty state; contains only formats that ImageMagick can actually read on this system.</summary>
     public string SupportedFormatsSummary
     {
         get
@@ -152,19 +161,19 @@ public partial class MainViewModel : ViewModelBase
     public bool HasMultipleFiles => _files.Count > 1;
     public string FilePosition => _files.Count > 1 ? $"{_fileIndex + 1} / {_files.Count}" : "";
 
-    /// <summary>Alle Einstellungen, wie sie beim Programmstart sind (gespeichert wird nur die Sprache).</summary>
+    /// <summary>All settings as they are at program start. Editing settings are not saved between sessions.</summary>
     private readonly SettingsState _startSettings;
 
-    /// <summary>Wird ausgelöst, wenn neue Bilder die bisherigen ersetzen — Erweiterungen (KI) beginnen dann auch neu.</summary>
+    /// <summary>Raised when newly opened images replace the previous ones, so that extensions (AI) start afresh as well.</summary>
     internal event EventHandler? FilesReplaced;
 
     /// <summary>
-    /// Neu geladene Bilder beginnen wie nach dem Programmstart: alle Einstellungen (Format, Qualität, Größe =
-    /// Originalauflösung, DPI aus der Datei, Licht, Dunst, Farbe, Schärfe …) auf den Vorgaben. Dazu Einstellungen
-    /// je Bild („Gleiche Einstellungen für alle Bilder“ aus) — so überschreibt eine Änderung an einem Bild nie
-    /// unbemerkt die anderen; jedes Bild beginnt beim ersten Anzeigen mit dem Startstand.
-    /// Kein Rückgängig-Schritt — der Verlauf beginnt mit den neuen Bildern neu.
-    /// Blättern zwischen schon geöffneten Bildern ändert nichts.
+    /// Newly opened images start as after program start: all settings (format, quality, size = original resolution,
+    /// DPI from the file, light, haze, colour, sharpness …) are at their defaults. Settings are also kept per image
+    /// ("Same settings for all images" off), so that a change to one image never silently overwrites the others;
+    /// each image starts with the initial state when it is first shown.
+    /// This is not an undo step; the history starts afresh with the new images.
+    /// Browsing between images that are already open does not call this method.
     /// </summary>
     internal void ResetToStart()
     {
@@ -180,8 +189,10 @@ public partial class MainViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Übernimmt Dateien und Ordner (aus Drag &amp; Drop, Dateidialog oder
-    /// Kommandozeile) und zeigt das erste Bild. Ordner werden flach durchsucht.
+    /// Takes over files and folders (from drag &amp; drop, the file dialog or the
+    /// command line) and shows the first image. Folders are searched non-recursively.
+    /// </summary>
+    /// <param name="paths">Paths of image files and folders.
     /// </summary>
     public async Task OpenAsync(IEnumerable<string> paths)
     {
@@ -211,12 +222,12 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        // Neue Auswahl ersetzt die alte samt Verlauf. Erst die Vorschau-Berechnung
-        // abwarten — sie liest evtl. noch ein Bild, das gleich freigegeben wird.
+        // The new selection replaces the old one including its history. Wait for the preview computation
+        // first, because it may still be reading an image that is about to be released.
         await StopPreviewAsync();
         ClearDisplay();
         DisposeAllHistories();
-        ResetToStart();   // neue Bilder beginnen wie nach dem Programmstart
+        ResetToStart();   // new images start as after program start
         _fileIndex = -1;
 
         _files.Clear();
@@ -239,10 +250,10 @@ public partial class MainViewModel : ViewModelBase
     private async Task ShowFileAsync(int index)
     {
         var path = _files[index];
-        CommitPendingSettings();   // offene Reglerbewegungen gehören noch zum vorigen Bild
+        CommitPendingSettings();   // pending slider movements still belong to the previous image
 
-        // Stand des Bildes, das gerade verlassen wird. Im Einzelmodus merken;
-        // im gemeinsamen Modus ist er die Vorlage für das nächste Bild.
+        // State of the image being left. In per-image mode it is remembered;
+        // in shared mode it is the template for the next image.
         var outgoing = _history is not null ? CaptureSettings() : null;
         var outgoingFileDpi = _history?.Dpi;
         if (!ApplyToAll && CurrentPath is { } leaving && outgoing is not null)
@@ -257,8 +268,8 @@ public partial class MainViewModel : ViewModelBase
             var isNew = false;
             if (!_histories.TryGetValue(path, out var history))
             {
-                // ImageMagick: alle Formate, EXIF-Drehung, Farbprofil → sRGB.
-                // Läuft im Hintergrund, die Oberfläche bleibt bedienbar.
+                // ImageMagick: all formats, EXIF orientation, colour profile → sRGB.
+                // Runs in the background so that the UI stays responsive.
                 var loaded = await ImageLoader.LoadAsync(path, cts.Token);
                 history = new EditHistory(loaded.Image)
                 {
@@ -280,44 +291,44 @@ public partial class MainViewModel : ViewModelBase
 
             await ShowCurrentAsync();
 
-            // Einstellungen für dieses Bild: eigener Stand (Einzelmodus) oder der
-            // bisherige Stand, auf dieses Bild umgerechnet.
+            // Settings for this image: its own state (per-image mode) or the
+            // previous state converted to fit this image.
             if (!ApplyToAll && _fileSettings.TryGetValue(path, out var own))
             {
                 ApplySettings(own);
             }
             else if (outgoing is not null)
             {
-                // DPI folgt der Datei, solange man sie beim vorigen Bild nicht selbst
-                // geändert hatte — sonst gilt die eigene Einstellung für alle.
-                // Einzelmodus ohne eigenen Stand: Vorlage vom Umschalten, nicht das vorige Bild
+                // DPI follows the file unless it was changed manually on the previous image;
+                // in that case the manual setting applies to all.
+                // Per-image mode without an own state: use the template from switching modes, not the previous image.
                 var template = !ApplyToAll && _individualTemplate is { } t ? t : outgoing;
-                if (isNew) template = WithFileDpi(template, history.Dpi, outgoingFileDpi);   // wie bei SettingsFor
+                if (isNew) template = WithFileDpi(template, history.Dpi, outgoingFileDpi);   // as in SettingsFor
                 ApplySettings(AdaptToImage(template, SourceWidth, SourceHeight));
             }
             else if (isNew)
             {
-                // Allererstes Bild: DPI aus der Datei
+                // Very first image: DPI from the file
                 using (SuppressHistory())
                     SetDpiSilently((int)Math.Round(history.Dpi));
                 ResetHistoryBaseline();
             }
 
-            // Unbearbeitete Bilder nicht im Speicher halten, bearbeitete schon —
-            // sonst wäre ein Zuschnitt beim Weiterblättern verloren.
+            // Do not keep unedited images in memory, but keep edited ones;
+            // otherwise a crop would be lost when moving on to another image.
             if (previous is not null && previous != history && previousPath is not null
                 && !IsReferencedByHistory(previousPath, previous))
             {
                 await StopPreviewAsync();
                 _histories.Remove(previousPath);
-                previous.Current.Dispose();   // unbearbeitet: Current ist das Original
+                previous.Current.Dispose();   // unedited: Current is the original
                 RequestPreview();
                 ReleaseMemorySoon();
             }
         }
         catch (OperationCanceledException)
         {
-            // Inzwischen wurde ein anderes Bild gewählt — kein Fehler
+            // Another image has been selected in the meantime; not an error.
         }
         catch (Exception ex)
         {

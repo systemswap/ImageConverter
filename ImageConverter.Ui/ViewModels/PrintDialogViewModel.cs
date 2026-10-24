@@ -13,19 +13,25 @@ using ImageConverter.Imaging;
 
 namespace ImageConverter.ViewModels;
 
-/// <summary>Eintrag in der Druckerliste — „Als PDF speichern" ist ein eigener Eintrag.</summary>
+/// <summary>Entry in the printer list; "Save as PDF" is an entry of its own.</summary>
+/// <param name="Label">Display name; for the PDF entry the German key that is translated for display.</param>
+/// <param name="Printer">The printer; null for "Save as PDF".</param>
 public sealed record PrinterChoice(string Label, PrinterInfo? Printer)
 {
     public bool IsPdf => Printer is null;
-    public override string ToString() => IsPdf ? Tr.T(Label) : Label;   // „Als PDF speichern“ übersetzt, Druckernamen nicht
+    public override string ToString() => IsPdf ? Tr.T(Label) : Label;   // "Save as PDF" is translated, printer names are not
 }
 
-/// <summary>Ein zu druckendes Bild: Druckauftrag (Größe, DPI …) und Vorschaubild.</summary>
+/// <summary>An image to print: print job (size, DPI …) and thumbnail.</summary>
+/// <param name="Id">Identifier of the image within the layout.</param>
+/// <param name="Path">Path of the source file.</param>
+/// <param name="Options">Export options of the image's settings state.</param>
+/// <param name="Thumbnail">Thumbnail for the page preview; null if none.</param>
 public sealed record PrintSourceInfo(int Id, string Path, ExportOptions Options, Bitmap? Thumbnail);
 
 /// <summary>
-/// Druckdialog: Einstellungen links, Seitenvorschau rechts. Die Anordnung rechnet
-/// <see cref="PrintLayout"/> bei jeder Änderung neu (Millisekunden).
+/// Print dialog: settings on the left, page preview on the right. <see cref="PrintLayout"/>
+/// recomputes the arrangement on every change (milliseconds).
 /// </summary>
 public partial class PrintDialogViewModel : ViewModelBase
 {
@@ -38,8 +44,8 @@ public partial class PrintDialogViewModel : ViewModelBase
     {
         _main = main;
 
-        // Drucker im Hintergrund holen: lpstat bzw. der Windows-Druckdienst kann dauern oder
-        // hängen. Bis dahin steht „Als PDF speichern" da.
+        // Fetch the printers in the background, because lpstat or the Windows print service can take long or
+        // hang. Until then "Save as PDF" is shown.
         Printers = [new PrinterChoice("Als PDF speichern", null)];
         SelectedPrinter = Printers[0];
         _ = LoadPrintersAsync();
@@ -56,11 +62,11 @@ public partial class PrintDialogViewModel : ViewModelBase
         _ = LoadCapabilitiesAsync(SelectedPrinter);
     }
 
-    // ------------------------------------------------------------ Einstellungen
+    // ------------------------------------------------------------ Settings
 
     public ObservableCollection<PrinterChoice> Printers { get; }
     public IReadOnlyList<PaperSize> Papers { get; }
-    // Werte sind die deutschen Texte (Kennungen); angezeigt wird die Übersetzung (ComboBox.tr)
+    // The values are the German texts (used as keys); the translation is displayed (ComboBox.tr).
     internal static readonly string[] OrientationLabels = ["Automatisch", "Hochformat", "Querformat"];
     internal static readonly string[] ModeLabels = ["Mehrere pro Seite — schneidefreundlich", "Mehrere pro Seite — möglichst dicht", "Ein Bild pro Seite"];
     internal static readonly string[] ColorModeLabels = ["Farbe", "Schwarzweiß"];
@@ -92,15 +98,15 @@ public partial class PrintDialogViewModel : ViewModelBase
     [ObservableProperty] public partial string SelectedColorMode { get; set; }
     [ObservableProperty] public partial string SelectedDuplex { get; set; }
 
-    /// <summary>Was der gewählte Drucker kann — unbekannt heißt: wählbar lassen.</summary>
+    /// <summary>What the selected printer supports; unknown means: leave the option selectable.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ColorAvailable), nameof(DuplexAvailable), nameof(ColorHint), nameof(DuplexHint))]
     public partial PrinterCapabilities Capabilities { get; set; } = PrinterCapabilities.Unknown;
 
-    /// <summary>Farbe/Schwarzweiß: nur gesperrt, wenn der Drucker sicher nur Schwarzweiß kann.</summary>
+    /// <summary>Colour/black and white: locked only if the printer is known to print black and white only.</summary>
     public bool ColorAvailable => Capabilities.Color != false;
 
-    /// <summary>Doppelseitig: nicht im PDF und nicht, wenn der Drucker es sicher nicht kann.</summary>
+    /// <summary>Duplex: not for PDF and not if the printer is known not to support it.</summary>
     public bool DuplexAvailable => !SelectedPrinter.IsPdf && Capabilities.Duplex != false;
 
     public string ColorHint => Capabilities.Color == false
@@ -113,7 +119,7 @@ public partial class PrintDialogViewModel : ViewModelBase
             ? Tr.T("Dieser Drucker kann nicht beidseitig drucken.")
             : Tr.T("Lange Kante: geblättert wird wie in einem Buch.\nKurze Kante: geblättert wird nach oben, wie bei einem Kalender oder Klemmbrett.");
 
-    /// <summary>Alle geöffneten Bilder oder nur das aktuelle.</summary>
+    /// <summary>All open images, or only the current one.</summary>
     [ObservableProperty] public partial bool PrintAll { get; set; }
 
     public bool HasMultipleFiles => _main.OpenFiles.Count > 1;
@@ -122,7 +128,7 @@ public partial class PrintDialogViewModel : ViewModelBase
 
     public string PrimaryButtonText => SelectedPrinter.IsPdf ? Tr.T("PDF speichern …") : Tr.T("Drucken");
 
-    /// <summary>Warnung, wenn der Rand kleiner ist, als der Drucker bedrucken kann (nur wo bekannt).</summary>
+    /// <summary>Warning if the margin is smaller than the area the printer cannot print on (only where known).</summary>
     public string? MarginHint
     {
         get
@@ -154,7 +160,7 @@ public partial class PrintDialogViewModel : ViewModelBase
 
     partial void OnCapabilitiesChanged(PrinterCapabilities value) => ApplyCapabilities();
 
-    /// <summary>Fähigkeiten im Hintergrund abfragen — unter Linux startet das lpoptions.</summary>
+    /// <summary>Fetches the printer list in the background; on Linux this starts lpstat.</summary>
     private async Task LoadPrintersAsync()
     {
         IReadOnlyList<PrinterInfo> found;
@@ -164,11 +170,12 @@ public partial class PrintDialogViewModel : ViewModelBase
         var choices = found.Select(p => new PrinterChoice(p.ToString(), p)).ToList();
         foreach (var c in choices) Printers.Add(c);
 
-        // Standarddrucker vorwählen — nur, wenn noch niemand etwas anderes gewählt hat
+        // Preselect the default printer, but only if nothing else has been selected yet.
         if (SelectedPrinter.IsPdf && choices.FirstOrDefault(c => c.Printer!.IsDefault) is { } standard)
             SelectedPrinter = standard;
     }
 
+    /// <summary>Queries the capabilities of the printer in the background; on Linux this starts lpoptions.</summary>
     private async Task LoadCapabilitiesAsync(PrinterChoice choice)
     {
         ApplyCapabilities();
@@ -178,18 +185,18 @@ public partial class PrintDialogViewModel : ViewModelBase
         try { caps = await Task.Run(() => SystemPrinters.Capabilities(p.Name)); }
         catch { caps = PrinterCapabilities.Unknown; }
 
-        if (SelectedPrinter == choice)   // inzwischen anderer Drucker gewählt → verwerfen
+        if (SelectedPrinter == choice)   // another printer selected in the meantime → discard
             Capabilities = caps;
     }
 
-    /// <summary>Nicht mögliche Auswahl zurücksetzen: Schwarzweiß-Drucker, kein Duplex, PDF.</summary>
+    /// <summary>Resets selections that are not possible: black-and-white printer, no duplex, PDF.</summary>
     private void ApplyCapabilities()
     {
         if (!ColorAvailable) SelectedColorMode = ColorModes[1];
         if (!DuplexAvailable) SelectedDuplex = DuplexModes[0];
     }
 
-    // ------------------------------------------------------------ Vorschau
+    // ------------------------------------------------------------ Preview
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPage), nameof(PageInfo), nameof(HasPages))]
@@ -206,7 +213,7 @@ public partial class PrintDialogViewModel : ViewModelBase
     [ObservableProperty] public partial string? Message { get; set; }
     [ObservableProperty] public partial string? Problem { get; set; }
 
-    /// <summary>Vorschaubilder je Bild-Id — für die Seitenvorschau.</summary>
+    /// <summary>Thumbnails per image id, for the page preview.</summary>
     public IReadOnlyDictionary<int, Bitmap> Thumbnails =>
         _sources.Where(s => s.Thumbnail is not null).ToDictionary(s => s.Id, s => s.Thumbnail!);
 
@@ -234,7 +241,7 @@ public partial class PrintDialogViewModel : ViewModelBase
     private void NextPage() => PageIndex++;
     private bool CanNext => Layout is { } l && PageIndex < l.Pages.Count - 1;
 
-    /// <summary>Größen und Vorschaubilder aller Bilder holen, dann anordnen.</summary>
+    /// <summary>Fetches the sizes and thumbnails of all images, then arranges them.</summary>
     public async Task LoadAsync()
     {
         var id = 1;
@@ -242,7 +249,7 @@ public partial class PrintDialogViewModel : ViewModelBase
         {
             try
             {
-                // Kopfdaten und kleines Vorschaubild — das Bild selbst lädt erst der Druck
+                // Header data and a small thumbnail only; the full image is loaded by the print job itself.
                 var (w, h, dpi, thumb, tw, th) = await _main.GetListEntryAsync(path, ThumbSize);
                 var state = _main.SettingsFor(path, w, h, dpi);
                 var options = MainViewModel.OptionsFor(state);
@@ -296,12 +303,12 @@ public partial class PrintDialogViewModel : ViewModelBase
         OnPropertyChanged(nameof(PageInfo));
     }
 
-    // ------------------------------------------------------------ Drucken
+    // ------------------------------------------------------------ Printing
 
-    /// <summary>Von der Ansicht gesetzt: fragt nach dem Speicherort für das PDF.</summary>
+    /// <summary>Set by the view: asks for the location to save the PDF.</summary>
     public Func<string, Task<string?>>? PickPdfPath { get; set; }
 
-    /// <summary>Von der Ansicht gesetzt: schließt das Fenster nach erfolgreichem Druck.</summary>
+    /// <summary>Set by the view: closes the window after successful printing.</summary>
     public Action? Close { get; set; }
 
     private bool CanPrint => !IsPrinting && HasPages;
@@ -322,7 +329,7 @@ public partial class PrintDialogViewModel : ViewModelBase
         {
             if (PickPdfPath is null) return;
             pdfPath = await PickPdfPath(title + ".pdf");
-            if (pdfPath is null) return;   // abgebrochen
+            if (pdfPath is null) return;   // cancelled
         }
 
         IsPrinting = true;
@@ -337,7 +344,7 @@ public partial class PrintDialogViewModel : ViewModelBase
                     : SelectedDuplex == DuplexModes[2] ? DuplexMode.ShortEdge : DuplexMode.OneSided,
                 SelectedColorMode == ColorModes[1]);
 
-            // Bild für eine Platzierung: aus dem Verlauf bzw. frisch geladen, wie beim Export
+            // Image for a placement: from the history or freshly loaded, as for the export
             byte[] ImageFor(Placement p)
             {
                 var source = sources[p.ItemId];
@@ -363,7 +370,7 @@ public partial class PrintDialogViewModel : ViewModelBase
                 }
                 else
                 {
-                    // CUPS druckt PDF direkt — also erst ein PDF, dann an den Drucker
+                    // CUPS prints PDF directly, so first write a PDF, then send it to the printer.
                     var temp = Path.Combine(Path.GetTempPath(), $"imageconverter-{Guid.NewGuid():N}.pdf");
                     try
                     {
@@ -373,7 +380,7 @@ public partial class PrintDialogViewModel : ViewModelBase
                     }
                     finally
                     {
-                        // CUPS hat die Datei beim Annehmen des Auftrags bereits kopiert
+                        // CUPS has already copied the file when it accepted the job.
                         if (File.Exists(temp)) File.Delete(temp);
                     }
                 }

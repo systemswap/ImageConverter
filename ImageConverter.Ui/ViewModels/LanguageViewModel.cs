@@ -10,8 +10,8 @@ using ImageConverter.Services;
 namespace ImageConverter.ViewModels;
 
 /// <summary>
-/// Tab „Sprache“ in den Einstellungen: eingebaute Sprachen und JSON-Dateien aus dem
-/// Ordner languages. Die Wahl gilt sofort und wird gespeichert.
+/// "Language" tab of the settings: built-in languages and JSON files from the
+/// languages folder. A selection takes effect immediately and is saved.
 /// </summary>
 public partial class LanguageViewModel : ObservableObject
 {
@@ -19,7 +19,7 @@ public partial class LanguageViewModel : ObservableObject
 
     [ObservableProperty] public partial Language? Selected { get; set; }
 
-    /// <summary>Fehlerhafte Sprachdateien, je Zeile eine; null = keine.</summary>
+    /// <summary>Faulty language files, one per line; null if there are none.</summary>
     [ObservableProperty] public partial string? Problems { get; set; }
 
     [ObservableProperty] public partial string? Status { get; set; }
@@ -28,7 +28,7 @@ public partial class LanguageViewModel : ObservableObject
 
     public LanguageViewModel() => Rescan();
 
-    /// <summary>Ordner neu einlesen — z. B. nachdem eine Datei hineinkopiert wurde.</summary>
+    /// <summary>Rereads the languages folder, for example after a file has been copied into it.</summary>
     public void Rescan()
     {
         var all = Languages.All(out var problems);
@@ -36,7 +36,7 @@ public partial class LanguageViewModel : ObservableObject
         foreach (var l in all) Available.Add(l);
         Problems = problems.Count > 0 ? string.Join("\n", problems) : null;
 
-        // Aktuelle Sprache wiederfinden (nach Neueinlesen ist es ein neues Objekt)
+        // Find the current language again by its code; after rereading it is a new object.
         _syncing = true;
         Selected = all.FirstOrDefault(l => l.Code == Tr.Current.Code) ?? all[0];
         _syncing = false;
@@ -54,7 +54,7 @@ public partial class LanguageViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Sprache beim Programmstart: gespeicherte Wahl, sonst Systemsprache.
+    /// Applies the language at program start: the saved choice, otherwise the system language.
     /// </summary>
     public static void ApplyAtStartup()
     {

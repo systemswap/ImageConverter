@@ -10,7 +10,7 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-// Format, Metadaten, Farbe, Ausgabe — und der Export selbst samt Größenschätzung.
+// Format, metadata, colour, output, and the export itself including the size estimate.
 public partial class MainViewModel
 {
     private static readonly Dictionary<string, OutputFormat> FormatByLabel = new()
@@ -49,10 +49,10 @@ public partial class MainViewModel
     [NotifyPropertyChangedFor(nameof(QualityApplies))]
     public partial bool Lossless { get; set; }
 
-    /// <summary>PNG, TIFF, BMP, ICO speichern immer verlustfrei — dort gibt es keinen Qualitätsregler.</summary>
+    /// <summary>The quality slider applies: not for PNG, TIFF, BMP and ICO, which always save losslessly, and not when lossless saving is chosen.</summary>
     public bool QualityApplies => !ImageExporter.IsAlwaysLossless(CurrentFormat) && !(Lossless && LosslessAvailable);
 
-    /// <summary>Nur WebP, AVIF und JPEG XL können wahlweise verlustfrei.</summary>
+    /// <summary>Only WebP, AVIF and JPEG XL can optionally save losslessly.</summary>
     public bool LosslessAvailable => CurrentFormat is OutputFormat.WebP or OutputFormat.Avif or OutputFormat.JpegXl;
 
     partial void OnSelectedFormatChanged(string value)
@@ -63,26 +63,26 @@ public partial class MainViewModel
     partial void OnQualityChanged(double value) => RequestEstimate();
     partial void OnLosslessChanged(bool value) => RequestEstimate();
 
-    /// <summary>PNG und TIFF wahlweise mit 16 Bit je Kanal (Quellen mit 16 Bit bleiben es ohnehin).</summary>
+    /// <summary>PNG and TIFF optionally with 16 bits per channel (sources with more than 8 bits keep 16 bits anyway).</summary>
     [ObservableProperty] public partial bool HighBitDepth { get; set; }
 
     public bool HighBitDepthAvailable => ImageExporter.SupportsHighBitDepth(CurrentFormat);
 
     /// <summary>
-    /// „empfohlen“ neben dem Haken: kräftige Tonwert-Bearbeitung (<see cref="Adjustments.SpreadsTones"/>) — 16 Bit halten die
-    /// Verläufe ohne Stufen, die Datei wird etwa doppelt so groß. Nachgeführt bei jeder Änderung (<see cref="RequestPreview"/>).
+    /// "recommended" next to the check box: strong tonal editing (<see cref="Adjustments.SpreadsTones"/>); 16 bits keep
+    /// gradients free of banding, the file becomes about twice as large. Updated on every change (<see cref="RequestPreview"/>).
     /// </summary>
     public bool HighBitDepthRecommended => HighBitDepthAvailable && CurrentAdjustments().SpreadsTones;
 
-    // Automatik: Haken selbst gesetzt (dann nimmt die App ihn auch selbst wieder heraus) und letzter Stand der Empfehlung
+    // Automatic mode: whether the app set the tick itself (then it also removes it again itself), and the last recommendation state
     private bool _highBitDepthByApp;
     private bool _highBitDepthWasRecommended;
     private bool _settingHighBitDepth;
 
     /// <summary>
-    /// Empfehlung nachführen (bei jeder Vorschau). Fällt sie weg, nimmt die App einen selbst gesetzten Haken wieder heraus —
-    /// sonst würde die Datei ohne Nutzen doppelt so groß; einen von Hand gesetzten lässt sie stehen. Beim Wiederherstellen
-    /// eines Stands (Rückgängig, anderes Bild) gilt der gespeicherte Haken, nichts wird umgestellt.
+    /// Updates the recommendation (on every preview). If it lapses, the app removes a tick it set itself, because
+    /// otherwise the file would become twice as large for no benefit; a tick set by hand stays. When a state is
+    /// restored (undo, another image) the saved tick applies and nothing is changed.
     /// </summary>
     private void UpdateHighBitDepthRecommendation()
     {
@@ -95,9 +95,11 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Nach jeder Änderung einer Einstellung durch den Benutzer: liegt sie über der Schwelle, setzt die App den Haken — auch
-    /// wenn er vorher von Hand herausgenommen war (Wunsch: lieber einmal zu viel an als vergessen). Herausnehmen geht
-    /// jederzeit. Still, ohne eigenen Rückgängig-Schritt: Rückgängig des auslösenden Reglers nimmt ihn mit.
+    /// After every settings change made in the UI: if the edit is above the threshold, the app sets the tick, even if it
+    /// had been removed by hand before, because a tick set once too often is preferable to a forgotten one. It can be
+    /// removed at any time. Silent, without its own undo step: undoing the triggering slider also undoes the tick.
+    /// </summary>
+    /// <param name="changed">Name of the property that changed.
     /// </summary>
     private void TickHighBitDepthIfRecommended(string changed)
     {
@@ -121,20 +123,20 @@ public partial class MainViewModel
 
     partial void OnHighBitDepthChanged(bool value)
     {
-        if (!_settingHighBitDepth && _suppressHistory == 0) _highBitDepthByApp = false;   // von Hand: bleibt so
+        if (!_settingHighBitDepth && _suppressHistory == 0) _highBitDepthByApp = false;   // set by hand: stays as it is
         RequestEstimate();
     }
 
-    // ------------------------------------------------- Metadaten und Farbe
+    // ------------------------------------------------- Metadata and colour
 
     [ObservableProperty] public partial string SelectedMetadataMode { get; set; }
     [ObservableProperty] public partial string SelectedColorMode { get; set; }
 
     partial void OnSelectedColorModeChanged(string value) => RequestEstimate();
 
-    // ------------------------------------------------------------- Ausgabe
+    // ------------------------------------------------------------- Output
 
-    /// <summary>Leer = Unterordner „konvertiert" neben dem jeweiligen Original.</summary>
+    /// <summary>Output folder; empty means the default subfolder (<see cref="OutputNaming.DefaultSubfolder"/>) next to each original.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OutputFolderDisplay), nameof(HasCustomOutputFolder))]
     public partial string OutputFolder { get; set; } = "";
@@ -158,21 +160,21 @@ public partial class MainViewModel
 
     [ObservableProperty] public partial string? StatusMessage { get; set; }
 
-    /// <summary>Fortschritt des Speicherns über alle Schritte, 0–100.</summary>
+    /// <summary>Progress of saving across all steps, 0–100.</summary>
     [ObservableProperty] public partial double ExportProgress { get; set; }
 
-    /// <summary>Was beim Speichern gerade passiert (unter dem Balken).</summary>
+    /// <summary>What is happening during saving right now (shown below the progress bar).</summary>
     [ObservableProperty] public partial string ExportStep { get; set; } = "";
 
-    /// <summary>Ordner des zuletzt exportierten Bildes — für „Ordner öffnen".</summary>
+    /// <summary>Folder of the most recently exported image, for "Open folder".</summary>
     [ObservableProperty] public partial string? LastExportFolder { get; set; }
 
     private bool CanExport => HasImage && !IsExporting && !IsUpscaling;
 
-    /// <summary>Die Ansicht öffnet das Export-Fenster (modal) und wartet, bis es zu ist.</summary>
+    /// <summary>The view opens the export window (modal) and waits until it is closed.</summary>
     public event Func<ExportDialogViewModel, Task>? MultiExportRequested;
 
-    /// <summary>Die Ansicht öffnet den Druckdialog (modal).</summary>
+    /// <summary>The view opens the print dialog (modal).</summary>
     public event Func<PrintDialogViewModel, Task>? PrintRequested;
 
     internal string? CurrentImagePath => CurrentPath;
@@ -187,7 +189,7 @@ public partial class MainViewModel
             await open(new PrintDialogViewModel(this));
     }
 
-    /// <summary>Ergebnis aus dem Druckdialog in der Fußleiste anzeigen.</summary>
+    /// <summary>Shows the result of the print dialog in the status bar.</summary>
     internal void ReportPrint(string message, string? pdfPath)
     {
         LastExportFolder = pdfPath is not null ? Path.GetDirectoryName(pdfPath) : null;
@@ -195,7 +197,7 @@ public partial class MainViewModel
         StatusMessage = message;
     }
 
-    /// <summary>Ergebnis aus dem Export-Fenster in der Fußleiste anzeigen.</summary>
+    /// <summary>Shows the result of the export window in the status bar.</summary>
     internal void ReportExport(string folder, string message)
     {
         LastExportFolder = folder;
@@ -203,7 +205,7 @@ public partial class MainViewModel
         StatusMessage = message;
     }
 
-    /// <summary>Die aktuellen Einstellungen als Export-Auftrag in voller Auflösung.</summary>
+    /// <summary>The current settings as an export job at full resolution.</summary>
     private ExportOptions BuildExportOptions(int width, int height, double sharpenScale = 1) => new(
         CurrentFormat,
         (int)Math.Round(Quality),
@@ -224,11 +226,11 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task Export()
     {
-        if (_fileIndex < 0 || await Task.Run(() => ResultDocument) is not { } doc) return;   // ohne Ausgeblendetes (KI …), mit Ausrichten
+        if (_fileIndex < 0 || await Task.Run(() => ResultDocument) is not { } doc) return;   // without switched-off functions (AI …), with geometry
 
         CommitPendingSettings();
 
-        // Mehrere Bilder: Export-Fenster mit Liste — öffnet die Ansicht
+        // Several images: export window with a list, opened by the view
         if (_files.Count > 1 && MultiExportRequested is { } openDialog)
         {
             if (!ApplyToAll && CurrentPath is { } current)
@@ -240,7 +242,7 @@ public partial class MainViewModel
         var (w, h) = EffectiveTarget();
         var options = BuildExportOptions(w, h);
 
-        // Upscaler gewählt: berechnetes Bild ×4 als Grundlage (sonst nachfragen)
+        // Upscaler selected: the computed ×4 image is the basis (otherwise ask)
         var (cancel, upscaled) = await UpscaleBeforeExportAsync();
         if (cancel) return;
         if (upscaled is not null) options = options with { Upscaled = upscaled };
@@ -256,7 +258,7 @@ public partial class MainViewModel
             var fileName = OutputNaming.BuildFileName(NamePattern, sourcePath, w, h,
                 _fileIndex + 1, DateTime.Now, ImageExporter.Extension(options.Format));
 
-            // Meldungen kommen aus dem Rechen-Thread und landen über den UI-Kontext hier
+            // Progress reports come from the worker thread and arrive here via the UI context.
             var progress = new Progress<WorkProgress>(p =>
             {
                 ExportProgress = p.Fraction * 100;
@@ -267,7 +269,7 @@ public partial class MainViewModel
                 Directory.CreateDirectory(folder);
                 var target = OutputNaming.MakeUnique(folder, fileName);
                 var written = ImageExporter.Export(doc, options, target, progress);
-                PixelPool.Trim(release: true);   // erst jetzt sind alle Puffer des Exports frei — Speicher zurückgeben
+                PixelPool.Trim(release: true);   // only now are all export buffers free: return memory
                 return (target, written);
             });
 
@@ -285,19 +287,20 @@ public partial class MainViewModel
     }
 
 
-    // ------------------------------------------------- Größenschätzung
+    // ------------------------------------------------- Size estimate
 
-    // Probe für die Schätzung: so klein wie möglich, damit auch AVIF schnell geht.
-    // Ist das Ziel selbst klein genug, wird exakt in Zielgröße kodiert.
+    // Sample for the estimate: as small as possible, so that AVIF is fast too.
+    // If the target itself is small enough, it is encoded exactly at the target size.
     private const int EstimateMaxEdge = SizeEstimator.DefaultSampleEdge;
 
-    // Verkleinerte Ausgangsfassung für die Proben — spart das teure Skalieren aus
-    // dem vollen Bild bei jeder Reglerbewegung.
+    // Reduced base image for the samples; saves the expensive scaling from
+    // the full image on every slider movement.
     private const int EstimateBaseEdge = 2048;
     private MagickImage? _estimateBase;
     private (MagickImage Doc, ResampleFilter Filter, bool Gamma)? _estimateBaseKey;
-    // Zwischenstände der Proben (Dunst, Tiefen/Lichter, Licht und Farbe): Schärfen, Körnung, Qualität, Format rechnen
-    // sonst bei jeder Änderung den ganzen Dunst zweimal neu. Gilt für _estimateBase, wird mit ihr verworfen.
+    // Intermediate results of the samples (dehaze, shadows/highlights, light and colour): otherwise sharpening, grain,
+    // quality and format would recompute the whole dehaze twice on every change. Valid for _estimateBase and
+    // discarded with it.
     private readonly LookCache _estimateCache = new();
 
     [ObservableProperty] public partial string EstimatedSize { get; set; } = "—";
@@ -307,7 +310,7 @@ public partial class MainViewModel
     private CancellationTokenSource? _estimateCts;
     private Task _estimateTask = Task.CompletedTask;
 
-    /// <summary>Neue Schätzung anfordern — erst nach kurzer Ruhe, ältere werden abgebrochen.</summary>
+    /// <summary>Requests a new estimate, computed only after a short pause; older ones are cancelled.</summary>
     private void RequestEstimate()
     {
         _estimateCts?.Cancel();
@@ -321,10 +324,10 @@ public partial class MainViewModel
     {
         try
         {
-            // Nacheinander, nie gleichzeitig: alle teilen sich die verkleinerte Fassung
-            try { await previous; } catch { /* vorige Schätzung abgebrochen */ }
+            // One after another, never concurrently: all share the reduced base image.
+            try { await previous; } catch { /* previous estimate cancelled */ }
             await Task.Delay(350, ct);
-            // Nicht während gezogen wird — sie nähme der Vorschau Rechenzeit (nach dem Loslassen kommt sie neu)
+            // Not while dragging, because it would take computing time from the preview (it is requested again on release).
             if (Interactive) return;
             if (_history is not { } h || await Task.Run(() => ResultDocument) is not { } doc) return;
 
@@ -336,8 +339,8 @@ public partial class MainViewModel
             IsEstimating = true;
             var estimate = await Task.Run(() =>
             {
-                // Proben aus einer verkleinerten Fassung rechnen statt aus dem vollen Bild —
-                // die wird nur neu erstellt, wenn sich Bild, Filter oder Gamma ändern.
+                // Compute the samples from a reduced version instead of the full image;
+                // it is recreated only when the image, filter or gamma changes.
                 if (_estimateBase is null || _estimateBaseKey != baseKey)
                 {
                     _estimateCache.Clear();
@@ -366,7 +369,7 @@ public partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            // Neue Einstellung kam dazwischen
+            // A new setting arrived in the meantime.
         }
         catch (Exception ex)
         {

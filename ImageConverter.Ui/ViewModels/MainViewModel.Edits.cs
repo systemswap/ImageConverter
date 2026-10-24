@@ -10,7 +10,7 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-/// <summary>Funktionen, die sich ausschalten lassen (Auge in der Liste „Bearbeitungen“, wie in Referenzwerkzeug).</summary>
+/// <summary>Functions that can be switched off (eye icon in the "Edits" list, as in Referenzwerkzeug).</summary>
 [Flags]
 public enum EditSteps
 {
@@ -27,7 +27,7 @@ public enum EditSteps
     ColorNoise = 512,
     WhiteBalance = 1024,
     Retouch = 2048,
-    // Ausrichten (Rezept, GeometryRecipe): je Stufe eine Zeile
+    // Geometry (recipe, GeometryRecipe): one row per stage
     Straighten = 4096,
     Level = 8192,
     CropStep = 16384,
@@ -37,27 +37,27 @@ public enum EditSteps
     Dewarp = 262144,
 }
 
-/// <summary>Art eines Bildschritts im Verlauf (verändert das Bild selbst, nicht nur Einstellungen).</summary>
+/// <summary>Kind of an image step in the history (changes the image or its geometry, not only settings).</summary>
 public enum ImageStepKind { Crop, Rotate, Flip, Ai, Applied, Retouch }
 
-/// <summary>Eine Zeile der Liste „Bearbeitungen“: eine Funktion, die am Bild wirkt.</summary>
+/// <summary>One row of the "Edits" list: a function that acts on the image.</summary>
 public partial class EditRow(MainViewModel owner, EditSteps step, string name, string detail, bool canHide, string? note)
     : ObservableObject
 {
     public string Name { get; } = name;
     public string Detail { get; } = detail;
 
-    /// <summary>Lässt sich ausschalten (z. B. nicht, wenn die KI vergrößert hat).</summary>
+    /// <summary>The function can be switched off (not, for example, if the AI has enlarged the image).</summary>
     public bool CanHide { get; } = canHide;
 
     public string? Note { get; } = note;
 
-    /// <summary>Stift neben der Zeile: die Bearbeitung wieder öffnen (Gewölbtes Blatt: die verwendeten Linien justieren).</summary>
+    /// <summary>Pencil next to the row: reopens the edit (Curved page: adjust the lines in use).</summary>
     public CommunityToolkit.Mvvm.Input.IRelayCommand? Edit { get; init; }
 
     public bool CanEdit => Edit is not null;
 
-    /// <summary>Auge offen: wirkt in „Nachher“ und im Export.</summary>
+    /// <summary>Eye open: the function acts in "After" and in the export.</summary>
     public bool Shown
     {
         get => (owner.HiddenSteps & step) == 0;
@@ -69,28 +69,32 @@ public partial class EditRow(MainViewModel owner, EditSteps step, string name, s
     }
 }
 
-// Liste „Bearbeitungen“: je Funktion eine Zeile (KI, Haut & Details, Größe, Rauschen, Dunst, Licht, Farbe,
-// Gleiche Farbe, Schärfe) — nicht jede Reglerbewegung, nicht Drehen und Zuschnitt. Das Auge schaltet eine Funktion
-// aus „Nachher“ und dem Export aus, „Neu anwenden“ schreibt die Auswahl fest.
+// "Edits" list: one row per function (AI, Skin & details, removal, each geometry stage, size, noise, white balance,
+// dehaze, match colour, light, colour, sharpness, grain …), not one per slider movement. The eye switches a function
+// off for "After" and the export; "Apply selection" makes the selection permanent.
 public partial class MainViewModel
 {
-    /// <summary>Ein Bildschritt im Verlauf: was er war und wie er sich auf ein anderes Bild wiederholen lässt.</summary>
-    /// <param name="Replay">Derselbe Schritt auf einem anderen Bild (Zuschnitt, Drehen); null = nicht wiederholbar (KI).</param>
-    /// <param name="SkinDetail">KI mit Haut &amp; Details: Kurzinfo dazu; null = keine.</param>
+    /// <summary>An image step in the history: what it was and how it can be repeated on another image.</summary>
+    /// <param name="Kind">Kind of the step.</param>
+    /// <param name="Label">Name in the "Edits" list.</param>
+    /// <param name="Detail">Short info for the "Edits" list; null for none.</param>
+    /// <param name="Replay">The same step applied to another pixel image; null if the step cannot be repeated. All steps
+    /// created at present pass null, because rotation and crop are kept in the recipe instead.</param>
+    /// <param name="SkinDetail">AI with "Skin &amp; details": short info on it; null for none.</param>
     internal sealed record ImageStep(ImageStepKind Kind, string Label, string? Detail,
         Func<MagickImage, MagickImage>? Replay, string? SkinDetail = null)
     {
-        /// <summary>Dieselbe KI ohne Haut &amp; Details (nur wenn es welche gab) — zum Ausschalten.</summary>
+        /// <summary>The same AI result without "Skin &amp; details" (only if there were any), used to switch them off.</summary>
         public MagickImage? Plain { get; set; }
 
-        /// <summary>Entfernen: neuer Versuch vom Bild vor dem letzten Entfernen — ersetzt es in der Liste.</summary>
+        /// <summary>Removal: a new attempt from the image before the last removal; replaces that step in the list.</summary>
         public bool Replaces { get; init; }
     }
 
-    /// <summary>Ausgeschaltete Funktionen — gehören zum Einstellungsstand (je Bild, Rückgängig, Export).</summary>
+    /// <summary>Switched-off functions; part of the settings state (per image, undo, export).</summary>
     [ObservableProperty] public partial EditSteps HiddenSteps { get; set; }
 
-    /// <summary>Liste „Bearbeitungen“ über der Vorschau zeigen.</summary>
+    /// <summary>Shows the "Edits" list above the preview.</summary>
     [ObservableProperty] public partial bool ShowEditList { get; set; }
 
     public ObservableCollection<EditRow> EditRows { get; } = [];
@@ -101,7 +105,7 @@ public partial class MainViewModel
 
     private const EditSteps ImageVariants = EditSteps.Ai | EditSteps.SkinDetails;
 
-    /// <summary>Die Stufen des Ausrichtens in der Liste.</summary>
+    /// <summary>The geometry stages in the list.</summary>
     internal const EditSteps GeometrySteps = EditSteps.Dewarp | EditSteps.Straighten | EditSteps.Level | EditSteps.CropStep | EditSteps.Orient;
 
     partial void OnHiddenStepsChanged(EditSteps oldValue, EditSteps newValue)
@@ -110,15 +114,15 @@ public partial class MainViewModel
         RefreshEditRows();
         var changed = oldValue ^ newValue;
         if ((changed & GeometrySteps) != 0)
-            _ = ShowDocumentAsync(sizeChanges: true);   // Ausrichten ein/aus: anderes Format
+            _ = ShowDocumentAsync(sizeChanges: true);   // geometry on/off: different dimensions
         else if ((changed & ImageVariants) != 0)
-            _ = ShowDocumentAsync();   // KI bzw. Haut & Details ein/aus: anderes Bild zeigen
+            _ = ShowDocumentAsync();   // AI or Skin & details on/off: show a different image
         else
             RequestPreview();
         NotifySizeDerived();
     }
 
-    /// <summary>Welche Stufen des Ausrichtens eingeschaltet sind.</summary>
+    /// <summary>Returns the geometry stages that are switched on.</summary>
     internal static GeometryStages StagesShown(EditSteps hidden) =>
         GeometryStages.All
         & ~((hidden & EditSteps.Dewarp) != 0 ? GeometryStages.Dewarp : 0)
@@ -127,7 +131,7 @@ public partial class MainViewModel
         & ~((hidden & EditSteps.CropStep) != 0 ? GeometryStages.Crop : 0)
         & ~((hidden & EditSteps.Orient) != 0 ? GeometryStages.Orient : 0);
 
-    /// <summary>Einstellungen ohne die ausgeschalteten Funktionen.</summary>
+    /// <summary>Returns the adjustments without the switched-off functions.</summary>
     internal static Adjustments Mask(Adjustments a, EditSteps hidden)
     {
         if ((hidden & EditSteps.Dehaze) != 0) a = a with { Dehaze = 0 };
@@ -143,15 +147,15 @@ public partial class MainViewModel
     private double EffectiveColorNoise => Shows(EditSteps.ColorNoise) && ColorNoiseReduction > 0.005 ? ColorNoiseReduction : 0;
     private double EffectiveSharpen => Shows(EditSteps.Sharpen) && SharpenAmount > 0.01 ? SharpenAmount : 0;
 
-    // ------------------------------------------------------------ Bildschritte
+    // ------------------------------------------------------------ Image steps
 
-    /// <summary>Die Bildschritte einer Datei, die zum aktuellen Stand geführt haben (älteste zuerst).</summary>
+    /// <summary>The image steps of a file that led to the current state (oldest first).</summary>
     private List<Snapshot> ImageStepsOf(string path) =>
         _undo.Where(s => s.FilePath == path && s.Image is not null && s.Step is not null).Reverse().ToList();
 
     /// <summary>
-    /// Index des ersten KI-Schritts, der noch zählt: nach dem letzten „Auswahl angewendet“ (das eine KI schon aus dem
-    /// Bild genommen hat); −1 = keiner.
+    /// Index of the first AI step that still counts: after the last "Selection applied" step (which has already taken an
+    /// AI out of the image); −1 if there is none.
     /// </summary>
     private static int FirstLiveAi(List<Snapshot> steps)
     {
@@ -159,17 +163,18 @@ public partial class MainViewModel
         return steps.FindIndex(applied + 1, s => s.Step!.Kind == ImageStepKind.Ai);
     }
 
-    /// <summary>Das Bild nach Schritt <paramref name="i"/> (vor dem nächsten bzw. das aktuelle).</summary>
+    /// <summary>The image after step <paramref name="i"/> (the image before the next step, or the current one).</summary>
     private static MagickImage After(List<Snapshot> steps, int i, EditHistory h) =>
         i + 1 < steps.Count ? steps[i + 1].Image! : h.Current;
 
-    /// <summary>Alles ab Schritt <paramref name="from"/> wiederholbar (Zuschnitt, Drehen) — KI-Schritte ausgenommen?</summary>
+    /// <summary>Determines whether every step from <paramref name="from"/> on is an AI step or can be repeated.</summary>
     private static bool Replayable(List<Snapshot> steps, int from) =>
         steps.Skip(from).All(s => s.Step!.Kind == ImageStepKind.Ai || s.Step.Replay is not null);
 
     /// <summary>
-    /// Lässt sich die KI ausschalten? Nur wenn sie die Bildgröße behalten hat und alles danach wiederholbar ist
-    /// (Zuschnitt, Drehen) — dann entsteht das Bild ohne KI aus dem Stand davor plus den späteren Schritten.
+    /// Determines whether the AI can be switched off: only if it kept the image size and every later image step can be
+    /// repeated (see <see cref="Replayable"/>); the image without AI is then built from the state before plus the later
+    /// steps. Geometry is not affected, because it is kept in the recipe.
     /// </summary>
     private bool CanHideAi(string path, EditHistory h, out string? reason)
     {
@@ -194,7 +199,7 @@ public partial class MainViewModel
         return true;
     }
 
-    /// <summary>Der letzte KI-Schritt hat Haut &amp; Details, die sich ausschalten lassen?</summary>
+    /// <summary>Determines whether the last AI step has "Skin &amp; details" that can be switched off.</summary>
     private bool CanHideSkin(string path, EditHistory h)
     {
         var steps = ImageStepsOf(path);
@@ -208,13 +213,13 @@ public partial class MainViewModel
         lock (a) lock (b) return a.Width == b.Width && a.Height == b.Height;
     }
 
-    // Bild ohne KI bzw. ohne Haut & Details, je Datei, Fassung und aktuellem Bild einmal gerechnet
+    // Image without AI or without Skin & details, computed once per file, variant and current image
     private readonly Dictionary<(string Path, EditSteps Variant), (MagickImage Current, MagickImage Image)> _variants = [];
 
     /// <summary>
-    /// Das Bild, das angezeigt und exportiert wird: das aktuelle — oder bei ausgeschalteter KI das Bild vor dem ersten
-    /// KI-Schritt, bei ausgeschalteten Haut &amp; Details die letzte KI ohne sie; die späteren Schritte (Zuschnitt,
-    /// Drehen) jeweils noch einmal angewendet.
+    /// The pixel image that is displayed and exported: the current one, or with AI switched off the image before the
+    /// first AI step, or with "Skin &amp; details" switched off the last AI result without them; later repeatable steps
+    /// are applied again in each case. Geometry is applied afterwards from the recipe.
     /// </summary>
     private MagickImage PixelsFor(string path, EditHistory h, EditSteps hidden)
     {
@@ -247,28 +252,28 @@ public partial class MainViewModel
             (doc, owned) = (next, true);
         }
 
-        // Der vorige Stand wird nicht mehr gebraucht (Bild hat sich geändert — die Vorschau ist gestoppt)
+        // The previous variant is no longer needed (the image has changed and the preview is stopped).
         if (_variants.TryGetValue((path, variant), out var old) && !ReferenceEquals(old.Image, doc) && !IsHeldByHistory(old.Image))
             old.Image.Dispose();
         _variants[(path, variant)] = (h.Current, doc);
         return doc;
     }
 
-    // Pixelbild + Rezept, je Datei die letzten Fassungen (Ansicht der Werkzeuge, Augen ein/aus)
+    // Pixel image + recipe: the latest variants per file (tool views, eyes on/off)
     private readonly Dictionary<string, List<(MagickImage Pixels, GeometryRecipe Recipe, GeometryStages Stages, MagickImage Image)>> _geometryDocs = [];
     private readonly List<MagickImage> _geometryTrash = [];
-    // Je Fassung bis ~230 MB bei 28 MP — höchstens drei je Bild, andere Bilder beim Wechsel freigeben
+    // Up to ~230 MB per variant at 28 MP: at most three per image; those of other images are released on switching.
     private const int GeometryDocsPerFile = 3;
 
     /// <summary>
-    /// Das Bild, wie es angezeigt und gespeichert wird: Pixelbild (mit oder ohne KI …, <see cref="PixelsFor"/>) plus
-    /// Ausrichten (<see cref="GeometryRecipe"/>) mit den eingeschalteten Stufen. <paramref name="view"/> schränkt die
-    /// Stufen für die Ansicht eines Werkzeugs weiter ein (Frei drehen, Entzerren).
+    /// The image as it is displayed and saved: the pixel image (with or without AI …, <see cref="PixelsFor"/>) plus
+    /// geometry (<see cref="GeometryRecipe"/>) with the stages switched on. <paramref name="view"/> restricts the
+    /// stages further for the view of a tool (free rotation, perspective, curved page).
     /// </summary>
     private MagickImage DocumentFor(string path, EditHistory h, EditSteps hidden, GeometryStages view = GeometryStages.All) =>
         WithGeometry(path, h.Recipe, PixelsFor(path, h, hidden), StagesShown(hidden) & view);
 
-    /// <summary>Ein Pixelbild mit Rezept (zwischengespeichert je Datei) — auch für die Vorher-Seite des Vergleichs.</summary>
+    /// <summary>A pixel image with the recipe applied (cached per file); also used for the "Before" side of the comparison.</summary>
     private MagickImage WithGeometry(string path, GeometryRecipe recipe, MagickImage pixels, GeometryStages stages)
     {
         if ((recipe.Present & stages) == 0) return pixels;
@@ -286,14 +291,14 @@ public partial class MainViewModel
             if (!_geometryDocs.TryGetValue(path, out var list)) _geometryDocs[path] = list = [];
             if (list.FindIndex(e => ReferenceEquals(e.Pixels, pixels) && e.Recipe == recipe && e.Stages == stages) is var i and >= 0)
             {
-                // gleichzeitig schon gerechnet (Vorschau und Anzeige): eine Fassung behalten
+                // already computed concurrently (preview and display): keep one variant
                 if (!ReferenceEquals(doc, pixels)) _geometryTrash.Add(doc);
                 return list[i].Image;
             }
             list.Insert(0, (pixels, recipe, stages, doc));
             while (list.Count > GeometryDocsPerFile)
             {
-                // Freigegeben wird erst, wenn keine Vorschau mehr darauf rechnet (EmptyGeometryTrash)
+                // Released only once no preview is computing on it any more (EmptyGeometryTrash).
                 if (!ReferenceEquals(list[^1].Image, list[^1].Pixels)) _geometryTrash.Add(list[^1].Image);
                 list.RemoveAt(list.Count - 1);
             }
@@ -301,7 +306,7 @@ public partial class MainViewModel
         return doc;
     }
 
-    /// <summary>Verdrängte Fassungen freigeben — nur aufrufen, wenn die Vorschau steht.</summary>
+    /// <summary>Releases evicted variants; call only while the preview is stopped.</summary>
     private void EmptyGeometryTrash()
     {
         lock (_geometryDocs)
@@ -312,7 +317,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Fassungen anderer Bilder verwerfen (Bildwechsel) — für einen Export werden sie neu gerechnet.</summary>
+    /// <summary>Discards the variants of other images (on switching images); an export computes them again.</summary>
     private void DropGeometryDocsExcept(string? path)
     {
         lock (_geometryDocs)
@@ -325,7 +330,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Alle Fassungen mit Ausrichten freigeben (Bilder geschlossen).</summary>
+    /// <summary>Releases all variants with geometry (images closed).</summary>
     private void ClearGeometryDocs()
     {
         lock (_geometryDocs)
@@ -338,27 +343,27 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Stufen, die ein offenes Werkzeug zeigt: Frei drehen ohne Drehung/Zuschnitt, Entzerren ohne alles bis auf Drehen/Spiegeln.</summary>
+    /// <summary>Stages shown by an open tool: free rotation without level/crop, perspective with only page flattening and rotate/flip, curved page with only rotate/flip.</summary>
     private GeometryStages ToolView =>
         RotationTool ? GeometryRecipe.LevelView : PerspectiveTool ? GeometryRecipe.StraightenView
         : DewarpTool && !DewarpShowsResult ? GeometryRecipe.DewarpView : GeometryStages.All;
 
-    /// <summary>Das gerade angezeigte Bild — mit oder ohne KI …, mit den eingeschalteten Stufen, beim Werkzeug in dessen Ansicht.</summary>
+    /// <summary>The image currently displayed: with or without AI …, with the stages switched on, in the tool's view while a tool is open.</summary>
     private MagickImage? ShownDocument =>
         _history is { } h && CurrentPath is { } path ? DocumentFor(path, h, HiddenSteps, ToolView) : null;
 
-    /// <summary>Das fertige Bild (für Export, Größe, Druck) — nie die Ansicht eines Werkzeugs.</summary>
+    /// <summary>The finished image (for export, size, printing); never the view of a tool.</summary>
     private MagickImage? ResultDocument =>
         _history is { } h && CurrentPath is { } path ? DocumentFor(path, h, HiddenSteps) : null;
 
-    /// <summary>Größe des Pixelbilds (vor dem Ausrichten).</summary>
+    /// <summary>Size of the pixel image (before geometry).</summary>
     private (int Width, int Height) PixelSize()
     {
         if (_history is not { } h) return (0, 0);
         lock (h.Current) return ((int)h.Current.Width, (int)h.Current.Height);
     }
 
-    /// <summary>Punkt im angezeigten Bild → Punkt im Pixelbild (Pipette, Pinsel beim Entfernen).</summary>
+    /// <summary>Maps a point in the displayed image to the pixel image (eyedropper, removal brush).</summary>
     internal (double X, double Y) ShownToPixels(double x, double y)
     {
         if (_history is not { } h) return (x, y);
@@ -366,7 +371,7 @@ public partial class MainViewModel
         return h.Recipe.ToSource(x, y, w, ht, StagesShown(HiddenSteps) & ToolView);
     }
 
-    /// <summary>Wie groß ein Abstand <paramref name="r"/> um (x, y) im Pixelbild ist (Pinselradius beim Entzerren verzerrt).</summary>
+    /// <summary>Length of a distance <paramref name="r"/> around (x, y) in the pixel image (the brush radius is distorted by perspective correction).</summary>
     internal double ShownLengthToPixels(double x, double y, double r)
     {
         var (cx, cy) = ShownToPixels(x, y);
@@ -375,28 +380,28 @@ public partial class MainViewModel
         return (Math.Sqrt((ax - cx) * (ax - cx) + (ay - cy) * (ay - cy)) + Math.Sqrt((bx - cx) * (bx - cx) + (by - cy) * (by - cy))) / 2;
     }
 
-    // ------------------------------------------------------------ KI und Ausrichten
+    // ------------------------------------------------------------ AI and geometry
     //
-    // Die KI bekommt das Pixelbild nur gedreht/gespiegelt — Gesichter stehen dann aufrecht, wie man sie sieht (die
-    // Gesichtserkennung findet liegende Gesichter schlecht). Das Ergebnis wird exakt zurückgedreht, bevor es ins
-    // Pixelbild kommt; Zwischenstände und Vorschau werden für die Anzeige zurückgedreht und mit dem Rezept gezeigt.
+    // The AI receives the pixel image only rotated/flipped, so that faces are upright as they are seen (face detection
+    // finds faces lying on their side poorly). The result is rotated back exactly before it enters the pixel image;
+    // intermediate results and the preview are rotated back for display and shown with the recipe.
 
-    /// <summary>Vierteldrehungen und Spiegeln, die die KI am Pixelbild vornimmt (nur, wenn Drehen/Spiegeln eingeschaltet ist).</summary>
+    /// <summary>Quarter turns and flip that the AI applies to the pixel image (only if rotate/flip is switched on).</summary>
     internal (int Turns, bool Flip) AiOrientation =>
         (CurrentStages & GeometryStages.Orient) != 0 ? (CurrentRecipe.NormalTurns, CurrentRecipe.Flip) : (0, false);
 
-    /// <summary>Bild gedreht/gespiegelt; null = nichts zu tun.</summary>
+    /// <summary>Returns the image rotated/flipped; null if there is nothing to do.</summary>
     internal static MagickImage? Orient(MagickImage image, int turns, bool flip) =>
         new GeometryRecipe(Turns: turns, Flip: flip).Apply(image, GeometryStages.Orient);
 
-    /// <summary>Umkehrung von <see cref="Orient"/> (Spiegeln samt Drehung ist sich selbst die Umkehrung).</summary>
+    /// <summary>Inverse of <see cref="Orient"/> (a flip combined with a rotation is its own inverse).</summary>
     internal static MagickImage? Unorient(MagickImage image, int turns, bool flip) =>
         flip ? Orient(image, turns, true) : Orient(image, (4 - turns) % 4, false);
 
-    /// <summary>Rezept und Stufen, wie das Bild gerade angezeigt wird (auf dem UI-Thread abholen, dann im Hintergrund benutzen).</summary>
+    /// <summary>Recipe and stages as the image is currently displayed (read on the UI thread, then use in the background).</summary>
     internal (GeometryRecipe Recipe, GeometryStages Stages) ShownGeometry => (CurrentRecipe, CurrentStages & ToolView);
 
-    /// <summary>Vorschau-Pixel der KI (gedrehtes Pixelbild, verkleinert) so, wie das Bild angezeigt wird.</summary>
+    /// <summary>Converts AI preview pixels (rotated pixel image, reduced) to the way the image is displayed.</summary>
     internal static Core.Ai.AiPixels ShowWithGeometry(Core.Ai.AiPixels frame, int turns, bool flip, GeometryRecipe recipe, GeometryStages stages)
     {
         if ((recipe.Present & stages) == 0 && turns == 0 && !flip) return frame;
@@ -408,7 +413,7 @@ public partial class MainViewModel
         return new Core.Ai.AiPixels(Pixels.FromMagick(result), (int)result.Width, (int)result.Height);
     }
 
-    /// <summary>Wie <see cref="ShowWithGeometry(Core.Ai.AiPixels, int, bool, GeometryRecipe, GeometryStages)"/> für 8-Bit-Zwischenstände.</summary>
+    /// <summary>Like <see cref="ShowWithGeometry(Core.Ai.AiPixels, int, bool, GeometryRecipe, GeometryStages)"/>, for 8-bit intermediate results.</summary>
     internal static Core.Ai.AiPreviewFrame ShowWithGeometry(Core.Ai.AiPreviewFrame frame, int turns, bool flip, GeometryRecipe recipe, GeometryStages stages)
     {
         if ((recipe.Present & stages) == 0 && turns == 0 && !flip) return frame;
@@ -416,20 +421,20 @@ public partial class MainViewModel
         return new Core.Ai.AiPreviewFrame(Pixels.ToBytes(shown.Bgra, dither: true), shown.Width, shown.Height);
     }
 
-    /// <summary>Das Ausrichten des aktuellen Bildes (für die KI: nur Drehen/Spiegeln, damit Gesichter aufrecht stehen).</summary>
+    /// <summary>The geometry of the current image (the AI uses only rotate/flip from it, so that faces are upright).</summary>
     internal GeometryRecipe CurrentRecipe => _history?.Recipe ?? GeometryRecipe.None;
 
-    /// <summary>Eingeschaltete Stufen des aktuellen Bildes (ohne Werkzeug-Ansicht).</summary>
+    /// <summary>Stages of the current image that are switched on (without a tool view).</summary>
     internal GeometryStages CurrentStages => StagesShown(HiddenSteps);
 
     /// <summary>
-    /// Das aktuelle Bild ohne KI (Zuschnitt, Drehen danach noch einmal angewendet) — Ausgangsbild für einen neuen
-    /// KI-Lauf, damit sich KI nicht auf KI häuft. null: keine KI im Bild oder nicht abtrennbar.
+    /// The current pixel image without AI (later repeatable steps applied again); the source for a new AI run, so that
+    /// AI is not stacked on AI. null if there is no AI in the image or it cannot be separated.
     /// </summary>
     internal MagickImage? CurrentWithoutAi =>
         _history is { } h && CurrentPath is { } path && CanHideAi(path, h, out _) ? PixelsFor(path, h, EditSteps.Ai) : null;
 
-    /// <summary>Was bei einer Datei ausgeschaltet ist — ihr eigener Stand, sonst der gemeinsame bzw. die Vorlage.</summary>
+    /// <summary>What is switched off for a file: its own state, otherwise the shared state or the template.</summary>
     internal EditSteps HiddenFor(string path)
     {
         if (path == CurrentPath || ApplyToAll) return HiddenSteps;
@@ -437,7 +442,7 @@ public partial class MainViewModel
         return _individualTemplate?.Hidden ?? EditSteps.None;
     }
 
-    /// <summary>Alle Fassungen freigeben (Bilder geschlossen).</summary>
+    /// <summary>Releases all variants without AI or Skin &amp; details (images closed).</summary>
     private void ClearWithoutAi()
     {
         foreach (var (_, entry) in _variants)
@@ -449,12 +454,12 @@ public partial class MainViewModel
         _histories.Values.Any(h => ReferenceEquals(h.Current, image) || ReferenceEquals(h.Original, image))
         || _undo.Concat(_redo).Any(s => ReferenceEquals(s.Image, image) || ReferenceEquals(s.Step?.Plain, image));
 
-    /// <summary>Angezeigtes Bild neu setzen (KI bzw. Haut &amp; Details oder eine Stufe des Ausrichtens ein/aus, Werkzeug auf/zu).</summary>
-    /// <param name="sizeChanges">Das fertige Bild hat ein anderes Format — Größe, Druck und Export folgen.</param>
+    /// <summary>Sets the displayed image again (AI, Skin &amp; details or a geometry stage on/off, tool opened/closed).</summary>
+    /// <param name="sizeChanges">The finished image has different dimensions; size, printing and export follow.</param>
     private async Task ShowDocumentAsync(bool sizeChanges = false)
     {
         if (_history is null) return;
-        // Im Hintergrund: Entzerren eines großen Bildes dauert Sekunden
+        // In the background: perspective correction of a large image takes seconds.
         var doc = await Task.Run(() => ShownDocument);
         if (doc is null) return;
         await StopPreviewAsync();
@@ -470,11 +475,11 @@ public partial class MainViewModel
         RequestPreview();
     }
 
-    // ------------------------------------------------------------ Liste
+    // ------------------------------------------------------------ List
 
     private bool _editRowsRequested;
 
-    /// <summary>Liste einmal je Bedienvorgang neu aufbauen (nicht bei jedem Zwischenwert eines Reglers einzeln).</summary>
+    /// <summary>Rebuilds the list once per user action (not separately for every intermediate value of a slider).</summary>
     private void RequestEditRows()
     {
         if (_editRowsRequested) return;
@@ -486,13 +491,13 @@ public partial class MainViewModel
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
-    /// <summary>Zeilen neu aufbauen — nach jeder Einstellung, jedem Bildschritt, jedem Bildwechsel.</summary>
+    /// <summary>Rebuilds the rows after every setting, every image step and every image switch.</summary>
     private void RefreshEditRows()
     {
         var rows = new List<EditRow>();
         if (_history is { } h && CurrentPath is { } path)
         {
-            // KI als eine Zeile (spätere Läufe ersetzen frühere), Haut & Details der letzten KI als eigene
+            // AI as one row (later runs replace earlier ones), Skin & details of the last AI as a separate row
             var steps = ImageStepsOf(path);
             if (FirstLiveAi(steps) >= 0)
             {
@@ -507,7 +512,7 @@ public partial class MainViewModel
                 }
             }
 
-            // Entfernen: eine Zeile für alle Stellen seit dem letzten Festschreiben
+            // Removal: one row for all spots since the last "Apply selection"
             var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
             var retouch = new List<ImageStep>();
             foreach (var s in steps.Skip(applied + 1).Select(s => s.Step!).Where(s => s.Kind == ImageStepKind.Retouch))
@@ -519,7 +524,7 @@ public partial class MainViewModel
                 rows.Add(new EditRow(this, EditSteps.Retouch, Tr.T("Entfernt"),
                     retouch.Count == 1 ? retouch[0].Detail ?? "" : Tr.T("{0}× · zuletzt {1}", retouch.Count, retouch[^1].Detail ?? ""),
                     false, Tr.T("Lässt sich nicht ausschalten — nur mit Rückgängig zurücknehmen.")));
-            // Ausrichten: je Stufe eine Zeile, in der festen Reihenfolge des Rezepts (immer aus dem Pixelbild gerechnet)
+            // Geometry: one row per stage, in the fixed order of the recipe (always computed from the pixel image)
             var recipe = h.Recipe;
             var (pw, ph) = PixelSize();
             if (recipe.HasDewarp && recipe.Dewarp is { } spec)
@@ -553,28 +558,28 @@ public partial class MainViewModel
             }
             if (recipe.HasOrient)
             {
-                // Vierteldrehungen netto: dreimal rechts = 270°, ein Auge für alle
+                // net quarter turns: three times right = 270°, one eye for all
                 var parts = new List<string>();
                 if (recipe.NormalTurns != 0) parts.Add($"{recipe.NormalTurns * 90}°");
                 if (recipe.Flip) parts.Add(Tr.T("gespiegelt"));
                 rows.Add(Row(EditSteps.Orient, recipe.NormalTurns != 0 ? Tr.T("Gedreht") : Tr.T("Gespiegelt"), string.Join(" · ", parts)));
             }
             if (TargetWidth != SourceWidth || TargetHeight != SourceHeight)
-                rows.Add(Row(EditSteps.Resize, Tr.T("Größe"),     // mit Verfahren: man sieht, was gerechnet hat
+                rows.Add(Row(EditSteps.Resize, Tr.T("Größe"),     // with the method, so that it is visible what computed the result
                     $"{TargetWidth} × {TargetHeight} px · {(AiScalingActive ? SelectedUpscaler.Name : SelectedFilter.Name)}"
                     + (UpscaleTwoPasses ? " · " + Tr.T("2 Durchgänge") : "")));
             if (NoiseReduction > 0.005)
                 rows.Add(Row(EditSteps.Denoise, Tr.T("Rauschen"), $"{NoiseReduction * 100:0} %"));
             if (ColorNoiseReduction > 0.005)
                 rows.Add(Row(EditSteps.ColorNoise, Tr.T("Farbrauschen"), $"{ColorNoiseReduction * 100:0} %"));
-            // Weißabgleich rechnet als Erstes der Kette (vor Dunst, Licht und Farbe)
+            // White balance is computed first in the chain (before dehaze, light and colour).
             if (HasWhiteBalance)
                 rows.Add(Row(EditSteps.WhiteBalance, Tr.T("Weißabgleich"), string.Join(" · ",
                     new[] { WbNeutral is null ? null : WbNeutralText, WbBlack is null ? null : WbBlackText, WbWhite is null ? null : WbWhiteText }
                         .Where(t => t is not null))));
             if (Math.Round(Dehaze) != 0)
                 rows.Add(Row(EditSteps.Dehaze, Tr.T("Dunst"), $"{Math.Round(Dehaze):+0;−0} · {Math.Round(DehazePasses)}×"));
-            // Reihenfolge der Kette: Gleiche Farbe (Weißabgleich) vor Licht und Farbe
+            // Order of the chain: match colour (white balance) before light and colour
             AddIfAny(rows, EditSteps.MatchColor, Tr.T("Gleiche Farbe"),
                 CanLimitLuminance ? string.Join(" · ", new[]
                 {
@@ -596,7 +601,7 @@ public partial class MainViewModel
             AddIfAny(rows, EditSteps.Color, Tr.T("Farbe"), tint, (Tr.T("Dynamik"), Vibrance), (Tr.T("Sättigung"), Saturation));
             if (SharpenAmount > 0.01)
                 rows.Add(Row(EditSteps.Sharpen, Tr.T("Schärfe"), Tr.T("{0:0.00} · Radius {1:0.0}", SharpenAmount, SharpenRadius)));
-            // Körnung zuletzt, wie in der Kette
+            // grain last, as in the chain
             if (Math.Round(GrainAmount) >= 1)
                 rows.Add(Row(EditSteps.Grain, Tr.T("Körnung"), string.Join(" · ", new[]
                 {
@@ -611,8 +616,8 @@ public partial class MainViewModel
         EditRows.Clear();
         foreach (var row in rows) EditRows.Add(row);
         OnPropertyChanged(nameof(HasEditRows));
-        OnPropertyChanged(nameof(AiStraightenActive));   // Symbol „KI begradigen“ folgt dem Rezept (auch nach Rückgängig)
-        OnPropertyChanged(nameof(HasAppliedDewarpLines));   // Punkt am Symbol „Gewölbtes Blatt“ ebenso
+        OnPropertyChanged(nameof(AiStraightenActive));   // the "Straighten with AI" icon follows the recipe (also after undo)
+        OnPropertyChanged(nameof(HasAppliedDewarpLines));   // as does the dot on the "Curved page" icon
         ApplySelectionCommand.NotifyCanExecuteChanged();
     }
 
@@ -629,13 +634,14 @@ public partial class MainViewModel
         if (parts.Count > 0) rows.Add(Row(step, name, string.Join(" · ", parts)));
     }
 
-    // ------------------------------------------------------------ Neu anwenden
+    // ------------------------------------------------------------ Apply selection
 
     private bool CanApplySelection => HiddenSteps != EditSteps.None && EditRows.Any(r => !r.Shown) && !IsEditing;
 
     /// <summary>
-    /// Nur die eingeschalteten Funktionen festschreiben: ausgeschaltete Regler auf null, eine ausgeschaltete KI bzw.
-    /// Haut &amp; Details aus dem Bild — ein Schritt, rückgängig mit Strg+Z.
+    /// Makes only the switched-on functions permanent: switched-off sliders go to zero, a switched-off AI or
+    /// "Skin &amp; details" is taken out of the image, switched-off geometry stages leave the recipe. One step, undoable
+    /// with Ctrl+Z.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanApplySelection))]
     private async Task ApplySelection()
@@ -644,7 +650,7 @@ public partial class MainViewModel
         var hidden = HiddenSteps;
         SettingsState Cleared(SettingsState s) => WithoutHidden(s, hidden);
 
-        // Ausrichten: ausgeschaltete Stufen fliegen aus dem Rezept (im selben Schritt)
+        // Geometry: switched-off stages are removed from the recipe (in the same step).
         var recipeAfter = _history is { } hr ? WithoutHiddenStages(hr.Recipe, hidden) : null;
         if (recipeAfter is not null && recipeAfter == _history!.Recipe) recipeAfter = null;
 
@@ -654,7 +660,7 @@ public partial class MainViewModel
             var aiOut = (hidden & EditSteps.Ai) != 0;
             var steps = ImageStepsOf(path);
             var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
-            // KI ganz raus: ab hier zählt keine KI mehr. Nur Haut & Details raus: die KI bleibt, nur ohne sie.
+            // AI removed completely: from here on no AI counts. Only Skin & details removed: the AI stays, without them.
             var step = aiOut
                 ? new ImageStep(ImageStepKind.Applied, Tr.T("Auswahl angewendet"), Tr.T("ohne KI"), null)
                 : new ImageStep(ImageStepKind.Ai, last.Label, last.Detail, null);
@@ -676,7 +682,7 @@ public partial class MainViewModel
         NotifyUndoRedo();
     }
 
-    /// <summary>Rezept ohne die ausgeschalteten Stufen des Ausrichtens.</summary>
+    /// <summary>Returns the recipe without the switched-off geometry stages.</summary>
     private static GeometryRecipe WithoutHiddenStages(GeometryRecipe r, EditSteps hidden)
     {
         if ((hidden & EditSteps.Dewarp) != 0) r = r with { Dewarp = null };
@@ -687,7 +693,7 @@ public partial class MainViewModel
         return r;
     }
 
-    /// <summary>Stand ohne die ausgeschalteten Funktionen — deren Regler auf null, nichts mehr ausgeschaltet.</summary>
+    /// <summary>Returns the state without the switched-off functions: their sliders at zero, nothing switched off any more.</summary>
     internal static SettingsState WithoutHidden(SettingsState s, EditSteps hidden)
     {
         if ((hidden & EditSteps.Resize) != 0) s = s with { TargetWidth = s.SourceWidth, TargetHeight = s.SourceHeight,

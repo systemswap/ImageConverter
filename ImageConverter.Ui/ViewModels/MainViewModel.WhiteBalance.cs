@@ -10,10 +10,10 @@ using ImageConverter.Core.Imaging;
 
 namespace ImageConverter.ViewModels;
 
-// Weißabgleich mit drei Pipetten (Neutral, Schwarz, Weiß) — Gruppe „Weißabgleich“ in der Rubrik Standard.
+// White balance with three eyedroppers (neutral, black, white): the "White balance" group in the standard section.
 public partial class MainViewModel
 {
-    /// <summary>Gemittelte Messungen je Pipette; null = nicht benutzt. Gehören zum Einstellungsstand (Rückgängig).</summary>
+    /// <summary>Averaged measurements per eyedropper; null = not used. Part of the settings state (undo).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WbNeutralBrush), nameof(WbNeutralText), nameof(HasWbNeutral), nameof(HasWhiteBalance))]
     public partial WbSample? WbNeutral { get; set; }
@@ -39,7 +39,7 @@ public partial class MainViewModel
     public IBrush? WbBlackBrush => BrushOf(WbBlack);
     public IBrush? WbWhiteBrush => BrushOf(WbWhite);
 
-    /// <summary>„Neutral“ bzw. „Neutral 3×“ — wie viele Klicks gemittelt sind.</summary>
+    /// <summary>"Neutral" or "Neutral 3×": how many clicks are averaged.</summary>
     public string WbNeutralText => Named(Tr.T("Neutral"), WbNeutral);
     public string WbBlackText => Named(Tr.T("Schwarz"), WbBlack);
     public string WbWhiteText => Named(Tr.T("Weiß"), WbWhite);
@@ -53,9 +53,9 @@ public partial class MainViewModel
         return new SolidColorBrush(Color.FromRgb(r, g, b));
     }
 
-    // ------------------------------------------------------------ Pipetten
+    // ------------------------------------------------------------ Eyedroppers
 
-    /// <summary>Welche Pipette gerade misst; null = keine. Sie bleibt an — jeder Klick ins Bild wird gemittelt.</summary>
+    /// <summary>The eyedropper currently measuring; null = none. It stays active, and every click into the image is averaged in.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PickNeutral), nameof(PickBlack), nameof(PickWhite), nameof(IsPicking), nameof(WbHint))]
     public partial WbPoint? ActivePipette { get; set; }
@@ -63,7 +63,7 @@ public partial class MainViewModel
     public bool IsPicking
     {
         get => ActivePipette is not null;
-        set { if (!value) ActivePipette = null; }   // Esc in der Vorschau
+        set { if (!value) ActivePipette = null; }   // Esc in the preview
     }
 
     public bool PickNeutral { get => ActivePipette == WbPoint.Neutral; set => SetPipette(WbPoint.Neutral, value); }
@@ -74,7 +74,7 @@ public partial class MainViewModel
     {
         if (on)
         {
-            // Gemessen wird am ungedrehten Bild — Drehen und Entzerren schließen
+            // The measurement is taken on the unrotated pixel image; close the rotation, perspective and curved-page tools.
             RotationTool = false;
             PerspectiveTool = false;
             DewarpTool = false;
@@ -86,13 +86,14 @@ public partial class MainViewModel
 
     partial void OnActivePipetteChanged(WbPoint? value) => OnPropertyChanged(nameof(IsPicking));
 
-    /// <summary>Ein Klick ins Bild mit aktiver Pipette: messen und zu den bisherigen Messungen dieser Pipette mitteln.</summary>
+    /// <summary>A click into the image with an active eyedropper: measures and averages with the previous measurements of this eyedropper.</summary>
+    /// <param name="at">Click position in pixels of the displayed image.</param>
     [RelayCommand]
     private void PickAt(Point at)
     {
         if (ActivePipette is not { } kind || CurrentImage is not { } image) return;
 
-        // Geklickt wird im angezeigten Bild (gedreht, zugeschnitten …), gemessen im Pixelbild
+        // The click is in the displayed image (rotated, cropped …), the measurement in the pixel image.
         var (px, py) = ShownToPixels(at.X, at.Y);
         var sample = WhiteBalance.Measure(image, px, py, kind);
         if (sample is not { } s)
@@ -113,7 +114,8 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(WbHint));
     }
 
-    /// <summary>Messungen einer Pipette löschen (z. B. nach einem Fehlklick) — ein Rückgängig-Schritt.</summary>
+    /// <summary>Deletes the measurements of one eyedropper (for example after a misclick), as one undo step.</summary>
+    /// <param name="kind">Name of a <see cref="WbPoint"/> value.</param>
     [RelayCommand]
     private void ClearPipette(string kind)
     {
@@ -126,7 +128,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Alle drei Pipetten zurück — ein Rückgängig-Schritt.</summary>
+    /// <summary>Resets all three eyedroppers, as one undo step.</summary>
     [RelayCommand]
     private void ResetWhiteBalance()
     {
@@ -138,7 +140,7 @@ public partial class MainViewModel
 
     private string? _wbProblem;
 
-    /// <summary>Was zu tun ist: je Pipette, was man wählen soll — oder was an der letzten Stelle nicht ging.</summary>
+    /// <summary>What to do: per eyedropper, what to pick, or what went wrong at the last spot.</summary>
     public string WbHint => _wbProblem ?? ActivePipette switch
     {
         WbPoint.Neutral => Tr.T("Neutral: auf etwas klicken, das in Wirklichkeit farblos ist – egal ob hell oder dunkel, z. B. Asphalt, Beton, eine graue Wolke, weißes Papier im Schatten. Nicht: grelles Weiß, fast Schwarzes, Beige oder Holz. Mehrere Klicks werden gemittelt; Esc beendet."),
@@ -147,11 +149,11 @@ public partial class MainViewModel
         _ => Tr.T("Pipette wählen und ins Bild klicken. Eine Pipette reicht – Neutral (grau) ist meist die beste. Mit Schwarz und Weiß dazu und mit mehreren Klicks wird es genauer."),
     };
 
-    // ------------------------------------------------------------ Markierungen im Bild
+    // ------------------------------------------------------------ Markers in the image
 
     private readonly List<PickMarker> _wbMarkers = [];
 
-    /// <summary>Messstellen zum Anzeigen in der Vorschau (nur für das aktuelle Bild).</summary>
+    /// <summary>Measuring points to show in the preview (for the current image only).</summary>
     [ObservableProperty] public partial IReadOnlyList<PickMarker>? WbMarkers { get; set; }
 
     private static string MarkerLabel(WbPoint kind) => kind switch
@@ -161,7 +163,7 @@ public partial class MainViewModel
         _ => Tr.T("W"),
     };
 
-    /// <summary>Messung geändert (Klick, ×, Rückgängig): Markierungen auf die Zahl der Klicks kürzen, Vorschau neu.</summary>
+    /// <summary>Measurement changed (click, ×, undo): trims the markers to the number of clicks and refreshes the preview.</summary>
     private void WbChanged(WbPoint kind, WbSample? value)
     {
         var keep = value?.Count ?? 0;
@@ -171,7 +173,7 @@ public partial class MainViewModel
         ToolChanged(nameof(WbHint));
     }
 
-    /// <summary>Neuer Bildstand: Markierungen gehören zum Bild davor, die Pipette hört auf.</summary>
+    /// <summary>New image state: the markers belong to the previous image, and the eyedropper stops.</summary>
     private void ResetWbForNewImage()
     {
         _wbMarkers.Clear();

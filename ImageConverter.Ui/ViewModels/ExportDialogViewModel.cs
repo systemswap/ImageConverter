@@ -12,7 +12,7 @@ using ImageConverter.Imaging;
 
 namespace ImageConverter.ViewModels;
 
-/// <summary>Eine Zeile im Export-Fenster.</summary>
+/// <summary>One row in the export window.</summary>
 public partial class ExportItem(string path) : ObservableObject
 {
     public string Path { get; } = path;
@@ -26,14 +26,14 @@ public partial class ExportItem(string path) : ObservableObject
     [ObservableProperty] public partial bool Failed { get; set; }
     [ObservableProperty] public partial bool Done { get; set; }
 
-    /// <summary>Upscaling muss beim Export noch gerechnet werden (geschätzte Dauer), sonst null.</summary>
+    /// <summary>Estimated duration if upscaling still has to be computed during the export, otherwise null.</summary>
     internal TimeSpan? UpscaleEstimate { get; set; }
 }
 
 /// <summary>
-/// Export mehrerer Bilder: Liste mit Haken, Vorschaubild, Auflösung und Ziel.
-/// Jedes Bild wird mit seinem eigenen Stand exportiert (Einzelmodus) bzw. mit dem
-/// gemeinsamen, auf das Bild umgerechneten Stand.
+/// Export of several images: a list with check boxes, thumbnail, resolution and destination.
+/// Each image is exported with its own settings (per-image mode) or with the shared settings
+/// converted to fit that image.
 /// </summary>
 public partial class ExportDialogViewModel : ViewModelBase
 {
@@ -42,9 +42,9 @@ public partial class ExportDialogViewModel : ViewModelBase
     private readonly MainViewModel _main;
     private readonly CancellationTokenSource _closing = new();
     private bool _cancelRequested;
-    private CancellationTokenSource? _exportCts;   // bricht auch ein laufendes Upscaling ab
+    private CancellationTokenSource? _exportCts;   // also cancels a running upscaling
 
-    /// <summary>Rückfrage (modal über diesem Fenster); Ergebnis: Nummer der Antwort, −1 = geschlossen.</summary>
+    /// <summary>Asks a question (modal over this window); result: index of the answer, −1 if the dialog was closed.</summary>
     public event Func<ChoiceRequest, Task<int>>? ChoiceRequested;
 
     public ExportDialogViewModel(MainViewModel main)
@@ -75,7 +75,7 @@ public partial class ExportDialogViewModel : ViewModelBase
     [ObservableProperty] public partial bool IsDone { get; set; }
     [ObservableProperty] public partial double Progress { get; set; }
 
-    /// <summary>Was gerade passiert: Bild n von m und der Schritt darin.</summary>
+    /// <summary>What is happening right now: image n of m and the current step within it.</summary>
     [ObservableProperty] public partial string Step { get; set; } = "";
     [ObservableProperty] public partial string Summary { get; set; } = "";
 
@@ -92,7 +92,7 @@ public partial class ExportDialogViewModel : ViewModelBase
     [RelayCommand]
     private void SelectNone() { foreach (var i in Items) i.Include = false; }
 
-    /// <summary>Vorschaubilder und Auflösungen nacheinander im Hintergrund füllen.</summary>
+    /// <summary>Fills in thumbnails and resolutions one image after another in the background.</summary>
     public async Task LoadAsync()
     {
         foreach (var item in Items)
@@ -100,7 +100,7 @@ public partial class ExportDialogViewModel : ViewModelBase
             if (_closing.IsCancellationRequested) return;
             try
             {
-                // Kopfdaten und kleines Vorschaubild — das Bild selbst lädt erst der Export
+                // Header data and a small thumbnail only; the full image is loaded by the export itself.
                 var (w, h, dpi, thumb, tw, th) = await _main.GetListEntryAsync(item.Path, ThumbSize);
                 var state = _main.SettingsFor(item.Path, w, h, dpi);
                 var options = MainViewModel.OptionsFor(state);
@@ -134,7 +134,7 @@ public partial class ExportDialogViewModel : ViewModelBase
 
         var selected = Items.Where(i => i.Include).ToList();
 
-        // Upscaling (KI) noch zu rechnen: einmal für alle fragen
+        // AI upscaling still to be computed: ask once for all images.
         var upscale = true;
         var needs = selected.Where(i => i.UpscaleEstimate is not null).ToList();
         if (needs.Count > 0 && ChoiceRequested is { } ask)
@@ -164,7 +164,7 @@ public partial class ExportDialogViewModel : ViewModelBase
             var item = selected[n];
             item.Status = Tr.T("wird exportiert …");
             item.Failed = false;
-            // Ein Balken über alle Bilder: jedes Bild ein gleich großes Stück, darin seine Schritte
+            // One progress bar for all images: each image gets an equal share, subdivided by its steps.
             var index = n;
             Step = Tr.T("Bild {0} von {1} · {2}", index + 1, selected.Count, Tr.T("Laden …"));
             var progress = new Progress<WorkProgress>(p =>
@@ -177,7 +177,7 @@ public partial class ExportDialogViewModel : ViewModelBase
             {
                 var (path, bytes) = await _main.ExportFileAsync(item.Path, progress, upscale, _exportCts.Token);
                 item.Status = $"✓  {FormatBytes(bytes)}";
-                item.Details = Path.GetFileName(path);   // tatsächlicher Name, ggf. mit „ (2)"
+                item.Details = Path.GetFileName(path);   // actual name, possibly with a " (2)" suffix
                 item.Done = true;
                 lastFolder = Path.GetDirectoryName(path);
                 total += bytes;
@@ -211,7 +211,7 @@ public partial class ExportDialogViewModel : ViewModelBase
         IsDone = true;
     }
 
-    /// <summary>Beendet nach dem Bild, das gerade läuft — ein laufendes Upscaling sofort.</summary>
+    /// <summary>Stops the export after the current image; a running upscaling is cancelled immediately.</summary>
     [RelayCommand]
     private void CancelExport()
     {
@@ -219,7 +219,7 @@ public partial class ExportDialogViewModel : ViewModelBase
         _exportCts?.Cancel();
     }
 
-    /// <summary>Fenster wird geschlossen: Laden der Vorschaubilder beenden.</summary>
+    /// <summary>Called when the window closes: stops loading thumbnails and cancels a running export.</summary>
     public void OnClosing()
     {
         _cancelRequested = true;

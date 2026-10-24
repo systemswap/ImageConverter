@@ -24,14 +24,18 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-/// <summary>Rückfrage an die Ansicht: Titel, Text, Antworten (untereinander), hervorgehobene Antwort.</summary>
+/// <summary>A question for the view: title, text, answers (listed one below the other) and the highlighted answer.</summary>
+/// <param name="Title">Window title.</param>
+/// <param name="Message">Question text.</param>
+/// <param name="Choices">Answers in display order.</param>
+/// <param name="Default">Index of the highlighted answer.</param>
 public sealed record ChoiceRequest(string Title, string Message, IReadOnlyList<string> Choices, int Default = 0);
 
-// Upscaling (Gruppe unter „Größe“): beim Vergrößern entstehen die Pixel nicht nur aus dem Filter, sondern aus einer KI.
-// Gerechnet wird nur auf Knopfdruck (oder nach Rückfrage beim Speichern) — das Ergebnis in vierfacher Größe bleibt im
-// Speicher und dient Vorschau und Export als Grundlage fürs Skalieren. Treue und Details mischen danach ohne neue Rechnung.
-// Die Prüfansicht zeigt das Ergebnis in voller Auflösung (zoomen bis 100 % und mehr), Vorher/Nachher vergleicht mit dem
-// Filter; während der Rechnung kommen fertige Kacheln sofort hinein.
+// Upscaling (group under "Size"): when enlarging, the pixels come not only from the filter but from an AI.
+// It is computed only on demand (button, or after a question when saving); the result at four times the size stays in
+// memory and serves preview and export as the basis for scaling. Fidelity and details are mixed afterwards without a new
+// computation. The inspection view shows the result at full resolution (zoom to 100 % and beyond), before/after compares
+// it with the filter; during the computation finished tiles appear immediately.
 public partial class MainViewModel
 {
     public IReadOnlyList<UpscaleOption> UpscaleOptions { get; } = UpscaleOption.All;
@@ -40,25 +44,25 @@ public partial class MainViewModel
     [NotifyPropertyChangedFor(nameof(UsesAiUpscaler), nameof(UpscaleModelMissing), nameof(UpscaleDownloadText))]
     public partial UpscaleOption SelectedUpscaler { get; set; } = UpscaleOption.All[0];
 
-    /// <summary>0 … 1: Treue-Sicherung — verkleinert ergibt das Ergebnis wieder das Original.</summary>
+    /// <summary>0 … 1: fidelity safeguard; scaled back down, the result yields the original again.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UpscaleFidelityLabel))]
     public partial double UpscaleFidelity { get; set; } = 1;
 
-    /// <summary>0 … 1: Anteil der KI gegenüber dem Filter.</summary>
+    /// <summary>0 … 1: share of the AI relative to the filter.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UpscaleDetailsLabel))]
     public partial double UpscaleDetails { get; set; } = 1;
 
     /// <summary>
-    /// Über 4×: zwei KI-Durchgänge (auch die feinen Details kommen von der KI) statt einem, nach dem der Filter den Rest
-    /// vergrößert. Gewählt in der Rückfrage vor dem Rechnen.
+    /// Above 4×: two AI passes (the fine details also come from the AI) instead of one followed by the filter enlarging
+    /// the rest. Chosen in the question before computing.
     /// </summary>
     [ObservableProperty] public partial bool UpscaleTwice { get; set; } = true;
 
     /// <summary>
-    /// Während des Upscalings ist alles andere gesperrt (Einstellungen, Werkzeuge, Rückgängig, Bildwechsel, Speichern) — das
-    /// Ergebnis gehört zu genau diesem Stand. Frei bleiben Zoom, Verschieben, Vorher/Nachher und Abbrechen.
+    /// During upscaling everything else is locked (settings, tools, undo, image switch, saving), because the result belongs
+    /// to exactly this state. Zoom, panning, before/after and cancel remain available.
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UpscaleCommand), nameof(CancelUpscaleCommand), nameof(UndoCommand), nameof(RedoCommand),
@@ -67,35 +71,35 @@ public partial class MainViewModel
     [NotifyPropertyChangedFor(nameof(CanUndo), nameof(CanRedo), nameof(CanTransform), nameof(CanCropToSelection), nameof(IsIdle), nameof(SelectionActive))]
     public partial bool IsUpscaling { get; set; }
 
-    /// <summary>Nichts rechnet — Einstellungen und Werkzeuge frei.</summary>
+    /// <summary>No upscaling is running; settings and tools are available.</summary>
     public bool IsIdle => !IsUpscaling;
 
-    /// <summary>Blättern zwischen Bildern (nicht während des Upscalings).</summary>
+    /// <summary>Browsing between images is possible (not during upscaling).</summary>
     public bool CanBrowse => HasMultipleFiles && !IsUpscaling;
 
-    /// <summary>Prüfansicht: Ergebnis in voller Auflösung statt der Vorschau (ohne Licht/Farbe/Schärfe).</summary>
+    /// <summary>Inspection view: the result at full resolution instead of the preview (without light/colour/sharpness).</summary>
     [ObservableProperty] public partial bool UpscaleInspect { get; set; }
 
     [ObservableProperty] public partial string? UpscaleStatus { get; set; }
 
-    /// <summary>Wechselt, wenn neue Kacheln in der angezeigten Bitmap stehen (die Ansicht zeichnet dann neu).</summary>
+    /// <summary>Changes when new tiles are in the displayed bitmap (the view then redraws).</summary>
     [ObservableProperty] public partial object? RedrawToken { get; set; }
 
-    /// <summary>Sichtbarer Teil des Bildes in Bildpixeln — setzt die Ansicht.</summary>
+    /// <summary>Visible part of the image in image pixels; set by the view.</summary>
     public Func<Rect>? VisibleImageArea { get; set; }
 
-    /// <summary>Rückfrage (modal); Ergebnis: Nummer der Antwort, −1 = Fenster geschlossen.</summary>
+    /// <summary>Asks a question (modal); result: index of the answer, −1 = window closed.</summary>
     public event Func<ChoiceRequest, Task<int>>? ChoiceRequested;
 
     public bool UsesAiUpscaler => SelectedUpscaler.Method != UpscaleMethod.Filter;
 
-    /// <summary>KI-Scaler gewählt und es wird vergrößert — nur dann rechnet die KI (Treue, Details, Zeit).</summary>
+    /// <summary>An AI scaler is selected and the image is being enlarged; only then does the AI compute (fidelity, details, time).</summary>
     public bool AiScalingActive => UsesAiUpscaler && UpscaleEnlarges();
 
-    /// <summary>Ziel größer als das Bild (in einer der Kanten).</summary>
+    /// <summary>The target is larger than the image (in one of the edges).</summary>
     public bool IsEnlarging => UpscaleEnlarges();
 
-    /// <summary>Ziel anders als das Bild — sonst gibt es nichts zu skalieren.</summary>
+    /// <summary>The target differs from the image; otherwise there is nothing to scale.</summary>
     public bool HasSizeChange
     {
         get
@@ -105,7 +109,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Einträge der Liste „Verfahren“ — fest; je nach Richtung blendet <see cref="SyncScaleChoices"/> aus.</summary>
+    /// <summary>Entries of the "Method" list; fixed, with <see cref="SyncScaleChoices"/> hiding entries depending on the direction.</summary>
     public IReadOnlyList<ScaleChoice> ScaleChoices => _scaleChoices ??= CreateScaleChoices();
 
     private IReadOnlyList<ScaleChoice>? _scaleChoices;
@@ -117,7 +121,7 @@ public partial class MainViewModel
         return list;
     }
 
-    /// <summary>Gewählter Eintrag — Filter und KI-Scaler sind getrennt gespeichert (die KI-Wahl bleibt beim Verkleinern erhalten).</summary>
+    /// <summary>Selected entry; filter and AI scaler are stored separately (the AI choice is kept while reducing).</summary>
     public ScaleChoice? SelectedScaleChoice
     {
         get
@@ -130,7 +134,7 @@ public partial class MainViewModel
         {
             if (value is null || value.IsHeader)
             {
-                Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(SelectedScaleChoice)));   // Überschrift: nicht wählbar
+                Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(SelectedScaleChoice)));   // heading: not selectable
                 return;
             }
             if (value.Ai is { } ai) SelectedUpscaler = ai;
@@ -144,15 +148,15 @@ public partial class MainViewModel
 
     private ScaleDirection _direction = ScaleDirection.Same;
 
-    /// <summary>Kleiner, gleich oder größer als das Bild.</summary>
+    /// <summary>Smaller than, equal to or larger than the image.</summary>
     public ScaleDirection Direction => IsEnlarging ? ScaleDirection.Up : HasSizeChange ? ScaleDirection.Down : ScaleDirection.Same;
 
-    /// <summary>KI-Scaler gewählt und nicht beim Verkleinern — Treue und Details lassen sich schon vor den Maßen einstellen.</summary>
+    /// <summary>An AI scaler is selected and the image is not being reduced; fidelity and details can be set even before the dimensions.</summary>
     public bool AiScalerChosen => UsesAiUpscaler && Direction != ScaleDirection.Down;
 
     /// <summary>
-    /// Nach jeder Größenänderung: Richtung gewechselt → andere Liste; ein Filter, der in der neuen Richtung nicht
-    /// angeboten wird (Box beim Vergrößern …), wird zu Lanczos.
+    /// After every size change: if the direction changed, a different list is offered; a filter that is not offered
+    /// in the new direction (Box when enlarging …) becomes Lanczos.
     /// </summary>
     private void SyncScaleChoices()
     {
@@ -175,17 +179,17 @@ public partial class MainViewModel
         ResetScaleCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Worauf die KI-Scaler rechnen — unter Treue/Details und im Fortschritt.</summary>
+    /// <summary>The device the AI scalers compute on, shown below fidelity/details and in the progress.</summary>
     public string ComputeDeviceText => Ai.Sessions.OnGpu && OnnxSessions.GpuName is { } gpu
         ? Tr.T("KI rechnet auf der Grafikkarte ({0}).", gpu)
         : Tr.T("KI rechnet auf der CPU.");
 
-    /// <summary>„Skalieren“, bei KI mit der geschätzten Zeit.</summary>
+    /// <summary>"Scale", with the estimated time when an AI computes.</summary>
     public string ScaleButtonText => AiScalingActive && MatchingUpscale() is null
         ? Tr.T("Skalieren (≈ {0})", Upscalers.Format(CurrentEstimate()))
         : Tr.T("Skalieren");
 
-    /// <summary>Plan zum jetzigen Stand: ein oder zwei Durchgänge, Basis des letzten.</summary>
+    /// <summary>Plan for the current state: one or two passes and the base of the last one.</summary>
     private UpscalePlan CurrentPlan()
     {
         var (tw, th) = EffectiveTarget();
@@ -194,17 +198,17 @@ public partial class MainViewModel
 
     private TimeSpan CurrentEstimate() => Upscalers.Estimate(SelectedUpscaler.Method, SourceWidth, SourceHeight, CurrentPlan());
 
-    /// <summary>KI rechnet in zwei Durchgängen (Zeile „Größe“ der Bearbeitungen).</summary>
+    /// <summary>The AI computes in two passes ("Size" row of the "Edits" list).</summary>
     public bool UpscaleTwoPasses => AiScalingActive && CurrentPlan().Passes == 2;
     public string UpscaleFidelityLabel => $"{UpscaleFidelity * 100:0} %";
     public string UpscaleDetailsLabel => $"{UpscaleDetails * 100:0} %";
 
-    // ------------------------------------------------------------ Modelle
+    // ------------------------------------------------------------ Models
 
-    /// <summary>Das gewählte Modell (mit allen Teilen) liegt nicht vor.</summary>
+    /// <summary>The selected model (with all its parts) is not installed.</summary>
     public bool UpscaleModelMissing => SelectedUpscaler.Model is { } m && !UpscaleModelInstalled(m);
 
-    /// <summary>Alles da? PiSA-SR braucht den Text-Encoder nur, solange die leere Beschreibung fehlt.</summary>
+    /// <summary>Whether everything is installed. PiSA-SR needs the text encoder only as long as the empty prompt embedding is missing.</summary>
     private bool UpscaleModelInstalled(AiModel m) =>
         m == AiModelCatalog.PiSaSr
             ? PiSaSrModel.Find(Ai.Store) is not null
@@ -217,7 +221,7 @@ public partial class MainViewModel
 
     public bool IsDownloadingUpscaler => UpscaleItems().Any(i => i.IsDownloading);
 
-    /// <summary>„Herunterladen (2,6 GB)“ bzw. Fortschritt über alle Teile.</summary>
+    /// <summary>"Download (2.6 GB)" or the progress across all parts.</summary>
     public string UpscaleDownloadText
     {
         get
@@ -234,7 +238,7 @@ public partial class MainViewModel
     [RelayCommand]
     private async Task DownloadUpscaler()
     {
-        // Das Hauptmodell lädt seine Teile mit (Requires)
+        // The main model downloads its parts along with it (Requires).
         if (SelectedUpscaler.Model is not { } m || Ai.Models.FirstOrDefault(i => i.Model == m) is not { } item) return;
         WatchUpscaleItems();
         if (!item.IsInstalled && !item.IsDownloading) await item.DownloadCommand.ExecuteAsync(null);
@@ -267,9 +271,9 @@ public partial class MainViewModel
         UpscaleCommand.NotifyCanExecuteChanged();
     }
 
-    // ------------------------------------------------------------ Ergebnis
+    // ------------------------------------------------------------ Result
 
-    /// <summary>Wofür ein Ergebnis gilt: Pixelbild (mit/ohne Ausgeblendetes), Ausrichten, Verfahren, Durchgänge.</summary>
+    /// <summary>What a result applies to: pixel image (with/without switched-off functions), geometry, method, passes.</summary>
     private sealed record UpscaleKey(string Path, MagickImage Pixels, GeometryRecipe Recipe, GeometryStages Stages, UpscaleMethod Method,
         UpscalePlan Plan)
     {
@@ -280,8 +284,8 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Das letzte Ergebnis: ganzes Bild oder nur ein Ausschnitt (Region in Bildpixeln, BaseRegion in Pixeln der Basis des
-    /// letzten Durchgangs — bei einem Durchgang dieselbe).
+    /// The latest result: the whole image or only a region (Region in image pixels, BaseRegion in pixels of the base of
+    /// the last pass; identical for a single pass).
     /// </summary>
     private sealed record UpscaleEntry(UpscaleKey Key, SourceRect? Region, SourceRect? BaseRegion, UpscaleResult Result, TimeSpan Took);
 
@@ -296,21 +300,21 @@ public partial class MainViewModel
         return new UpscaleKey(path, PixelsFor(path, h, HiddenSteps), h.Recipe, StagesShown(HiddenSteps), SelectedUpscaler.Method, CurrentPlan());
     }
 
-    /// <summary>Wird gerade vergrößert (Zielgröße größer als das Bild)?</summary>
+    /// <summary>Whether the image is being enlarged (target size larger than the image).</summary>
     private bool UpscaleEnlarges()
     {
         var (w, h) = EffectiveTarget();
         return w > SourceWidth || h > SourceHeight;
     }
 
-    /// <summary>Ergebnis zum jetzigen Stand (ganzes Bild), sonst null.</summary>
+    /// <summary>The result for the current state (whole image only, unless <paramref name="wholeOnly"/> is false), otherwise null.</summary>
     private UpscaleEntry? MatchingUpscale(bool wholeOnly = true) =>
         UsesAiUpscaler && _upscale is { } e && e.Key.Equals(CurrentUpscaleKey()) && (!wholeOnly || e.Region is null) ? e : null;
 
     /// <summary>
-    /// Für Vorschau und Export: das zusammengesetzte Bild ×4, wenn ein passendes Ergebnis da ist und vergrößert wird.
-    /// Fehlt die Mischung mit den aktuellen Reglern, wird sie im Hintergrund gerechnet (danach neue Vorschau) — bis dahin
-    /// gilt die vorige.
+    /// For the preview: the composed ×4 image if a matching result exists and the image is being enlarged.
+    /// If the mix for the current sliders is missing, it is computed in the background (followed by a new preview); until
+    /// then the previous mix applies.
     /// </summary>
     private MagickImage? UpscaledForPreview()
     {
@@ -325,7 +329,7 @@ public partial class MainViewModel
         return null;
     }
 
-    /// <summary>Zusammengesetztes Bild mit den aktuellen Reglern (wartet, rechnet notfalls).</summary>
+    /// <summary>For the export: the composed image with the current sliders (waits, computes it if necessary).</summary>
     private async Task<MagickImage?> UpscaledForExportAsync()
     {
         if (!UpscaleEnlarges() || MatchingUpscale() is not { } e) return null;
@@ -340,13 +344,13 @@ public partial class MainViewModel
     {
         var old = _upscaledImage?.Image;
         _upscaledImage = (result, f, d, image);
-        // Das alte Bild kann noch in einer laufenden Vorschau stecken — der Speicher räumt es mit dem nächsten Lauf weg
+        // The old image may still be in use by a running preview; EmptyUpscaleTrash releases it after the next run.
         if (old is not null && !ReferenceEquals(old, image)) _upscaleTrash.Add(old);
     }
 
     private readonly List<MagickImage> _upscaleTrash = [];
 
-    /// <summary>Verdrängte Bilder ×4 freigeben — nur aufrufen, wenn keine Vorschau und kein Export mehr darauf rechnet.</summary>
+    /// <summary>Releases evicted ×4 images; call only when no preview or export is computing on them any more.</summary>
     private void EmptyUpscaleTrash()
     {
         if (IsExporting) return;
@@ -354,10 +358,10 @@ public partial class MainViewModel
         _upscaleTrash.Clear();
     }
 
-    /// <summary>Hält Upscaling-Status und -Ansicht beim Bild: Wechsel, Bearbeiten, Größe.</summary>
+    /// <summary>Keeps the upscaling status and view in step with the image: switching, editing, size.</summary>
     private void OnUpscaleRelevantChange(object? sender, PropertyChangedEventArgs e)
     {
-        // Jede andere Einstellung (Licht, Farbe, Größe, Verfahren …): wieder die normale Vorschau mit allem
+        // Any other setting (light, colour, size, method …): back to the normal preview with everything applied
         if (UpscaleInspect && !IsUpscaling && e.PropertyName is { } name && TrackedSettings.ContainsKey(name)
             && name is not (nameof(UpscaleFidelity) or nameof(UpscaleDetails)))
             UpscaleInspect = false;
@@ -391,7 +395,7 @@ public partial class MainViewModel
 
     private async Task RecomposeAsync()
     {
-        await Task.Delay(250);   // Regler noch in Bewegung
+        await Task.Delay(250);   // slider still moving
         do
         {
             _recomposeAgain = false;
@@ -445,11 +449,11 @@ public partial class MainViewModel
         UpdateUpscaleStatus();
     }
 
-    /// <summary>Statuszeile der Gruppe.</summary>
+    /// <summary>Updates the status line of the group.</summary>
     private void UpdateUpscaleStatus()
     {
         OnPropertyChanged(nameof(ScaleButtonText));
-        if (IsUpscaling) return;   // die Rechnung schreibt selbst
+        if (IsUpscaling) return;   // the computation writes the status itself
         var inspect = UpscaleInspect
             ? Tr.T("Die Vorschau zeigt das Ergebnis in voller Größe, nur skaliert — Licht, Farbe und Schärfe kommen zurück, sobald du etwas anderes einstellst.")
             : null;
@@ -479,13 +483,13 @@ public partial class MainViewModel
             : Tr.T("Noch nicht berechnet (≈ {0}). Beim Speichern wird gefragt.", estimate);
     }
 
-    // ------------------------------------------------------------ Rechnen
+    // ------------------------------------------------------------ Computation
 
     private bool CanUpscale => HasImage && !IsUpscaling && HasSizeChange && (!AiScalingActive || !UpscaleModelMissing);
 
     /// <summary>
-    /// „Skalieren“: mit einem Filter in Sekunden, mit einem KI-Scaler in Minuten — über 4× oder bei langer Dauer nach
-    /// Rückfrage. Danach zeigt die Vorschau das Ergebnis in voller Größe — zum Hineinzoomen und für Vorher/Nachher.
+    /// "Scale": with a filter in seconds, with an AI scaler in minutes; above 4× or for a long duration after a
+    /// question. Afterwards the preview shows the result at full size, for zooming in and for before/after.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanUpscale))]
     private async Task Upscale()
@@ -502,12 +506,12 @@ public partial class MainViewModel
 
         if (await AskUpscaleAsync(w, h) is not { } choice) return;
         UpscaleTwice = choice.Twice;
-        if (await ShowReadyUpscaleAsync(doc)) return;   // mit der anderen Wahl schon gerechnet
+        if (await ShowReadyUpscaleAsync(doc)) return;   // already computed with the other choice
         if (await Task.Run(CurrentUpscaleKey) is not { } key) return;
         await RunUpscaleAsync(doc, key, choice.Region);
     }
 
-    /// <summary>Schon gerechnet (ganzes Bild): nur zeigen.</summary>
+    /// <summary>Already computed (whole image): only shows it. Returns true if it was shown.</summary>
     private async Task<bool> ShowReadyUpscaleAsync(MagickImage doc)
     {
         if (MatchingUpscale() is not { } ready) return false;
@@ -518,12 +522,13 @@ public partial class MainViewModel
         return true;
     }
 
-    /// <summary>Ab dieser Dauer wird vorher gefragt (ganzes Bild oder nur der sichtbare Ausschnitt).</summary>
+    /// <summary>From this duration on, a question is asked first (whole image or only the visible region).</summary>
     private static readonly TimeSpan LongUpscale = TimeSpan.FromSeconds(45);
 
     /// <summary>
-    /// Rückfrage vor dem Rechnen, jeweils mit Dauer und Uhrzeit: über 4× ein oder zwei Durchgänge, bei langer Dauer ganzes
-    /// Bild oder nur der sichtbare Ausschnitt. Kurz und höchstens 4×: keine Frage, die jetzige Wahl. null = abgebrochen.
+    /// Question before computing, each option with duration and end time: above 4× one or two passes, for a long duration
+    /// the whole image or only the visible region. Short and at most 4×: no question, the current choice applies.
+    /// null = cancelled.
     /// </summary>
     private async Task<(bool Twice, SourceRect? Region)?> AskUpscaleAsync(int w, int h)
     {
@@ -550,7 +555,7 @@ public partial class MainViewModel
         }
         if ((!beyond && !isLong) || ChoiceRequested is not { } ask) return (UpscaleTwice, null);
 
-        // Vorgewählt: die bisherige Wahl, bei langer Dauer der Ausschnitt
+        // Preselected: the previous choice, and the region for a long duration
         var preferred = options.FindIndex(o => o.Twice == UpscaleTwice && o.Region is not null);
         if (preferred < 0) preferred = options.FindIndex(o => o.Twice == UpscaleTwice);
         var trial = options.Any(o => o.Region is not null)
@@ -568,7 +573,7 @@ public partial class MainViewModel
         return (options[answer].Twice, options[answer].Region);
     }
 
-    /// <summary>Über 4×: was ein und zwei Durchgänge bedeuten.</summary>
+    /// <summary>Above 4×: what one and two passes mean.</summary>
     private string BeyondText(int w, int h, int tw, int th) =>
         Tr.T("Das Ziel ({0} × {1} px) ist {2:0.#}× so groß wie das Bild ({3} × {4} px); „{5}“ vergrößert je Durchgang 4×. Zwei Durchgänge: auch die feinen Details kommen von der KI — deutlich schärfer, sie erfindet aber mehr dazu. Ein Durchgang: den Rest vergrößert der Filter — weicher.",
             tw, th, Math.Max(tw / (double)w, th / (double)h), w, h, SelectedUpscaler.Name);
@@ -576,18 +581,18 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(IsUpscaling))]
     private void CancelUpscale() => _upscaleCts?.Cancel();
 
-    /// <summary>Sichtbarer Ausschnitt, auf ganze Pixel gerundet — null, wenn ohnehin (fast) das ganze Bild zu sehen ist.</summary>
+    /// <summary>Visible region rounded to whole pixels; null if (almost) the whole image is visible anyway (more than 80 %).</summary>
     private SourceRect? VisibleRegion(int w, int h)
     {
         if (VisibleImageArea?.Invoke() is not { Width: > 0 } r || DocumentSize.Width <= 0) return null;
-        var k = w / (double)DocumentSize.Width;   // Ansicht rechnet in Bildpixeln des Dokuments
+        var k = w / (double)DocumentSize.Width;   // the view works in image pixels of the document
         int x0 = Math.Clamp((int)Math.Floor(r.X * k), 0, w - 1), y0 = Math.Clamp((int)Math.Floor(r.Y * k), 0, h - 1);
         int x1 = Math.Clamp((int)Math.Ceiling(r.Right * k), x0 + 1, w), y1 = Math.Clamp((int)Math.Ceiling(r.Bottom * k), y0 + 1, h);
         if ((x1 - x0) * (double)(y1 - y0) > 0.8 * w * h) return null;
         return new SourceRect(x0, y0, x1 - x0, y1 - y0);
     }
 
-    /// <summary>Rechnet das Upscaling (ganzes Bild oder Ausschnitt), zeigt es live in der Prüfansicht. true = fertig.</summary>
+    /// <summary>Computes the upscaling (whole image or region) and shows it live in the inspection view. true = finished.</summary>
     private async Task<bool> RunUpscaleAsync(MagickImage doc, UpscaleKey key, SourceRect? region)
     {
         if (SelectedUpscaler.Model is null) return false;
@@ -602,7 +607,7 @@ public partial class MainViewModel
         lock (doc) (dw, dh) = ((int)doc.Width, (int)doc.Height);
         var (pw, ph) = region is { } part ? (part.Width, part.Height) : (dw, dh);
         var expected = Upscalers.Estimate(method, dw, dh, plan, pw, ph);
-        // Der Fortschritt läuft über beide Durchgänge: Anteil des ersten an der Zeit
+        // Progress spans both passes: share of the first pass in the total time
         var share = plan.Passes == 2 && expected > TimeSpan.Zero ? Upscalers.Estimate(method, pw, ph) / expected : 1;
         var pass = 1;
         void Report(double f)
@@ -629,7 +634,7 @@ public partial class MainViewModel
         ActivityCancel = CancelUpscaleCommand;
         Report(0);
 
-        // Prüfansicht vorbereiten: Vorher = Filter, Nachher füllt sich mit fertigen Kacheln (des letzten Durchgangs)
+        // Prepare the inspection view: Before = filter, After fills with finished tiles (of the last pass).
         var baseRegion = region is { } rg ? ToBase(rg, dw, dh, plan) : (SourceRect?)null;
         var (f0, d0, gamma) = (UpscaleFidelity, UpscaleDetails, GammaCorrect);
         await PrepareInspectAsync(doc, plan, baseRegion);
@@ -660,7 +665,7 @@ public partial class MainViewModel
 
             var took = clock.Elapsed;
             Ai.RefreshGpuStatus();
-            // Modell schließen, bevor das Ergebnis zusammengesetzt wird — Treue und Details brauchen es nicht mehr
+            // Release the model before the result is composed; fidelity and details no longer need it.
             if (Upscalers.ModelOf(method) is { } usedModel) Ai.Sessions.Release(usedModel.Id);
             _upscale = new UpscaleEntry(key, region, baseRegion, result, took);
             _upscaledImage = null;
@@ -669,8 +674,8 @@ public partial class MainViewModel
                 var image = await Task.Run(() => result.Compose(UpscaleFidelity, UpscaleDetails));
                 SetUpscaledImage(result, UpscaleFidelity, UpscaleDetails, image);
             }
-            // Ansicht einmal ganz neu: an den Kachelrändern fehlten beim Rechnen die Nachbarn (Treue), und die Regler können
-            // inzwischen anders stehen
+            // Redraw the whole view once: during the computation the neighbours were missing at the tile edges (fidelity),
+            // and the sliders may have changed in the meantime.
             RedrawInspectLater();
             return true;
         }
@@ -699,7 +704,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Ausschnitt (Bildpixel) in Pixeln der Basis des letzten Durchgangs.</summary>
+    /// <summary>Converts a region (image pixels) to pixels of the base of the last pass.</summary>
     private static SourceRect ToBase(SourceRect r, int w, int h, UpscalePlan plan)
     {
         if (plan.Passes == 1) return r;
@@ -711,10 +716,10 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Nach Plan rechnen (im Rechen-Thread). Ein Durchgang: wie <see cref="ComputeUpscale"/>. Zwei: das Ergebnis des ersten
-    /// mit Treue und Details zusammensetzen, auf die Basis (<paramref name="baseWidth"/> × <paramref name="baseHeight"/>)
-    /// verkleinern und noch einmal ×4 rechnen. Fertige Kacheln meldet nur der letzte Durchgang; die Zeit je Durchgang
-    /// verfeinert die Schätzung.
+    /// Computes according to the plan (on the worker thread). One pass: like <see cref="ComputeUpscale"/>. Two: composes the
+    /// result of the first with fidelity and details, scales it to the base (<paramref name="baseWidth"/> ×
+    /// <paramref name="baseHeight"/>) and computes ×4 once more. Only the last pass reports finished tiles; the time per
+    /// pass refines the estimate.
     /// </summary>
     private UpscaleResult ComputePlanned(MagickImage source, UpscaleMethod method, int passes, int baseWidth, int baseHeight,
         double fidelity, double details, bool gamma, IProgress<double> first, IProgress<double> second, Action<bool>? preparing,
@@ -747,10 +752,13 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Geschwindigkeitstest: ein Upscaler an einem Testbild von 256 × 256 (mehrere Kacheln je Teil, wie bei großen Bildern),
-    /// vorher ein kleiner Lauf zum Laden des Modells. Ersetzt die Schätzung dieses Rechners. null: Modell fehlt (oder
-    /// PiSA-SR ist noch nie gelaufen — das Umwandeln dauert, das macht der erste echte Lauf).
+    /// Speed test: runs an upscaler on a 256 × 256 test image (several tiles per part, as with large images), preceded
+    /// by a small run that loads the model. Replaces the estimate for this machine. null: the model is missing (or
+    /// PiSA-SR has never run; the conversion takes long and is left to the first real run).
     /// </summary>
+    /// <param name="method">The upscaler to measure.</param>
+    /// <param name="ct">Cancels the measurement.</param>
+    /// <returns>Duration of the 256 × 256 run, or null.</returns>
     internal TimeSpan? MeasureUpscaler(UpscaleMethod method, CancellationToken ct)
     {
         if (Upscalers.ModelOf(method) is not { } model || !UpscaleModelInstalled(model)) return null;
@@ -774,14 +782,14 @@ public partial class MainViewModel
         return clock.Elapsed;
     }
 
-    /// <summary>Gemessene Upscaler-Zeiten für diesen Rechner speichern — die Schätzung stimmt dann auch nach einem Neustart.</summary>
+    /// <summary>Saves the measured upscaler times for this machine, so that the estimate is also correct after a restart.</summary>
     private static void SaveUpscaleTimes()
     {
         var times = new UpscaleTimes(SpeedTest.AiMachine(OnnxSessions.GpuProvider), Upscalers.Learned());
         AppSettings.Update(s => s with { UpscaleWork = times });
     }
 
-    /// <summary>Beim Start: gespeicherte Upscaler-Zeiten übernehmen, wenn sie auf diesem Rechner gemessen wurden.</summary>
+    /// <summary>At startup: takes over saved upscaler times if they were measured on this machine.</summary>
     internal static void RestoreUpscaleTimes()
     {
         if (AppSettings.Load().UpscaleWork is { } times && times.Machine == SpeedTest.AiMachine(OnnxSessions.GpuProvider))
@@ -789,8 +797,8 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Das Modell rechnen lassen (im Rechen-Thread). PiSA-SR baut beim ersten Mal seine ONNX-Dateien —
-    /// <paramref name="preparing"/> meldet Anfang (true) und Ende (false) davon; der Fortschritt beginnt danach neu.
+    /// Runs the model (on the worker thread). The first time, PiSA-SR builds its ONNX files;
+    /// <paramref name="preparing"/> reports the start (true) and end (false) of that, and progress starts afresh afterwards.
     /// </summary>
     private UpscaleResult ComputeUpscale(MagickImage source, UpscaleMethod method, IProgress<double> progress, Action<bool>? preparing,
         CancellationToken ct, Action<UpscaleResult, SourceRect>? done = null)
@@ -799,7 +807,7 @@ public partial class MainViewModel
         if (method == UpscaleMethod.Generative)
         {
             var sources = PiSaSrModel.Find(Ai.Store) ?? throw new InvalidOperationException(Tr.T("Modell nicht geladen."));
-            // Grafikkarte: halbe Genauigkeit (halber Speicher, schneller, Ergebnis gleich); CPU: volle — sie rechnet fp16 nicht schneller
+            // GPU: half precision (half the memory, faster, same result); CPU: full precision, because it does not compute fp16 faster
             var half = Ai.Sessions.OnGpu;
             var build = PiSaSrModel.NeedsBuild(sources, half);
             if (build) preparing?.Invoke(true);
@@ -808,7 +816,7 @@ public partial class MainViewModel
             var sessions = (Ai.Sessions.Get(model, enc), Ai.Sessions.Get(model, unet), Ai.Sessions.Get(model, dec));
             if (half && !Ai.Sessions.OnGpu)
             {
-                // Grafikkarte ließ sich doch nicht öffnen: die Dateien in voller Genauigkeit für die CPU
+                // The GPU could not be opened after all: use the full-precision files for the CPU.
                 if (PiSaSrModel.NeedsBuild(sources)) preparing?.Invoke(true);
                 (enc, unet, dec) = PiSaSrModel.OnnxFor(sources, progress, ct);
                 preparing?.Invoke(false);
@@ -830,8 +838,8 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// „  ·  noch ca. 4 min, fertig gegen 15:42“: aus dem Fortschritt, ganz am Anfang (noch zu wenig gerechnet) aus der
-    /// Schätzung <paramref name="expected"/>.
+    /// "  ·  about 4 min left, done around 15:42": from the progress, or at the very beginning (too little computed yet)
+    /// from the estimate <paramref name="expected"/>.
     /// </summary>
     private static string RemainingText(TimeSpan elapsed, double fraction, TimeSpan? expected = null)
     {
@@ -845,16 +853,20 @@ public partial class MainViewModel
         return Tr.T("  ·  noch ca. {0}", Upscalers.FormatWithEnd(left, DateTime.Now));
     }
 
-    // ------------------------------------------------------------ Prüfansicht
+    // ------------------------------------------------------------ Inspection view
 
-    /// <summary>Anzeige in <c>Factor</c>-facher Größe des Bildes (1, 2 oder 4 — so viel, wie die Zielgröße braucht).</summary>
-    /// <param name="Factor">Anzeige je Bildpixel (KI: 1, 2 oder 4); 0 beim Filter (Bitmap in Zielgröße).</param>
-    /// <param name="OwnsBefore">false: Vorher gehört der Anzeige (Zwischenspeicher), nicht freigeben.</param>
+    /// <summary>Display at <c>Factor</c> times the image size (1, 2 or 4, as much as the target size needs).</summary>
+    /// <param name="After">Bitmap of the result, filled tile by tile.</param>
+    /// <param name="Before">Bitmap of the filter result.</param>
+    /// <param name="Factor">Display pixels per image pixel (AI: 1, 2 or 4); 0 for the filter (bitmap at target size).</param>
+    /// <param name="Width">Width of the base in px.</param>
+    /// <param name="Height">Height of the base in px.</param>
+    /// <param name="OwnsBefore">false: Before belongs to the display (cache) and must not be disposed.</param>
     private sealed record InspectView(WriteableBitmap After, Bitmap Before, int Factor, int Width, int Height, bool OwnsBefore = true);
 
     private InspectView? _inspect;
 
-    /// <summary>Wie groß die Prüfansicht wird: so fein wie das Ziel, höchstens ×4 und rund 64 Megapixel.</summary>
+    /// <summary>Size factor of the inspection view: as fine as the target, at most ×4 and about 64 megapixels.</summary>
     private int InspectFactor(int w, int h)
     {
         var (tw, th) = EffectiveTarget();
@@ -865,8 +877,8 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Vorher (Filter) und Nachher (zunächst blass der Filter) in Anzeigegröße anlegen — gemessen an der Basis des letzten
-    /// Durchgangs (bei einem Durchgang das Bild selbst); <paramref name="region"/> in Pixeln dieser Basis.
+    /// Creates Before (filter) and After (initially the filter, faded) at display size, relative to the base of the last
+    /// pass (for a single pass the image itself); <paramref name="region"/> in pixels of this base.
     /// </summary>
     private async Task PrepareInspectAsync(MagickImage doc, UpscalePlan plan, SourceRect? region)
     {
@@ -878,7 +890,7 @@ public partial class MainViewModel
             using var big = ImageOps.Resize(doc, w * m, h * m, filter, gamma);
             return ImageOps.ToDisplayBgra(big);
         });
-        // Nachher: blass, bis die Kacheln kommen — beim Ausschnitt nur dort, der Rest bleibt wie Vorher
+        // After: faded until the tiles arrive; for a region only there, the rest stays like Before
         var after = (byte[])before.Clone();
         var (rx0, ry0, rx1, ry1) = region is { } r ? (r.X * m, r.Y * m, (r.X + r.Width) * m, (r.Y + r.Height) * m) : (0, 0, w * m, h * m);
         Parallel.For(ry0, ry1, ComputeLimits.Options, y =>
@@ -915,8 +927,8 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Skalieren mit dem gewählten Filter, in voller Zielgröße (höchstens rund 64 Megapixel in der Anzeige). Vorher ist das
-    /// Bild selbst — die Ansicht legt beide auf dieselbe Fläche.
+    /// Scales with the selected filter at full target size (at most about 64 megapixels in the display). Before is the
+    /// image itself; the view places both on the same area.
     /// </summary>
     private async Task ScaleWithFilterAsync()
     {
@@ -955,7 +967,7 @@ public partial class MainViewModel
 
     private void RedrawInspectLater() => _ = RedrawInspectAsync(delay: 200);
 
-    /// <summary>Ganze Prüfansicht mit den aktuellen Reglern neu zusammensetzen (Kachel für Kachel, abbrechbar).</summary>
+    /// <summary>Recomposes the whole inspection view with the current sliders (tile by tile, cancellable).</summary>
     private async Task RedrawInspectAsync(int delay = 0)
     {
         _redrawCts?.Cancel();
@@ -983,15 +995,15 @@ public partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            // neuere Werte rechnen schon
+            // newer values are already being computed
         }
     }
 
     /// <summary>
-    /// Eine fertige Fläche zusammensetzen (Treue, Details), auf die Anzeigegröße mitteln und in die Prüfansicht schreiben.
-    /// Läuft im Rechen-Thread; nur das Kopieren in die Bitmap geschieht im UI-Thread.
+    /// Composes a finished area (fidelity, details), averages it down to the display size and writes it into the inspection
+    /// view. Runs on the worker thread; only the copy into the bitmap happens on the UI thread.
     /// </summary>
-    /// <param name="live">Während der Rechnung: Nachbarn sind noch leer — Treue nur innerhalb der fertigen Fläche.</param>
+    /// <param name="live">During the computation the neighbours are still empty, so fidelity is applied only within the finished area.</param>
     private void BlitTile(InspectView view, UpscaleResult result, SourceRect rect, int ox, int oy, double f, double d, bool live = false)
     {
         var px = result.ComposeRegion(rect, f, d, known: live ? rect : null);
@@ -1033,11 +1045,11 @@ public partial class MainViewModel
         });
     }
 
-    // ------------------------------------------------------------ Speichern
+    // ------------------------------------------------------------ Saving
 
     /// <summary>
-    /// Vor dem Speichern: Upscaler gewählt und vergrößert, aber nicht (ganz) berechnet → fragen. Liefert das Bild ×4 für
-    /// den Export, null = nur Filter; <c>Cancel</c> = nicht speichern.
+    /// Before saving: if an upscaler is selected and the image is enlarged but not (completely) computed, asks first.
+    /// Returns the ×4 image for the export, null = filter only; <c>Cancel</c> = do not save.
     /// </summary>
     private async Task<(bool Cancel, MagickImage? Upscaled)> UpscaleBeforeExportAsync()
     {
@@ -1045,7 +1057,7 @@ public partial class MainViewModel
         if (MatchingUpscale() is not null) return (false, await UpscaledForExportAsync());
         if (UpscaleModelMissing || ChoiceRequested is not { } ask) return (false, null);
 
-        // Über 4×: ein oder zwei Durchgänge zur Wahl, jeweils mit Dauer
+        // Above 4×: one or two passes to choose from, each with its duration
         var (w, h) = (SourceWidth, SourceHeight);
         var (tw, th) = EffectiveTarget();
         var beyond = Upscalers.BeyondOnePass(w, h, tw, th);
@@ -1073,22 +1085,35 @@ public partial class MainViewModel
         return (false, await UpscaledForExportAsync());
     }
 
-    // ------------------------------------------------------------ Export mehrerer Bilder
+    // ------------------------------------------------------------ Export of several images
 
-    /// <summary>Muss für diese Datei mit ihrem Stand noch gerechnet werden? Dann wie lange ungefähr (sonst null).</summary>
+    /// <summary>Determines whether upscaling still has to be computed for this file with its state.</summary>
+    /// <param name="path">Path of the file.</param>
+    /// <param name="width">Width of the image in px.</param>
+    /// <param name="height">Height of the image in px.</param>
+    /// <param name="s">Settings state of the file.</param>
+    /// <param name="o">Export options for that state.</param>
+    /// <returns>The approximate duration, or null if nothing has to be computed.</returns>
     internal TimeSpan? UpscaleNeededFor(string path, int width, int height, SettingsState s, ExportOptions o)
     {
         if (s.Upscaler == UpscaleMethod.Filter || (o.Width <= width && o.Height <= height)) return null;
-        if (Upscalers.ModelOf(s.Upscaler) is not { } m || !UpscaleModelInstalled(m)) return null;   // ohne Modell: Filter
+        if (Upscalers.ModelOf(s.Upscaler) is not { } m || !UpscaleModelInstalled(m)) return null;   // without a model: filter
         if (path == CurrentPath && SelectedUpscaler.Method == s.Upscaler && UpscaleTwice == s.UpscaleTwice && MatchingUpscale() is not null)
             return null;
         return Upscalers.Estimate(s.Upscaler, width, height, Upscalers.Plan(width, height, o.Width, o.Height, s.UpscaleTwice));
     }
 
     /// <summary>
-    /// Beim Export einer Datei: Bild ×4 mit ihrem Stand — das berechnete des offenen Bildes oder neu gerechnet (ohne Ansicht).
-    /// <c>Owned</c> = der Aufrufer gibt es frei. null = nur Filter.
+    /// When exporting a file: the ×4 image for its state, either the computed one of the open image or newly computed
+    /// (without a view). <c>Owned</c> = the caller disposes it. null = filter only.
     /// </summary>
+    /// <param name="path">Path of the file.</param>
+    /// <param name="image">The image to upscale.</param>
+    /// <param name="s">Settings state of the file.</param>
+    /// <param name="o">Export options for that state.</param>
+    /// <param name="progress">Progress reports; null for none.</param>
+    /// <param name="ct">Cancels the computation.</param>
+    /// <returns>The upscaled image and whether the caller owns it, or null.</returns>
     internal async Task<(MagickImage Image, bool Owned)?> UpscaleForBatchAsync(string path, MagickImage image, SettingsState s, ExportOptions o,
         IProgress<WorkProgress>? progress, CancellationToken ct)
     {
@@ -1119,7 +1144,7 @@ public partial class MainViewModel
         return (composed, true);
     }
 
-    /// <summary>Grafikkarte an/aus: andere Zeitschätzung, Ergebnis bleibt gültig.</summary>
+    /// <summary>GPU switched on/off: a different time estimate; an existing result stays valid.</summary>
     internal void GpuChanged()
     {
         OnPropertyChanged(nameof(ComputeDeviceText));
@@ -1127,7 +1152,7 @@ public partial class MainViewModel
         UpdateUpscaleStatus();
     }
 
-    /// <summary>Bild gewechselt oder geschlossen: Ansicht weg; das Ergebnis bleibt (gilt nur für sein Bild).</summary>
+    /// <summary>Image switched or closed: cancels a running upscaling and closes the inspection view; the result stays (it applies only to its own image).</summary>
     private void UpscaleImageChanged()
     {
         if (IsUpscaling) _upscaleCts?.Cancel();

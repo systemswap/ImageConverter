@@ -9,21 +9,21 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-// „Gleiche Einstellungen für alle Bilder" oder jedes Bild einzeln.
+// "Same settings for all images" or each image on its own.
 //
-// Haken gesetzt (Standard): alle Bilder teilen sich die Einstellungen. Die Größe
-// wird pro Bild umgerechnet (AdaptToImage), damit nichts verzerrt.
-// Haken entfernt: jedes Bild merkt sich seinen eigenen Stand (_fileSettings).
-// Haken wieder gesetzt: alle Bilder übernehmen den Stand des aktuellen Bildes.
-// Zuschnitt, Drehen, Spiegeln gehören ohnehin immer zum einzelnen Bild.
+// Ticked: all images share the settings. The size is converted
+// per image (AdaptToImage) so that nothing is distorted.
+// Unticked (the state after opening images, see ResetToStart): each image remembers its own state (_fileSettings).
+// Ticked again: all images take over the state of the current image.
+// Crop, rotation and flip always belong to the individual image anyway.
 public partial class MainViewModel
 {
     [ObservableProperty] public partial bool ApplyToAll { get; set; } = true;
 
-    /// <summary>Einzelmodus: Stand je Datei. Bilder ohne Eintrag starten mit einer Kopie des aktuellen.</summary>
+    /// <summary>Per-image mode: state per file. Images without an entry start from <see cref="_individualTemplate"/>, otherwise from a copy of the current state.</summary>
     private Dictionary<string, SettingsState> _fileSettings = new(StringComparer.Ordinal);
 
-    /// <summary>Einzelmodus: Stand beim Entfernen des Hakens — Startpunkt für Bilder ohne eigenen Stand.</summary>
+    /// <summary>Per-image mode: the state when the tick was removed (or the start state after opening images); starting point for images without their own state.</summary>
     private SettingsState? _individualTemplate;
 
     private string? CurrentPath => _fileIndex >= 0 && _fileIndex < _files.Count ? _files[_fileIndex] : null;
@@ -32,7 +32,7 @@ public partial class MainViewModel
     {
         if (_suppressHistory > 0) return;
 
-        // Ein eigener Rückgängig-Schritt, der Modus, alle Einzelstände und die Vorlage sichert
+        // A separate undo step that saves the mode, all per-image states and the template
         CommitPendingSettings();
         _undo.Push(new Snapshot(null, null, CaptureSettings(),
             ApplyToAll: !value, FileSettings: new Dictionary<string, SettingsState>(_fileSettings),
@@ -41,15 +41,15 @@ public partial class MainViewModel
 
         if (value)
         {
-            // Wieder „für alle": alle übernehmen den aktuellen Stand
+            // "For all" again: all images take over the current state
             _fileSettings.Clear();
             _individualTemplate = null;
         }
         else
         {
-            // Ab jetzt einzeln. Vorlage für alle Bilder ist der Stand von JETZT —
-            // nicht der, den ein anderes Bild später bekommt (sonst würde eine
-            // Änderung an Bild 2 beim ersten Besuch von Bild 1 mit übernommen).
+            // Per image from now on. The template for all images is the state at THIS moment,
+            // not the state another image receives later (otherwise a change to
+            // image 2 would be carried over when image 1 is first visited).
             _individualTemplate = CaptureSettings();
             if (CurrentPath is { } path)
                 _fileSettings[path] = _individualTemplate;
@@ -60,15 +60,19 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Rechnet einen Einstellungsstand auf ein anders großes Bild um.
+    /// Converts a settings state to an image of a different size.
     /// <list type="bullet">
-    /// <item>Größe nicht angefasst (Ziel = Original) → auch das andere Bild in Originalgröße.</item>
-    /// <item>Kette offen → genau die eingestellten Maße (bewusst verzerrt).</item>
-    /// <item>Kette zu → die zuletzt eingegebene Kante gilt, die andere folgt dem
-    ///   Seitenverhältnis des neuen Bildes. Im mm-Modus entspricht das derselben Druckkante.</item>
+    /// <item>Size not touched (target = original) → the other image also keeps its original size.</item>
+    /// <item>Chain open → exactly the set dimensions (deliberately distorted).</item>
+    /// <item>Chain closed → the edge entered last applies, the other follows the
+    ///   aspect ratio of the new image. In mm mode this corresponds to the same print edge.</item>
     /// </list>
-    /// Auswahlrahmen und Eckenradius gehören zum alten Bild und werden verworfen.
+    /// Selection frame, corner radius and pending rotation belong to the old image and are discarded.
     /// </summary>
+    /// <param name="s">The state to convert.</param>
+    /// <param name="width">Width of the new image in px.</param>
+    /// <param name="height">Height of the new image in px.</param>
+    /// <returns>The converted state.
     internal static SettingsState AdaptToImage(SettingsState s, int width, int height)
     {
         int tw, th;
@@ -109,8 +113,12 @@ public partial class MainViewModel
         };
     }
 
-    /// <summary>Stand, der für eine Datei gilt — aktuelles Bild, eigener Stand oder umgerechnete Kopie.</summary>
-    /// <param name="fileDpi">DPI aus der Datei — für Bilder, die noch nie angezeigt wurden (wie beim ersten Anzeigen).</param>
+    /// <summary>The state that applies to a file: the current image's state, its own state or a converted copy.</summary>
+    /// <param name="path">Path of the file.</param>
+    /// <param name="width">Width of the image in px.</param>
+    /// <param name="height">Height of the image in px.</param>
+    /// <param name="fileDpi">DPI from the file, for images that have never been shown (as on first display).</param>
+    /// <returns>The settings state for the file.</returns>
     internal SettingsState SettingsFor(string path, int width, int height, double fileDpi)
     {
         if (path == CurrentPath)
@@ -122,8 +130,8 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// DPI für ein Bild, das zum ersten Mal einen Stand bekommt: aus der Datei, wenn die Vorlage der Startstand ist
-    /// oder ihre DPI noch die der Datei des Bildes davor (also nicht selbst eingestellt) — sonst die eigene Einstellung.
+    /// DPI for an image that receives a state for the first time: from the file if the template is the start state
+    /// or its DPI is still that of the previous image's file (that is, not set manually); otherwise the manual setting.
     /// </summary>
     private SettingsState WithFileDpi(SettingsState template, double fileDpi, double? previousFileDpi) =>
         ReferenceEquals(template, _startSettings)
@@ -131,16 +139,16 @@ public partial class MainViewModel
             ? template with { Dpi = (int)Math.Round(fileDpi) }
             : template;
 
-    /// <summary>Zielmaße nach „Nicht vergrößern" — wie EffectiveTarget, aber für einen beliebigen Stand.</summary>
+    /// <summary>Target dimensions with a switched-off size step taken into account; like EffectiveTarget(), but for any state.</summary>
     internal static (int Width, int Height) EffectiveTarget(SettingsState s)
     {
-        if ((s.Hidden & EditSteps.Resize) != 0) return (Math.Max(1, s.SourceWidth), Math.Max(1, s.SourceHeight));   // Größe ausgeblendet
+        if ((s.Hidden & EditSteps.Resize) != 0) return (Math.Max(1, s.SourceWidth), Math.Max(1, s.SourceHeight));   // size switched off
         return EffectiveResize(s);
     }
 
     private static (int Width, int Height) EffectiveResize(SettingsState s) => (Math.Max(1, s.TargetWidth), Math.Max(1, s.TargetHeight));
 
-    /// <summary>Export-Auftrag für einen Einstellungsstand.</summary>
+    /// <summary>Export job for a settings state.</summary>
     internal static ExportOptions OptionsFor(SettingsState s)
     {
         var (w, h) = EffectiveTarget(s);
@@ -175,21 +183,21 @@ public partial class MainViewModel
                 : null);
     }
 
-    // ------------------------------------------------- für das Export-Fenster
+    // ------------------------------------------------- for the export window
 
     internal IReadOnlyList<string> OpenFiles => _files;
 
     /// <summary>
-    /// Das Bild einer Datei in ihrem aktuellen Stand: bearbeitet aus dem Verlauf,
-    /// sonst frisch geladen. <c>Owned</c> = der Aufrufer muss es freigeben.
+    /// The image of a file in its current state: the edited image from the history,
+    /// otherwise freshly loaded. <c>Owned</c> = the caller must dispose it.
     /// </summary>
     internal async Task<(MagickImage Image, bool Owned, long FileBytes, double Dpi)> GetImageAsync(string path)
     {
         if (_histories.TryGetValue(path, out var h))
         {
             var hidden = HiddenFor(path);
-            // im Hintergrund: Ausrichten eines großen Bildes dauert
-            return (await Task.Run(() => DocumentFor(path, h, hidden)), false, h.FileBytes, h.Dpi);   // ohne Ausgeblendetes (KI …), mit Ausrichten
+            // in the background: applying geometry to a large image takes time
+            return (await Task.Run(() => DocumentFor(path, h, hidden)), false, h.FileBytes, h.Dpi);   // without switched-off functions (AI …), with geometry
         }
 
         var loaded = await ImageLoader.LoadAsync(path);
@@ -197,9 +205,9 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Für Listen (Export mehrerer Bilder, Drucken): Größe, DPI und Vorschaubild. Bearbeitete Bilder aus dem Verlauf;
-    /// alle anderen nur über die Kopfdaten und ein verkleinert entpacktes Vorschaubild — vorher wurde jedes ganz geladen
-    /// und beim Export noch einmal. Gelingt das nicht, ganz laden wie bisher.
+    /// For lists (export of several images, printing): size, DPI and thumbnail. Images in the history come from there;
+    /// all others only from the header data and a thumbnail decoded at reduced size, so that no image is loaded
+    /// completely for the list and then again for the export. If probing fails, the image is loaded completely.
     /// </summary>
     internal async Task<(int Width, int Height, double Dpi, byte[] Thumb, int ThumbWidth, int ThumbHeight)> GetListEntryAsync(string path,
         int thumbSize)
@@ -227,14 +235,18 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Zielordner und Dateiname (noch ohne Kollisionsprüfung).</summary>
+    /// <summary>Target folder and file name (not yet checked for collisions).</summary>
     internal (string Folder, string FileName) PlanOutput(string path, SettingsState s, ExportOptions o) =>
         (OutputNaming.ResolveFolder(s.OutputFolder, path),
          OutputNaming.BuildFileName(s.NamePattern, path, o.Width, o.Height,
              _files.IndexOf(path) + 1, DateTime.Now, ImageExporter.Extension(o.Format)));
 
-    /// <summary>Exportiert eine Datei mit ihrem Stand. Gibt Zielpfad und Größe zurück.</summary>
-    /// <param name="upscale">Upscaler (KI) rechnen, wo gewählt; false = nur Filter.</param>
+    /// <summary>Exports a file with its state.</summary>
+    /// <param name="path">Path of the source file.</param>
+    /// <param name="progress">Progress reports; null for none.</param>
+    /// <param name="upscale">Compute the AI upscaler where selected; false = filter only.</param>
+    /// <param name="ct">Cancels the upscaling step; the encoding itself is not cancelled.</param>
+    /// <returns>Target path and file size in bytes.</returns>
     internal async Task<(string Path, long Bytes)> ExportFileAsync(string path, IProgress<WorkProgress>? progress = null, bool upscale = true,
         CancellationToken ct = default)
     {
@@ -256,7 +268,7 @@ public partial class MainViewModel
                 Directory.CreateDirectory(folder);
                 var target = OutputNaming.MakeUnique(folder, fileName);
                 var written = ImageExporter.Export(image, options, target, progress);
-                PixelPool.Trim(release: true);   // erst jetzt sind alle Puffer des Exports frei — Speicher zurückgeben
+                PixelPool.Trim(release: true);   // only now are all export buffers free: return memory
                 return (target, written);
             });
         }

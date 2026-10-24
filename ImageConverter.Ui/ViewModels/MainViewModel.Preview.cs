@@ -11,53 +11,53 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-// Anzeige und Live-Vorschau.
+// Display and live preview.
 //
-// Die Vorschau rechnet dieselbe Kette wie später der Export —
-// Skalieren → Entrauschen → Tools → Schärfen — auf einer Kopie mit höchstens
-// PreviewMaxEdge Pixeln Kantenlänge. Die Stufen werden einzeln
-// zwischengespeichert: Ziehen am Schärfe-Regler rechnet nur die letzte,
-// schnelle Stufe neu.
+// The preview computes the same chain as the export later does
+// (scale → denoise → adjustments → sharpen → grain) on a copy with at most
+// PreviewMaxEdge pixels edge length. The stages are cached
+// individually: dragging the sharpness slider recomputes only the late,
+// fast stages.
 public partial class MainViewModel
 {
     private const int PreviewMaxEdge = 2048;
 
     /// <summary>
-    /// Beim Ziehen eines Reglers (Maustaste gedrückt, oder Änderungen schnell hintereinander: Mausrad, Pfeiltasten) rechnet
-    /// die Vorschau mit höchstens dieser Kante — ein Viertel der Pixel, etwa viermal so schnell. Nach dem Loslassen bzw.
-    /// <see cref="RapidMs"/> Ruhe kommt die feine Vorschau.
+    /// While a slider is dragged (mouse button pressed, or changes in quick succession: mouse wheel, arrow keys) the
+    /// preview is computed with at most this edge length: a quarter of the pixels, about four times as fast. After
+    /// release or <see cref="RapidMs"/> of quiet the fine preview follows.
     /// </summary>
     private const int PreviewDragEdge = 1024;
 
-    /// <summary>Kante, auf der der Dunst in der groben Vorschau geschätzt wird (sonst 1024).</summary>
+    /// <summary>Edge length on which dehaze is estimated in the coarse preview (otherwise 1024).</summary>
     private const int CoarseDehazeEdge = 512;
 
-    /// <summary>Zwei Änderungen in diesem Abstand gelten als Ziehen; darunter (<see cref="SameActionMs"/>) als eine Aktion.</summary>
+    /// <summary>Two changes within this interval (ms) count as dragging; below <see cref="SameActionMs"/> they count as one action.</summary>
     private const int RapidMs = 300, SameActionMs = 10;
 
-    /// <summary>Grob rechnen? Nur in der App — Tests und Werkzeuge wollen immer die feine Vorschau.</summary>
+    /// <summary>Whether to compute coarsely while dragging; only in the app, because tests and tools always need the fine preview.</summary>
     internal bool CoarseWhileDragging { get; init; }
 
     private bool _pointerDown;
     private bool _rapidChanges;
     private long _lastRequestTicks = long.MinValue / 2;
-    private bool _shownCoarse;   // die angezeigte Vorschau ist die grobe — fein folgt
+    private bool _shownCoarse;   // the displayed preview is the coarse one; the fine one follows
 
-    /// <summary>Das aktuelle Bild in voller Auflösung, unbearbeitet.</summary>
+    /// <summary>The displayed image state in full resolution, without the settings chain (size, denoise, adjustments, sharpening).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage), nameof(CompareBitmap))]
     [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand), nameof(ExportCommand), nameof(PrintCommand))]
     public partial Bitmap? FullBitmap { get; set; }
 
-    /// <summary>Ergebnis der Vorschau-Kette; null = nichts zu tun, Original zeigen.</summary>
+    /// <summary>Result of the preview chain; null = nothing to do, show <see cref="FullBitmap"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasAdjustments), nameof(CanCompare), nameof(CompareBitmap))]
     public partial Bitmap? AdjustedBitmap { get; set; }
 
     /// <summary>
-    /// Vorher/Nachher-Schalter: true = Vergleich zeigen — links der verschiebbaren Linie das
-    /// Bild vor den Bildschritten gleicher Form (KI …), ohne Einstellungen wie Größe,
-    /// Entrauschen, Tools, Schärfe; rechts das Ergebnis.
+    /// Before/after switch: true = show the comparison. Left of the movable line is the
+    /// image before the image steps of the same shape (AI …), without settings such as size,
+    /// denoise, adjustments, sharpness; on the right the result.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CompareBitmap))]
@@ -68,15 +68,15 @@ public partial class MainViewModel
         if (value) _ = LoadBeforeAsync();
     }
 
-    /// <summary>Anzeige für „Vorher“, wenn es einen früheren Bildstand gibt; sonst gilt <see cref="FullBitmap"/>.</summary>
+    /// <summary>Display for "Before" if there is an earlier image state; otherwise <see cref="FullBitmap"/> is used.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CompareBitmap))]
     public partial Bitmap? BeforeBitmap { get; set; }
 
     /// <summary>
-    /// <see cref="FullBitmap"/> verkleinert auf Vorschaugröße — für die Vorher-Seite, solange
-    /// die Nachher-Seite ohnehin eine Vorschau ist. Ein Panorama in voller Größe bei jeder
-    /// Bewegung der Trennlinie neu zu zeichnen, wäre zäh.
+    /// <see cref="FullBitmap"/> reduced to preview size, for the "Before" side while
+    /// the "After" side is a preview anyway. Redrawing a full-size panorama on every
+    /// movement of the dividing line would be sluggish.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CompareBitmap))]
@@ -84,21 +84,21 @@ public partial class MainViewModel
 
     private Bitmap? _fullPreviewOf;
 
-    /// <summary>Vorher-Seite des Vergleichs; null = kein Vergleich (oder Vorher wird noch geladen).</summary>
+    /// <summary>"Before" side of the comparison; null = no comparison (or "Before" is still loading).</summary>
     public Bitmap? CompareBitmap
     {
         get
         {
             if (!ShowOriginal || FullBitmap is null) return null;
-            if (OverrideBitmap is not null) return OverrideBeforeBitmap;   // offenes Ergebnis (KI …)
-            if (FindBeforeImage() is not null) return BeforeBitmap;   // früherer Bildstand (KI …)
+            if (OverrideBitmap is not null) return OverrideBeforeBitmap;   // pending result (AI …)
+            if (FindBeforeImage() is not null) return BeforeBitmap;   // earlier image state (AI …)
             return AdjustedBitmap is not null && FullPreviewBitmap is { } small && ReferenceEquals(_fullPreviewOf, FullBitmap)
                 ? small
                 : FullBitmap;
         }
     }
 
-    /// <summary>Verkleinerte Fassung von <see cref="FullBitmap"/> anlegen, falls größer als die Vorschau.</summary>
+    /// <summary>Creates a reduced version of <see cref="FullBitmap"/> if it is larger than the preview.</summary>
     private async Task PrepareFullPreviewAsync()
     {
         if (FullBitmap is not { } full || ReferenceEquals(_fullPreviewOf, full)) return;
@@ -109,7 +109,7 @@ public partial class MainViewModel
 
         var size = full.PixelSize;
         var scale = (double)PreviewMaxEdge / Math.Max(size.Width, size.Height);
-        if (scale >= 1) return;   // klein genug: das Bild selbst
+        if (scale >= 1) return;   // small enough: use the image itself
 
         var target = new PixelSize(Math.Max(1, (int)Math.Round(size.Width * scale)), Math.Max(1, (int)Math.Round(size.Height * scale)));
         var small = await Task.Run(() => full.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality));
@@ -117,7 +117,7 @@ public partial class MainViewModel
         else small.Dispose();
     }
 
-    /// <summary>Gibt es etwas zu vergleichen: Einstellungen oder ein früherer Bildstand (KI …)?</summary>
+    /// <summary>Whether there is something to compare: settings, a pending result or an earlier image state (AI …).</summary>
     public bool CanCompare => OverrideBeforeBitmap is not null || HasAdjustments || FindBeforeImage() is not null;
 
     private void NotifyCompare()
@@ -126,7 +126,7 @@ public partial class MainViewModel
         if (ShowOriginal && !CanCompare) ShowOriginal = false;
     }
 
-    /// <summary>„Vorher“-Bild holen (aus dem Speicher oder einmal umgerechnet).</summary>
+    /// <summary>Fetches the "Before" image (from the cache or converted once).</summary>
     private async Task LoadBeforeAsync()
     {
         if (FindBeforeImage() is not { } before)
@@ -136,7 +136,7 @@ public partial class MainViewModel
             return;
         }
 
-        // Vorher ist ein früheres Pixelbild (vor der KI …) — angezeigt mit demselben Ausrichten wie jetzt
+        // "Before" is an earlier pixel image (before the AI …), displayed with the same geometry as now.
         MagickImage shownBefore = before;
         if (_history is { } h && CurrentPath is { } path)
         {
@@ -149,15 +149,15 @@ public partial class MainViewModel
         TrimDisplayCache();
     }
 
-    /// <summary>Maße des Bildes in Pixeln — die Auswahl rechnet immer damit,
-    /// auch wenn gerade eine kleinere Vorschau angezeigt wird.</summary>
+    /// <summary>Dimensions of the displayed image in pixels; the selection always uses them,
+    /// even while a smaller preview is shown.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ViewOutputSize))]
     public partial PixelSize DocumentSize { get; set; }
 
     /// <summary>
-    /// Größe des angezeigten Ergebnisses — darauf bezieht sich die Zoom-Anzeige:
-    /// „100 %" heißt ein Ergebnis-Pixel pro Bildschirmpixel.
+    /// Size of the displayed result, to which the zoom display refers:
+    /// "100 %" means one result pixel per screen pixel.
     /// </summary>
     public PixelSize ViewOutputSize
     {
@@ -169,44 +169,44 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Wechselt bei jedem neuen Bildstand; die Ansicht passt dann neu ein.</summary>
+    /// <summary>Changes with every new image (or new image size); the view then fits the image again.</summary>
     [ObservableProperty] public partial object? ViewResetToken { get; set; }
 
-    /// <summary>Nur sichtbar, wenn eine Berechnung länger dauert — kein Flackern bei schnellen.</summary>
+    /// <summary>Visible only when a computation takes longer, so that fast ones do not flicker.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
     public partial bool ShowRendering { get; set; }
 
-    /// <summary>Auswahlwerkzeug in der Vorschau: an = Ziehen zieht einen Ausschnitt auf, aus = Ziehen verschiebt
-    /// das Bild. Eine Ansichtseinstellung, kein Bearbeitungsschritt (nicht im Rückgängig).</summary>
+    /// <summary>Selection tool in the preview: on = dragging draws a selection, off = dragging pans
+    /// the image. A view setting, not an editing step (not part of undo).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectionActive))]
     public partial bool SelectionTool { get; set; } = true;
 
-    /// <summary>Rahmen aufziehen möglich — nicht während des Upscalings (dann verschiebt Ziehen das Bild).</summary>
+    /// <summary>Drawing a frame is possible; not during upscaling (dragging then pans the image).</summary>
     public bool SelectionActive => SelectionTool && !IsUpscaling;
 
-    /// <summary>Was die Vorschau gerade rechnet (z. B. „Dunst entfernen – Durchlauf 2 von 3“).</summary>
+    /// <summary>What the preview is computing right now (for example "Dehaze – pass 2 of 3").</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
     public partial string PreviewStep { get; set; } = "";
 
-    /// <summary>Wie weit die Vorschau ist (0…1).</summary>
+    /// <summary>Progress of the preview (0…1).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
     public partial double PreviewFraction { get; set; }
 
     /// <summary>
-    /// Vorübergehende Anzeige statt der Vorschau, z. B. der Zwischenstand einer langen
-    /// Berechnung. Muss dasselbe Seitenverhältnis wie das Bild haben.
+    /// Temporary display instead of the preview, for example the intermediate result of a long
+    /// computation. Must have the same aspect ratio as the image.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(CompareBitmap))]
     public partial Bitmap? OverrideBitmap { get; set; }
 
     /// <summary>
-    /// Vorher-Seite zu <see cref="OverrideBitmap"/>, z. B. das Bild vor einem noch nicht übernommenen
-    /// KI-Ergebnis — so lässt sich auch ein offenes Ergebnis mit „Vorher / Nachher“ vergleichen.
+    /// "Before" side for <see cref="OverrideBitmap"/>, for example the image before an AI result that has not yet been
+    /// applied, so that a pending result can also be compared with "Before / After".
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CompareBitmap))]
@@ -214,42 +214,42 @@ public partial class MainViewModel
 
     partial void OnOverrideBeforeBitmapChanged(Bitmap? value) => NotifyCompare();
 
-    /// <summary>Hinweis über dem Bild bei langen Arbeiten (z. B. „KI · 42 % · noch 20 s“); null = keiner.</summary>
+    /// <summary>Notice over the image during long operations (for example "AI · 42 % · 20 s left"); null = none.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
     public partial string? ActivityText { get; set; }
 
-    /// <summary>Fortschritt der langen Arbeit 0…100; −1 = ohne Balken.</summary>
+    /// <summary>Progress of the long operation, 0…100; −1 = no progress bar.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
     public partial double ActivityProgress { get; set; } = -1;
 
-    /// <summary>Abbrechen der langen Arbeit (z. B. KI); null = nicht abbrechbar.</summary>
+    /// <summary>Cancels the long operation (for example AI); null = cannot be cancelled.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOverlay), nameof(OverlayText), nameof(OverlayHasProgress), nameof(OverlayProgress), nameof(OverlayCanCancel))]
     public partial System.Windows.Input.ICommand? ActivityCancel { get; set; }
 
-    // Eine Anzeige für alles, was rechnet — unten mitte in der Vorschau: lange Arbeiten (KI, Einstellungen ins Bild)
-    // haben Vorrang, sonst die Vorschau-Berechnung, sobald sie spürbar dauert.
+    // One indicator for everything that computes, at the bottom centre of the preview: long operations (AI, baking
+    // settings into the image) take precedence, otherwise the preview computation as soon as it takes noticeable time.
     public bool ShowOverlay => ActivityText is not null || ShowRendering;
     public string? OverlayText => ActivityText ?? PreviewStep;
     public bool OverlayHasProgress => ActivityText is not null ? ActivityProgress >= 0 : ShowRendering;
     public double OverlayProgress => ActivityText is not null ? ActivityProgress : PreviewFraction * 100;
     public bool OverlayCanCancel => ActivityText is not null && ActivityCancel is not null;
 
-    /// <summary>Angezeigtes Ergebnis (beim Vergleich die Nachher-Seite).</summary>
+    /// <summary>Displayed result (the "After" side when comparing).</summary>
     public Bitmap? DisplayBitmap => OverrideBitmap ?? AdjustedBitmap ?? FullBitmap;
     public bool HasImage => FullBitmap is not null;
     public bool HasAdjustments => AdjustedBitmap is not null;
 
-    // ------------------------------------------------------------ Regler
+    // ------------------------------------------------------------ Sliders
 
     [ObservableProperty] public partial double SharpenAmount { get; set; }
     [ObservableProperty] public partial double SharpenRadius { get; set; } = 1.0;
-    /// <summary>Helligkeitsrauschen 0…1 (Non-Local Means, Stärke relativ zum gemessenen Rauschen).</summary>
+    /// <summary>Luminance noise reduction 0…1 (non-local means, strength relative to the measured noise).</summary>
     [ObservableProperty] public partial double NoiseReduction { get; set; }
 
-    /// <summary>Farbrauschen 0…1 (helligkeitsgeführter Filter auf den Farbkanälen).</summary>
+    /// <summary>Colour noise reduction 0…1 (luminance-guided filter on the colour channels).</summary>
     [ObservableProperty] public partial double ColorNoiseReduction { get; set; }
 
     public string SharpenLabel => SharpenAmount <= 0.01 ? Tr.T("aus") : $"{SharpenAmount:F2}";
@@ -276,15 +276,15 @@ public partial class MainViewModel
         RequestPreview();
     }
 
-    // ------------------------------------------------------------ Anzeige
+    // ------------------------------------------------------------ Display
 
-    // Anzeige-Bitmaps der letzten Bildstände (volle Auflösung). Rückgängig/Wiederholen
-    // eines Zuschnitts oder KI-Schritts tauscht dann nur noch aus, statt neu umzurechnen.
+    // Display bitmaps of the latest image states (full resolution), so that undo/redo
+    // of a crop or AI step only swaps bitmaps instead of converting again.
     private const long DisplayCacheBytes = 400L * 1024 * 1024;
     private readonly List<(MagickImage Doc, Bitmap Bitmap, long Bytes)> _displayCache = [];
     private string? _shownPath;
 
-    /// <summary>Neuer Bildstand: volle Auflösung für die Anzeige aufbereiten (oder aus dem Speicher).</summary>
+    /// <summary>New image state: prepares the full resolution for display (or takes it from the cache).</summary>
     private async Task SetDocumentAsync(MagickImage doc)
     {
         var w = (int)doc.Width;
@@ -292,14 +292,14 @@ public partial class MainViewModel
 
         var bitmap = await DisplayBitmapForAsync(doc);
 
-        // Gleiches Bild, gleiche Größe (Rückgängig eines KI-Schritts …): Zoom und Ausschnitt
-        // bleiben — so lässt sich vorher/nachher an derselben Stelle vergleichen
+        // Same image, same size (undo of an AI step …): zoom and visible area
+        // stay, so that before/after can be compared at the same spot.
         var keepView = _shownPath == CurrentPath && DocumentSize == new PixelSize(w, h);
         _shownPath = CurrentPath;
 
-        // Anderes Bild oder andere Größe: Die Vorschau des vorigen Stands passt nicht mehr —
-        // sofort das neue Bild zeigen, die Vorschau-Kette rechnet es gleich nach. Sonst stand
-        // beim Blättern das vorige Bild noch so lange da, wie die neue Vorschau brauchte.
+        // Other image or other size: the preview of the previous state no longer fits.
+        // Show the new image immediately; the preview chain recomputes it right away. Otherwise
+        // the previous image would stay visible while browsing for as long as the new preview takes.
         if (!keepView) SetAdjusted(null);
 
         FullBitmap = bitmap;
@@ -307,13 +307,13 @@ public partial class MainViewModel
         DocumentSize = new PixelSize(w, h);
         if (!keepView) ViewResetToken = new object();
 
-        // „Vorher“ gehört zum Bildstand — neu bestimmen
+        // "Before" belongs to the image state: determine it again
         BeforeBitmap = null;
         NotifyCompare();
         if (ShowOriginal) _ = LoadBeforeAsync();
     }
 
-    /// <summary>Anzeige-Bitmap eines Bildstands — aus dem Speicher oder neu umgerechnet.</summary>
+    /// <summary>Display bitmap of an image state, from the cache or newly converted.</summary>
     private async Task<Bitmap> DisplayBitmapForAsync(MagickImage doc)
     {
         var i = _displayCache.FindIndex(e => ReferenceEquals(e.Doc, doc));
@@ -332,7 +332,7 @@ public partial class MainViewModel
         return bitmap;
     }
 
-    /// <summary>Älteste Einträge freigeben, sobald zu viel Speicher belegt ist — nie das angezeigte Bild.</summary>
+    /// <summary>Releases the oldest entries once too much memory is in use; never the displayed or the "Before" image.</summary>
     private void TrimDisplayCache()
     {
         long total = 0;
@@ -374,14 +374,14 @@ public partial class MainViewModel
         old?.Dispose();
     }
 
-    // ------------------------------------------------------------ Rechnen
+    // ------------------------------------------------------------ Computation
 
     private sealed record PreviewJob(
         MagickImage Doc, int Width, int Height,
         ResampleFilter Filter, bool Gamma,
         (double Luma, double Chroma) Noise, Adjustments Adjust, double SharpenAmount, double SharpenSigma, double Scale,
-        GrainSettings? Grain, MagickImage? Upscaled = null,   // Upscaling: Bild ×4 als Grundlage fürs Vergrößern
-        bool Coarse = false);                                // grob beim Ziehen — fein folgt
+        GrainSettings? Grain, MagickImage? Upscaled = null,   // upscaling: the ×4 image as the basis for enlarging
+        bool Coarse = false);                                // coarse while dragging; fine follows
 
     private sealed record PreviewResult(byte[] Bgra, int Width, int Height);
 
@@ -390,38 +390,39 @@ public partial class MainViewModel
     private bool _renderDirty;
     private CancellationTokenSource? _renderCts;
 
-    // Zwischenspeicher der Stufen — nur im Render-Task benutzt, nie gleichzeitig.
-    // Je ein paar Ergebnisse, damit Rückgängig/Wiederholen zwischen Ständen nicht neu rechnet.
-    // Bildstufen in 32 Bit sind viermal so groß wie früher in 8 Bit (bei 2048 px ~30 MB je Stufe):
-    // skaliert vier, die Pixelstufen je zwei (Dunst + Tiefen/Lichter als teuerste drei).
+    // Stage caches, used only in the render task, never concurrently.
+    // A few results each, so that undo/redo between states does not recompute.
+    // Image stages in 32-bit float are four times as large as in 8 bits (~30 MB per stage at 2048 px):
+    // four scaled images, two of each pixel stage, three of the prepared stage (dehaze + shadows/highlights, the most expensive).
     private const int StageCacheSize = 4;
     private const int PixelCacheSize = 2;
     private const int PreparedCacheSize = 3;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, float[] Pixels)> _denoisedCache = [];
-    // Weißabgleich + Dunst gesondert: der teuerste Teil, hängt nur von DehazeKey ab — Tiefen/Lichter und die
-    // Bereichskarten kommen danach und rechnen ihn nicht neu
+    // White balance + dehaze separately: the most expensive part, depends only on DehazeKey; shadows/highlights and
+    // the region maps come afterwards and do not recompute it.
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments DehazeKey, float[] Pixels)> _dehazedCache = [];
-    // Dunst + Tiefen/Lichter (+ Bereichskarten): hängt nur von PrepareKey ab, die übrigen Regler bleiben flüssig
+    // Dehaze + shadows/highlights (+ region maps): depends only on PrepareKey, so the other sliders stay fluid.
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments PrepareKey, Adjust.Prepared Prepared)> _tonedCache = [];
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments Adjust, float[] Pixels)> _adjustedCache = [];
 
     private readonly record struct ResizeKey(MagickImage Doc, int W, int H, ResampleFilter F, bool G, MagickImage? Up = null);
 
     /// <summary>
-    /// Fordert eine neue Vorschau an. Läuft schon eine Berechnung, wird danach genau
-    /// einmal mit den dann aktuellen Werten nachgerechnet („die letzte gewinnt").
+    /// Requests a new preview. If a computation is already running, it is followed by exactly
+    /// one recomputation with the values current at that time ("the last one wins").
     /// </summary>
     private void RequestPreview()
     {
-        // Änderungen kurz hintereinander (nicht dieselbe Aktion): es wird gezogen
+        // Changes in quick succession (not the same action): the user is dragging.
         var now = Environment.TickCount64;
         if (now - _lastRequestTicks >= SameActionMs) _rapidChanges = now - _lastRequestTicks < RapidMs;
         _lastRequestTicks = now;
         RequestPreviewNow();
     }
 
-    /// <summary>Maustaste in der Oberfläche gedrückt/losgelassen (setzt die Ansicht). Loslassen: feine Vorschau.</summary>
+    /// <summary>Mouse button pressed/released in the UI (set by the view). On release the fine preview follows.</summary>
+    /// <param name="down">true when pressed, false when released.</param>
     public void SetPointerDown(bool down)
     {
         if (_pointerDown == down) return;
@@ -429,13 +430,13 @@ public partial class MainViewModel
         if (down) return;
         _rapidChanges = false;
         if (_shownCoarse || _renderRunning) RequestPreviewNow();
-        else RequestEstimate();   // die Schätzung hat auf das Loslassen gewartet
+        else RequestEstimate();   // the estimate has been waiting for the release
     }
 
-    /// <summary>Jetzt grob rechnen? (Ziehen am Regler, schnelle Änderungen)</summary>
+    /// <summary>Whether to compute coarsely now (slider dragged, rapid changes).</summary>
     private bool Interactive => CoarseWhileDragging && (_pointerDown || _rapidChanges);
 
-    /// <summary>Nach einer groben Vorschau ohne gedrückte Taste: nach kurzer Ruhe die feine.</summary>
+    /// <summary>After a coarse preview without a pressed button: the fine one after a short quiet period.</summary>
     private async Task FineAfterQuietAsync(long requestTicks)
     {
         await Task.Delay(RapidMs + 20);
@@ -446,14 +447,14 @@ public partial class MainViewModel
 
     private void RequestPreviewNow()
     {
-        RequestEstimate();   // Größe, Schärfe, Rauschen … ändern auch die Dateigröße
-        UpdateHighBitDepthRecommendation();   // Empfehlung 16 Bit folgt den Reglern (und setzt den Haken selbst)
+        RequestEstimate();   // size, sharpness, noise … also change the file size
+        UpdateHighBitDepthRecommendation();   // the 16-bit recommendation follows the sliders (and removes a tick the app set itself when it lapses)
         if (_renderRunning)
         {
             _renderDirty = true;
-            // laufende Rechnung zwischen zwei Schritten abbrechen — der Regler läuft weiter. Beim Ziehen nicht: die grobe
-            // Vorschau rechnet fertig (sonst käme bei langsamen Stufen wie Dunst bis zum Innehalten gar keine), danach der
-            // neueste Stand
+            // Cancel the running computation between two steps, because the slider keeps moving. Not while dragging:
+            // the coarse preview finishes (otherwise slow stages such as dehaze would show no preview at all until the
+            // movement pauses), then the latest state follows.
             if (!Interactive) _renderCts?.Cancel();
             return;
         }
@@ -477,7 +478,7 @@ public partial class MainViewModel
                     continue;
                 }
 
-                var cts = _renderCts = new CancellationTokenSource();   // ohne Zeitgeber, Dispose nicht nötig
+                var cts = _renderCts = new CancellationTokenSource();   // without a timer, Dispose is not needed
                 PreviewStep = Tr.T("Vorschau wird berechnet …");
                 PreviewFraction = 0;
                 var plan = new WorkPlan(new Progress<WorkProgress>(p =>
@@ -492,10 +493,10 @@ public partial class MainViewModel
                 }
                 catch (OperationCanceledException)
                 {
-                    continue;   // neuere Einstellungen warten schon (_renderDirty)
+                    continue;   // newer settings are already waiting (_renderDirty)
                 }
-                // Inzwischen ein anderes Bild gewählt: Ergebnis verwerfen, die Schleife
-                // rechnet ohnehin neu (RequestPreview hat _renderDirty gesetzt)
+                // Another image was selected in the meantime: discard the result; the loop
+                // recomputes anyway (RequestPreview has set _renderDirty).
                 if (!ReferenceEquals(job.Doc, ShownDocument)) continue;
                 SetAdjusted(BitmapOps.FromBgra(result.Bgra, result.Width, result.Height));
                 _shownCoarse = job.Coarse;
@@ -522,16 +523,16 @@ public partial class MainViewModel
         if (_renderRunning) ShowRendering = true;
     }
 
-    /// <summary>Wartet eine laufende Berechnung ab und leert die Zwischenspeicher.</summary>
+    /// <summary>Cancels and awaits a running preview computation and size estimate, and clears the estimate caches.</summary>
     private async Task StopPreviewAsync()
     {
         _renderDirty = false;
         _renderCts?.Cancel();
-        try { await _renderTask; } catch { /* Fehler zeigt die Schleife selbst an */ }
+        try { await _renderTask; } catch { /* the loop reports errors itself */ }
 
-        // Auch eine laufende Größenschätzung liest das Bild noch
+        // A running size estimate also still reads the image.
         _estimateCts?.Cancel();
-        try { await _estimateTask; } catch { /* abgebrochen */ }
+        try { await _estimateTask; } catch { /* cancelled */ }
         _estimateCache.Clear();
         _estimateBase?.Dispose();
         _estimateBase = null;
@@ -539,7 +540,7 @@ public partial class MainViewModel
 
     }
 
-    /// <summary>Zwischenspeicher leeren (Bilder geschlossen).</summary>
+    /// <summary>Clears the stage caches (images closed).</summary>
     private void ClearPreviewCaches()
     {
         foreach (var (_, image) in _resizedCache) image.Dispose();
@@ -550,7 +551,7 @@ public partial class MainViewModel
         _dehazedCache.Clear();
     }
 
-    /// <summary>Momentaufnahme der Einstellungen (UI-Thread). null = Original zeigen.</summary>
+    /// <summary>Snapshot of the settings (UI thread). null = show the image without the chain.</summary>
     private PreviewJob? CreateJob()
     {
         if (ShownDocument is not { } doc) return null;
@@ -559,14 +560,14 @@ public partial class MainViewModel
         var resize = tw != (int)doc.Width || th != (int)doc.Height;
         var noise = (EffectiveNoise, EffectiveColorNoise);
         var sharpen = EffectiveSharpen;
-        // „Maske zeigen“ gilt nur hier in der Vorschau (nicht im Export, nicht in der Größenschätzung)
+        // "Show mask" applies only here in the preview (not in the export, not in the size estimate).
         var adjust = CurrentAdjustments() is var a && ShowMask && Shows(EditSteps.LumMask) ? a with { MaskPreview = true } : CurrentAdjustments();
         var grain = EffectiveGrain;
         if (!resize && noise == (0, 0) && sharpen == 0 && adjust.IsNone && grain is null) return null;
-        var upscaled = ToolView == GeometryStages.All ? UpscaledForPreview() : null;   // nicht in der Ansicht eines Werkzeugs
+        var upscaled = ToolView == GeometryStages.All ? UpscaledForPreview() : null;   // not in the view of a tool
 
-        // Vorschau höchstens PreviewMaxEdge groß (beim Ziehen PreviewDragEdge); der Schärferadius wird
-        // mitskaliert, damit er relativ zum Ergebnis gleich wirkt.
+        // Preview at most PreviewMaxEdge in size (PreviewDragEdge while dragging); the sharpening radius is
+        // scaled along so that its effect relative to the result stays the same.
         var coarse = Interactive && Math.Max(tw, th) > PreviewDragEdge;
         var scale = Math.Min(1.0, (double)(coarse ? PreviewDragEdge : PreviewMaxEdge) / Math.Max(tw, th));
         var pw = Math.Max(1, (int)Math.Round(tw * scale));
@@ -576,10 +577,10 @@ public partial class MainViewModel
             noise, adjust, sharpen, SharpenRadius * scale, scale, grain, upscaled, coarse);
     }
 
-    /// <summary>Hintergrund: die vier Stufen, jede nur wenn nötig neu.</summary>
+    /// <summary>Background thread: the chain stages, each recomputed only when necessary.</summary>
     private PreviewResult Render(PreviewJob job, WorkPlan plan)
     {
-        // 1) Skalieren — teuer, nur bei Größe/Filter/Gamma neu
+        // 1) Scale: expensive, recomputed only on a change of size/filter/gamma
         var key = new ResizeKey(job.Doc, job.Width, job.Height, job.Filter, job.Gamma, job.Upscaled);
         var resized = Cached(_resizedCache, e => e.Key == key)?.Image;
         if (resized is null)
@@ -588,7 +589,7 @@ public partial class MainViewModel
             AddCached(_resizedCache, (Key: key, Image: resized), e => e.Image.Dispose());
         }
 
-        // 2) Entrauschen — mittel, nur bei geändertem Regler neu
+        // 2) Denoise: medium cost, recomputed only when its slider changes
         var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Pixels;
         if (denoised is null)
         {
@@ -596,7 +597,7 @@ public partial class MainViewModel
             lock (job.Doc) (docW, docH) = ((int)job.Doc.Width, (int)job.Doc.Height);
             if (job.Noise != (0, 0) && job.Upscaled is null && (long)job.Width * job.Height > (long)docW * docH)
             {
-                // Vergrößern: erst entrauschen, dann vergrößern — wie im Export (ImageExporter.NoiseFirst)
+                // Enlarging: denoise first, then enlarge, as in the export (ImageExporter.NoiseFirst)
                 plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * docW * docH / 1e6);
                 var source = ImageOps.ToDisplayPixels(job.Doc);
                 var clean = Denoiser.Apply(source, docW, docH, job.Noise.Luma, job.Noise.Chroma, 1, plan);
@@ -612,7 +613,7 @@ public partial class MainViewModel
             }
             if (job.Noise != (0, 0) && (job.Upscaled is not null || (long)job.Width * job.Height <= (long)docW * docH))
             {
-                // Helligkeit und Farbe getrennt; Radien mit dem Vorschau-Maßstab wie beim Export
+                // Luminance and colour separately; radii scaled to the preview as in the export
                 plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * job.Width * job.Height / 1e6);
                 var clean = Denoiser.Apply(denoised, job.Width, job.Height, job.Noise.Luma, job.Noise.Chroma, job.Scale, plan);
                 PixelPool.Return(denoised);
@@ -621,7 +622,7 @@ public partial class MainViewModel
             AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Pixels: denoised), null, PixelCacheSize);
         }
 
-        // 3) Tools (Licht, Farbe) — schnell, nur bei geänderten Reglern neu
+        // 3) Adjustments (light, colour, dehaze): recomputed only when their sliders change
         var adjusted = denoised;
         if (!job.Adjust.IsNone)
         {
@@ -635,11 +636,11 @@ public partial class MainViewModel
                 {
                     var dehazeKey = j.DehazeKey;
                     var dehazed = Cached(_dehazedCache, e => e.Key == key && e.Noise == job.Noise && e.DehazeKey == dehazeKey)?.Pixels;
-                    // Dunst je Durchlauf (nur wenn nicht schon gerechnet) … Tiefen/Lichter … Licht und Farbe
+                    // Dehaze per pass (only if not computed already) … shadows/highlights … light and colour
                     Adjust.PlanSteps(j, plan, (double)job.Width * job.Height / 1e6, withDehaze: dehazed is null);
                     if (dehazed is null)
                     {
-                        // Beim Ziehen schätzt der Dunst auf einer kleineren Fassung (ein Viertel der Arbeit) — fein wie immer
+                        // While dragging, dehaze estimates on a smaller version (a quarter of the work); otherwise as usual
                         dehazed = Adjust.Dehazed(denoised, job.Width, job.Height, j, plan, job.Coarse ? CoarseDehazeEdge : 0);
                         AddCached(_dehazedCache, (key, job.Noise, dehazeKey, dehazed), null, PixelCacheSize);
                     }
@@ -655,12 +656,12 @@ public partial class MainViewModel
             }
         }
 
-        // 4) Schärfen — schnell, bei jeder Reglerbewegung
+        // 4) Sharpen: fast, on every slider movement
         var final = job.SharpenAmount > 0
             ? Sharpen.UnsharpMask(adjusted, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
             : adjusted;
 
-        // 5) Körnung — immer zuletzt; in der verkleinerten Vorschau so, wie sie im verkleinerten Export aussähe
+        // 5) Grain: always last; in the reduced preview as it would look in a reduced export
         if (job.Grain is { } grain)
         {
             plan.Add(Tr.T("Körnung"), WorkPlan.GrainCost * job.Width * job.Height / 1e6);
@@ -670,15 +671,15 @@ public partial class MainViewModel
             final = grainy;
         }
 
-        // Einmal runden, mit Dither — erst hier wird aus 32 Bit die Anzeige in 8 Bit
+        // Round once, with dithering: only here does the 32-bit data become the 8-bit display
         var bgra = Pixels.ToBytes(final, dither: true);
         if (job.Grain is not null) PixelPool.Return(final);
-        // Die Zwischenstände dieser Rechnung (Dunst-Durchläufe …) sollen nicht belegt bleiben
+        // The intermediate buffers of this computation (dehaze passes …) must not stay allocated.
         PixelPool.Trim();
         return new PreviewResult(bgra, job.Width, job.Height);
     }
 
-    /// <summary>Treffer nach vorn holen (zuletzt benutzt bleibt am längsten).</summary>
+    /// <summary>Moves a hit to the front (the most recently used entry stays longest).</summary>
     private static T? Cached<T>(List<T> cache, Func<T, bool> match) where T : struct
     {
         var i = cache.FindIndex(e => match(e));

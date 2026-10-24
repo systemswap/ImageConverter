@@ -13,35 +13,35 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.ViewModels;
 
-// Werkzeug „Gewölbtes Blatt“: Linien nachzeichnen, die in Wirklichkeit gerade sind (Textzeilen, Blattkanten, Falz) —
-// daraus wird das Blatt geglättet (Core: Dewarp). Eine Stufe im Rezept vor dem Entzerren, immer aus dem Original.
+// "Curved page" tool: trace lines that are straight in reality (text lines, page edges, fold); the page is flattened
+// from them (Core: Dewarp). A stage in the recipe before perspective correction, always computed from the original.
 public partial class MainViewModel
 {
-    /// <summary>Werkzeug „Gewölbtes Blatt“ offen: die Vorschau zeigt das Original (nur gedreht/gespiegelt) mit den Linien.</summary>
+    /// <summary>The "Curved page" tool is open: the preview shows the original (only rotated/flipped) with the lines.</summary>
     [ObservableProperty] public partial bool DewarpTool { get; set; }
 
-    /// <summary>Die Linien in Bildpixeln der Ansicht; null = Werkzeug aus.</summary>
+    /// <summary>The lines in image pixels of the view; null if the tool is off.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCropToSelection))]
     public partial IReadOnlyList<WarpLineShape>? DewarpLines { get; set; }
 
-    /// <summary>Zeichenmodus: jeder Klick setzt einen Punkt (Esc beendet); aus: Ziehen verschiebt das Bild.</summary>
+    /// <summary>Drawing mode: each click sets a point (Esc ends it); when off, dragging pans the image.</summary>
     [ObservableProperty] public partial bool DewarpDrawing { get; set; }
 
-    /// <summary>Unten in der Leiste: was herauskommt (Größe, Seitenverhältnis) oder was noch fehlt.</summary>
+    /// <summary>Shown at the bottom of the panel: the result (size, aspect ratio) or what is still missing.</summary>
     [ObservableProperty] public partial string DewarpInfo { get; set; } = "";
 
     private bool HasDewarpLines => DewarpLines?.Any(l => l.Counts) == true;
 
-    /// <summary>Es liegen Vorschläge da (für „Vorschläge verwerfen“).</summary>
+    /// <summary>Suggested lines are present (shows the "Clear suggestions" button).</summary>
     public bool HasDewarpSuggestions => DewarpLines?.Any(l => l.Suggested) == true;
 
     partial void OnDewarpToolChanged(bool value)
     {
-        DewarpShowsResult = false;              // öffnet immer beim Justieren (Original mit Linien)
+        DewarpShowsResult = false;              // always opens in adjust mode (original with lines)
         if (value)
         {
-            RotationTool = false;               // immer nur ein Werkzeug
+            RotationTool = false;               // only one tool at a time
             PerspectiveTool = false;
             CropSelection = null;
             if (!_quietTools) _ = EnterDewarpViewAsync();
@@ -50,13 +50,13 @@ public partial class MainViewModel
         {
             DewarpDrawing = false;
             DewarpLines = null;
-            if (!_quietTools) _ = ShowDocumentAsync();   // zurück zum fertigen Bild
+            if (!_quietTools) _ = ShowDocumentAsync();   // back to the finished image
         }
         OnPropertyChanged(nameof(CanCropToSelection));
         CropToSelectionCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Ansicht für das Werkzeug: das Pixelbild, nur gedreht/gespiegelt; die bisherigen Linien vorbelegt.</summary>
+    /// <summary>View for the tool: the pixel image, only rotated/flipped, pre-filled with the lines already in the recipe.</summary>
     private async Task EnterDewarpViewAsync()
     {
         if (_history is not { } h) return;
@@ -70,20 +70,20 @@ public partial class MainViewModel
 
     partial void OnDewarpLinesChanged(IReadOnlyList<WarpLineShape>? value)
     {
-        if (value is null && DewarpTool && !DewarpShowsResult) DewarpTool = false;   // Linien weg von außen: Werkzeug zu
+        if (value is null && DewarpTool && !DewarpShowsResult) DewarpTool = false;   // lines removed from outside: close the tool
         OnPropertyChanged(nameof(HasDewarpSuggestions));
         CropToSelectionCommand.NotifyCanExecuteChanged();
         _ = UpdateDewarpInfoAsync();
     }
 
-    /// <summary>Alle Linien weg (übernommen wird erst mit „Gerade ziehen“).</summary>
+    /// <summary>Removes all lines from the view; the recipe changes only with "Straighten out".</summary>
     [RelayCommand]
     private void ResetDewarpLines()
     {
         if (DewarpTool) DewarpLines = [];
     }
 
-    /// <summary>Linien werden gerade gesucht.</summary>
+    /// <summary>A line search is in progress.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SuggestDewarpLinesCommand))]
     public partial bool IsSuggestingLines { get; set; }
@@ -91,10 +91,9 @@ public partial class MainViewModel
     private bool CanSuggestLines => !IsSuggestingLines;
 
     /// <summary>
-    /// Linien vorschlagen (Textzeilen, Blattrand, Falz — <see cref="LineFinder"/>), gestrichelt; frühere, unberührte
-    /// Vorschläge werden ersetzt. Eigene Linien bleiben (auch übernommene, also geänderte Vorschläge), und was dicht an
-    /// einer von ihnen liegt, wird nicht noch einmal vorgeschlagen. Vorschläge, die nicht zu den übrigen passen, kommen gar
-    /// nicht erst dazu.
+    /// Suggests lines (text lines, page edge, fold; see <see cref="LineFinder"/>), drawn dashed; earlier untouched
+    /// suggestions are replaced. Own lines stay (including adopted, that is modified, suggestions), and anything close to
+    /// one of them is not suggested again. Suggestions that do not agree with the remaining lines are not added at all.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanSuggestLines))]
     private async Task SuggestDewarpLines()
@@ -110,16 +109,16 @@ public partial class MainViewModel
             if (!DewarpTool || DewarpLines is not { } current) return;
             var own = current.Where(l => !l.Suggested).ToList();
             var (pw, ph) = PixelSize();
-            // „dicht an einer eigenen Linie“: 0,6 % der langen Bildseite, mindestens 6 px
+            // "close to an own line": 0.6 % of the long image side, at least 6 px
             var tolerance = Math.Max(6, 0.006 * Math.Max(pw, ph));
             var suggested = found
                 .Select(f => (f.Source, Line: new WarpLineShape(f.Kind, f.Points.Select(p => new Point(p.X, p.Y)).ToArray(),
                     KindChosen: true, Suggested: true)))
-                .Where(s => !own.Any(o => o.Overlaps(s.Line, tolerance)))   // auch mit anderer Richtung: dieselbe Stelle, dieselbe Linie
+                .Where(s => !own.Any(o => o.Overlaps(s.Line, tolerance)))   // regardless of direction: same place, same line
                 .ToList();
             var twins = found.Count - suggested.Count;
 
-            // Prüfen: Vorschläge, die nicht zu den übrigen Linien passen (falsch erkannte Kante, verrutschte Zeile), weglassen
+            // Check: leave out suggestions that do not agree with the other lines (misdetected edge, shifted text line).
             ActivityText = Tr.T("Linien werden geprüft …");
             var lines = own.Concat(suggested.Select(s => s.Line)).ToList();
             var counted = lines.Where(l => l.Counts).ToList();
@@ -132,7 +131,7 @@ public partial class MainViewModel
                     if (!keep[k] && counted[k].Suggested) dropped.Add(counted[k]);
             }
             if (DewarpLines is not { } now) return;
-            // was in der Zwischenzeit von Hand dazukam, bleibt; nur die alten, unberührten Vorschläge gehen
+            // lines added by hand in the meantime stay; only the old, untouched suggestions are removed
             DewarpLines = now.Where(l => !l.Suggested)
                 .Concat(suggested.Select(s => s.Line).Where(l => !dropped.Contains(l)))
                 .ToArray();
@@ -161,7 +160,7 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Linien im angezeigten Bild suchen (verkleinert auf <see cref="LineFinder.WorkEdge"/>), in Pixeln der Ansicht.</summary>
+    /// <summary>Searches lines in the displayed image (scaled down to <see cref="LineFinder.WorkEdge"/>); returns them in pixels of the view.</summary>
     private static IReadOnlyList<FoundLine> FindLines(ImageMagick.MagickImage doc)
     {
         int w, h;
@@ -178,8 +177,8 @@ public partial class MainViewModel
                 .ToArray();
             if (scale >= 0.999) return found;
 
-            // im Original nachschärfen (Kanten, Falz, gezeichnete Linien) — auf der verkleinerten Fassung liegt ein Punkt
-            // sonst bis zu einigen Pixeln daneben
+            // Refine on the full-resolution image (edges, fold, ruled lines); on the reduced version a point can
+            // otherwise be off by up to a few pixels.
             float[] gray;
             using (var g = ImageOps.CloneOf(doc))
             {
@@ -198,14 +197,14 @@ public partial class MainViewModel
         }
     }
 
-    /// <summary>Alle unberührten Vorschläge weg; eigene und geänderte Linien bleiben.</summary>
+    /// <summary>Removes all untouched suggestions; own and modified lines stay.</summary>
     [RelayCommand]
     private void DiscardDewarpSuggestions()
     {
         if (DewarpLines is { } lines) DewarpLines = lines.Where(l => !l.Suggested).ToArray();
     }
 
-    /// <summary>Rezept mit den Linien der Ansicht (Hilfe für Anzeige und Übernehmen).</summary>
+    /// <summary>Recipe with the lines of the view (used for the info text and for applying).</summary>
     private GeometryRecipe? DewarpedRecipe(IReadOnlyList<WarpLineShape> lines)
     {
         if (_history is not { } h) return null;
@@ -217,7 +216,7 @@ public partial class MainViewModel
 
     private CancellationTokenSource? _dewarpInfoCts;
 
-    /// <summary>Ergebnis der Linien ausrechnen (im Hintergrund, die letzte Änderung gewinnt).</summary>
+    /// <summary>Computes the result of the lines for the info text, in the background; the latest change wins.</summary>
     private async Task UpdateDewarpInfoAsync()
     {
         _dewarpInfoCts?.Cancel();
@@ -233,20 +232,20 @@ public partial class MainViewModel
             return;
         }
 
-        // Nicht mit „using“: der nächste Aufruf bricht _dewarpInfoCts ab — war es schon entsorgt, warf Cancel(), und die
-        // Zeile blieb ab der zweiten Änderung auf dem ersten Stand stehen. Ohne Zeitgeber braucht es kein Dispose.
+        // Not with "using": the next call cancels _dewarpInfoCts; if it had already been disposed, Cancel() threw and the
+        // info line stayed at the first result from the second change on. Without a timer no Dispose is needed.
         var cts = _dewarpInfoCts = new CancellationTokenSource();
         var (pw, ph) = PixelSize();
         try
         {
-            await Task.Delay(120, cts.Token);   // beim Ziehen nicht jede Bewegung rechnen
+            await Task.Delay(120, cts.Token);   // do not compute every movement while dragging
             var map = await Task.Run(() => recipe.DewarpMapFor(pw, ph), cts.Token);
             if (cts.IsCancellationRequested) return;
             DewarpInfo = DescribeDewarp(map, count, pw);
         }
         catch (OperationCanceledException)
         {
-            // neuere Linien kommen gleich
+            // newer lines are on their way
         }
         finally
         {
@@ -265,21 +264,22 @@ public partial class MainViewModel
         return string.Join(" · ", parts);
     }
 
-    // ------------------------------------------------------------ KI begradigen (SyntheticDoc)
+    // ------------------------------------------------------------ Straighten with AI (SyntheticDoc)
 
-    /// <summary>Die KI-Begradigung ist im Rezept (Symbol gedrückt).</summary>
+    /// <summary>The AI straightening is part of the recipe (icon shown as pressed).</summary>
     public bool AiStraightenActive => CurrentRecipe.Dewarp?.Grid is not null;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StraightenWithAiCommand))]
     public partial bool IsStraighteningWithAi { get; set; }
 
-    // nicht an HasImage koppeln: der Befehl erführe nichts davon und bliebe gesperrt; ohne Bild ist das Symbol ohnehin unsichtbar
+    // Not coupled to HasImage: the command would not be notified of changes and would stay disabled; without an image the icon is invisible anyway.
     private bool CanStraightenWithAi => !IsUpscaling && !IsStraighteningWithAi;
 
     /// <summary>
-    /// „Schatten entfernen“ (Rechtsklick auf das KI-Symbol): die Schattenkarte von SyntheticDoc beim Rendern herausrechnen.
-    /// Die App merkt sich die Wahl; ist die KI-Begradigung schon im Bild, wird sie gleich umgeschaltet (ein Schritt, Strg+Z).
+    /// "Remove shadows" (right-click on the AI icon): removes the SyntheticDoc shadow map during rendering.
+    /// The choice is saved in the app settings; if the AI straightening is already applied, it is switched immediately
+    /// (one step, undoable with Ctrl+Z).
     /// </summary>
     [ObservableProperty] public partial bool AiRemoveShadows { get; set; } = AppSettings.Load().AiRemoveShadows;
 
@@ -298,9 +298,10 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// „KI begradigen“: SyntheticDoc rechnet aus dem Bild (nur gedreht/gespiegelt, verkleinert auf 1600 px) das Gitter, damit
-    /// wird das Blatt gerade gezogen — ein Schritt, Strg+Z macht ihn rückgängig; Linien des Werkzeugs „Gewölbtes Blatt“
-    /// werden ersetzt. Ist die KI-Begradigung schon drin, nimmt der Klick sie wieder heraus.
+    /// "Straighten with AI": SyntheticDoc computes the grid from the image (only rotated/flipped, scaled to the model
+    /// input size, see <see cref="Core.Ai.SyntheticDoc.SyntheticDocDewarp"/>) and the page is flattened with it. This is
+    /// one step, undoable with Ctrl+Z; lines of the "Curved page" tool are replaced. If the AI straightening is already
+    /// applied, the click removes it again.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanStraightenWithAi))]
     private async Task StraightenWithAi()
@@ -337,7 +338,7 @@ public partial class MainViewModel
                 var (gridOnnx, shadowOnnx) = Core.Ai.SyntheticDoc.SyntheticDocModel.OnnxFor(checkpoint, fallback);
                 var session = Ai.Sessions.Get(model, gridOnnx);
                 var shadowSession = Ai.Sessions.Get(model, shadowOnnx);
-                // Schattenkarte immer mitrechnen (0,6 s): dann schaltet „Schatten entfernen“ ohne neuen Lauf um
+                // Always compute the shadow map as well (0.6 s), so that "Remove shadows" switches without a new run.
                 return Core.Ai.SyntheticDoc.SyntheticDocDewarp.Run(session, shadowSession, doc, focal, AiRemoveShadows, CancellationToken.None);
             });
             if (grid is null) return;
@@ -365,8 +366,11 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// „Gerade ziehen“: die Linien ins Rezept — ein Schritt, Strg+Z macht ihn rückgängig. Das Werkzeug bleibt offen und zeigt
-    /// das Ergebnis (<see cref="DewarpShowsResult"/>); „Justieren“ holt Original und Linien zurück, verlassen über das Symbol.
+    /// "Straighten out": writes the lines into the recipe as one step, undoable with Ctrl+Z. The tool stays open and shows
+    /// the result (<see cref="DewarpShowsResult"/>); "Adjust" brings back the original with the lines; the tool is left
+    /// via its icon.
+    /// </summary>
+    /// <param name="lines">The lines of the view.
     /// </summary>
     private async Task ApplyDewarpAsync(IReadOnlyList<WarpLineShape> lines)
     {
@@ -383,17 +387,17 @@ public partial class MainViewModel
         }
         else
         {
-            if (!h.Recipe.HasDewarp) return;   // nichts zu tun: weiter justieren
+            if (!h.Recipe.HasDewarp) return;   // nothing to do: keep adjusting
             (label, detail) = (Tr.T("Gerade ziehen entfernt"), Tr.T("keine Linien"));
             info = Tr.T("Keine Linien – das Blatt ist nicht mehr gerade gezogen.");
         }
 
-        // Ergebnis zeigen, Werkzeug offen lassen: erst umschalten, dann die Linien weg (sonst schlösse das das Werkzeug)
+        // Show the result and keep the tool open: switch first, then remove the lines (otherwise that would close the tool).
         DewarpDrawing = false;
         DewarpShowsResult = true;
         DewarpResultInfo = info;
         DewarpLines = null;
-        _keepDewarpTool = true;   // der neue Stand setzt die Größen zurück und schlösse dabei das Werkzeug
+        _keepDewarpTool = true;   // the new state resets the sizes and would close the tool in doing so
         try
         {
             await CommitRecipeAsync(next, new ImageStep(ImageStepKind.Crop, label, detail, null),
@@ -405,18 +409,18 @@ public partial class MainViewModel
         }
     }
 
-    // ------------------------------------------------------------ Ergebnis zeigen, justieren
+    // ------------------------------------------------------------ Show result, adjust
 
-    /// <summary>Werkzeug offen, aber nach „Gerade ziehen“: die Vorschau zeigt das Ergebnis, unten „Justieren“.</summary>
+    /// <summary>The tool is open after "Straighten out": the preview shows the result, with "Adjust" at the bottom.</summary>
     [ObservableProperty] public partial bool DewarpShowsResult { get; set; }
 
-    /// <summary>Unten im Ergebnis: Linien, Größe, Seitenverhältnis.</summary>
+    /// <summary>Shown below the result: lines, size, aspect ratio.</summary>
     [ObservableProperty] public partial string DewarpResultInfo { get; set; } = "";
 
-    // während „Gerade ziehen“ übernimmt: das Werkzeug bleibt offen (ApplySourceSize schlösse es sonst)
+    // while "Straighten out" is being applied the tool stays open (ApplySourceSize would close it otherwise)
     private bool _keepDewarpTool;
 
-    /// <summary>„Justieren“: wieder das Original mit den verwendeten Linien — nacharbeiten und noch einmal gerade ziehen.</summary>
+    /// <summary>"Adjust": shows the original with the lines in use again, so that they can be refined and applied once more.</summary>
     [RelayCommand]
     private async Task AdjustDewarp()
     {
@@ -425,14 +429,14 @@ public partial class MainViewModel
         await EnterDewarpViewAsync();
     }
 
-    /// <summary>Im Bild steckt eine Begradigung mit Linien (Punkt am Symbol, Stift in „Bearbeitungen“).</summary>
+    /// <summary>The image contains a straightening with lines (dot on the icon, pencil in the "Edits" list).</summary>
     public bool HasAppliedDewarpLines => CurrentRecipe.Dewarp is { Grid: null, Lines.Count: > 0 };
 
-    /// <summary>Stift in der Liste „Bearbeitungen“: das Werkzeug mit den verwendeten Linien öffnen.</summary>
+    /// <summary>Pencil in the "Edits" list: opens the tool with the lines in use.</summary>
     [RelayCommand]
     private void EditDewarpLines()
     {
-        if (!DewarpTool) DewarpTool = true;   // öffnet direkt beim Justieren
+        if (!DewarpTool) DewarpTool = true;   // opens directly in adjust mode
         else if (DewarpShowsResult) _ = AdjustDewarp();
         ShowEditList = false;
     }

@@ -6,27 +6,32 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-// Der Bildlook als Ganzes — für Erweiterungen (KI), die ihn vorher ins Bild rechnen oder
-// über ein eigenes Zwischenergebnis legen wollen.
+// The image look as a whole, for extensions (AI) that bake it into the image beforehand or
+// apply it over their own intermediate result.
 public partial class MainViewModel
 {
     /// <summary>
-    /// Was die Kette außer Größe und Format aufs Bild legt: Entrauschen → Tools (Licht, Farbe, Dunst) → Schärfen.
+    /// What the chain applies to the image apart from size and format: denoise → adjustments (light, colour, dehaze …) → sharpen.
     /// </summary>
-    /// <param name="TargetWidth">Breite des Exports — der Schärferadius gilt relativ dazu.</param>
+    /// <param name="Noise">Noise reduction strength; 0 for none.</param>
+    /// <param name="Adjust">Tonal and colour adjustments.</param>
+    /// <param name="SharpenAmount">Sharpening amount; 0 for none.</param>
+    /// <param name="SharpenRadius">Sharpening radius at <paramref name="TargetWidth"/>.</param>
+    /// <param name="TargetWidth">Width of the export in px; the sharpening radius is relative to it.</param>
+    /// <param name="ColorNoise">Colour noise reduction strength; 0 for none.</param>
     internal sealed record Look(double Noise, Adjustments Adjust, double SharpenAmount, double SharpenRadius, int TargetWidth,
         double ColorNoise = 0)
     {
         public bool IsNone => Noise <= 0 && ColorNoise <= 0 && SharpenAmount <= 0 && Adjust.IsNone;
 
-        /// <summary>Schärferadius für ein Bild dieser Breite (so, dass er im Export gleich wirkt).</summary>
+        /// <summary>Sharpening radius for an image of this width, scaled so that it has the same effect as in the export.</summary>
         public double SharpenSigma(int width) => SharpenRadius * width / Math.Max(1, TargetWidth);
 
-        /// <summary>Schritte für die Fortschrittsanzeige (Entrauschen, Dunst je Durchlauf, Licht und Farbe, Schärfen).</summary>
+        /// <summary>Steps for the progress display (denoise, dehaze per pass, light and colour, sharpen).</summary>
         public WorkPlan Plan(int width, int height, IProgress<WorkProgress>? progress, System.Threading.CancellationToken cancel) =>
             ImageExporter.PlanLook((double)width * height / 1e6, Noise, ColorNoise, Adjust, SharpenAmount, progress, cancel);
 
-        /// <summary>Derselbe Look ohne Wirkung: Regler, die etwas tun, auf null; Feineinstellungen bleiben.</summary>
+        /// <summary>The same look without effect: sliders that have an effect go to zero; fine settings stay.</summary>
         public Look Neutral() => this with
         {
             Noise = 0,
@@ -41,7 +46,7 @@ public partial class MainViewModel
         };
     }
 
-    /// <summary>Größe und Filter der normalen Vorschau — für Zwischenergebnisse, die an ihrer Stelle gezeigt werden.</summary>
+    /// <summary>Size and filter of the normal preview, for intermediate results shown in its place.</summary>
     internal AiPreviewSize PreviewSize()
     {
         var (tw, th) = EffectiveTarget();
@@ -49,16 +54,17 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// Ziel des Exports so groß wie das Bild? Dann zeigt die normale Vorschau ohne Look das Bild selbst, in voller
-    /// Größe — ein Zwischenergebnis sollte dann auch in voller Größe erscheinen, sonst springt es beim Übernehmen.
+    /// Determines whether the export target is as large as the image. In that case the normal preview without a look
+    /// shows the image itself at full size, so an intermediate result should also appear at full size; otherwise it
+    /// jumps when it is applied.
     /// </summary>
     internal bool TargetIsImageSize
     {
         get
         {
             var (tw, th) = EffectiveTarget();
-            // Größe des fertigen Bildes (mit Ausrichten) — und nur ohne Ausrichten: sonst müsste das Zwischenergebnis
-            // in voller Größe gedreht/entzerrt werden
+            // Only without geometry: otherwise the intermediate result would have to be rotated/straightened
+            // at full size.
             return _history is { } h && h.Recipe.IsNone && tw == SourceWidth && th == SourceHeight;
         }
     }
@@ -72,12 +78,12 @@ public partial class MainViewModel
         EffectiveColorNoise);
 
     /// <summary>
-    /// Teilen sich mehrere Bilder die Einstellungen („für alle“)? Dann lässt sich der Look nicht für
-    /// ein einzelnes Bild ins Bild rechnen und zurücksetzen.
+    /// Determines whether several images share the settings ("for all"). In that case the look cannot be baked into
+    /// a single image and reset.
     /// </summary>
     internal bool SettingsShared => ApplyToAll && _files.Count > 1;
 
-    /// <summary>Look in voller Größe ins Bild rechnen (Hintergrund). Ohne Wirkung: das Bild selbst.</summary>
+    /// <summary>Bakes the look into the image at full size (background thread). Without effect, returns the image itself.</summary>
     internal static MagickImage RenderLook(MagickImage image, Look look, WorkPlan? plan = null)
     {
         if (look.IsNone) return image;
@@ -86,14 +92,21 @@ public partial class MainViewModel
         return ImageExporter.RenderLook(image, look.Noise, look.ColorNoise, look.Adjust, look.SharpenAmount, look.SharpenSigma(width), plan);
     }
 
-    /// <summary>Körnung für Vorschau und Export (gehört nicht zum Look: sie kommt nie vor der KI ins Bild).</summary>
+    /// <summary>Grain for preview and export; not part of the look, because it is never baked into the image before the AI.</summary>
     internal GrainSettings? CurrentGrain() => EffectiveGrain;
 
     /// <summary>
-    /// Look auf eine Vorschau (Pixelpuffer der Kette) rechnen und für die Anzeige runden (Hintergrund). Die Körnung
-    /// kommt danach, auch ohne Look — immer als Letztes.
+    /// Applies the look to a preview (pixel buffer of the chain) and rounds it for display (background thread). Grain
+    /// is applied afterwards, even without a look, always last.
     /// </summary>
-    /// <param name="grainScale">Größe dieser Vorschau relativ zur Ausgabe.</param>
+    /// <param name="bgra">Pixels of the chain (BGRA, float).</param>
+    /// <param name="width">Width in px.</param>
+    /// <param name="height">Height in px.</param>
+    /// <param name="look">The look; null for none.</param>
+    /// <param name="plan">Progress plan; null for none.</param>
+    /// <param name="grain">Grain settings; null for none.</param>
+    /// <param name="grainScale">Size of this preview relative to the output.</param>
+    /// <returns>Dithered 8-bit BGRA pixels.</returns>
     internal static byte[] RenderLookPreview(float[] bgra, int width, int height, Look? look, WorkPlan? plan = null,
         GrainSettings? grain = null, double grainScale = 1)
     {
@@ -116,7 +129,7 @@ public partial class MainViewModel
         return result;
     }
 
-    /// <summary>Die Einstellungen mit einem anderen Look (alles Übrige bleibt).</summary>
+    /// <summary>Returns the settings with another look (everything else stays).</summary>
     private static SettingsState WithLook(SettingsState s, Look look)
     {
         var a = look.Adjust;
