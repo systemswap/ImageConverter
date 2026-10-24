@@ -1,19 +1,26 @@
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>Ein Standardformat in Millimetern (Hochformat: Breite ≤ Höhe).</summary>
+/// <summary>A standard paper or print size in millimetres, stored in portrait orientation (width ≤ height).</summary>
+/// <param name="Key">Identifier used for lookup with <see cref="PaperFormats.Find"/> (case-insensitive).</param>
+/// <param name="Name">Display name, for example "A4".</param>
+/// <param name="WidthMm">Width in mm.</param>
+/// <param name="HeightMm">Height in mm.</param>
 public sealed record PaperFormat(string Key, string Name, double WidthMm, double HeightMm)
 {
-    /// <summary>Für das Menü, z. B. „A4 · 210 × 297 mm“.</summary>
+    /// <summary>Gets the menu text, for example "A4 · 210 × 297 mm".</summary>
     public string Label => $"{Name}  ·  {WidthMm:0.#} × {HeightMm:0.#} mm";
 }
 
 /// <summary>
-/// Standardformate zum Auswählen (Größe → Format) und das Einpassen des Bildes. Hoch- oder Querformat folgt
-/// dem Bild; bei geschlossener Kette passt das Bild mit gleichem Seitenverhältnis ganz hinein, die eine
-/// Kante füllt das Format aus.
+/// Provides the standard formats offered for selection (Size → Format) and fits an image into them.
 /// </summary>
+/// <remarks>
+/// Portrait or landscape orientation follows the image. With the aspect-ratio lock closed, the image fits entirely
+/// inside with its own aspect ratio and one edge fills the format.
+/// </remarks>
 public static class PaperFormats
 {
+    /// <summary>Gets the ISO 216 A series (A0–A7) and DIN long (DL).</summary>
     public static IReadOnlyList<PaperFormat> Din { get; } =
     [
         new("A0", "A0", 841, 1189),
@@ -27,7 +34,7 @@ public static class PaperFormats
         new("DL", "DIN lang", 99, 210),
     ];
 
-    /// <summary>Gängige Fotoabzüge (Nennmaß in cm, tatsächliche Größe in mm).</summary>
+    /// <summary>Gets common photo print sizes (nominal size in cm as the name, actual size in mm).</summary>
     public static IReadOnlyList<PaperFormat> Photo { get; } =
     [
         new("9x13", "9 × 13", 89, 127),
@@ -38,23 +45,33 @@ public static class PaperFormats
         new("30x45", "30 × 45", 305, 457),
     ];
 
+    /// <summary>Gets the US paper sizes Letter and Legal.</summary>
     public static IReadOnlyList<PaperFormat> Us { get; } =
     [
         new("Letter", "Letter", 215.9, 279.4),
         new("Legal", "Legal", 215.9, 355.6),
     ];
 
+    /// <summary>Gets all formats: <see cref="Din"/>, then <see cref="Photo"/>, then <see cref="Us"/>.</summary>
     public static IEnumerable<PaperFormat> All => Din.Concat(Photo).Concat(Us);
 
+    /// <summary>Looks up a format by its <see cref="PaperFormat.Key"/>.</summary>
+    /// <param name="key">Key to look for; compared case-insensitively.</param>
+    /// <returns>The format, or <see langword="null"/> if no format has this key.</returns>
     public static PaperFormat? Find(string key) =>
         All.FirstOrDefault(f => string.Equals(f.Key, key, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Druckgröße in mm für ein Bild mit dem Seitenverhältnis <paramref name="imageAspect"/> (Breite/Höhe).
-    /// Hoch- oder Querformat wie das Bild (quadratisch: Hochformat). <paramref name="keepAspect"/>: ganz
-    /// hinein, eine Kante füllt das Format; sonst genau das Format (das Bild wird gestaucht/gestreckt).
-    /// <c>WidthLeads</c>: die Breite füllt das Format aus (die Höhe ergibt sich).
+    /// Computes the print size in mm for an image with the aspect ratio <paramref name="imageAspect"/>.
     /// </summary>
+    /// <param name="imageAspect">Image width ÷ height. Values ≤ 0 return the full format, as with
+    /// <paramref name="keepAspect"/> off.</param>
+    /// <param name="format">Target format; it is turned to landscape if the image is wider than tall (a square image
+    /// stays portrait).</param>
+    /// <param name="keepAspect"><see langword="true"/>: the image fits entirely inside and one edge fills the format;
+    /// <see langword="false"/>: exactly the format (the image is squeezed or stretched).</param>
+    /// <returns>Width and height in mm; <c>WidthLeads</c> is <see langword="true"/> if the width fills the format
+    /// (the height follows from it).</returns>
     public static (double WidthMm, double HeightMm, bool WidthLeads) Fit(double imageAspect, PaperFormat format, bool keepAspect)
     {
         var landscape = imageAspect > 1;
@@ -62,7 +79,7 @@ public static class PaperFormats
         var fh = landscape ? format.WidthMm : format.HeightMm;
         if (!keepAspect || imageAspect <= 0) return (fw, fh, true);
 
-        // Breiter als das Format → die Breite stößt zuerst an
+        // Wider than the format: the width reaches the edge first
         return imageAspect >= fw / fh
             ? (fw, fw / imageAspect, true)
             : (fh * imageAspect, fh, false);

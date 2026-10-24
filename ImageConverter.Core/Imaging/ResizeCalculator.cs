@@ -1,18 +1,29 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Rechnet Zielmaße aus. Haelt das Seitenverhaeltnis als einen festen Wert, der beim
-/// Laden des Bildes (bzw. nach einem Zuschnitt) gesetzt wird — nicht nach jedem
-/// Tastendruck neu aus den gerundeten Feldern, weil das Verhaeltnis sonst wegdriftet.
+/// Computes target dimensions in pixels.
 /// </summary>
+/// <remarks>
+/// The aspect ratio is a fixed value taken from the source size given to the constructor (when the image is loaded or
+/// after a crop), not recomputed from the rounded input fields after every keystroke, because the ratio would drift
+/// otherwise. All results are at least 1 px.
+/// </remarks>
 public sealed class ResizeCalculator
 {
-    /// <summary>Seitenverhaeltnis Breite/Hoehe der Quelle.</summary>
+    /// <summary>Gets the aspect ratio width ÷ height of the source.</summary>
     public double AspectRatio { get; }
 
+    /// <summary>Gets the source width in px.</summary>
     public int SourceWidth { get; }
+
+    /// <summary>Gets the source height in px.</summary>
     public int SourceHeight { get; }
 
+    /// <summary>Creates a calculator for a source image of the given size.</summary>
+    /// <param name="sourceWidth">Source width in px.</param>
+    /// <param name="sourceHeight">Source height in px.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sourceWidth"/> or
+    /// <paramref name="sourceHeight"/> is not positive.</exception>
     public ResizeCalculator(int sourceWidth, int sourceHeight)
     {
         if (sourceWidth <= 0)
@@ -26,26 +37,37 @@ public sealed class ResizeCalculator
     }
 
     /// <summary>
-    /// Breite wurde eingegeben — liefert die passende Hoehe. Die eingegebene Breite
-    /// bleibt unangetastet, der Rundungsfehler landet in der Hoehe.
+    /// Returns the height that matches an entered width. The entered width stays untouched; the rounding error goes
+    /// into the height.
     /// </summary>
+    /// <param name="width">Entered width in px.</param>
+    /// <returns>Height in px, rounded, at least 1.</returns>
     public int HeightFor(int width) => Clamp((int)Math.Round(width / AspectRatio));
 
-    /// <summary>Hoehe wurde eingegeben — liefert die passende Breite.</summary>
+    /// <summary>Returns the width that matches an entered height.</summary>
+    /// <param name="height">Entered height in px.</param>
+    /// <returns>Width in px, rounded, at least 1.</returns>
     public int WidthFor(int height) => Clamp((int)Math.Round(height * AspectRatio));
 
-    /// <summary>Beide Kanten aus einem Prozentwert (100 = Originalgroesse).</summary>
+    /// <summary>Computes both edges from a percentage of the source size.</summary>
+    /// <param name="percent">Scale in percent; 100 is the original size.</param>
+    /// <returns>Width and height in px, each rounded separately, at least 1.</returns>
     public (int Width, int Height) FromPercent(double percent) =>
         (Clamp((int)Math.Round(SourceWidth * percent / 100.0)),
          Clamp((int)Math.Round(SourceHeight * percent / 100.0)));
 
-    /// <summary>Beide Kanten so, dass die laengste Kante <paramref name="longestEdge"/> ergibt.</summary>
+    /// <summary>Computes both edges so that the longest edge equals <paramref name="longestEdge"/>.</summary>
+    /// <param name="longestEdge">Target length of the longest edge in px (for a square source, the width).</param>
+    /// <returns>Width and height in px, at least 1.</returns>
     public (int Width, int Height) FromLongestEdge(int longestEdge) =>
         SourceWidth >= SourceHeight
             ? (Clamp(longestEdge), HeightFor(longestEdge))
             : (WidthFor(longestEdge), Clamp(longestEdge));
 
-    /// <summary>Groesstes Ergebnis, das vollstaendig in die Box passt (Fit, mit Rand).</summary>
+    /// <summary>Computes the largest size that fits entirely inside the box (fit, leaves a margin).</summary>
+    /// <param name="boxWidth">Box width in px.</param>
+    /// <param name="boxHeight">Box height in px.</param>
+    /// <returns>Width and height in px, at least 1.</returns>
     public (int Width, int Height) Fit(int boxWidth, int boxHeight)
     {
         var scale = Math.Min((double)boxWidth / SourceWidth, (double)boxHeight / SourceHeight);
@@ -53,7 +75,10 @@ public sealed class ResizeCalculator
                 Clamp((int)Math.Round(SourceHeight * scale)));
     }
 
-    /// <summary>Kleinstes Ergebnis, das die Box vollstaendig fuellt (Cover, wird beschnitten).</summary>
+    /// <summary>Computes the smallest size that fills the box completely (cover, the excess is cropped).</summary>
+    /// <param name="boxWidth">Box width in px.</param>
+    /// <param name="boxHeight">Box height in px.</param>
+    /// <returns>Width and height in px, at least 1.</returns>
     public (int Width, int Height) Fill(int boxWidth, int boxHeight)
     {
         var scale = Math.Max((double)boxWidth / SourceWidth, (double)boxHeight / SourceHeight);
@@ -62,8 +87,12 @@ public sealed class ResizeCalculator
     }
 
     /// <summary>
-    /// Pixelmaße aus physischer Zielgroesse und DPI (DPI-Modus "neu berechnen").
+    /// Computes pixel dimensions from a physical target size and a resolution (DPI mode "resample").
     /// </summary>
+    /// <param name="widthInches">Target width in inches.</param>
+    /// <param name="heightInches">Target height in inches.</param>
+    /// <param name="dpi">Resolution in dots per inch.</param>
+    /// <returns>Width and height in px, rounded, at least 1.</returns>
     public static (int Width, int Height) FromPhysicalSize(
         double widthInches, double heightInches, double dpi) =>
         (Clamp((int)Math.Round(widthInches * dpi)),

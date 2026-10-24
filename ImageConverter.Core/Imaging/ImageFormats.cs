@@ -3,25 +3,27 @@ using ImageMagick;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Welche Dateiendungen die App öffnen kann. Die Liste wird mit dem abgeglichen,
-/// was die eingebundene ImageMagick-Version tatsächlich lesen kann — so steht im
-/// Dateidialog nie ein Format, an dem das Laden dann scheitert.
+/// Determines which file extensions the application can open.
 /// </summary>
+/// <remarks>
+/// The candidate list is intersected with the formats that the bundled ImageMagick build can actually
+/// read, so that the file dialog never offers a format that then fails to load.
+/// </remarks>
 public static class ImageFormats
 {
     /// <summary>
-    /// Kandidaten: übliche Bildformate. ImageMagick kennt noch viel mehr (Text,
-    /// Paletten, wissenschaftliche Formate) — die gehören nicht in einen Bildkonverter.
+    /// Candidates: common image formats. ImageMagick supports many more (text, palettes, scientific
+    /// formats), but those do not belong in an image converter.
     /// </summary>
     private static readonly string[] Candidates =
     [
-        // Klassisch
+        // Classic
         "jpg", "jpeg", "jpe", "jfif", "png", "bmp", "dib", "gif", "tif", "tiff", "ico", "cur", "tga",
         // Modern
         "webp", "avif", "heic", "heif", "jxl", "qoi", "jp2",
-        // Sonstige
+        // Other
         "svg", "psd", "exr", "hdr",
-        // Kamera-RAW
+        // Camera raw
         "dng", "cr2", "cr3", "nef", "nrw", "arw", "orf", "rw2", "raf", "pef", "srw",
     ];
 
@@ -38,8 +40,15 @@ public static class ImageFormats
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     });
 
-    /// <summary>Lesbare Endungen mit Punkt, z. B. ".avif". Groß-/Kleinschreibung egal.</summary>
+    /// <summary>Gets the readable extensions including the leading dot, for example ".avif".</summary>
+    /// <remarks>
+    /// The set compares case-insensitively. It is computed once on first access from
+    /// <see cref="MagickNET.SupportedFormats"/>.
+    /// </remarks>
     public static IReadOnlySet<string> ReadableExtensions => Readable.Value;
 
+    /// <summary>Determines whether the extension of a path is one of the <see cref="ReadableExtensions"/>.</summary>
+    /// <param name="path">File path or file name; only its extension is examined.</param>
+    /// <returns><see langword="true"/> if the extension is readable; otherwise <see langword="false"/>.</returns>
     public static bool CanRead(string path) => ReadableExtensions.Contains(Path.GetExtension(path));
 }

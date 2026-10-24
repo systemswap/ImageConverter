@@ -1,22 +1,30 @@
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>Was eine nachgezeichnete Linie auf dem Blatt ist.</summary>
+/// <summary>Specifies what a traced line is on the page.</summary>
 public enum WarpLineKind
 {
-    /// <summary>Auf dem Blatt waagerecht: Textzeile, Ober- oder Unterkante — wird durch die Wölbung zum Bogen.</summary>
+    /// <summary>Horizontal on the page: a text line, the top or bottom edge; the curvature turns it into an arc.</summary>
     Horizontal,
-    /// <summary>Auf dem Blatt senkrecht: Seitenkante, Spalte, Tabellenlinie.</summary>
+    /// <summary>Vertical on the page: a page edge, a column, a table rule.</summary>
     Vertical,
-    /// <summary>Falz einer Doppelseite: senkrecht, dort darf das Papier einen Knick haben.</summary>
+    /// <summary>Fold of a double page: vertical; the paper may have a kink there. Only the first fold line is used as a
+    /// fold, further ones count as <see cref="Vertical"/>.</summary>
     Fold,
 }
 
 /// <summary>
-/// Eine nachgezeichnete Linie, die in Wirklichkeit gerade ist. Punkte relativ zum Pixelbild (x / Breite, y / Höhe),
-/// in der Reihenfolge, in der sie gesetzt wurden.
+/// A traced line that is straight in reality.
 /// </summary>
+/// <param name="Kind">What the line is on the page.</param>
+/// <param name="Points">Points relative to the pixel image (x / width, y / height), in the order in which they were
+/// placed. Lines with fewer than two points are ignored.</param>
+/// <remarks>Equality compares the points element by element (value semantics), so that the record can serve as a cache
+/// key.</remarks>
 public sealed record WarpLine(WarpLineKind Kind, IReadOnlyList<(double X, double Y)> Points)
 {
+    /// <summary>Compares kind and points element by element.</summary>
+    /// <param name="other">Line to compare with.</param>
+    /// <returns><see langword="true"/> if both lines are equal.</returns>
     public bool Equals(WarpLine? other) =>
         other is not null && Kind == other.Kind && Points.SequenceEqual(other.Points);
 
@@ -30,14 +38,26 @@ public sealed record WarpLine(WarpLineKind Kind, IReadOnlyList<(double X, double
 }
 
 /// <summary>
-/// Fertiges Gitter einer Begradigung (KI, <c>SyntheticDocDewarp</c>): für ein Raster von <paramref name="Nx"/> × <paramref name="Ny"/>
-/// Stellen des Ergebnisses die Stelle im Pixelbild (relativ: x / Breite, y / Höhe), dazu die Größe des Ergebnisses in
-/// Breiten des Pixelbilds und das geschätzte Seitenverhältnis (Höhe / Breite, null = unbekannt). Unabhängig von der
-/// Bildgröße, deshalb Teil des Rezepts.
+/// A finished dewarping grid (AI, <c>SyntheticDocDewarp</c>).
 /// </summary>
+/// <remarks>Independent of the image size, and therefore part of the recipe. Equality compares the arrays element by
+/// element.</remarks>
+/// <param name="Nx">Number of grid nodes horizontally.</param>
+/// <param name="Ny">Number of grid nodes vertically.</param>
+/// <param name="Sx">Per node (row by row, <paramref name="Nx"/> · <paramref name="Ny"/> values), the x position in the
+/// pixel image, relative (x / width).</param>
+/// <param name="Sy">Per node, the y position in the pixel image, relative (y / height).</param>
+/// <param name="RelWidth">Width of the result in widths of the pixel image.</param>
+/// <param name="RelHeight">Height of the result in widths of the pixel image.</param>
+/// <param name="PageAspect">Estimated page aspect ratio (height ÷ width); <see langword="null"/> = unknown.</param>
+/// <param name="Din">Whether the aspect ratio was snapped to DIN (1 : √2).</param>
+/// <param name="Shading">Shading map of the AI dewarping; <see langword="null"/> = none.</param>
 public sealed record DewarpGrid(int Nx, int Ny, float[] Sx, float[] Sy, double RelWidth, double RelHeight, double? PageAspect, bool Din,
     DewarpShading? Shading = null)
 {
+    /// <summary>Compares all values; the grid arrays element by element.</summary>
+    /// <param name="other">Grid to compare with.</param>
+    /// <returns><see langword="true"/> if both grids are equal.</returns>
     public bool Equals(DewarpGrid? other) =>
         other is not null && Nx == other.Nx && Ny == other.Ny && RelWidth.Equals(other.RelWidth) && RelHeight.Equals(other.RelHeight)
         && Nullable.Equals(PageAspect, other.PageAspect) && Din == other.Din && Equals(Shading, other.Shading)
@@ -57,18 +77,24 @@ public sealed record DewarpGrid(int Nx, int Ny, float[] Sx, float[] Sy, double R
 }
 
 /// <summary>
-/// Schattenkarte der KI-Begradigung (SyntheticDoc), schon gerade gezogen: ein Raster von <paramref name="Width"/> ×
-/// <paramref name="Height"/> Stellen über das Ergebnis (Ecke zu Ecke, wie die Gitterknoten), je R, G, B der Helligkeit, die
-/// das Licht dort hatte (1 = volles Licht). <paramref name="Strength"/>: wie stark herausgerechnet wird (bei hellen Fotos
-/// weniger, wie bei den Autoren). <paramref name="On"/>: wird herausgerechnet — die Karte bleibt auch ausgeschaltet im Rezept,
-/// damit das Umschalten keinen neuen KI-Lauf braucht.
+/// Shading map of the AI dewarping (SyntheticDoc), already flattened.
 /// </summary>
+/// <param name="Width">Number of samples horizontally across the result (corner to corner, like the grid nodes).</param>
+/// <param name="Height">Number of samples vertically across the result.</param>
+/// <param name="Rgb">Per sample (row by row), R, G, B of the brightness the light had there (1 = full light).</param>
+/// <param name="Strength">How strongly the shading is removed, 0 … 1 (less for bright photos, as the SyntheticDoc
+/// authors do).</param>
+/// <param name="On">Whether the shading is removed. The map stays in the recipe when switched off, so that toggling
+/// does not require a new AI run.</param>
 public sealed record DewarpShading(int Width, int Height, float[] Rgb, double Strength, bool On = true)
 {
-    /// <summary>Kleinster Teiler (wie bei den Autoren): tiefe Schatten werden höchstens zehnfach aufgehellt.</summary>
+    /// <summary>Smallest divisor (as used by the SyntheticDoc authors): deep shadows are brightened at most tenfold.</summary>
     public const double MinDivisor = 0.1;
 
-    /// <summary>Licht an der Stelle (u, v ∈ 0 … 1) des Ergebnisses, bilinear.</summary>
+    /// <summary>Samples the light at a position of the result, bilinearly.</summary>
+    /// <param name="u">Horizontal position, 0 … 1 (clamped).</param>
+    /// <param name="v">Vertical position, 0 … 1 (clamped).</param>
+    /// <returns>Light per channel (1 = full light).</returns>
     public (float R, float G, float B) Sample(double u, double v)
     {
         var fx = Math.Clamp(u, 0, 1) * (Width - 1);
@@ -82,7 +108,11 @@ public sealed record DewarpShading(int Width, int Height, float[] Rgb, double St
         return (Lerp(0), Lerp(1), Lerp(2));
     }
 
-    /// <summary>Faktor, mit dem ein Farbwert an der Stelle (u, v) malgenommen wird: 1 / (Licht · Stärke + 1 − Stärke).</summary>
+    /// <summary>Computes the factor by which a colour value at the position (u, v) is multiplied:
+    /// 1 / (light · strength + 1 − strength), with the divisor at least <see cref="MinDivisor"/>.</summary>
+    /// <param name="u">Horizontal position, 0 … 1 (clamped).</param>
+    /// <param name="v">Vertical position, 0 … 1 (clamped).</param>
+    /// <returns>Gain per channel, at most 1 / <see cref="MinDivisor"/>.</returns>
     public (float R, float G, float B) Gain(double u, double v)
     {
         var (r, g, b) = Sample(u, v);
@@ -91,6 +121,9 @@ public sealed record DewarpShading(int Width, int Height, float[] Rgb, double St
         return (Inv(r, k), Inv(g, k), Inv(b, k));
     }
 
+    /// <summary>Compares all values; the map element by element.</summary>
+    /// <param name="other">Shading map to compare with.</param>
+    /// <returns><see langword="true"/> if both maps are equal.</returns>
     public bool Equals(DewarpShading? other) =>
         other is not null && Width == other.Width && Height == other.Height && Strength.Equals(other.Strength) && On == other.On
         && Rgb.AsSpan().SequenceEqual(other.Rgb);
@@ -108,22 +141,29 @@ public sealed record DewarpShading(int Width, int Height, float[] Rgb, double St
 }
 
 /// <summary>
-/// Gewölbtes Blatt gerade ziehen: die nachgezeichneten Linien und die Brennweite der Aufnahme (Kleinbild-Äquivalent,
-/// aus den EXIF-Daten; ohne Angabe 28 mm wie bei Handys üblich).
+/// Describes how to flatten a curved page: the traced lines and the focal length of the shot.
 /// </summary>
-/// <param name="GridOnly">Kein Blattmodell im Raum: nur die Linien gerade ziehen (Gitter), Seitenverhältnis wie vorher — für
-/// einen zweiten Durchgang auf einem schon begradigten Bild.</param>
-/// <param name="Grid">Fertiges Gitter einer KI-Begradigung — dann zählen keine Linien.</param>
+/// <param name="Lines">Traced lines; only lines with at least two points are used.</param>
+/// <param name="Focal35">35 mm equivalent focal length in mm (from the EXIF data, see <see cref="Dewarp.Focal35Of"/>);
+/// without one, 28 mm, as is common for phones.</param>
+/// <param name="GridOnly">No 3D page model: only straighten the lines (grid), the aspect ratio stays as in the source;
+/// for a second pass on an already flattened image.</param>
+/// <param name="Grid">Finished grid of an AI dewarping; if set, the lines are not used.</param>
 public sealed record DewarpSpec(IReadOnlyList<WarpLine> Lines, double Focal35 = DewarpSpec.DefaultFocal35, bool GridOnly = false,
     DewarpGrid? Grid = null)
 {
+    /// <summary>Default 35 mm equivalent focal length in mm (main camera of a phone).</summary>
     public const double DefaultFocal35 = 28;
 
-    /// <summary>Linien mit mindestens zwei Punkten — nur die zählen.</summary>
+    /// <summary>Gets the lines with at least two points; only these are used.</summary>
     public IEnumerable<WarpLine> UsableLines => Lines.Where(l => l.Points.Count >= 2);
 
+    /// <summary>Gets whether there is anything to compute: a grid or at least one usable line.</summary>
     public bool IsUsable => Grid is not null || UsableLines.Any();
 
+    /// <summary>Compares all values; the lines element by element.</summary>
+    /// <param name="other">Specification to compare with.</param>
+    /// <returns><see langword="true"/> if both specifications are equal.</returns>
     public bool Equals(DewarpSpec? other) =>
         other is not null && Focal35.Equals(other.Focal35) && GridOnly == other.GridOnly && Equals(Grid, other.Grid)
         && Lines.SequenceEqual(other.Lines);

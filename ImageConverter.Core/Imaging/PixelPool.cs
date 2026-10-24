@@ -3,29 +3,41 @@ using System.Collections.Concurrent;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Wiederverwendbare Pixelpuffer genau einer Länge. Die Bildkette legte je Schritt neue Puffer an
-/// (bei 28,7 MP je 460 MB) — die Speicherbereinigung räumte sie spät weg, die Spitze lag bei 8 GB.
-/// Mit dem Pool laufen die Durchläufe mit wenigen Puffern, die immer wieder benutzt werden.
+/// Pool of reusable pixel buffers, keyed by exact length.
 /// </summary>
 /// <remarks>
-/// Regeln: Nur zurückgeben, was man selbst gemietet hat und danach nicht mehr anfasst — nie den
-/// Eingang eines Aufrufers oder etwas, das in einem Zwischenspeicher liegt. Gemietete Puffer sind
-/// nicht geleert. Nach einer großen Rechnung <see cref="Trim"/>, sonst bleibt der Speicher belegt.
+/// <para>If the processing chain allocates new buffers for every step (460 MB each at 28.7 MP), the garbage collector
+/// reclaims them late and the peak reaches about 8 GB. With the pool, the passes run with a few buffers that are reused
+/// again and again.</para>
+/// <para>Rules: only return a buffer that was rented by the same code and is not touched afterwards; never the input of
+/// a caller or a buffer that is held in a cache. Rented buffers are not cleared. Call <see cref="Trim"/> after a large
+/// computation, otherwise the memory stays allocated.</para>
+/// <para><see cref="Rent"/> and <see cref="Return"/> may be called from several threads at once (concurrent
+/// collections); the limit per length is approximate under concurrency.</para>
 /// </remarks>
 public static class PixelPool
 {
-    /// <summary>Höchstens so viele freie Puffer je Länge (8: der Guided Filter des Entrauschens braucht so viele
-    /// gleichzeitig — mit 2 wurde fast alles neu angelegt; nach Vorschau und Export leert Trim den Pool).</summary>
+    /// <summary>Maximum number of free buffers per length. The guided filter of the noise reduction needs 8 at the same
+    /// time; with only 2, almost every buffer is allocated anew. <see cref="Trim"/> empties the pool after preview and
+    /// export.</summary>
     private const int MaxFreePerLength = 8;
 
     private static readonly ConcurrentDictionary<int, ConcurrentBag<float[]>> Free = new();
 
+    /// <summary>Rents a buffer of exactly <paramref name="length"/> elements.</summary>
+    /// <param name="length">Number of <see cref="float"/> elements.</param>
+    /// <returns>A free buffer from the pool or a newly allocated one; in both cases the content is undefined (not
+    /// cleared).</returns>
     public static float[] Rent(int length)
     {
         if (Free.TryGetValue(length, out var bag) && bag.TryTake(out var buffer)) return buffer;
         return GC.AllocateUninitializedArray<float>(length);
     }
 
+    /// <summary>Returns a buffer to the pool for reuse.</summary>
+    /// <param name="buffer">Buffer that the caller owns and no longer uses. <see langword="null"/> and empty arrays are
+    /// ignored; if the pool already holds the maximum number of free buffers of this length, the buffer is left to the
+    /// garbage collector.</param>
     public static void Return(float[]? buffer)
     {
         if (buffer is null || buffer.Length == 0) return;
@@ -33,22 +45,22 @@ public static class PixelPool
         if (bag.Count < MaxFreePerLength) bag.Add(buffer);
     }
 
-    /// <summary>Alle freien Puffer loslassen (nach Export oder Vorschau).</summary>
-    /// <param name="release">Nach einer großen Rechnung (Export): den Speicher auch ans System zurückgeben —
-    /// sonst behält .NET die großen Bereiche, und das Programm bleibt bei mehreren GB stehen.</param>
+    /// <summary>Drops all free buffers (after an export or a preview).</summary>
+    /// <param name="release">After a large computation (export): also return the memory to the operating system.
+    /// Otherwise .NET keeps the large regions and the process stays at several GB.</param>
     /// <remarks>
-    /// Eine normale Sammlung (auch mit LOH-Verdichtung) gibt den Speicher nicht zurück: nach dem Export des Panoramas
-    /// (28 MP) blieben 4,1 GB „zugesagt“ bei 0,16 GB belegt, 7,0 GB im Arbeitsspeicher. Erst
-    /// <see cref="GCCollectionMode.Aggressive"/> gibt ihn frei (danach 1,2 GB, etwa 0,1 s Pause), unter Linux dazu
-    /// <c>malloc_trim</c> für den freigegebenen Speicher von ImageMagick. Am Ergebnis ändert das nichts.
+    /// A normal collection (even with LOH compaction) does not return the memory: after exporting the panorama test
+    /// image (28 MP), 4.1 GB stayed committed with 0.16 GB in use and 7.0 GB resident. Only
+    /// <see cref="GCCollectionMode.Aggressive"/> releases it (afterwards 1.2 GB, a pause of about 0.1 s); on Linux,
+    /// <c>malloc_trim</c> additionally releases the memory freed by ImageMagick. The image result is not affected.
     /// </remarks>
     public static void Trim(bool release = false)
     {
         Free.Clear();
         if (!release) return;
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        // Was erst Finalizer oder Rückrufe nach der Sammlung loslassen (z. B. geteilte Puffer-Pools), fällt erst bei der
-        // nächsten Sammlung weg — gemessen blieben nach nur einer noch 2 GB belegt
+        // Whatever finalizers or post-collection callbacks release (for example shared buffer pools) is only reclaimed by
+        // the next collection; measured, 2 GB stayed in use after a single collection
         GC.WaitForPendingFinalizers();
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         if (OperatingSystem.IsLinux())
@@ -59,7 +71,7 @@ public static class PixelPool
             }
             catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
             {
-                // andere C-Bibliothek (musl): nicht nötig
+                // Other C library (musl): not needed
             }
         }
     }

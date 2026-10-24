@@ -4,14 +4,17 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Ergebnis von <see cref="Dewarp.MapFor"/>: welcher Punkt des Pixelbilds an welche Stelle des gerade gezogenen
-/// Ergebnisses kommt. Ein Gitter über das Ergebnis (bilinear dazwischen), Koordinaten relativ — dieselbe Abbildung
-/// passt auf jede Größe des Pixelbilds (Vorschau, volle Größe).
+/// Result of <see cref="Dewarp.MapFor"/>: maps each position of the flattened result to the point of the pixel image
+/// that belongs there.
 /// </summary>
+/// <remarks>
+/// A grid over the result (bilinear in between) with relative coordinates, so the same map fits any size of the pixel
+/// image (preview, full size). Instances are immutable and can be shared between threads.
+/// </remarks>
 public sealed class DewarpMap
 {
-    private readonly int _nx, _ny;            // Knoten waagerecht, senkrecht
-    private readonly float[] _sx, _sy;        // Stelle im Pixelbild, relativ (x / Breite, y / Höhe)
+    private readonly int _nx, _ny;            // Nodes horizontally, vertically
+    private readonly float[] _sx, _sy;        // Position in the pixel image, relative (x / width, y / height)
 
     internal DewarpMap(int nx, int ny, float[] sx, float[] sy, double relWidth, double relHeight)
     {
@@ -19,31 +22,35 @@ public sealed class DewarpMap
         (RelWidth, RelHeight) = (relWidth, relHeight);
     }
 
-    /// <summary>Breite des Ergebnisses in Breiten des Pixelbilds.</summary>
+    /// <summary>Gets the width of the result in widths of the pixel image.</summary>
     public double RelWidth { get; }
 
-    /// <summary>Höhe des Ergebnisses in Breiten des Pixelbilds.</summary>
+    /// <summary>Gets the height of the result in widths of the pixel image.</summary>
     public double RelHeight { get; }
 
-    /// <summary>Mit Blattmodell im Raum gerechnet (sonst nur die Linien gerade gezogen, Seitenverhältnis wie vorher).</summary>
+    /// <summary>Gets whether the map was computed with a 3D page model (otherwise only the lines are straightened and the
+    /// aspect ratio stays as in the source).</summary>
     public bool Modelled { get; internal init; }
 
-    /// <summary>Gitter aus einem KI-Modell (<c>SyntheticDocDewarp</c>), kein Blattmodell im Raum.</summary>
+    /// <summary>Gets whether the grid comes from an AI model (<c>SyntheticDocDewarp</c>) rather than a 3D page model.</summary>
     public bool Ai { get; internal init; }
 
-    /// <summary>Schatten, die beim Rendern herausgerechnet werden (KI-Begradigung, eingeschaltet); sonst null.</summary>
+    /// <summary>Gets the shading that <see cref="Render"/> removes (AI dewarping with shading removal switched on);
+    /// otherwise <see langword="null"/>.</summary>
     public DewarpShading? Shading { get; internal init; }
 
-    /// <summary>Doppelseite (mit Falz).</summary>
+    /// <summary>Gets whether the page model is a double page (with a fold).</summary>
     public bool DoublePage { get; internal init; }
 
-    /// <summary>Seitenverhältnis einer Seite (Höhe / Breite), wenn die Linien das Blatt umranden; sonst null.</summary>
+    /// <summary>Gets the aspect ratio of one page (height ÷ width) if the lines frame the page; otherwise
+    /// <see langword="null"/>.</summary>
     public double? PageAspect { get; internal init; }
 
-    /// <summary>Auf DIN (1 : √2) eingerastet.</summary>
+    /// <summary>Gets whether the page aspect ratio was snapped to DIN (1 : √2).</summary>
     public bool Din { get; internal init; }
 
-    /// <summary>Wie gut das Blattmodell passt: mittlere Abweichung der Punkte in Tausendsteln der Bildbreite.</summary>
+    /// <summary>Gets how well the page model fits: RMS deviation of the points in thousandths of the image width
+    /// (0 without a page model).</summary>
     public double ModelError { get; internal init; }
 
     internal DewarpMap With(bool modelled, bool doublePage, double? pageAspect, bool din, double modelError) =>
@@ -53,10 +60,15 @@ public sealed class DewarpMap
         };
 
     /// <summary>
-    /// Das Pixelbild gerade gezogen (neues Bild mit denselben Profilen; die Quelle bleibt). Je Ergebnispixel die Stelle im
-    /// Pixelbild aus dem Gitter, dort bikubisch (Catmull-Rom) gelesen. Mit <see cref="Shading"/> wird danach das Licht
-    /// herausgerechnet (Farbwert durch Licht, auf den Werten wie gespeichert — so rechnen auch die Autoren von SyntheticDoc).
+    /// Renders the flattened pixel image.
     /// </summary>
+    /// <param name="source">Pixel image to flatten; not modified. Access is synchronised by locking on it.</param>
+    /// <returns>A new 16-bit image with the profiles and density of the source; the caller disposes it.</returns>
+    /// <remarks>
+    /// For each result pixel, the position in the pixel image comes from the grid and is read there bicubically
+    /// (Catmull-Rom). With <see cref="Shading"/>, the light is removed afterwards (colour value divided by light, on the
+    /// values as stored, as the authors of SyntheticDoc also compute it). The size follows from <see cref="SizeFor"/>.
+    /// </remarks>
     public MagickImage Render(MagickImage source)
     {
         int sw, sh;
@@ -125,11 +137,16 @@ public sealed class DewarpMap
         w[3] = 0.5 * t3 - 0.5 * t2;
     }
 
-    /// <summary>Größe des Ergebnisses für ein Pixelbild dieser Breite.</summary>
+    /// <summary>Computes the size of the result for a pixel image of the given width.</summary>
+    /// <param name="width">Width of the pixel image in px.</param>
+    /// <returns>Width and height of the result in px, each at least 1.</returns>
     public (int Width, int Height) SizeFor(int width) =>
         (Math.Max(1, (int)Math.Round(RelWidth * width)), Math.Max(1, (int)Math.Round(RelHeight * width)));
 
-    /// <summary>Stelle (u, v ∈ 0 … 1) im Ergebnis → Stelle im Pixelbild (relativ).</summary>
+    /// <summary>Maps a position in the result to the position in the pixel image.</summary>
+    /// <param name="u">Horizontal position in the result, 0 … 1 (clamped).</param>
+    /// <param name="v">Vertical position in the result, 0 … 1 (clamped).</param>
+    /// <returns>Position in the pixel image, relative (x / width, y / height).</returns>
     public (double X, double Y) Source(double u, double v)
     {
         var fx = Math.Clamp(u, 0, 1) * (_nx - 1);
@@ -142,10 +159,15 @@ public sealed class DewarpMap
         return (Lerp(_sx), Lerp(_sy));
     }
 
-    /// <summary>Umkehrung von <see cref="Source"/>: Stelle im Pixelbild (relativ) → Stelle im Ergebnis (0 … 1, auch außerhalb).</summary>
+    /// <summary>Inverts <see cref="Source"/>: maps a position in the pixel image to the position in the result.</summary>
+    /// <param name="x">Horizontal position in the pixel image, relative (x / width).</param>
+    /// <param name="y">Vertical position in the pixel image, relative (y / height).</param>
+    /// <returns>Position in the result, nominally 0 … 1; values outside that range are possible.</returns>
+    /// <remarks>Starts at the nearest grid node and refines with up to 30 Newton steps; the cost is linear in the
+    /// number of grid nodes.</remarks>
     public (double U, double V) Result(double x, double y)
     {
-        // Startpunkt: nächster Knoten, dann Newton auf der bilinearen Abbildung
+        // Starting point: nearest node, then Newton's method on the bilinear map
         var best = 0;
         var bestD = double.MaxValue;
         for (var k = 0; k < _sx.Length; k++)
@@ -173,37 +195,40 @@ public sealed class DewarpMap
 }
 
 /// <summary>
-/// Gewölbtes Blatt gerade ziehen: aus nachgezeichneten Linien (in Wirklichkeit gerade) eine Abbildung, die das Blatt
-/// glättet — das ganze Bild bleibt, beschnitten auf das größte volle Rechteck.
+/// Flattens a curved page: computes, from traced lines that are straight in reality, a map that flattens the page.
 /// </summary>
 /// <remarks>
-/// <para><b>1. Blattmodell im Raum</b> (wie page_dewarp, Zucker 2016; Kim/Koo/Cho 2015): Kamera mit Brennweite aus den
-/// EXIF-Daten, das Blatt als in einer Richtung gebogene Fläche z = h(x) (abwickelbar wie Papier; Biegung als natürlicher
-/// kubischer Spline über 8 Abschnitte, an den Rändern 0), Doppelseite: zwei Splines, am Falz verbunden, dort mit Knick.
-/// Waagerechte Linien liegen auf dem Blatt bei y = konst., senkrechte bei x = konst., der Falz bei x = Falz. Unbekannt
-/// sind Lage, Biegung, je Linie ihre Konstante und je Punkt seine Stelle entlang der Linie — gelöst mit
-/// Levenberg-Marquardt (Abstand der Punkte zu ihrer Projektion). Gerechnet wird beides, Biegung entlang x und entlang y;
-/// es gilt das Bessere. Abgewickelt nach Bogenlänge ergibt sich das echte Seitenverhältnis; liegt es höchstens 3 %
-/// neben DIN (1 : √2), wird DIN genommen.</para>
-/// <para><b>2. Feinkorrektur mit Gitter</b> (wie die Weitwinkelkorrektur bei Carroll/Agrawala/Agarwala 2009): Was das
-/// Modell nicht trifft (welliges Papier), gleicht ein glattes Verschiebungsfeld aus, bis jeder Punkt auf seiner geraden
-/// Linie liegt. Mit nur einer Linie (oder wenn das Modell nicht passt) nur dieses Feld: die Linie wird gerade, das
-/// Seitenverhältnis bleibt.</para>
-/// <para><b>3.</b> Das ganze Bild bleibt erhalten (außerhalb des Blatts läuft die Biegung flach aus); beschnitten wird auf
-/// das größte Rechteck ohne leere Stellen.</para>
+/// <para><b>1. 3D page model</b> (as in page_dewarp, Zucker 2016; Kim/Koo/Cho 2015): a camera with the focal length from
+/// the EXIF data, the page as a surface curved in one direction, z = h(x) (developable like paper; the curvature is a
+/// natural cubic spline over 8 sections, 0 at the ends). Double page: two splines joined at the fold, with a kink
+/// there. Horizontal lines lie on the page at y = const., vertical lines at x = const., the fold at x = fold. The
+/// unknowns are the pose, the curvature, one constant per line and, per point, its position along the line, solved with
+/// Levenberg-Marquardt (distance of the points to their projection). Both curvature along x and along y are computed;
+/// the better one is used (only along x with a fold). Developing by arc length gives the true aspect ratio; if it lies
+/// within 3 % of DIN (1 : √2), DIN is used.</para>
+/// <para><b>2. Fine correction with a grid</b> (like the wide-angle correction of Carroll/Agrawala/Agarwala 2009):
+/// whatever the model does not capture (wavy paper) is compensated by a smooth displacement field until each point lies
+/// on its straight line. With only one line (or if the model does not fit), only this field is used: the line becomes
+/// straight and the aspect ratio stays.</para>
+/// <para><b>3.</b> The whole image is kept (outside the page the curvature flattens out) and cropped to the largest
+/// rectangle without empty areas.</para>
+/// <para>The public methods are thread-safe; <see cref="MapFor"/> caches the most recent maps.</para>
 /// </remarks>
 public static class Dewarp
 {
-    /// <summary>Höchstens so viel neben DIN, damit eingerastet wird.</summary>
+    /// <summary>Maximum relative deviation from the DIN aspect ratio (1 : √2) that is still snapped to DIN (0.03 = 3 %).</summary>
     public const double DinTolerance = 0.03;
 
-    private const double Scale = 1000;   // Fehler in Tausendsteln der Bildbreite (≈ Pixel bei 1000 px)
+    private const double Scale = 1000;   // Errors in thousandths of the image width (≈ pixels at 1000 px)
 
     /// <summary>
-    /// Brennweite der Aufnahme als Kleinbild-Äquivalent aus den EXIF-Daten (FocalLengthIn35mmFilm); fehlt sie,
-    /// <see cref="DewarpSpec.DefaultFocal35"/> (Handy-Hauptkamera). Reicht für das Blattmodell — ein paar Millimeter
-    /// daneben ändern vor allem das Seitenverhältnis um wenige Prozent.
+    /// Reads the 35 mm equivalent focal length of the shot from the EXIF data (FocalLengthIn35mmFilm).
     /// </summary>
+    /// <param name="image">Image whose EXIF profile is read; access is synchronised by locking on it.</param>
+    /// <returns>The focal length in mm if it is present and within 8 … 600 mm; otherwise
+    /// <see cref="DewarpSpec.DefaultFocal35"/> (main camera of a phone).</returns>
+    /// <remarks>This is precise enough for the page model: a few millimetres off mainly change the aspect ratio by a few
+    /// percent.</remarks>
     public static double Focal35Of(MagickImage image)
     {
         lock (image)
@@ -214,20 +239,29 @@ public static class Dewarp
         return DewarpSpec.DefaultFocal35;
     }
 
-    // ------------------------------------------------------------ Zwischenspeicher
+    // ------------------------------------------------------------ Cache
 
     private static readonly List<(DewarpSpec Spec, long Aspect, DewarpMap? Map)> Cache = [];
     private const int CacheSize = 12;
 
     /// <summary>
-    /// Abbildung für ein Pixelbild dieser Größe (gerechnet einmal je Linien und Seitenverhältnis, dann aus dem
-    /// Zwischenspeicher). null: nichts zu tun (keine brauchbare Linie).
+    /// Returns the map for a pixel image of the given size.
     /// </summary>
+    /// <param name="spec">Traced lines, focal length or a finished AI grid.</param>
+    /// <param name="width">Width of the pixel image in px.</param>
+    /// <param name="height">Height of the pixel image in px.</param>
+    /// <returns>The map, or <see langword="null"/> if there is nothing to do (no usable line, size not positive) or no
+    /// valid map results.</returns>
+    /// <remarks>
+    /// The map is computed once per specification and aspect ratio (rounded to 1/1000) and then served from a cache of
+    /// the 12 most recently used entries, so preview and full size share one computation. Thread-safe; a cache miss
+    /// solves outside the lock and can take a noticeable time.
+    /// </remarks>
     public static DewarpMap? MapFor(DewarpSpec spec, int width, int height)
     {
         if (!spec.IsUsable || width <= 0 || height <= 0) return null;
         var aspect = (double)height / width;
-        var key = (long)Math.Round(aspect * 1000);   // Vorschau und volle Größe: gleiches Seitenverhältnis
+        var key = (long)Math.Round(aspect * 1000);   // Preview and full size: same aspect ratio
         lock (Cache)
         {
             var i = Cache.FindIndex(e => e.Aspect == key && e.Spec.Equals(spec));
@@ -248,9 +282,9 @@ public static class Dewarp
         return map;
     }
 
-    // ------------------------------------------------------------ Rechnen
+    // ------------------------------------------------------------ Solving
 
-    /// <summary>Beobachtete Linie in Bildmaß (x / Breite, y / Breite — beide Achsen gleich skaliert).</summary>
+    /// <summary>Observed line in image units (x / width, y / width; both axes scaled equally).</summary>
     private sealed record Obs(WarpLineKind Kind, (double X, double Y)[] Pts);
 
     internal static DewarpMap? Solve(DewarpSpec spec, double aspect)
@@ -270,15 +304,16 @@ public static class Dewarp
     private static (List<Obs> Obs, Camera Cam) Prepare(DewarpSpec spec, double aspect)
     {
         var obs = spec.UsableLines.Select(l => new Obs(l.Kind, l.Points.Select(p => (p.X, p.Y * aspect)).ToArray())).ToList();
-        // Nur ein Falz: weitere Falzlinien zählen als senkrechte Linien
+        // Only one fold: further fold lines count as vertical lines
         var firstFold = obs.FindIndex(o => o.Kind == WarpLineKind.Fold);
         for (var i = 0; i < obs.Count; i++)
             if (obs[i].Kind == WarpLineKind.Fold && i != firstFold) obs[i] = obs[i] with { Kind = WarpLineKind.Vertical };
-        var f = spec.Focal35 / 43.27 * Math.Sqrt(1 + aspect * aspect);   // Brennweite in Bildbreiten
+        var f = spec.Focal35 / 43.27 * Math.Sqrt(1 + aspect * aspect);   // Focal length in image widths (43.27 mm = 35 mm frame diagonal)
         return (obs, new Camera(f, 0.5, aspect / 2));
     }
 
-    /// <summary>Blattmodell, Biegung entlang x und entlang y gerechnet, das Bessere; null = zu wenig Linien oder unplausibel.</summary>
+    /// <summary>Page model with curvature along x and along y, whichever fits better; null = fewer than two lines or
+    /// implausible.</summary>
     private static Fit? BestFit(List<Obs> obs, Camera cam)
     {
         if (obs.Count < 2) return null;
@@ -286,7 +321,7 @@ public static class Dewarp
         Fit? best = null;
         foreach (var alongY in new[] { false, true })
         {
-            if (alongY && fold) continue;   // Falz: Biegung quer zum Falz
+            if (alongY && fold) continue;   // Fold: curvature across the fold
             var fit = FitModel(obs, cam, alongY);
             if (fit is not null && (best is null || fit.Cost < best.Cost)) best = fit;
         }
@@ -294,13 +329,22 @@ public static class Dewarp
     }
 
     /// <summary>
-    /// Welche Vorschläge passen nicht zu den übrigen Linien? Das Blattmodell wird mit allen angewählten Linien gerechnet; die
-    /// am schlechtesten passende Linie unter den <paramref name="candidates"/> fällt heraus, wenn sie deutlich schlechter ist
-    /// als der Rest (mehr als das 2,5-Fache des Medians der ersten Runde, mindestens 0,8 ‰ der Bildbreite) und das Modell ohne
-    /// sie trägt und mindestens 10 % besser passt — bis zu viermal. So verderben
-    /// eine falsch erkannte Kante oder eine verrutschte Zeile nicht das Ergebnis. Andere Linien (von Hand) bleiben immer.
+    /// Determines which suggested lines do not fit the remaining lines.
     /// </summary>
-    /// <returns>Für jede Linie aus <paramref name="spec"/>: behalten?</returns>
+    /// <param name="spec">All lines; lines with fewer than two points are ignored and always kept.</param>
+    /// <param name="candidates">Per line of <paramref name="spec"/>: whether it may be removed (automatic suggestion).
+    /// Other lines (traced by hand) are always kept.</param>
+    /// <param name="width">Width of the pixel image in px.</param>
+    /// <param name="height">Height of the pixel image in px.</param>
+    /// <returns>For each line of <paramref name="spec"/>: whether to keep it.</returns>
+    /// <remarks>
+    /// The page model is computed with all usable lines. The worst-fitting line among the
+    /// <paramref name="candidates"/> is removed if it is clearly worse than the rest (at least 2.5 times the median line
+    /// error, where the median is the smaller of the first round's and the current one, and at least 0.8 ‰ of the image
+    /// width) and the model without it is still plausible and fits at least 10 % better. This repeats up to four times
+    /// while at least four lines remain. A misdetected edge or a shifted text line therefore does not spoil the result.
+    /// Each round solves the page model again, so the call can take a noticeable time.
+    /// </remarks>
     public static bool[] RejectOutliers(DewarpSpec spec, IReadOnlyList<bool> candidates, int width, int height)
     {
         var keep = Enumerable.Repeat(true, spec.Lines.Count).ToArray();
@@ -312,7 +356,7 @@ public static class Dewarp
         }
         var active = Enumerable.Range(0, spec.Lines.Count).Where(i => spec.Lines[i].Points.Count >= 2).ToList();
         var fit = FitOf(active);
-        // Maßstab: der Median der ersten Runde — eine schlechte Linie verbiegt das Modell, dann passen alle schlechter
+        // Reference: the median of the first round; a bad line distorts the model, and then all lines fit worse
         var reference = fit is null ? 0 : fit.LineRms.OrderBy(v => v).ElementAt(fit.LineRms.Length / 2);
         for (var round = 0; round < 4 && fit is not null && active.Count >= 4; round++)
         {
@@ -321,7 +365,7 @@ public static class Dewarp
             for (var k = 0; k < active.Count; k++)
                 if (candidates[active[k]] && (worst < 0 || fit.LineRms[k] > fit.LineRms[worst])) worst = k;
             if (worst < 0 || fit.LineRms[worst] < Math.Max(0.8, 2.5 * median)) break;
-            // nur, wenn das Modell ohne die Linie trägt und insgesamt besser passt — sonst lag es nicht an ihr
+            // Only if the model without the line holds and fits better overall; otherwise the line was not the cause
             var without = active.Where((_, k) => k != worst).ToList();
             var next = FitOf(without);
             if (next is null || next.Rms >= 0.9 * fit.Rms) break;
@@ -332,9 +376,13 @@ public static class Dewarp
     }
 
     /// <summary>
-    /// Zur Diagnose: wie gut passt jede Linie zum Blattmodell aus allen Linien (mittlere Abweichung ihrer Punkte in Tausendsteln
-    /// der Bildbreite, je Linie aus <paramref name="spec"/>; NaN für Linien mit weniger als 2 Punkten). null: kein Modell.
+    /// For diagnostics: determines how well each line fits the page model computed from all lines.
     /// </summary>
+    /// <param name="spec">Lines to evaluate.</param>
+    /// <param name="width">Width of the pixel image in px.</param>
+    /// <param name="height">Height of the pixel image in px.</param>
+    /// <returns>Per line of <paramref name="spec"/>, the RMS deviation of its points in thousandths of the image width
+    /// (NaN for lines with fewer than 2 points); <see langword="null"/> if no plausible model results.</returns>
     public static double[]? LineErrors(DewarpSpec spec, int width, int height)
     {
         var aspect = (double)height / Math.Max(1, width);
@@ -348,7 +396,7 @@ public static class Dewarp
         return result;
     }
 
-    // ------------------------------------------------------------ Kamera und Blatt
+    // ------------------------------------------------------------ Camera and page
 
     private readonly record struct Camera(double F, double Cx, double Cy)
     {
@@ -356,14 +404,14 @@ public static class Dewarp
             z <= 1e-6 ? (0, 0, false) : (Cx + F * x / z, Cy + F * y / z, true);
     }
 
-    /// <summary>Biegung: ein oder zwei natürliche kubische Splines über gleichabständige Knoten, außen flach auslaufend.</summary>
+    /// <summary>Curvature: one or two natural cubic splines over equally spaced knots, flattening out beyond the ends.</summary>
     private sealed class Profile
     {
         private readonly (double A, double B, double[] H, double[] M)[] _pieces;
         private readonly double _tail;
         private readonly Func<double, (double Z, double D)>? _extra;
 
-        /// <param name="extra">Zusätzlich zum Spline (Doppelseite: am Falz steil ansteigend, wie √).</param>
+        /// <param name="extra">Added to the spline (double page: rising steeply at the fold, like √).</param>
         public Profile(Func<double, (double Z, double D)>? extra, params (double A, double B, double[] H)[] pieces)
         {
             _pieces = pieces.Select(p => (p.A, p.B, p.H, SecondDerivatives(p.H, (p.B - p.A) / (p.H.Length - 1)))).ToArray();
@@ -417,7 +465,7 @@ public static class Dewarp
             var n = h.Length - 1;
             var m = new double[n + 1];
             if (n < 2) return m;
-            // M[i-1] + 4 M[i] + M[i+1] = 6 (h[i-1] − 2 h[i] + h[i+1]) / dx², M[0] = M[n] = 0 (Thomas)
+            // M[i-1] + 4 M[i] + M[i+1] = 6 (h[i-1] − 2 h[i] + h[i+1]) / dx², M[0] = M[n] = 0 (tridiagonal matrix algorithm)
             var c = new double[n];
             var d = new double[n];
             for (var i = 1; i < n; i++)
@@ -432,7 +480,7 @@ public static class Dewarp
         }
     }
 
-    /// <summary>Das angepasste Modell: Lage, Biegung und für jeden Punkt seine Stelle auf dem Blatt.</summary>
+    /// <summary>The fitted model: pose, curvature and, for each point, its position on the page.</summary>
     private sealed class Fit
     {
         public required double[,] R;
@@ -440,11 +488,11 @@ public static class Dewarp
         public required Profile Profile;
         public required bool AlongY;
         public required double? FoldX;
-        public required (double X, double Y)[][] Page;   // je Beobachtung und Punkt
+        public required (double X, double Y)[][] Page;   // Per observation and point
         public required double Cost;
-        public required double Rms;                       // Tausendstel der Bildbreite
-        public required double Span;                      // Ausdehnung der Punkte auf dem Blatt
-        public required double[] LineRms;                 // je Linie, Tausendstel der Bildbreite
+        public required double Rms;                       // Thousandths of the image width
+        public required double Span;                      // Extent of the points on the page
+        public required double[] LineRms;                 // Per line, thousandths of the image width
 
         public bool Plausible
         {
@@ -472,22 +520,22 @@ public static class Dewarp
         if (InitialPose(obs, cam) is not { } init) return null;
         var (r0, t0, page0) = init;
 
-        // Bereich der Biegung: Ausdehnung der Punkte entlang der gebogenen Richtung
+        // Range of the curvature: extent of the points along the curved direction
         var bent = page0.SelectMany(p => p).Select(p => alongY ? p.Y : p.X).ToArray();
         double lo = bent.Min(), hi = bent.Max(), span = Math.Max(1e-3, hi - lo);
         lo -= 0.02 * span;
         hi += 0.02 * span;
         var foldIndex = obs.FindIndex(o => o.Kind == WarpLineKind.Fold);
         double? foldX = foldIndex >= 0 ? page0[foldIndex].Average(p => p.X) : null;
-        if (foldX is { } fx && (fx <= lo + 0.1 * span || fx >= hi - 0.1 * span)) foldX = null;   // Falz am Rand: kein Falz
+        if (foldX is { } fx && (fx <= lo + 0.1 * span || fx >= hi - 0.1 * span)) foldX = null;   // Fold at the edge: no fold
 
-        // Unbekannte: Drehung (3), Verschiebung (3), Höhen, je Linie eine Konstante. Die Stelle jedes Punkts entlang seiner
-        // Linie ist keine Unbekannte des Lösers, sondern wird bei jeder Auswertung bestimmt (Variable Projection, Golub/Pereyra):
-        // die Stelle der Linie, deren Projektion dem Punkt am nächsten liegt. Der Löser sieht so rund 40 statt mehrere hundert
-        // Unbekannte — bei 20 vorgeschlagenen Linien Sekundenbruchteile statt halber Minuten.
-        const int segments = 8, half = 6;   // Doppelseite: je Seite 6 Abschnitte (am Falz steil, abgeglichen in DewarpTests)
-        var nHeights = foldX is null ? segments - 1 : 2 * half - 1;   // Falz: links und rechts je 5, dazu die Höhe am Falz
-        var nSteep = foldX is null ? 0 : 2;                           // Falz: je Seite ein steiler Anteil (√)
+        // Unknowns: rotation (3), translation (3), heights, one constant per line. The position of each point along its
+        // line is not an unknown of the solver but is determined at every evaluation (variable projection, Golub/Pereyra):
+        // the position on the line whose projection lies closest to the point. The solver thus sees about 40 unknowns
+        // instead of several hundred; with 20 suggested lines this takes fractions of a second instead of half a minute.
+        const int segments = 8, half = 6;   // Double page: 6 sections per page (steep at the fold, tuned in DewarpTests)
+        var nHeights = foldX is null ? segments - 1 : 2 * half - 1;   // Fold: 5 each on the left and right, plus the height at the fold
+        var nSteep = foldX is null ? 0 : 2;                           // Fold: one steep component (√) per page
         var lineParam = new int[obs.Count];
         var n = 6 + nHeights + nSteep;
         for (var i = 0; i < obs.Count; i++) lineParam[i] = obs[i].Kind == WarpLineKind.Fold ? -1 : n++;
@@ -501,7 +549,7 @@ public static class Dewarp
             if (lineParam[i] < 0) continue;
             theta[lineParam[i]] = obs[i].Kind == WarpLineKind.Horizontal ? page0[i].Average(p => p.Y) : page0[i].Average(p => p.X);
         }
-        // Stelle entlang der Linie (waagerecht: x, sonst y); Startwerte aus der Anfangslage, nach jedem Schritt nachgeführt
+        // Position along the line (horizontal: x, otherwise y); start values from the initial pose, updated after each step
         var along = obs.Select((o, i) => page0[i].Select(p => o.Kind == WarpLineKind.Horizontal ? p.X : p.Y).ToArray()).ToArray();
 
         Profile ProfileOf(double[] th)
@@ -517,8 +565,9 @@ public static class Dewarp
             for (var k = 1; k < half; k++) left[k] = th[6 + k - 1];
             left[half] = right[0] = th[6 + half - 1];
             for (var k = 1; k < half; k++) right[k] = th[6 + half + k - 1];
-            // Am Falz steigt das Papier fast senkrecht an (Bindung): g(u) = √u · (1 − u), u = Abstand vom Falz / Seitenbreite —
-            // am Falz und am Außenrand 0, am Falz unendlich steil. Ein Spline mit gleichen Abständen schafft das nicht.
+            // At the fold the paper rises almost vertically (binding): g(u) = √u · (1 − u), u = distance from the fold ÷ page
+            // width; 0 at the fold and at the outer edge, infinitely steep at the fold. A spline with equal spacing cannot
+            // represent this.
             double kl = th[6 + nHeights], kr = th[6 + nHeights + 1];
             (double Z, double D) Steep(double x)
             {
@@ -546,7 +595,7 @@ public static class Dewarp
                                rot[2, 0] * x + rot[2, 1] * y + rot[2, 2] * z + th[5]);
         }
 
-        // je Punkt die Stelle auf seiner Linie, deren Projektion am nächsten liegt (Gauß-Newton in einer Unbekannten)
+        // Per point, the position on its line whose projection lies closest (Gauss-Newton in one unknown)
         double[][] Along(double[] th, double[,] rot, Profile prof)
         {
             var result = new double[obs.Count][];
@@ -591,11 +640,11 @@ public static class Dewarp
                 res.Add((u - obs[i].Pts[j].X) * Scale);
                 res.Add((v - obs[i].Pts[j].Y) * Scale);
             }
-            // Biegung glatt (zweite Differenzen) und klein; Maßstab festhalten (Blattgröße ↔ Abstand)
+            // Curvature smooth (second differences) and small; fix the scale (page size ↔ distance)
             var hs = Enumerable.Range(0, nHeights).Select(k => th[6 + k]).ToArray();
-            double[] all = [0, .. hs, 0];   // Ränder 0 (mit Falz: links, Falz, rechts in einer Reihe)
+            double[] all = [0, .. hs, 0];   // Ends 0 (with a fold: left, fold, right in one row)
             for (var k = 1; k < all.Length - 1; k++)
-                if (foldX is null || k != half)   // am Falz darf das Papier knicken
+                if (foldX is null || k != half)   // The paper may kink at the fold
                     res.Add(100 * (all[k - 1] - 2 * all[k] + all[k + 1]) / span);
             foreach (var hk in hs) res.Add(2 * hk / span);
             for (var k = 0; k < nSteep; k++) res.Add(2 * th[6 + nHeights + k] / span);
@@ -604,12 +653,12 @@ public static class Dewarp
         }
         double[] Residuals(double[] th) => Evaluate(th, out _);
 
-        // nach jedem angenommenen Schritt: Stellen entlang der Linien als neue Startwerte
+        // After each accepted step: positions along the lines become the new start values
         var (solved, cost) = LevenbergMarquardt(Residuals, theta, th => { Evaluate(th, out var us); along = us; });
         var final = Evaluate(solved, out var alongFinal);
         double sum = 0;
         for (var k = 0; k < dataCount; k++) sum += final[k] * final[k];
-        // je Linie: mittlerer Abstand ihrer Punkte zur Projektion (Reihenfolge der Residuen wie in Evaluate)
+        // Per line: RMS distance of its points to the projection (order of the residuals as in Evaluate)
         var lineRms = new double[obs.Count];
         for (int i = 0, k = 0; i < obs.Count; i++)
         {
@@ -637,19 +686,19 @@ public static class Dewarp
     }
 
     /// <summary>
-    /// Anfangslage: aus den zwei äußersten Linien der gebogenen Richtung (bzw. der anderen) ein Viereck, daraus mit
-    /// bekannter Brennweite Lage und Seitenverhältnis einer ebenen Seite (Homographie zerlegt). Sonst frontal.
-    /// Liefert je Punkt seine Stelle auf dieser Ebene.
+    /// Initial pose: a quadrilateral from the two outermost horizontal lines (or, failing that, the two outermost vertical
+    /// lines); with the known focal length this gives the pose and aspect ratio of a flat page (homography decomposition).
+    /// Otherwise frontal. Returns, per point, its position on this plane.
     /// </summary>
     private static (double[,] R, double[] T, (double X, double Y)[][] Page)? InitialPose(List<Obs> obs, Camera cam)
     {
-        // Familien: entlang = Linien mit fester Blatt-y (waagerecht), quer = feste Blatt-x (senkrecht, Falz)
+        // Families: horizontal = lines with fixed page y; vertical = fixed page x (vertical lines, fold)
         var horizontal = obs.Where(o => o.Kind == WarpLineKind.Horizontal).ToList();
         var vertical = obs.Where(o => o.Kind != WarpLineKind.Horizontal).ToList();
 
         var dh = Principal(horizontal);
         var dv = Principal(vertical);
-        // Blatt-x-Richtung im Bild; Blatt-y = 90° weiter (Bildschirm: y nach unten, rechtshändig wie das Bild)
+        // Page x direction in the image; page y = 90° further (screen: y down, right-handed like the image)
         (double X, double Y) ex;
         if (dh is { } h) ex = h;
         else if (dv is { } v) ex = (v.Y, -v.X);
@@ -686,7 +735,7 @@ public static class Dewarp
             return (r, t, page);
         }
 
-        // Frontal in Abstand 1, nur um die Blickachse gedreht
+        // Frontal at distance 1, rotated only about the viewing axis
         var phi = Math.Atan2(ex.Y, ex.X);
         var rz = Rotation(0, 0, phi);
         var frontal = obs.Select(o => o.Pts.Select(p =>
@@ -697,7 +746,7 @@ public static class Dewarp
         return (rz, [0, 0, 1], frontal);
     }
 
-    /// <summary>Ebene Seite aus einem Viereck (Ecken der Einheitsfläche) mit bekannter Brennweite: Lage und Seitenverhältnis.</summary>
+    /// <summary>Flat page from a quadrilateral (corners of the unit square) with known focal length: pose and aspect ratio.</summary>
     private static (double[,] R, double[] T, double AspectY)? PoseFromQuad((double X, double Y)[] quad, Camera cam)
     {
         double[] h;
@@ -726,7 +775,7 @@ public static class Dewarp
         return t[2] > 0 ? (r, t, aspectY) : null;
     }
 
-    /// <summary>Gemeinsame Hauptrichtung der Linien (Abweichungen von ihrem jeweiligen Schwerpunkt).</summary>
+    /// <summary>Common principal direction of the lines (deviations from each line's own centroid).</summary>
     private static (double X, double Y)? Principal(List<Obs> lines)
     {
         double sxx = 0, sxy = 0, syy = 0;
@@ -744,16 +793,16 @@ public static class Dewarp
         return (Math.Cos(angle), Math.Sin(angle));
     }
 
-    // ------------------------------------------------------------ Abbildung aus dem Modell
+    // ------------------------------------------------------------ Map from the model
 
     private static DewarpMap? ModelMap(Fit fit, List<Obs> obs, Camera cam, double aspect)
     {
-        // Ausdehnung der Linien auf dem Blatt
+        // Extent of the lines on the page
         var pagePts = fit.Page.SelectMany(p => p).ToArray();
         double bx0 = pagePts.Min(p => p.X), bx1 = pagePts.Max(p => p.X), by0 = pagePts.Min(p => p.Y), by1 = pagePts.Max(p => p.Y);
         double bw = Math.Max(1e-3, bx1 - bx0), bh = Math.Max(1e-3, by1 - by0);
 
-        // Abwickeln entlang der gebogenen Richtung: Bogenlänge als Tabelle (weit über das Blatt hinaus)
+        // Develop along the curved direction: arc length as a table (extending well beyond the page)
         double aLo, aHi;
         if (fit.AlongY) (aLo, aHi) = (by0 - 1.5 * bh, by1 + 1.5 * bh);
         else (aLo, aHi) = (bx0 - 1.5 * bw, bx1 + 1.5 * bw);
@@ -786,7 +835,7 @@ public static class Dewarp
             return cam.Project(px, py, pz);
         }
 
-        // Blatt im Ergebnis so, wie es im Bild liegt (Vierteldrehung), Auflösung wie im Bild in der Blattmitte
+        // Page in the result oriented as it lies in the image (quarter turns), resolution as in the image at the page centre
         double cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2, delta = 0.01 * Math.Max(bw, bh);
         var c0 = ProjectPage(cx, cy);
         var cX = ProjectPage(cx + delta, cy);
@@ -798,9 +847,9 @@ public static class Dewarp
         var (dx0, dy0) = Developed(bx0, by0);
         var (dx1, dy1) = Developed(bx1, by1);
         double devW = Math.Abs(dx1 - dx0), devH = Math.Abs(dy1 - dy0), devCx = (dx0 + dx1) / 2, devCy = (dy0 + dy1) / 2;
-        // Seitenverhältnis: nur, wenn die Linien das Blatt umranden — je zwei waagerechte und senkrechte, und die senkrechten
-        // überspannen wenigstens 60 % der Höhe, die waagerechten 60 % der Breite (acht kurze Rasterstriche in einem Kasten
-        // sagen nichts über die Blatthöhe)
+        // Aspect ratio only if the lines frame the page: at least two horizontal and two vertical lines, the vertical ones
+        // spanning at least 60 % of the height and the horizontal ones 60 % of the width (eight short grid strokes in a
+        // box say nothing about the page height)
         double Span(Func<Obs, bool> which, Func<(double X, double Y), double> coord)
         {
             var pts = fit.Page.Where((_, k) => which(obs[k])).SelectMany(p => p).Select(coord).ToList();
@@ -827,7 +876,7 @@ public static class Dewarp
             }
         }
 
-        // Blatt (abgewickelt) → Ergebnis in Bildbreiten; und zurück
+        // Page (developed) → result in image widths, and back
         (double Ox, double Oy) ToOut(double sx, double sy)
         {
             double a = (sx - devCx) * density, b = (sy - devCy) * stretch * density;
@@ -840,7 +889,7 @@ public static class Dewarp
             return ProjectPage(x, y);
         }
 
-        // Wohin der Bildrand fällt (Strahl schneidet das Blatt) — begrenzt auf das Blatt samt Umgebung
+        // Where the image border falls (ray intersects the page), limited to the page and its surroundings
         var rot = fit.R;
         var origin = new[]
         {
@@ -904,7 +953,7 @@ public static class Dewarp
             return ok ? (u, v) : (double.NaN, double.NaN);
         });
 
-        // Feinkorrektur: jeder Punkt auf seine gerade Linie
+        // Fine correction: each point onto its straight line
         var data = new List<(double Ox, double Oy, double X, double Y)>();
         for (var i = 0; i < obs.Count; i++)
         for (var j = 0; j < obs[i].Pts.Length; j++)
@@ -920,7 +969,7 @@ public static class Dewarp
             : null;
     }
 
-    // ------------------------------------------------------------ Nur die Linien gerade ziehen
+    // ------------------------------------------------------------ Straighten the lines only
 
     private static DewarpMap? FlatMap(List<Obs> obs, double aspect)
     {
@@ -928,7 +977,7 @@ public static class Dewarp
         var data = new List<(double Ox, double Oy, double X, double Y)>();
         foreach (var o in obs)
         {
-            // Sehne vom ersten zum letzten Punkt entlang der Linie; jeder Punkt soll auf ihr landen
+            // Chord from the first to the last point along the line; each point is to land on it
             var dir = Principal([o]) ?? (1, 0);
             var a = o.Pts.MinBy(p => Dot(p, dir));
             var b = o.Pts.MaxBy(p => Dot(p, dir));
@@ -940,7 +989,7 @@ public static class Dewarp
                 data.Add((a.X + t * lx, a.Y + t * ly, p.X, p.Y));
             }
         }
-        // Nur waagerechte Linien: ganze Spalten verschieben sich mit (wie ein gebogenes Blatt), nur senkrechte: Zeilen
+        // Only horizontal lines: whole columns move along (like a curved page); only vertical lines: whole rows
         var hasH = obs.Any(o => o.Kind == WarpLineKind.Horizontal);
         var hasV = obs.Any(o => o.Kind != WarpLineKind.Horizontal);
         var (alongX, alongY) = hasH && !hasV ? (1.0, 300.0) : hasV && !hasH ? (300.0, 1.0) : (1.0, 1.0);
@@ -951,12 +1000,12 @@ public static class Dewarp
     private static DewarpMap Annotate(DewarpMap map, bool modelled, bool doublePage, double? pageAspect, bool din, double rms) =>
         map.With(modelled, doublePage, pageAspect, din, rms);
 
-    // ------------------------------------------------------------ Gitter über das Ergebnis
+    // ------------------------------------------------------------ Grid over the result
 
-    /// <summary>Knoten über einem Rechteck des Ergebnisses (in Bildbreiten), je Knoten die Stelle im Bild (Bildmaß).</summary>
+    /// <summary>Nodes over a rectangle of the result (in image widths); per node, the position in the image (image units).</summary>
     private sealed class Grid
     {
-        private const int Cells = 160;   // Zellen über die längere Seite
+        private const int Cells = 160;   // Cells across the longer side
 
         private readonly int _nx, _ny;
         private readonly double _x0, _y0, _dx, _dy;
@@ -993,8 +1042,9 @@ public static class Dewarp
         }
 
         /// <summary>
-        /// Glattes Verschiebungsfeld, damit die Stelle (Ox, Oy) des Ergebnisses genau auf (X, Y) im Bild zeigt:
-        /// kleinste Quadrate mit Glätte (Nachbarknoten gleich, je Richtung gewichtet) und schwachem Zug zu null.
+        /// Smooth displacement field so that the position (Ox, Oy) of the result points exactly to (X, Y) in the image:
+        /// least squares with smoothness (neighbouring nodes equal, weighted per direction) and a weak pull towards zero,
+        /// solved with conjugate gradients.
         /// </summary>
         public void Correct(List<(double Ox, double Oy, double X, double Y)> data, double alongX, double alongY)
         {
@@ -1054,8 +1104,8 @@ public static class Dewarp
         }
 
         /// <summary>
-        /// Größtes Rechteck aus Zellen, deren Ecken alle im Bild liegen (dann liegt die ganze Zelle drin) — als
-        /// Abbildung mit relativen Bildkoordinaten.
+        /// Largest rectangle of cells whose corners all lie inside the image (then the whole cell lies inside), as a map
+        /// with relative image coordinates; null if no such cell exists.
         /// </summary>
         public DewarpMap? ToMap(double aspect)
         {
@@ -1073,7 +1123,7 @@ public static class Dewarp
                     var ok = Inside(k) && Inside(k + 1) && Inside(k + _nx) && Inside(k + _nx + 1);
                     heights[i] = ok ? heights[i] + 1 : 0;
                 }
-                // größtes Rechteck im Histogramm (Stapel)
+                // Largest rectangle in the histogram (stack)
                 var stack = new Stack<int>();
                 for (var i = 0; i <= cw; i++)
                 {
@@ -1082,7 +1132,7 @@ public static class Dewarp
                     {
                         var top = stack.Pop();
                         var left = stack.Count > 0 ? stack.Peek() + 1 : 0;
-                        // Fläche in echten Maßen (Zellen können nicht quadratisch sein)
+                        // Area in real units (cells may be non-square)
                         var area = (long)Math.Round(heights[top] * _dy * (i - left) * _dx * 1e12);
                         if (heights[top] > 0 && area > best.Area) best = (area, left, i, j - heights[top] + 1, j + 1);
                     }
@@ -1129,7 +1179,7 @@ public static class Dewarp
 
     // ------------------------------------------------------------ Levenberg-Marquardt
 
-    /// <param name="accepted">Nach jedem angenommenen Schritt (z. B. Startwerte für innere Unbekannte nachführen).</param>
+    /// <param name="accepted">Called after each accepted step (for example to update start values of inner unknowns).</param>
     private static (double[] Theta, double Cost) LevenbergMarquardt(Func<double[], double[]> residuals, double[] theta,
         Action<double[]>? accepted = null)
     {
@@ -1139,7 +1189,7 @@ public static class Dewarp
         var mu = -1.0;
         for (var iter = 0; iter < 80; iter++)
         {
-            // Jacobi-Matrix numerisch (Vorwärtsdifferenzen)
+            // Numerical Jacobian (forward differences)
             var m = r.Length;
             var jac = new double[n][];
             Parallel.For(0, n, ComputeLimits.Options, c =>
@@ -1195,7 +1245,7 @@ public static class Dewarp
                     if (accepted is not null)
                     {
                         accepted(theta);
-                        r = residuals(theta);   // mit den nachgeführten Startwerten (höchstens besser)
+                        r = residuals(theta);   // With the updated start values (at most better)
                         cost = Math.Min(cost, Dot(r, r));
                     }
                     mu = Math.Max(1e-12, mu / 3);
@@ -1245,9 +1295,9 @@ public static class Dewarp
         return x;
     }
 
-    // ------------------------------------------------------------ Kleinkram
+    // ------------------------------------------------------------ Helpers
 
-    /// <summary>Drehvektor → Drehmatrix (Rodrigues).</summary>
+    /// <summary>Rotation vector → rotation matrix (Rodrigues).</summary>
     private static double[,] Rotation(double wx, double wy, double wz)
     {
         var angle = Math.Sqrt(wx * wx + wy * wy + wz * wz);
@@ -1265,7 +1315,7 @@ public static class Dewarp
         return r;
     }
 
-    /// <summary>Drehmatrix → Drehvektor.</summary>
+    /// <summary>Rotation matrix → rotation vector.</summary>
     private static double[] RotationVector(double[,] r)
     {
         var cos = Math.Clamp((r[0, 0] + r[1, 1] + r[2, 2] - 1) / 2, -1, 1);
@@ -1273,7 +1323,7 @@ public static class Dewarp
         if (angle < 1e-9) return [0, 0, 0];
         if (Math.PI - angle < 1e-6)
         {
-            // 180°: Achse aus der Diagonale
+            // 180°: axis from the diagonal
             double x = Math.Sqrt(Math.Max(0, (r[0, 0] + 1) / 2)), y = Math.Sqrt(Math.Max(0, (r[1, 1] + 1) / 2)), z = Math.Sqrt(Math.Max(0, (r[2, 2] + 1) / 2));
             if (r[0, 1] < 0) y = -y;
             if (r[0, 2] < 0) z = -z;
@@ -1283,7 +1333,7 @@ public static class Dewarp
         return [(r[2, 1] - r[1, 2]) * k, (r[0, 2] - r[2, 0]) * k, (r[1, 0] - r[0, 1]) * k];
     }
 
-    /// <summary>Vierteldrehungen im Uhrzeigersinn (Bildschirm, y nach unten).</summary>
+    /// <summary>Quarter turns clockwise (screen, y down).</summary>
     private static (double, double) Turn(double a, double b, int turns) => turns switch
     {
         1 => (-b, a),

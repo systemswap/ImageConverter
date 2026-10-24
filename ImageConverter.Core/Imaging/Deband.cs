@@ -2,31 +2,35 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Treppen in weichen Verläufen glätten (Debanding), auf Fließkomma-Pixeln.
-///
-/// Verfahren wie flash3kyuu_deband (f3kdb) und der Deband-Filter von libplacebo (mpv, FFmpeg):
-/// Je Pixel vier Proben in zufälliger Richtung und Entfernung (Kreuz aus zwei Gegenpaaren),
-/// das Pixel wird durch ihr Mittel ersetzt — aber nur, wo alle vier höchstens um die Schwelle
-/// abweichen. In einem Verlauf liegen die Nachbarstufen so nahe, dass sie gemittelt werden: Aus
-/// der Treppe wird eine Rampe mit Zwischenwerten, die erst die Fließkomma-Kette halten kann.
-/// Echte Kanten und Struktur liegen über der Schwelle und bleiben. Zwei Runden: erst kleiner
-/// Radius, dann der doppelte mit halber Schwelle (wie libplacebo) — lange flache Verläufe
-/// brauchen den großen Radius, steilere den kleinen.
-///
-/// Strenger als libplacebo (dort zählt nur der Abstand zum Mittel): Jede einzelne Probe muss
-/// passen, und die Wirkung blendet vor der Schwelle aus — sonst verschwanden feine, flaue
-/// Strukturen in der Ferne, die der Dunstfilter danach sichtbar machen soll.
+/// Smooths steps in soft gradients (debanding) on floating-point pixels.
 /// </summary>
+/// <remarks>
+/// <para>Method as in flash3kyuu_deband (f3kdb) and the deband filter of libplacebo (mpv, FFmpeg): per pixel, four
+/// samples in a random direction and distance (a cross of two opposite pairs); the pixel is replaced by their mean,
+/// but only where all four deviate by less than the threshold. In a gradient the neighbouring steps lie so close that
+/// they are averaged: the staircase becomes a ramp with intermediate values that only the floating-point chain can
+/// hold. Real edges and structure lie above the threshold and stay. Two rounds: first a small radius, then twice the
+/// radius with half the threshold (as in libplacebo); long flat gradients need the large radius, steeper ones the
+/// small one.</para>
+/// <para>Stricter than libplacebo (where only the distance to the mean counts): every single sample must lie within
+/// the threshold, and the effect fades out before the threshold. Otherwise fine, low-contrast structures in the
+/// distance disappear, which the dehaze filter is meant to bring out afterwards.</para>
+/// </remarks>
 internal static class Deband
 {
-    /// <summary>Probenradius der ersten Runde, relativ zur längsten Kante (bei 4000 px: 32 px).</summary>
+    /// <summary>Sample radius of the first round, relative to the longest edge (at 4000 px: 32 px; at least 2 px).</summary>
     private const double RadiusPerEdge = 0.008;
 
-    /// <summary>Schwelle bei Stärke 1 in 8-Bit-Stufen.</summary>
+    /// <summary>Threshold at strength 1: 6 levels on the 8-bit scale.</summary>
     private const float MaxThreshold = 6f / 255;
 
-    /// <param name="strength">0 … 1.</param>
-    /// <param name="seed">Je Aufruf ein anderes Zufallsmuster — mehrere Runden mitteln sich so aus.</param>
+    /// <summary>Debands an image. The input is not modified.</summary>
+    /// <param name="px">Pixels, interleaved B, G, R, A, each 0…1.</param>
+    /// <param name="width">Width in px.</param>
+    /// <param name="height">Height in px.</param>
+    /// <param name="strength">0 … 1; at 0 or below, <paramref name="px"/> itself is returned.</param>
+    /// <param name="seed">A different random pattern per call, so that several passes average out.</param>
+    /// <returns>A new buffer from <see cref="PixelPool"/>, or <paramref name="px"/> itself if the strength is 0.</returns>
     public static float[] Apply(float[] px, int width, int height, float strength, uint seed)
     {
         if (strength <= 0) return px;
@@ -35,16 +39,16 @@ internal static class Deband
         for (var round = 1; round <= 2; round++)
         {
             var src = current;
-            var dst = PixelPool.Rent(src.Length);   // wird vollständig geschrieben
+            var dst = PixelPool.Rent(src.Length);   // Fully written
             var reach = (float)(radius * round);
             var bound = strength * MaxThreshold / round;
             var key = seed * 0x9E3779B9u + (uint)round * 0x85EBCA6Bu;
             var (offX, offY) = Offsets(reach);
-            // Muster je Aufruf verschoben, damit sich die Runden nicht decken
+            // Pattern shifted per call and round, so that the rounds do not coincide
             var shiftX = (int)(Pixels.Noise(key) * Pattern);
             var shiftY = (int)(Pixels.Noise(key ^ 0x5BD1E995u) * Pattern);
-            // In Kacheln (TileWidth × TileRows): Die Proben liegen bis zu 2 Radien entfernt — über ganze
-            // Bildzeilen (bei 8000 px je 128 KB) passte deren Umgebung nicht in den Cache des Prozessors
+            // In tiles (TileWidth × TileRows): the samples lie up to 2 radii away; when whole image rows are processed
+            // (128 KB each at 8000 px), their neighbourhood does not fit in the processor cache
             var tilesX = (width + TileWidth - 1) / TileWidth;
             var tilesY = (height + TileRows - 1) / TileRows;
             Parallel.For(0, tilesX * tilesY, ComputeLimits.Options, tile =>
@@ -67,8 +71,8 @@ internal static class Deband
                         tap[2] = Index(x - dy, y + dx, width, height);
                         tap[3] = Index(x + dy, y - dx, width, height);
 
-                        // Größte Abweichung einer Probe; ab der Schwelle bleibt das Pixel (Struktur, Kante) —
-                        // dann gleich weiter, die übrigen Proben braucht es nicht
+                        // Largest deviation of a sample; from the threshold on, the pixel stays (structure, edge),
+                        // and the remaining samples are skipped
                         float s0 = src[i], s1 = src[i + 1], s2 = src[i + 2];
                         var worst = 0f;
                         for (var t = 0; t < 4 && worst < bound; t++)
@@ -77,7 +81,7 @@ internal static class Deband
                             worst = MathF.Max(worst, MathF.Max(MathF.Abs(src[q] - s0),
                                 MathF.Max(MathF.Abs(src[q + 1] - s1), MathF.Abs(src[q + 2] - s2))));
                         }
-                        // voll bis zur halben Schwelle, an der Schwelle aus
+                        // Full effect up to half the threshold, none at the threshold
                         var w = worst >= bound ? 0 : Math.Clamp(2 - 2 * worst / bound, 0, 1);
                         if (w <= 0)
                         {
@@ -95,21 +99,21 @@ internal static class Deband
                     }
                 }
             });
-            if (round == 2) PixelPool.Return(src);   // Zwischenstand der ersten Runde (gehört uns)
+            if (round == 2) PixelPool.Return(src);   // Intermediate result of the first round (owned here)
             current = dst;
         }
         return current;
     }
 
-    /// <summary>Kachelgröße: Breite in Pixeln, Höhe in Zeilen.</summary>
+    /// <summary>Tile size: width in pixels, height in rows.</summary>
     private const int TileWidth = 256, TileRows = 64;
 
-    /// <summary>Kantenlänge des Zufallsmusters der Probenrichtungen (Zweierpotenz).</summary>
+    /// <summary>Edge length of the random pattern of sample directions (power of two, used as a bit mask).</summary>
     private const int Pattern = 512;
 
     /// <summary>
-    /// Zufällige Richtung (halber Kreis — die Proben bilden ein Kreuz) und Entfernung (¼ … 1 der Reichweite)
-    /// je Feld eines Musters von <see cref="Pattern"/>² — vorab, statt je Pixel Sinus und Kosinus zu rechnen.
+    /// Random direction (half circle, because the samples form a cross) and distance (¼ … 1 of the reach) per cell of a
+    /// pattern of <see cref="Pattern"/>² cells, computed in advance instead of sine and cosine per pixel.
     /// </summary>
     private static readonly Lazy<(float[] Cos, float[] Sin)> Directions = new(() =>
     {

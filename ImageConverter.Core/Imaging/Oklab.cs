@@ -1,22 +1,24 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Oklab (Björn Ottosson 2020) — ein wahrnehmungsgleicher Farbraum: L Helligkeit, a/b
-/// Farbrichtung; Buntheit C = √(a² + b²), Farbton h = atan2(b, a). Mehr oder weniger Farbe
-/// heißt hier nur C ändern — Farbton und empfundene Helligkeit bleiben stehen. In RGB
-/// kippt Blau beim Verstärken ins Violette und Gelb wird heller.
+/// Conversions to and from Oklab (Björn Ottosson 2020), a perceptually uniform colour space: L lightness, a/b colour
+/// direction; chroma C = √(a² + b²), hue h = atan2(b, a).
 /// </summary>
+/// <remarks>
+/// More or less colour here means changing only C; hue and perceived lightness stay fixed. In RGB, blue shifts towards
+/// violet when boosted and yellow becomes lighter.
+/// </remarks>
 internal static class Oklab
 {
     private const int TableSize = 4096;
 
-    // sRGB-Kodierung ↔ linear, als Tabellen (Werte 0–1)
+    // sRGB encoding ↔ linear, as lookup tables (values 0–1; transfer function per IEC 61966-2-1)
     private static readonly float[] ToLinearTable = BuildTable(v =>
         v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4));
     private static readonly float[] ToSrgbTable = BuildTable(v =>
         v <= 0.0031308 ? 12.92 * v : 1.055 * Math.Pow(v, 1 / 2.4) - 0.055);
 
-    /// <summary>Tabellen für die Grafikkarte (Dehaze.Gpu): sRGB → linear und zurück, je 4097 Werte.</summary>
+    /// <summary>Tables for the GPU (Dehaze.Gpu): sRGB → linear and back, 4097 values each.</summary>
     internal static float[] LinearTableForGpu => ToLinearTable;
     internal static float[] SrgbTableForGpu => ToSrgbTable;
 
@@ -35,11 +37,11 @@ internal static class Oklab
         return table[i] + (table[i + 1] - table[i]) * (x - i);
     }
 
-    /// <summary>sRGB-kodiert (0–1) → Oklab.</summary>
+    /// <summary>sRGB-encoded (0–1) → Oklab. Inputs outside 0–1 are clamped by the table lookup.</summary>
     public static (float L, float A, float B) FromSrgb(float r, float g, float b) =>
         FromLinear(Lookup(ToLinearTable, r), Lookup(ToLinearTable, g), Lookup(ToLinearTable, b));
 
-    /// <summary>Lineares Licht (0–1) → Oklab.</summary>
+    /// <summary>Linear light (0–1) → Oklab.</summary>
     public static (float L, float A, float B) FromLinear(float r, float g, float b)
     {
         var l = MathF.Cbrt(0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b);
@@ -50,7 +52,7 @@ internal static class Oklab
                 0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s);
     }
 
-    /// <summary>Oklab → linear (ungeklemmt — Werte außerhalb 0–1 heißen „nicht darstellbar“).</summary>
+    /// <summary>Oklab → linear (not clamped; values outside 0–1 mean "out of gamut").</summary>
     private static (float R, float G, float B) ToLinear(float L, float a, float b)
     {
         var l = L + 0.3963377774f * a + 0.2158037573f * b;
@@ -66,16 +68,15 @@ internal static class Oklab
         c.R is >= -1e-4f and <= 1.0001f && c.G is >= -1e-4f and <= 1.0001f && c.B is >= -1e-4f and <= 1.0001f;
 
     /// <summary>
-    /// Buntheit mit <paramref name="factor"/> skalieren, Farbton und Helligkeit fest. Was dabei
-    /// nicht mehr darstellbar wäre, wird in der Buntheit zurückgenommen (statt Kanäle hart zu
-    /// kappen, was den Farbton verschiebt). Ergebnis sRGB-kodiert, 0–1.
+    /// Scales the chroma by <paramref name="factor"/> with hue and lightness fixed. Colours that would fall out of gamut
+    /// are pulled back in chroma (instead of hard-clipping channels, which shifts the hue). Result sRGB-encoded, 0–1.
     /// </summary>
     public static (float R, float G, float B) ScaleChroma(float L, float a, float b, float factor) =>
         ToSrgb(L, a * factor, b * factor);
 
     /// <summary>
-    /// Oklab → sRGB-kodiert (0–1). Nicht darstellbare Farben werden in der Buntheit so weit
-    /// zurückgenommen, dass sie passen — Farbton und Helligkeit bleiben.
+    /// Oklab → sRGB-encoded (0–1). Out-of-gamut colours are reduced in chroma until they fit (bisection, 10 steps);
+    /// hue and lightness stay. L is clamped to 0–1 first.
     /// </summary>
     public static (float R, float G, float B) ToSrgb(float L, float a, float b)
     {
@@ -83,7 +84,7 @@ internal static class Oklab
         var lin = ToLinear(L, a, b);
         if (!InGamut(lin))
         {
-            // Größten darstellbaren Anteil der Buntheit suchen (Grau ist immer darstellbar)
+            // Search for the largest in-gamut fraction of the chroma (grey is always in gamut)
             float lo = 0, hi = 1;
             for (var k = 0; k < 10; k++)
             {
@@ -95,7 +96,7 @@ internal static class Oklab
         return (Lookup(ToSrgbTable, lin.R), Lookup(ToSrgbTable, lin.G), Lookup(ToSrgbTable, lin.B));
     }
 
-    /// <summary>Farbwinkel in Grad (0–360).</summary>
+    /// <summary>Hue angle in degrees (0–360).</summary>
     public static float Hue(float a, float b)
     {
         var h = MathF.Atan2(b, a) * (180 / MathF.PI);

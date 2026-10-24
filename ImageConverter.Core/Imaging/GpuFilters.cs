@@ -7,12 +7,18 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Bildfilter auf der Grafikkarte (ILGPU: OpenCL für AMD/Intel, CUDA für NVIDIA) — dieselbe Rechnung wie auf der CPU, je
-/// Pixel ein Faden. Lohnt bei Filtern mit viel Exponential-/Wurzelrechnung je Pixel (Entrauschen, Dunst): gemessen auf der
-/// Radeon im Notebook-Prozessor etwa 13× so schnell wie alle CPU-Kerne. Ohne Grafikkarte, abgeschaltet oder bei einem Fehler
-/// rechnet der Aufrufer auf der CPU weiter (der Fehler schaltet die Grafikkarte bis zum Neustart ab und steht im Log).
-/// Die Ergebnisse weichen nur in der Rundung ab (Gleitkomma in anderer Reihenfolge, relativ um 10⁻⁷).
+/// Runs image filters on the GPU (ILGPU: OpenCL for AMD/Intel, CUDA for NVIDIA) with the same computation as on the
+/// CPU, one thread per pixel.
 /// </summary>
+/// <remarks>
+/// <para>Worthwhile for filters with many exponential or square-root operations per pixel (noise reduction, dehaze):
+/// measured on the Radeon integrated in a Notebook-Prozessor, about 13 times as fast as all CPU cores.</para>
+/// <para>Without a GPU, when disabled or after an error, the caller continues on the CPU. An error disables the GPU
+/// until the program restarts and is written to the log.</para>
+/// <para>The results differ only in rounding (floating-point operations in a different order, relatively about
+/// 10⁻⁷).</para>
+/// <para>All GPU work is serialised by one lock, because preview, size estimate and export share one device.</para>
+/// </remarks>
 public static class GpuFilters
 {
     private static readonly Lock Gate = new();
@@ -20,14 +26,14 @@ public static class GpuFilters
     private static Accelerator? _accelerator;
     private static bool _tried;
 
-    /// <summary>Grafikkarte benutzen, wenn vorhanden.</summary>
+    /// <summary>Gets or sets whether the GPU is used when available. Default <see langword="true"/>.</summary>
     public static bool Enabled { get; set; } = true;
 
     private static readonly AsyncLocal<bool> CpuOnlyHere = new();
 
     /// <summary>
-    /// Nur in diesem Ablauf auf der CPU rechnen (Vergleich Grafikkarte/CPU in Tests) — andere, die gleichzeitig rechnen,
-    /// bleiben auf der Grafikkarte.
+    /// Computes on the CPU only in the current asynchronous flow (GPU/CPU comparison in tests); other computations running
+    /// at the same time stay on the GPU. Disposing the result switches back.
     /// </summary>
     internal static IDisposable CpuOnly()
     {
@@ -42,7 +48,8 @@ public static class GpuFilters
 
     private static readonly AsyncLocal<bool> ForceGpuHere = new();
 
-    /// <summary>Nur in diesem Ablauf auf der Grafikkarte rechnen, auch wenn der Geschwindigkeitstest die CPU wählte.</summary>
+    /// <summary>Computes on the GPU in the current asynchronous flow even if the speed test chose the CPU. Disposing the
+    /// result switches back.</summary>
     internal static IDisposable GpuEvenIfSlower()
     {
         ForceGpuHere.Value = true;
@@ -55,24 +62,27 @@ public static class GpuFilters
     }
 
     /// <summary>
-    /// Letzter Geschwindigkeitstest (Einstellungen). War die CPU auf diesem Rechner schneller, rechnen die Filter dort —
-    /// die Grafikkarte bleibt geöffnet, falls ein neuer Test anders ausfällt.
+    /// Gets or sets the result of the last speed test (settings); <see langword="null"/> = no test.
     /// </summary>
+    /// <remarks>If the CPU was faster on this machine, the filters run there. The GPU stays open in case a new test
+    /// comes out differently.</remarks>
     public static SpeedMeasure? Measured { get; set; }
 
-    /// <summary>Die Grafikkarte ist offen und laut Test (oder ohne Test) die schnellere Wahl.</summary>
+    /// <summary>Gets whether the GPU is enabled, open and, according to the speed test (or without one), the faster
+    /// choice.</summary>
     public static bool UsesGpu => Enabled && DeviceName is { } device && SpeedMeasure.PreferGpu(Measured, SpeedTest.FilterMachine(device));
 
-    /// <summary>Name der Grafikkarte, sobald sie geöffnet ist; null ohne.</summary>
+    /// <summary>Gets the name of the GPU once it is open; <see langword="null"/> without one.</summary>
     public static string? DeviceName { get; private set; }
 
-    /// <summary>Warum die Grafikkarte nicht (mehr) benutzt wird, sonst null.</summary>
+    /// <summary>Gets the reason why the GPU is not used (or no longer used); otherwise <see langword="null"/>.</summary>
     public static string? Problem { get; private set; }
 
     /// <summary>
-    /// Kurz nach dem Start im Hintergrund: Grafikkarte öffnen und die Kernel übersetzen (an einem kleinen Bild) — sonst
-    /// wartete die erste Vorschau mit Rauschen oder Dunst darauf.
+    /// Opens the GPU and compiles the kernels on a small image, in the background shortly after startup; otherwise the
+    /// first preview with noise reduction or dehaze would have to wait for it.
     /// </summary>
+    /// <returns>A task that completes when the warm-up is done. Errors are written to the log and not rethrown.</returns>
     public static Task WarmUpAsync() => Task.Run(() =>
     {
         try
@@ -91,8 +101,9 @@ public static class GpuFilters
     });
 
     /// <summary>
-    /// <paramref name="work"/> auf der Grafikkarte ausführen (nacheinander, nie gleichzeitig — Vorschau, Schätzung und
-    /// Export teilen sich eine). false: keine Grafikkarte oder Fehler — dann auf der CPU rechnen.
+    /// Runs <paramref name="work"/> on the GPU (one after another, never concurrently, because preview, size estimate and
+    /// export share one GPU). false: no GPU, CPU preferred by the speed test, or an error; the caller then computes on the
+    /// CPU.
     /// </summary>
     internal static bool TryRun(Action<Accelerator> work)
     {
@@ -112,7 +123,7 @@ public static class GpuFilters
                 Problem = e.Message;
                 AppLog.Write("Grafikkarte für Bildfilter abgeschaltet (rechnet auf der CPU weiter)", e.ToString());
                 Close();
-                _tried = true;   // nicht wieder öffnen
+                _tried = true;   // Do not open again
                 return false;
             }
         }
@@ -125,9 +136,9 @@ public static class GpuFilters
         try
         {
             _context = Context.Create(b => b.Default().EnableAlgorithms().Optimize(OptimizationLevel.O2));
-            // Echte Grafikkarte (CUDA vor OpenCL), bei mehreren die mit den meisten Recheneinheiten — nicht nach Speicher:
-            // die im Prozessor eingebaute meldet den geteilten Arbeitsspeicher (31 GB gegen 8 GB der eigenen Karte).
-            // Die CPU-Nachbildung von ILGPU ist langsamer als unsere Schleifen.
+            // A real GPU (CUDA before OpenCL); with several, the one with the most compute units, not by memory: an
+            // integrated GPU reports the shared main memory (31 GB versus 8 GB of a dedicated card).
+            // The CPU emulation of ILGPU is slower than the program's own CPU loops, so it is not used.
             var candidates = _context.Devices.Where(d => d.AcceleratorType is AcceleratorType.Cuda or AcceleratorType.OpenCL).ToList();
             var device = candidates
                 .OrderBy(d => d.AcceleratorType == AcceleratorType.Cuda ? 0 : 1)
@@ -166,17 +177,18 @@ public static class GpuFilters
         DeviceName = null;
     }
 
-    // ------------------------------------------------------------ Entrauschen (Non-Local Means)
+    // ------------------------------------------------------------ Noise reduction (Non-Local Means)
 
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, NlmParams>? _nlm;
 
-    /// <summary>Feste Werte des Non-Local-Means-Kernels.</summary>
+    /// <summary>Constant parameters of the Non-Local Means kernel.</summary>
     internal readonly record struct NlmParams(int Width, int Height, int PatchRadius, int SearchRadius, float Mix);
 
     /// <summary>
-    /// Non-Local Means auf der Helligkeit wie <see cref="Denoiser"/>: je Punkt alle Verschiebungen im Suchfenster, Abstand
-    /// der Umgebungen als Mittel der quadrierten Differenzen (am Rand nur, was im Bild liegt), Gewicht aus dem Rauschen,
-    /// der Punkt selbst mit dem größten Gewicht, mit der Stärke gemischt. null: auf der CPU rechnen.
+    /// Non-Local Means on the luminance as in <see cref="Denoiser"/>: per pixel all offsets in the search window, the
+    /// distance of the neighbourhoods as the mean of the squared differences (at the border only over what lies inside
+    /// the image), the weight from the noise, the pixel itself with the largest weight, mixed according to the strength.
+    /// null: compute on the CPU.
     /// </summary>
     internal static float[]? NonLocalMeans(float[] y, float[] sigma2, float[] invH2, int w, int h, int patchRadius, int searchRadius,
         float mix)

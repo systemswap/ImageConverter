@@ -1,26 +1,28 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Zwei Fassungen eines Bildes mit einer Maske mischen, Stufe für Stufe einer Laplace-Pyramide (Burt und Adelson
-/// 1983; Grundlage der Belichtungsverschmelzung nach Mertens 2007 und der Tonwertverarbeitung in Googles HDR+):
-/// Grobe Helligkeit wird so großflächig gemischt, feine Kanten nur über wenige Pixel — auch eine weiche Maske gibt
-/// so keinen Saum an Kanten.
+/// Blends two versions of an image with a mask, level by level of a Laplacian pyramid (Burt and Adelson 1983; the
+/// basis of exposure fusion after Mertens 2007 and of the tone mapping in Google's HDR+).
 /// </summary>
+/// <remarks>
+/// Coarse brightness is blended over large areas, fine edges only over a few pixels, so even a soft mask leaves no halo
+/// at edges.
+/// </remarks>
 internal static class PyramidBlend
 {
-    /// <summary>Kleinste Kante der gröbsten Stufe.</summary>
+    /// <summary>Minimum shorter edge (px) of the coarsest level.</summary>
     private const int MinTop = 8;
 
     /// <summary>
-    /// Die gröbste Stufe ist höchstens so grob wie ein 24stel der längsten Kante: Weiter oben würde die Maske über das
-    /// halbe Bild gemittelt — ein großer heller Bereich bekäme dann Licht vom dunklen daneben ab. Relativ zur Bildgröße,
-    /// damit Vorschau und Export gleich aussehen.
+    /// The coarsest level is at most as coarse as one 24th of the longest edge. Any higher, the mask would be averaged
+    /// over half the image, and a large bright area would take on light from the dark area next to it. Relative to the
+    /// image size, so that preview and export look the same.
     /// </summary>
     private const int TopPerEdge = 24;
 
     /// <summary>
-    /// <paramref name="a"/> · (1 − w) + <paramref name="b"/> · w, je Stufe. Liefert einen neuen Puffer aus dem
-    /// <see cref="PixelPool"/>; die Eingaben bleiben unverändert.
+    /// Computes <paramref name="a"/> · (1 − w) + <paramref name="b"/> · w per pyramid level, with w clamped to 0…1.
+    /// Returns a new buffer from the <see cref="PixelPool"/>; the inputs remain unchanged.
     /// </summary>
     public static float[] Blend(float[] a, float[] b, float[] weight, int width, int height)
     {
@@ -49,7 +51,7 @@ internal static class PyramidBlend
             }
         }
 
-        // Stufe 0 der Gauß-Pyramiden sind die Eingaben selbst — nur die gröberen Stufen zurückgeben
+        // Level 0 of the Gaussian pyramids is the input itself, so only the coarser levels are returned to the pool
         pa.ReturnLevels(1);
         pb.ReturnLevels(1);
         pw.ReturnLevels(1);

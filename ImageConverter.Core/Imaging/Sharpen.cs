@@ -2,19 +2,26 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Unscharfmaskierung (Unsharp Mask) auf 8-Bit-BGRA-Pixeln — schnell genug für eine
-/// Live-Vorschau beim Ziehen am Regler. Vorschau und Export nutzen dieselbe Funktion,
-/// damit man exportiert, was man gesehen hat.
-///
-/// Der Weichzeichner ist <see cref="Blur.Gauss"/> (Gauß, bei größeren Radien über drei
-/// Boxfilter-Durchgänge angenähert).
+/// Sharpens images with an unsharp mask, fast enough for a live preview while a slider is dragged.
 /// </summary>
+/// <remarks>
+/// Preview and export use the same function, so that the export matches what the preview showed.
+/// The blur is <see cref="Blur.Gauss"/> (Gaussian, approximated by three box filter passes for larger radii).
+/// Only B, G and R are sharpened; alpha stays unchanged.
+/// </remarks>
 public static class Sharpen
 {
-    /// <param name="amount">Stärke, 0 = aus; 1 = Kanten um 100 % verstärken.</param>
-    /// <param name="sigma">Radius des Weichzeichners in Pixeln (Gauß-Sigma).</param>
-    /// <param name="threshold">Mindestunterschied in Tonwertstufen (0–255), damit flache
-    /// Flächen und Rauschen nicht mitgeschärft werden.</param>
+    /// <summary>Applies an unsharp mask to 8-bit BGRA pixels.</summary>
+    /// <param name="bgra">Pixels, 4 bytes per pixel in the order B, G, R, A; not modified.</param>
+    /// <param name="width">Width in px.</param>
+    /// <param name="height">Height in px.</param>
+    /// <param name="amount">Strength; 0 = off, 1 = amplify edges by 100 %. Values up to 0.001 count as off.</param>
+    /// <param name="sigma">Blur radius in px (Gaussian sigma); values up to 0.05 count as off.</param>
+    /// <param name="threshold">Minimum difference in tone levels (0–255), so that flat areas and noise are not
+    /// sharpened as well.</param>
+    /// <returns>A new array with the sharpened pixels; an unchanged copy if sharpening is off.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The length of <paramref name="bgra"/> is not
+    /// <paramref name="width"/> · <paramref name="height"/> · 4.</exception>
     public static byte[] UnsharpMask(byte[] bgra, int width, int height,
         double amount, double sigma, double threshold = 2)
     {
@@ -26,7 +33,7 @@ public static class Sharpen
         var pixels = width * height;
         var blur = new float[pixels * 3];
 
-        // B, G, R in eine Fließkomma-Ebene; Alpha wird nicht geschärft
+        // B, G, R into one floating-point plane; alpha is not sharpened
         Parallel.For(0, height, ComputeLimits.Options, y =>
         {
             var row = y * width;
@@ -63,7 +70,18 @@ public static class Sharpen
         return result;
     }
 
-    /// <summary>Wie oben auf dem 32-Bit-Puffer (<see cref="Pixels"/>), ohne Rundung — Vorschau, Export und Dunst-Durchläufe.</summary>
+    /// <summary>
+    /// Applies an unsharp mask to the 32-bit float buffer (<see cref="Pixels"/>) without rounding; used by preview,
+    /// export and the dehaze passes.
+    /// </summary>
+    /// <param name="px">Pixels, interleaved B, G, R, A, each 0…1; not modified.</param>
+    /// <param name="width">Width in px.</param>
+    /// <param name="height">Height in px.</param>
+    /// <param name="amount">Strength; 0 = off, 1 = amplify edges by 100 %. Values up to 0.001 count as off.</param>
+    /// <param name="sigma">Blur radius in px (Gaussian sigma); values up to 0.05 count as off.</param>
+    /// <param name="threshold">Minimum difference in 8-bit tone levels (0–255, converted to 0…1 internally).</param>
+    /// <returns>A new buffer rented from <see cref="PixelPool"/>, owned by the caller; an unchanged copy if sharpening
+    /// is off. Results are clamped to 0…1.</returns>
     public static float[] UnsharpMask(float[] px, int width, int height,
         double amount, double sigma, double threshold = 2)
     {

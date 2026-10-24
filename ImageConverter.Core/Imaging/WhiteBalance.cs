@@ -3,16 +3,25 @@ using ImageConverter.Core.Platform;
 
 namespace ImageConverter.Core.Imaging;
 
-/// <summary>Welche Pipette: eine Stelle, die grau, schwarz oder weiß sein soll.</summary>
+/// <summary>Specifies the eyedropper: a spot that is to become grey, black or white.</summary>
+/// <remarks><c>Neutral</c>: the spot becomes colourless, its brightness stays. <c>Black</c>: the spot becomes fully
+/// black. <c>White</c>: the spot becomes fully white.</remarks>
 public enum WbPoint { Neutral, Black, White }
 
 /// <summary>
-/// Gemessene Farbe einer Pipette in linearem Licht (0–1) und wie viele Klicks darin gemittelt sind.
-/// Jeder weitere Klick mit derselben Pipette wird eingerechnet — eine einzelne ungünstige Stelle zählt weniger.
+/// Colour measured by an eyedropper in linear light (0–1) and the number of clicks averaged in it.
 /// </summary>
+/// <remarks>Each further click with the same eyedropper is averaged in (<see cref="Add"/>), so that a single unfavourable
+/// spot counts less.</remarks>
+/// <param name="R">Red in linear light, 0–1.</param>
+/// <param name="G">Green in linear light, 0–1.</param>
+/// <param name="B">Blue in linear light, 0–1.</param>
+/// <param name="Count">Number of clicks averaged in this sample.</param>
 public readonly record struct WbSample(double R, double G, double B, int Count = 1)
 {
-    /// <summary>Mittel aus beiden, nach Anzahl der Klicks gewichtet.</summary>
+    /// <summary>Combines this sample with another one.</summary>
+    /// <param name="next">Further measurement.</param>
+    /// <returns>The mean of both, weighted by the number of clicks, with the click counts added.</returns>
     public WbSample Add(WbSample next)
     {
         var n = Count + next.Count;
@@ -20,36 +29,52 @@ public readonly record struct WbSample(double R, double G, double B, int Count =
             (B * Count + next.B * next.Count) / n, n);
     }
 
-    /// <summary>Für die Anzeige: Farbe sRGB-kodiert 0–255.</summary>
+    /// <summary>Converts the colour for display.</summary>
+    /// <returns>The colour sRGB-encoded, 0–255 per channel.</returns>
     public (byte R, byte G, byte B) ToSrgb8() =>
         (WhiteBalance.Byte(R), WhiteBalance.Byte(G), WhiteBalance.Byte(B));
 }
 
 /// <summary>
-/// Weißabgleich mit bis zu drei Pipetten, jede allein oder zusammen:
-/// <list type="bullet">
-/// <item>Schwarz und Weiß setzen je Farbkanal die Tonwert-Enden (wie Referenzwerkzeug „Tonwerte“): die schwarze Stelle wird
-/// ganz schwarz, die weiße ganz weiß — das entfernt einen Stich auch getrennt in Schatten und Lichtern.</item>
-/// <item>Neutral macht die graue Stelle farblos, ihre Helligkeit bleibt. Mit Weiß über die Mitten je Kanal (Weiß bleibt
-/// weiß), ohne Weiß über eine Verstärkung je Kanal — physikalisch das Umrechnen auf anderes Licht.</item>
-/// </list>
-/// Gerechnet in linearem Licht. Angewendet als erster Schritt der Kette, also auf dasselbe Bild, an dem gemessen wird.
+/// White balance with up to three eyedroppers, each alone or combined.
 /// </summary>
+/// <remarks>
+/// <list type="bullet">
+/// <item>Black and white set the tonal end points per colour channel (like the Levels dialog in Referenzwerkzeug): the black spot
+/// becomes fully black, the white spot fully white. This also removes a cast separately in shadows and highlights.</item>
+/// <item>Neutral makes the grey spot colourless while its brightness stays. With white, this is done through the midtones
+/// per channel (white stays white); without white, through a gain per channel, which physically corresponds to
+/// converting to a different illuminant.</item>
+/// </list>
+/// Computed in linear light. Applied as the first step of the chain, that is, to the same image the measurement is
+/// taken on.
+/// </remarks>
 public static class WhiteBalance
 {
-    /// <summary>Ab hier gilt ein Kanal als ausgefressen — dort fehlt die Farbinformation, beim Messen bleibt er außen vor.</summary>
+    /// <summary>Encoded level (0–1) from which a channel counts as clipped. Clipped pixels lack colour information and are
+    /// excluded when measuring neutral and white.</summary>
     public const double ClippedLevel = 0.985;
 
-    /// <summary>Kleinster Abstand Schwarz → Weiß je Kanal (linear), sonst wäre die Kurve unbrauchbar steil.</summary>
+    /// <summary>Minimum distance black → white per channel (linear); otherwise the curve would be unusably steep.</summary>
     private const double MinRange = 0.05;
 
-    /// <summary>Halbe Kantenlänge des Messfelds in Pixeln: mindestens 4, bei großen Bildern ein Dreihundertstel der kurzen Seite.</summary>
+    /// <summary>Computes the half edge length of the measuring square.</summary>
+    /// <param name="width">Image width in px.</param>
+    /// <param name="height">Image height in px.</param>
+    /// <returns>Radius in px: one 300th of the shorter side, at least 4.</returns>
     public static int SampleRadius(int width, int height) => Math.Max(4, Math.Min(width, height) / 300);
 
     /// <summary>
-    /// Mittlere Farbe um (x, y) in Bildpixeln. Bei Neutral und Weiß zählen ausgefressene Pixel nicht mit; ist alles
-    /// ausgefressen (oder liegt die Stelle außerhalb), null.
+    /// Measures the mean colour in a square of <see cref="SampleRadius"/> around a position.
     /// </summary>
+    /// <param name="image">Image to measure; access is synchronised by locking on it.</param>
+    /// <param name="x">Horizontal position in image pixels.</param>
+    /// <param name="y">Vertical position in image pixels.</param>
+    /// <param name="kind">Eyedropper; for <see cref="WbPoint.Neutral"/> and <see cref="WbPoint.White"/>, clipped pixels
+    /// (<see cref="ClippedLevel"/>) are not counted.</param>
+    /// <returns>The mean colour in linear light, or <see langword="null"/> if the position lies outside the image or all
+    /// pixels are clipped.</returns>
+    /// <exception cref="InvalidOperationException">The pixels could not be read.</exception>
     public static WbSample? Measure(MagickImage image, double x, double y, WbPoint kind)
     {
         int w, h;
@@ -84,11 +109,15 @@ public static class WhiteBalance
         return count == 0 ? null : new WbSample(sr / count, sg / count, sb / count);
     }
 
-    /// <summary>Ist etwas zu tun?</summary>
+    /// <summary>Determines whether there is anything to do.</summary>
+    /// <param name="neutral">Neutral measurement, or <see langword="null"/>.</param>
+    /// <param name="black">Black measurement, or <see langword="null"/>.</param>
+    /// <param name="white">White measurement, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if at least one measurement is set.</returns>
     public static bool IsActive(WbSample? neutral, WbSample? black, WbSample? white) =>
         neutral is not null || black is not null || white is not null;
 
-    /// <summary>Kurve je Kanal: Tonwert-Enden, dann Mitten (Exponent) oder Verstärkung.</summary>
+    /// <summary>Curve per channel: tonal end points, then midtones (exponent) or gain.</summary>
     internal readonly record struct Channel(double Black, double White, double Gamma, double Gain)
     {
         public double Map(double linear)
@@ -100,7 +129,7 @@ public static class WhiteBalance
         }
     }
 
-    /// <summary>Die drei Kanalkurven (R, G, B) aus den Messungen.</summary>
+    /// <summary>The three channel curves (R, G, B) from the measurements.</summary>
     internal static Channel[] Plan(WbSample? neutral, WbSample? black, WbSample? white)
     {
         double[] Of(WbSample s) => [s.R, s.G, s.B];
@@ -115,12 +144,12 @@ public static class WhiteBalance
             var n = Of(ns);
             var level = new double[3];
             for (var c = 0; c < 3; c++) level[c] = Math.Clamp((n[c] - b[c]) / (w[c] - b[c]), 1e-4, 1);
-            // Zielgrau: Helligkeit der Stelle (Rec. 709, linear) — sie soll nur ihre Farbe verlieren
+            // Target grey: brightness of the spot (ITU-R BT.709 weights, linear); it is only to lose its colour
             var target = Math.Clamp(0.2126 * level[0] + 0.7152 * level[1] + 0.0722 * level[2], 1e-4, 0.9999);
             for (var c = 0; c < 3; c++)
             {
                 if (white is not null && level[c] < 0.9999)
-                    gamma[c] = Math.Clamp(Math.Log(target) / Math.Log(level[c]), 0.2, 5);   // Weiß bleibt weiß
+                    gamma[c] = Math.Clamp(Math.Log(target) / Math.Log(level[c]), 0.2, 5);   // White stays white
                 else
                     gain[c] = Math.Clamp(target / level[c], 0.2, 5);
             }
@@ -129,21 +158,28 @@ public static class WhiteBalance
         return [new(b[0], w[0], gamma[0], gain[0]), new(b[1], w[1], gamma[1], gain[1]), new(b[2], w[2], gamma[2], gain[2])];
     }
 
-    /// <summary>Stützstellen der Kennlinie je Kanal (über den sRGB-kodierten Eingang, dazwischen linear gelesen).</summary>
+    /// <summary>Number of intervals of the lookup curve per channel (over the sRGB-encoded input, interpolated linearly in
+    /// between).</summary>
     private const int TableSize = 4096;
 
     /// <summary>
-    /// Weißabgleich auf einen Pixelpuffer (B, G, R, A; sRGB-kodiert 0–1). Liefert einen neuen Puffer aus dem
-    /// <see cref="PixelPool"/>; <paramref name="px"/> bleibt unverändert. Alpha bleibt.
+    /// Applies the white balance to a pixel buffer.
     /// </summary>
+    /// <param name="px">Pixels, interleaved B, G, R, A, sRGB-encoded 0–1; not modified.</param>
+    /// <param name="width">Width in px.</param>
+    /// <param name="height">Height in px.</param>
+    /// <param name="neutral">Neutral measurement, or <see langword="null"/>.</param>
+    /// <param name="black">Black measurement, or <see langword="null"/>.</param>
+    /// <param name="white">White measurement, or <see langword="null"/>.</param>
+    /// <returns>A new buffer from the <see cref="PixelPool"/>, owned by the caller. Alpha stays unchanged.</returns>
     public static float[] Apply(float[] px, int width, int height, WbSample? neutral, WbSample? black, WbSample? white)
     {
         var plan = Plan(neutral, black, white);
-        // Kennlinie je Kanal: kodierter Eingang → kodierter Ausgang (Reihenfolge im Puffer: B, G, R)
+        // Curve per channel: encoded input → encoded output (order in the buffer: B, G, R)
         var tables = new float[3][];
         for (var c = 0; c < 3; c++)
         {
-            var channel = plan[2 - c];   // Puffer B, G, R ↔ Plan R, G, B
+            var channel = plan[2 - c];   // Buffer B, G, R ↔ plan R, G, B
             var t = new float[TableSize + 1];
             for (var i = 0; i <= TableSize; i++)
                 t[i] = (float)ToSrgb(channel.Map(ToLinear(i / (double)TableSize)));
@@ -173,11 +209,15 @@ public static class WhiteBalance
         return table[i] + (table[i + 1] - table[i]) * (f - i);
     }
 
-    /// <summary>sRGB-kodiert → linear.</summary>
+    /// <summary>Converts an sRGB-encoded value to linear light (IEC 61966-2-1 transfer function).</summary>
+    /// <param name="v">Encoded value, 0–1.</param>
+    /// <returns>Linear value, 0–1.</returns>
     public static double ToLinear(double v) =>
         v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
 
-    /// <summary>Linear → sRGB-kodiert.</summary>
+    /// <summary>Converts a linear value to sRGB encoding (IEC 61966-2-1 transfer function).</summary>
+    /// <param name="v">Linear value, 0–1.</param>
+    /// <returns>Encoded value, 0–1.</returns>
     public static double ToSrgb(double v) =>
         v <= 0.0031308 ? v * 12.92 : 1.055 * Math.Pow(v, 1 / 2.4) - 0.055;
 

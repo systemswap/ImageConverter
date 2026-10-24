@@ -4,30 +4,40 @@ using ImageConverter.Core.Platform;
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Rauschen entfernen, getrennt nach Helligkeit und Farbe — so wie es gute Werkzeuge machen (Referenzwerkzeug: Luminanz und
-/// Farbe). Arbeitet im 32-Bit-Puffer der Kette (<see cref="Pixels"/>), rechnet in Helligkeit Y und den Farbabständen
-/// Cb = B − Y, Cr = R − Y.
+/// Removes noise separately for luminance and colour, in the way established raw editors split luminance and colour
+/// noise reduction.
 /// </summary>
 /// <remarks>
-/// <para><b>Farbrauschen</b>: grobe bunte Flecken; in den Farbkanälen steckt kaum feines Detail, die Kanten liegen in
-/// der Helligkeit. Deshalb ein helligkeitsgeführter Filter (Guided Filter, He u. a. 2010) auf Cb und Cr, in zwei Stufen
-/// (feine Farbpunkte, größere Flecken): glättet die Farbe kräftig, stoppt aber an Helligkeitskanten — keine Farbsäume.</para>
-/// <para><b>Helligkeitsrauschen</b>: Non-Local Means (Buades u. a. 2005) auf Y — jeder Punkt wird mit Punkten gemittelt,
-/// deren Umgebung ähnlich aussieht, nicht einfach mit seinen Nachbarn; Kanten und feine Struktur bleiben. Die Stärke
-/// folgt dem gemessenen Rauschen je Helligkeit (wie bei der KI-Körnung): dunkle, stark rauschende Stellen mehr, helle,
-/// saubere weniger. Ein sauberes Bild bleibt fast unverändert.</para>
+/// Works on the 32-bit float buffer of the processing chain (<see cref="Pixels"/>) and computes in luma Y and the colour
+/// differences Cb = B − Y and Cr = R − Y (Y with the ITU-R BT.709 weights).
+/// <para><b>Colour noise</b>: coarse coloured blotches. The colour channels carry hardly any fine detail; the edges lie in
+/// the luminance. Cb and Cr are therefore smoothed with a luminance-guided filter (guided filter, He et al. 2010) in two
+/// stages (fine colour dots, larger blotches). This smooths the colour strongly but stops at luminance edges, so no colour
+/// fringes appear.</para>
+/// <para><b>Luminance noise</b>: Non-Local Means (Buades et al. 2005) on Y. Each pixel is averaged with pixels whose
+/// neighbourhood looks similar rather than simply with its neighbours, so edges and fine structure are preserved. The
+/// filter strength follows the noise measured per brightness level (as for the AI grain): dark, noisy areas are
+/// filtered more, bright, clean areas less. A clean image remains almost unchanged.</para>
 /// </remarks>
 public static class Denoiser
 {
-    // Radien in Pixeln des Exports (in der Vorschau mit dem Maßstab umgerechnet)
+    // Radii in pixels of the export (converted with the scale factor in the preview)
     private const double ChromaFine = 3, ChromaCoarse = 10;
     private const int PatchRadius = 2, SearchRadius = 4;
 
-    /// <summary>Entrauschen; die Eingabe bleibt unverändert.</summary>
-    /// <param name="px">Pixel (B, G, R, A je 0…1).</param>
-    /// <param name="luma">0…1: Helligkeitsrauschen.</param>
-    /// <param name="chroma">0…1: Farbrauschen.</param>
-    /// <param name="scale">Breite hier ÷ Breite im Export — Radien wirken in Vorschau und Export gleich.</param>
+    /// <summary>Denoises an image; the input remains unchanged.</summary>
+    /// <param name="px">Pixels, interleaved B, G, R, A, each 0…1.</param>
+    /// <param name="w">Width in px.</param>
+    /// <param name="h">Height in px.</param>
+    /// <param name="luma">Luminance noise reduction strength, 0…1; values up to 0.005 switch it off.</param>
+    /// <param name="chroma">Colour noise reduction strength, 0…1; values up to 0.005 switch it off.</param>
+    /// <param name="scale">Width of this image ÷ width in the export, so that the radii act the same in the preview
+    /// and in the export.</param>
+    /// <param name="plan">Optional progress plan; <see cref="WorkPlan.Next"/> is called once at the start.</param>
+    /// <returns>A new buffer of the same length rented from <see cref="PixelPool"/>; the caller owns it. If both
+    /// strengths are off, it is an exact copy of the input.</returns>
+    /// <remarks>Luminance noise reduction runs on the GPU if <see cref="GpuFilters.NonLocalMeans"/> is available,
+    /// otherwise on the CPU; both give the same result up to rounding.</remarks>
     public static float[] Apply(float[] px, int w, int h, double luma, double chroma, double scale = 1, WorkPlan? plan = null)
     {
         plan?.Next();
@@ -35,10 +45,11 @@ public static class Denoiser
         {
             var copy = PixelPool.Rent(px.Length);
             Array.Copy(px, copy, px.Length);
-            return copy;   // nichts zu tun: genau dasselbe Bild, ohne Umweg über Helligkeit und Farbe
+            return copy;   // Nothing to do: exactly the same image, without the round trip through luma and chroma
         }
 
-        // Alle Zwischenpuffer aus dem Pool (vorher je Aufruf rund 7 GB neu angelegt beim Panorama) — gleiche Rechnung
+        // All intermediate buffers come from the pool; allocating them fresh costs about 7 GB per call for the panorama
+        // test image
         var n = w * h;
         float[] y = PixelPool.Rent(n), cb = PixelPool.Rent(n), cr = PixelPool.Rent(n);
         Parallel.For(0, h, ComputeLimits.Options, row =>
@@ -53,7 +64,8 @@ public static class Denoiser
 
         if (chroma > 0.005)
         {
-            // Mittelwerte der Führung (Helligkeit) hängen nur vom Radius ab — für beide Farbkanäle einmal
+            // The means of the guide (luma) depend only on the radius, so they are computed once for both colour
+            // channels
             using var stats = new GuideStats(y, w, h);
             ChromaDenoise(cb, y, w, h, chroma, scale, stats);
             ChromaDenoise(cr, y, w, h, chroma, scale, stats);
@@ -87,8 +99,8 @@ public static class Denoiser
     }
 
     /// <summary>
-    /// Mittel und Mittel der Quadrate der Führung je Radius (Guided Filter), einmal gerechnet für beide Farbkanäle.
-    /// Die Führung darf sich in der Zeit nicht ändern.
+    /// Mean and mean of squares of the guide per radius (guided filter), computed once for both colour channels.
+    /// The guide must not change while this instance is in use; <see cref="Dispose"/> returns the buffers to the pool.
     /// </summary>
     private sealed class GuideStats(float[] guide, int w, int h) : IDisposable
     {
@@ -124,16 +136,16 @@ public static class Denoiser
         }
     }
 
-    // ------------------------------------------------------------ Farbe
+    // ------------------------------------------------------------ Colour
 
     /// <summary>
-    /// Farbkanal glätten, geführt von der Helligkeit: zwei Stufen Guided Filter; die Stärke bestimmt, wie viel vom
-    /// geglätteten Kanal übernommen wird und wie weit der Filter Unterschiede noch für Rauschen hält.
+    /// Smooths a colour channel in place, guided by the luminance: two stages of guided filter. The strength determines
+    /// how much of the smoothed channel is taken over and how large a difference the filter still treats as noise.
     /// </summary>
     private static void ChromaDenoise(float[] c, float[] guide, int w, int h, double strength, double scale, GuideStats stats)
     {
         var sigma = NoiseSigma(c, w, h);
-        // Unterschiede bis etwa zum Dreifachen des Rauschens gelten als Rauschen — mehr Stärke, mehr Toleranz
+        // Differences up to about (1 + 3 · strength) times the noise level count as noise: more strength, more tolerance
         var eps = (float)Math.Pow(sigma * (1 + 3 * strength), 2) + 1e-7f;
         var r1 = Math.Max(1, (int)Math.Round(ChromaFine * scale));
         var r2 = Math.Max(r1 + 1, (int)Math.Round(ChromaCoarse * scale));
@@ -141,7 +153,8 @@ public static class Denoiser
         var fine = GuidedFilter(c, guide, w, h, r1, eps, stats);
         var coarse = GuidedFilter(fine, guide, w, h, r2, eps, stats);
         var s = (float)Math.Clamp(strength, 0, 1);
-        // feine Stufe ganz, die grobe nach und nach — kleine Werte entfernen erst die Farbpunkte, große auch Flecken
+        // The fine stage scales linearly with the strength, the coarse one quadratically: small values remove the colour
+        // dots first, large values also the blotches
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
@@ -151,12 +164,12 @@ public static class Denoiser
         PixelPool.Return(coarse);
     }
 
-    /// <summary>Guided Filter (He, Sun, Tang 2010): Ausgang folgt den Kanten der Führung, glättet dazwischen.</summary>
+    /// <summary>Guided filter (He, Sun, Tang 2010): the output follows the edges of the guide and smooths in between.</summary>
     private static float[] GuidedFilter(float[] p, float[] guide, int w, int h, int r, float eps, GuideStats stats)
     {
         var n = p.Length;
         var ip = PixelPool.Rent(n);
-        var tmp = PixelPool.Rent(n);   // ein Zwischenpuffer für alle Kastenmittel (wird jeweils ganz überschrieben)
+        var tmp = PixelPool.Rent(n);   // One scratch buffer for all box means (fully overwritten each time)
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++) ip[i] = guide[i] * p[i];
@@ -165,7 +178,7 @@ public static class Denoiser
         var meanP = BoxMean(p, w, h, r, tmp, PixelPool.Rent(n));
         var corrIP = BoxMean(ip, w, h, r, tmp, PixelPool.Rent(n));
 
-        float[] a = ip, b = PixelPool.Rent(n);   // a überschreibt ip (wird nicht mehr gebraucht)
+        float[] a = ip, b = PixelPool.Rent(n);   // a overwrites ip, which is no longer needed
         Parallel.For(0, h, ComputeLimits.Options, row =>
         {
             for (int x = 0, i = row * w; x < w; x++, i++)
@@ -187,11 +200,15 @@ public static class Denoiser
         return q;
     }
 
-    /// <summary>Mittel über ein Quadrat mit Radius <paramref name="r"/> (am Rand nur über das, was im Bild liegt).</summary>
+    /// <summary>
+    /// Mean over a square of radius <paramref name="r"/> (at the border only over the pixels that lie inside the image).
+    /// Separable running sums, so the cost does not depend on the radius.
+    /// </summary>
     internal static float[] BoxMean(float[] src, int w, int h, int r) =>
         BoxMean(src, w, h, r, new float[src.Length], new float[src.Length]);
 
-    /// <summary>Wie oben, in vorhandene Puffer (<paramref name="tmp"/> Zwischenstand, <paramref name="dst"/> Ergebnis).</summary>
+    /// <summary>As above, into existing buffers (<paramref name="tmp"/> intermediate result, <paramref name="dst"/>
+    /// result, which is also returned).</summary>
     internal static float[] BoxMean(float[] src, int w, int h, int r, float[] tmp, float[] dst)
     {
         Parallel.For(0, h, ComputeLimits.Options, y =>
@@ -246,30 +263,32 @@ public static class Denoiser
         return dst;
     }
 
-    /// <summary>Rauschstärke eines Kanals (robust: Median der Abweichung vom 3 × 3-Mittel, auf Normalverteilung umgerechnet).</summary>
+    /// <summary>Noise level of a channel (robust: median of the deviation from the 3 × 3 mean, converted to the standard
+    /// deviation of a normal distribution).</summary>
     private static double NoiseSigma(float[] c, int w, int h)
     {
         var tmp = PixelPool.Rent(c.Length);
         var mean = BoxMean(c, w, h, 1, tmp, PixelPool.Rent(c.Length));
-        var step = Math.Max(1, c.Length / 200_000);   // Stichprobe genügt
+        var step = Math.Max(1, c.Length / 200_000);   // A sample of about 200,000 values is sufficient
         var diffs = new List<float>(c.Length / step + 1);
         for (var i = 0; i < c.Length; i += step) diffs.Add(Math.Abs(c[i] - mean[i]));
         PixelPool.Return(tmp);
         PixelPool.Return(mean);
         diffs.Sort();
-        // Abweichung vom 3 × 3-Mittel hat bei weißem Rauschen die Streuung σ·√(8/9); Median |N(0,1)| = 0,6745
+        // For white noise the deviation from the 3 × 3 mean has the standard deviation σ·√(8/9); median |N(0,1)| = 0.6745
         return diffs[diffs.Count / 2] / 0.6745 / Math.Sqrt(8.0 / 9);
     }
 
-    // ------------------------------------------------------------ Helligkeit
+    // ------------------------------------------------------------ Luminance
 
     /// <summary>
-    /// Non-Local Means auf der Helligkeit: für jede Verschiebung im Suchfenster der Abstand der 5 × 5-Umgebungen
-    /// (Kastenmittel der quadrierten Differenzen), daraus das Gewicht. Filterstärke je Punkt aus dem gemessenen Rauschen.
+    /// Non-Local Means on the luminance: for each offset in the 9 × 9 search window, the distance of the 5 × 5
+    /// neighbourhoods (box mean of the squared differences) gives the weight. The filter strength per pixel comes from
+    /// the measured noise. Returns <paramref name="y"/> itself if the image shows no measurable noise.
     /// </summary>
     private static float[] LumaDenoise(float[] y, float[] px, int w, int h, double strength)
     {
-        // Rauschen je Helligkeit messen (wie bei der Körnung) — auf genau diesem Bild, auch in der Vorschau
+        // Measure the noise per brightness level (as for the grain) on exactly this image, also in the preview
         var rgb = PixelPool.Rent(w * h * 3);
         Parallel.For(0, w * h, ComputeLimits.Options, i =>
         {
@@ -282,7 +301,7 @@ public static class Denoiser
         if (profile.Average <= 1e-5) return y;
 
         var n = y.Length;
-        var k = 0.25f + 0.75f * (float)Math.Clamp(strength, 0, 1);   // Filterbreite in Vielfachen des Rauschens
+        var k = 0.25f + 0.75f * (float)Math.Clamp(strength, 0, 1);   // Filter width in multiples of the noise level
         var sigma2 = PixelPool.Rent(n);
         var invH2 = PixelPool.Rent(n);
         Parallel.For(0, n, ComputeLimits.Options, i =>
@@ -293,7 +312,7 @@ public static class Denoiser
             invH2[i] = hh > 1e-6f ? 1 / (hh * hh) : 0;
         });
 
-        // Grafikkarte: dieselbe Rechnung je Punkt, alle Verschiebungen in einem Faden (gleiches Ergebnis bis auf Rundung)
+        // GPU: the same computation per pixel, all offsets in one thread (same result up to rounding)
         if (GpuFilters.NonLocalMeans(y, sigma2, invH2, w, h, PatchRadius, SearchRadius, (float)Math.Min(1, 1.5 * strength)) is { } fast)
         {
             PixelPool.Return(sigma2);
@@ -301,7 +320,7 @@ public static class Denoiser
             return fast;
         }
 
-        // Summen beginnen bei null (Puffer aus dem Pool sind nicht geleert); diff, boxTmp, patch werden ganz überschrieben
+        // The sums start at zero (pool buffers are not cleared); diff, boxTmp and patch are fully overwritten
         var sum = PixelPool.Rent(n);
         var weightSum = PixelPool.Rent(n);
         var maxWeight = PixelPool.Rent(n);
@@ -338,7 +357,8 @@ public static class Denoiser
             });
         }
 
-        // der Punkt selbst mit dem größten Gewicht seiner Nachbarn (übliche Wahl), danach mit der Stärke mischen
+        // The pixel itself gets the largest weight of its neighbours (the usual choice); the result is then mixed with the
+        // original according to the strength
         var mix = (float)Math.Min(1, 1.5 * strength);
         var result = PixelPool.Rent(n);
         Parallel.For(0, n, ComputeLimits.Options, i =>
