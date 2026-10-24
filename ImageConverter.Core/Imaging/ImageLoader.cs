@@ -37,8 +37,8 @@ public sealed class ImageTooLargeException(string message) : IOException(message
 /// <summary>Loads images and image headers via ImageMagick, with a size check against crafted files.</summary>
 public static class ImageLoader
 {
-    /// <summary>Resolution in DPI used when the file contains no usable value (the convention of Referenzwerkzeug and similar
-    /// programs).</summary>
+    /// <summary>Resolution in DPI used when the file contains no usable value (the common convention of image
+    /// editors).</summary>
     public const double DefaultDpi = 72;
 
     /// <summary>

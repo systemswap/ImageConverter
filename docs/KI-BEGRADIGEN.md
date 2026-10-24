@@ -37,7 +37,7 @@ Alles, was nur SyntheticDoc betrifft, liegt in `ImageConverter.Core/Ai/Synthetic
 | `SyntheticDocDewarp.cs` | Zwei Läufe: grob auf 720 × 512 ohne Schatten (nur um das Blatt zu finden), dann genau auf 1440 × 1024 auf dem Blattausschnitt + 4 % (so wurde trainiert), mit Schattenkarte. Daraus das Gitter, Seitenverhältnis über unser Blattmodell mit den Gitterlinien (DIN-Einrasten), und die Schattenkarte gerade gezogen (256 × 360, `DewarpShading`). |
 
 Geprüft: Die C#-Umwandlung weicht von einem Export mit PyTorch höchstens um 5 · 10⁻⁷ ab. Rechenzeit auf
-dem Entwicklungsrechner (Notebook-Prozessor, CPU): grober Lauf 0,3 s, genauer 0,6 s, mit Bildaufbereitung
+dem Entwicklungsrechner (Laptop-Prozessor mit 8 Kernen, CPU): grober Lauf 0,3 s, genauer 0,6 s, mit Bildaufbereitung
 insgesamt 1,2–1,4 s je Bild ohne Schatten, 1,8–1,9 s mit. Den Schatten-Zweig rechnet ONNX Runtime immer
 mit, auch wenn man nur das Gitter abfragt (verdoppelt die Zeit) — deshalb zwei Dateien: der grobe Lauf nimmt
 die ohne. `OnnxSessions` hält beide offen (Dateien desselben Modells schließen sich nicht gegenseitig).
@@ -113,7 +113,7 @@ Alle Werkzeuge liegen in `extern/SyntheticDoc/`; die englischen READMEs dort bes
 
 ### Wie lange dauert das?
 
-Gemessen auf dem Entwicklungsrechner (Notebook-Prozessor, 8 Kerne, ohne NVIDIA-GPU; Zufallsdaten, die Rechenzeit
+Gemessen auf dem Entwicklungsrechner (Laptop-Prozessor, 8 Kerne, ohne NVIDIA-GPU; Zufallsdaten, die Rechenzeit
 hängt nicht vom Inhalt ab), ein Trainingsschritt mit Vorwärts, Rückwärts und Optimierer:
 
 | Auflösung | Stapel | je Bild |
@@ -205,7 +205,7 @@ Echter Fehler gegen die bekannte Form der Generator-Testbilder (Mittel px):
 | Bild | Linien + Blattmodell | SyntheticDoc direkt |
 |---|---|---|
 | Schulbuch-Blatt gewölbt | 0,5 | 13,2 |
-| Arbeitsblatt-Blatt gewölbt | 1,9 | 18,0 |
+| Arbeitsblatt gewölbt | 1,9 | 18,0 |
 | Schulbuch / Arbeitsblatt wellig | 5,9 / 10,0 | 19,7 / 25,8 |
 | Schulbuch / Arbeitsblatt Doppelseite | 1,4 / 1,9 | 31,5 / 32,1 |
 

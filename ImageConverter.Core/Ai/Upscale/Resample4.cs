@@ -6,7 +6,7 @@ namespace ImageConverter.Core.Ai.Upscale;
 /// constraint and as input of PiSA-SR.
 /// </summary>
 /// <remarks>
-/// Pixel centres as in PIL/ImageMagick: source pixel i covers target pixels 4i … 4i+3. Outside the crop the edge pixel
+/// Pixel centres as in ImageMagick and common implementations: source pixel i covers target pixels 4i … 4i+3. Outside the crop the edge pixel
 /// is repeated. The channels are processed in parallel.
 /// </remarks>
 public static class Resample4
@@ -14,7 +14,7 @@ public static class Resample4
     /// <summary>Interpolation kernel for enlarging.</summary>
     public enum Kernel
     {
-        /// <summary>Bicubic (a = −0.5, as in PIL): input of PiSA-SR, back projection.</summary>
+        /// <summary>Bicubic (a = −0.5, as in common implementations): input of PiSA-SR, back projection.</summary>
         Bicubic,
 
         /// <summary>Lanczos 3: plain enlargement without AI (for the details blend and the alpha channel).</summary>

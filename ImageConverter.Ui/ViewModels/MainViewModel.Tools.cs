@@ -33,7 +33,7 @@ public partial class MainViewModel
     [ObservableProperty] public partial double Contrast { get; set; }
     [ObservableProperty] public partial double Shadows { get; set; }
     [ObservableProperty] public partial double Highlights { get; set; }
-    /// <summary>"Match colour" as in Adobe Referenzwerkzeug CS5 Match Color: luminance −100 … +100 (Referenzwerkzeug 1–200 %).</summary>
+    /// <summary>"Match colour" (without source image): luminance −100 … +100 (factor 1–200 %).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanLimitLuminance))]
     public partial double MatchLuminance { get; set; }

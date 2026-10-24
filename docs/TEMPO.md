@@ -1,6 +1,6 @@
 # Tempo der Vorschau und der Filter
 
-Stand 0.5.95 beta. Gemessen auf dem Laptop mit Notebook-Prozessor (8 Kerne, 16 Threads, Radeon „gfx90c“ im Prozessor),
+Stand 0.5.95 beta. Gemessen auf dem Laptop (8 Kerne, 16 Threads, integrierte Grafik „gfx90c“ im Prozessor),
 Vorschau 2048 px (Familienfoto 2592 × 1944 → 2048 × 1536 = 3,1 MP; Panorama 7895 × 3544 → 2048 × 919 = 1,9 MP).
 
 ## Was beim Ziehen eines Reglers neu gerechnet wird (vor der Arbeit, 0.5.90)
@@ -57,18 +57,18 @@ vergleicht); Tests `DenoiserTests.LumaDenoise_GpuAndCpu_Agree`, `DehazeTests.Deh
 
 ## Messen auf diesem Laptop
 
-Der Notebook-Prozessor ist strombegrenzt: Bei Dauerlast taktet er herunter, die zweite Hälfte einer langen Messung ist 20–30 %
+Der Laptop-Prozessor ist strombegrenzt: Bei Dauerlast taktet er herunter, die zweite Hälfte einer langen Messung ist 20–30 %
 langsamer — auch Stufen, die sich nicht geändert haben. Deshalb alt und neu im Wechsel messen (Arbeitsbaum mit dem alten
 Stand, `ab.sh`) und den besten von mehreren Läufen nehmen. Mehr Kerne helfen nur, wo vorher Kerne frei waren.
 
-## Auf dem Debian-Rechner (RX 6650 XT)
+## Auf dem Debian-Rechner (eigene AMD-Grafikkarte)
 
 ILGPU braucht dort OpenCL (ROCm oder Mesa rusticl). Erwartet: deutlich mehr Gewinn als hier (eigene Grafikkarte mit
 eigenem Speicher). Ohne OpenCL rechnet die CPU — die Zeile in Einstellungen › KI-Modelle zeigt, was gilt.
 
 ## Start und Ausrichten-Werkzeuge (0.6.14 beta, Debian-Rechner, 18.10.2026)
 
-Gemessen auf dem Ryzen 9 7950X3D mit der fertigen AppImage bzw. im unsichtbaren Testfenster:
+Gemessen auf dem Debian-Rechner (16 Kerne) mit der fertigen AppImage bzw. im unsichtbaren Testfenster:
 
 - **Start bis zum Fenster:** 0,51–0,56 s (drei Starts, eigene Einstellungen; Fenster über `xwininfo` erkannt).
 - **Entzerren / Gerade richten, 12-MP-Foto** (Zeit bis zum fertigen Bild):

@@ -12,7 +12,7 @@ namespace ImageConverter.Core.Imaging;
 /// </summary>
 /// <remarks>
 /// <para>Worthwhile for filters with many exponential or square-root operations per pixel (noise reduction, dehaze):
-/// measured on the Radeon integrated in a Notebook-Prozessor, about 13 times as fast as all CPU cores.</para>
+/// measured on the graphics integrated in an 8-core laptop processor, about 13 times as fast as all CPU cores.</para>
 /// <para>Without a GPU, when disabled or after an error, the caller continues on the CPU. An error disables the GPU
 /// until the program restarts and is written to the log.</para>
 /// <para>The results differ only in rounding (floating-point operations in a different order, relatively about

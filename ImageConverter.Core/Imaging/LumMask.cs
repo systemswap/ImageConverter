@@ -1,7 +1,7 @@
 namespace ImageConverter.Core.Imaging;
 
 /// <summary>
-/// Luminosity mask in the style of the Referenzwerkzeug "Darks I/II/III" masks (Tony Kuyper): the inverted image itself serves
+/// Luminosity mask after the "Darks I/II/III" masks (Tony Kuyper): the inverted image itself serves
 /// as the mask, so dark areas receive the full effect, midtones a share and bright areas none. The mask is pixel-accurate
 /// (it follows every pine needle, no halo) and fades out smoothly.
 /// </summary>

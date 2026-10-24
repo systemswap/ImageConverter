@@ -17,7 +17,7 @@ using ImageConverter.Core.Imaging;
 namespace ImageConverter.Controls;
 
 /// <summary>
-/// Image preview with a Referenzwerkzeug-style selection frame.
+/// Image preview with a selection frame.
 ///
 /// The frame is initially invisible and appears only when the left mouse button is
 /// dragged over the image. Then: dragging corners and edge midpoints resizes, dragging
@@ -232,7 +232,7 @@ public sealed class CropView : Control
         set => SetValue(SelectionRadiusProperty, value);
     }
 
-    /// <summary>Executed on Enter or a double-click inside the selection (as in Referenzwerkzeug).</summary>
+    /// <summary>Executed on Enter or a double-click inside the selection.</summary>
     public static readonly StyledProperty<ICommand?> CropCommandProperty =
         AvaloniaProperty.Register<CropView, ICommand?>(nameof(CropCommand));
 

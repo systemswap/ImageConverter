@@ -378,13 +378,13 @@ Test oder Nachweis.
     drückt die Schwankung der Landschaft – Nebel galt als Himmel).
   - Kein Helligkeitsausgleich → Ergebnis dunkel. Ein Ausgleich über einen
     einfachen Weichzeichner trug Aufhellung vom Land in den Himmel (Streifen).
-- **Wie behoben:** Lineares Licht; Luftlicht wie im Adobe-Patent US 9 305 339 B2
+- **Wie behoben:** Lineares Licht; Luftlicht wie im Patent US 9 305 339 B2
   (hellste 1 %, davon die mittleren); Durchlässigkeit auf einer Fassung
   ≤ 1024 px, verfeinert mit farbigem Guided Filter, kantentreu auf volle Größe
   (Fast Guided Filter); Himmelsschutz über **Bandpass-Struktur** (Differenz
   zweier Glättungen – Verläufe heben sich auf; gemessen Himmel 0,002–0,005,
   Landschaft 0,04–0,38, dichter Testnebel 0,03); Toleranz nahe am Luftlicht;
-  Helligkeitsausgleich wie Adobe („guided brightness scaling“) mit Guided
+  Helligkeitsausgleich wie im Patent („guided brightness scaling“) mit Guided
   Filter und nie heller als das Original. Ein einziger Durchlauf über das große
   Bild: 78-MP-Panorama in 2,5 s.
 - **Nicht tun:** Schwellen für den Himmelsschutz ohne Messwerte an echten
@@ -481,7 +481,7 @@ Test oder Nachweis.
     Buntheit höchstens 1 + (1/t − 1) + 0,15 je Regler-Einheit (Dunst nimmt die
     Buntheit um t – so viel zurück ist berechtigt).
   - Luftlicht nur aus der Landschaft (Himmelskarte < 0,5), nicht aus dem Himmel.
-  - Wie Referenzwerkzeug zusätzlich Klarheit (lokaler Kontrast, kantentreu über Guided
+  - Zusätzlich Klarheit (lokaler Kontrast, kantentreu über Guided
     Filter), feine Schärfe (3×3), sanfte S-Kurve, Dynamik (blasse Farben mehr);
     Klarheit und Schärfe nicht im Himmel (Rauschen in Wolken).
 - **Nicht tun:** Die physikalische Rückrechnung direkt als Farbe ausgeben;
@@ -631,7 +631,7 @@ Test oder Nachweis.
   auf dem 0.4.40-Filter hatte dieselben Treppen (5–7 %) und gefiel auch sonst
   nicht – verworfen. Abhilfe 0.4.44: die ganze Dunstkette in 32-Bit-Fließkomma
   (`Pixels`), einmal am Schluss mit TPDF-Dither gerundet; dazu Entstufen
-  (`Deband`, f3kdb/libplacebo-Verfahren mit strengerem Kriterium: jede der vier
+  (`Deband`, Verfahren verbreiteter Video-Entstufungsfilter mit strengerem Kriterium: jede der vier
   Proben unter der Schwelle) an der Quelle und nach jedem Durchlauf, vor der
   Schärfe. Messung 100 × 3: 1,1 % ohne, 0,6 % mit Entstufen; Detail der Wiese
   unverändert (1,36).
@@ -936,7 +936,7 @@ Test oder Nachweis.
 - **Was:** (1) Nach der KI gedreht: Bild schmal, Gesichter an falscher Stelle — das *offene* Ergebnis
   lag als Vorschau-Ebene im alten Querformat über dem gedrehten Bild. (2) Nach Übernehmen und Drehen
   rechnete ein neuer KI-Lauf auf dem gedrehten KI-Ergebnis (KI auf KI). (3) Die Liste zeigte jede
-  Drehung als Zeile; gewünscht ist je Funktion eine Zeile zum Aus-/Einschalten wie in Referenzwerkzeug,
+  Drehung als Zeile; gewünscht ist je Funktion eine Zeile zum Aus-/Einschalten,
   dazu Haut & Details getrennt von der KI. (4) Drei Fortschrittsanzeigen (Vorschau unten rechts, KI
   unten mitte, Balken im KI-Bereich).
 - **Wie:** (1) `RunSetup.Current` = Bild beim Rechnen; ändert es sich (FullBitmap), wird das offene
@@ -1242,9 +1242,9 @@ Test oder Nachweis.
 - **Entdeckt in:** 0.5.38 beta (Commit `4ef443b`, 10.10.2026), beim eigenen Test am Panorama; dem Benutzer bei der
   Übergabe genannt. **Behoben in:** 0.5.39 beta.
 - **Was:** Mit „Ferne schonen“ hoch lag um Büsche und Baumkanten vor dem dunstigen Tal ein heller Saum.
-- **Recherche (Stand der Technik):** Belichtungsverschmelzung nach Mertens über eine Laplace-Pyramide – so arbeitet die
-  Tonwertverarbeitung in Googles HDR+; für ein einzelnes Bild mit künstlichen Belichtungen (Extended Exposure Fusion,
-  WACV 2020). Entfernung per KI-Tiefenkarte: Adobe Referenzwerkzeug seit April 2026 („Tiefenbereichsmaske“ für jedes Foto).
+- **Recherche (Stand der Technik):** Belichtungsverschmelzung nach Mertens über eine Laplace-Pyramide; für ein einzelnes
+  Bild mit künstlichen Belichtungen (Extended Exposure Fusion, WACV 2020). Entfernung per KI-Tiefenkarte (Tiefenmaske
+  für jedes Foto).
 - **Ursache (zwei Teile):** (1) Gemischt wurde Pixel für Pixel in einer Größenstufe – ein weicher Maskenrand wird so
   als Saum sichtbar. (2) Hauptursache: Die Dunstkarte nahm den dunkelsten Kanal *in der Umgebung* (Minimumfilter wie
   beim Dark Channel). Der trug die dunklen Werte der Büsche ins Tal; dort galt das Tal als nah und wurde aufgehellt.
@@ -1268,8 +1268,7 @@ Test oder Nachweis.
 - **Neu in:** 0.5.40 beta (10.10.2026). Folgt auf #37 (Wunsch des Benutzers nach der Recherche: beide Teile umsetzen).
 - **Funktion:** Ist das Modell „Tiefenkarte – Depth Anything V2 (klein)“ geladen (Einstellungen → KI-Modelle, Gruppe
   Tiefenkarte, 99 MB, Apache-2.0), nimmt „Ferne schonen“ die geschätzte Entfernung statt des Dunstes; ohne Modell
-  wie bisher der Dunst, unter dem Regler ein Hinweis mit „Laden …“. Vorbild: Adobe Referenzwerkzeug, Tiefenbereichsmaske
-  für jedes Foto (April 2026).
+  wie bisher der Dunst, unter dem Regler ein Hinweis mit „Laden …“.
 - **Bauweise:** `IDepthEstimator` (Core.Imaging) und `OnnxDepthEstimator` (Core.Ai, lange Seite 518, Vielfaches von 14,
   ImageNet-Normierung, Ausgang 2 %/98 % auf 0 fern … 1 nah). Das KI-Modul meldet es an (`LuminanceRegions.Depth`),
   sobald das Modell im Ordner liegt; der `PrepareKey` enthält, ob eine Tiefenkarte da ist → nach dem Laden rechnet
@@ -1330,7 +1329,7 @@ Test oder Nachweis.
   fast so stark angehoben wie ein dunkler Baum und strahlt über.
 - **Wie:** Faktor **je Bereich** (eingeebnete Helligkeit, nicht je Pixel – die Struktur im Baum bleibt):
   `Ziel / Bereichshelligkeit`, begrenzt auf 1 … Luminanz-Faktor. Ein Baum bei 20 % bekommt viel, eine Wiese bei 45 % mit
-  Ziel 40 % nichts. „Luminanz“ bleibt unverändert wie in Referenzwerkzeug (Entscheidung des Benutzers: eigener Regler statt
+  Ziel 40 % nichts. „Luminanz“ bleibt unverändert (Entscheidung des Benutzers: eigener Regler statt
   Umdeuten); Zielwert ganz links = aus.
 - **Falle:** Der Regler sollte „Ziel“ heißen – den deutschen Text gab es schon („Ziel“ = Speicherort beim Export,
   englisch „Destination“). Die englische Tabelle wird über den Indexer gefüllt, ein zweiter Eintrag überschreibt den
@@ -1342,7 +1341,7 @@ Test oder Nachweis.
   `Views/MainView.axaml` (unter Luminanz).
 - **Test/Nachweis:** `AdjustTests.MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone` (Gegenprobe: ohne Zielwert
   rot); Panorama mit Tiefenkarte: sonnige Büsche nicht mehr grell, dunkler Vordergrund gleichmäßig angehoben.
-- **Nachtrag 0.5.43:** Luminanz bis 400 % (Wunsch des Benutzers; vorher wie Referenzwerkzeug höchstens 200 %). Sinnvoll vor
+- **Nachtrag 0.5.43:** Luminanz bis 400 % (Wunsch des Benutzers; vorher höchstens 200 %). Sinnvoll vor
   allem mit Zielwert – der Faktor ist dann nur die Obergrenze, tiefe Schatten (8 %) brauchen ×5 bis 40 %. Ohne Zielwert
   wird bei 400 % fast alles weiß, und Rauschen in tiefen Schatten wird stark sichtbar (Tooltip sagt es).
   Test `MatchLuminance_UpTo400_LetsDeepShadowsReachTheTarget` (Gegenprobe: mit Grenze 200 % rot).
@@ -1447,10 +1446,10 @@ Test oder Nachweis.
 - **Test/Nachweis:** `AdjustTests.MatchTarget_Alone_LiftsTree_AndLeavesSkyAndGaps`; die übrigen Luminanz-Tests
   unverändert grün; `LuminanceDistanceTests` mit der Funktion entfallen. Panorama-Vergleich mit und ohne „Ferne“.
 
-## 44. Neue Gruppe „Luminanzmaske“ (wie die Luminanzmasken in Referenzwerkzeug)
+## 44. Neue Gruppe „Luminanzmaske“
 
 - **Neu in:** 0.5.51 beta (11.10.2026). Wunsch des Benutzers: Dunkles stärker anheben als Helles, um die Sonne nichts,
-  Felder etwas, Himmel dezent — „eine feine Maske wie bei Referenzwerkzeug drüber, was dunkler ist bekommt mehr, bei den hellen
+  Felder etwas, Himmel dezent — „eine feine Maske drüber, was dunkler ist bekommt mehr, bei den hellen
   Bereichen lässt man sie auslaufen“. Das Blau zwischen den Zweigen wurde mit „Gleiche Farbe“ zu hell (Saum).
 - **Ursache des Saums (gemessen, Lupe):** Richtig blaue Lücken erkannte schon die Durchblick-Erkennung; der Saum kam von
   Mischpixeln (halb Nadel, halb Himmel), die die grobe Bereichskarte als Baum sah und voll anhob.
@@ -1583,7 +1582,7 @@ Test oder Nachweis.
   die Blattfläche bekam tiefe Schlitze, der Umriss lief hinein. Ebenso trennte der Schatten am Falz eine Doppelseite in
   zwei Blätter (nur die rechte Seite, kein Falz). Abhilfe: Schließen der Blattfläche; zusätzlich gilt eine Kante nur,
   wenn ihr Umriss höchstens 30 % (+ 8 % Pixeltreppen) länger ist als die Verbindung.
-- **Grenze:** Ist der Blattrand selbst nicht gerade (Arbeitsblatt-Testblatt: handgezeichneter schwarzer Rahmen), passt das Modell
+- **Grenze:** Ist der Blattrand selbst nicht gerade (Testbild Arbeitsblatt: handgezeichneter schwarzer Rahmen), passt das Modell
   schlechter (3 ‰) — die Kante abwählen.
 - **Test/Nachweis:** `LineFinderTests` (künstliche Seite ohne Schriftart: gebogene Zeilen aus Kästchen mit Ober-/Unterlängen
   ≤ 1 px auf der Grundlinie; vier Kanten ≤ 2 px; kein Falz auf einem Blatt; Falz einer Doppelseite ± 5 px; Blatt füllt
@@ -1592,7 +1591,7 @@ Test oder Nachweis.
 
 ## 48. Gewölbtes Blatt: Vorschläge genauer, senkrechte Linien, Fehlerbild gegen das Original
 
-- **Neu in:** 0.5.56 beta (12.10.2026). Wunsch des Benutzers: Linien liegen teils daneben, unten wellig (Schulbuch-Testblatt),
+- **Neu in:** 0.5.56 beta (12.10.2026). Wunsch des Benutzers: Linien liegen teils daneben, unten wellig (Testbild Schulbuch-Blatt),
   auch senkrechte Linien erkennen.
 - **Messen statt schätzen — Fehlerbild** (`~/.cache/imageconverter-build/werkzeuge/fehlerbild/Fehlerbild.cs`): Für die
   Testbilder ist die wahre Form bekannt (Woelbung.cs). Ergebnis → Bild → Blatt (Umkehrung), ideal affin; Abweichung je
@@ -1600,13 +1599,13 @@ Test oder Nachweis.
   tun:** Verbesserungen nach Augenschein beurteilen — erst das Fehlerbild zeigte, dass die Rechnung selbst stimmte
   (exakte Linien: 0,3 px) und die Wellen von zwei falschen Vorschlägen kamen.
 - **Gefundene Ursachen und Abhilfe (Mittel / Max, automatisch):** Schulbuch-Blatt 1,5 / 9,0 → 0,4 / 3,6 px; Schulbuch-Doppelseite
-  14,3 / 55 → 2,0 / 11 px; Arbeitsblatt-Doppelseite 13,9 / 51 → 1,1 / 15 px; Arbeitsblatt-Blatt 9,2 / 44 → 2,0 / 22 px.
+  14,3 / 55 → 2,0 / 11 px; Arbeitsblatt-Doppelseite 13,9 / 51 → 1,1 / 15 px; Arbeitsblatt 9,2 / 44 → 2,0 / 22 px.
   1. Fußzeile (kleine Schrift) sprang in die Nachbarzeile — Toleranzen der Kette jetzt in der Schriftgröße **der Zeile**.
   2. Untere Kante an der eingerollten Ecke 5 px daneben — kubische Glättung zu steif: 15 Punkte, Kurve 5. Grades.
   3. Doppelseite selbst mit exakten Linien 10 px daneben: Am Falz steigt das Papier wie √d an (Spline kann das nicht),
      und die Glättung bestrafte den Knick am Falz. Jetzt je Seite ein Anteil √u · (1 − u), Falz aus der Glättung genommen.
   4. Ober-/Unterkante der Doppelseite (knickt am Falz) bis 49 px daneben — am Falz geteilt, je Seite eine Kante.
-  5. Falsche Vorschläge (handgezeichneter Rand des Arbeitsblatt-Blatts, Würfelkanten als „senkrecht“, Aufgabennummern als
+  5. Falsche Vorschläge (handgezeichneter Rand des Arbeitsblatts, Würfelkanten als „senkrecht“, Aufgabennummern als
      Textrand) — `Dewarp.RejectOutliers`: die am schlechtesten passende Linie fällt heraus, wenn sie über dem 2,5-Fachen
      des Medians **der ersten Runde** liegt (mind. 0,8 ‰) und das Modell ohne sie trägt und ≥ 10 % besser passt; bis zu
      viermal; nur Vorschläge, nie Linien von Hand. In der Oberfläche grau (abgewählt), wieder anwählbar.
@@ -1677,10 +1676,10 @@ Test oder Nachweis.
   - `ThinDark`: schwache Striche = Schließen (Max/Min-Filter) minus Bild über 4 σ Rauschen (mind. 0,025), nur im Innern
     des Blatts (1,5 Buchstabenhöhen vom Rand: Schatten, Heftrücken, Kantensaum gaben sonst parallele Falschlinien — DocUNet
     1_1 kippte das Modell). `RuledLines` bekommt dazu die echte Tinte: Breite und Mitte eines Stücks aus seinem Tintenkern,
-    sonst gilt ein dunkler Strich samt Saum als zu dick (Arbeitsblatt verlor so seine Kastenränder).
+    sonst gilt ein dunkler Strich samt Saum als zu dick (das Arbeitsblatt verlor so seine Kastenränder).
   - Spuren: Verbinden nur bei gleicher Steigung (±0,15), `Smooth` (Sehne unter 14°, Parabelrest ≤ 2,5 px), `Spread`:
     längste zuerst, dann die am weitesten entfernte (Karoraster gäbe sonst 8 Nachbarn), bis 8 je Richtung, Mindestabstand
-    0,6 Buchstabenhöhen (1,5 warf bei Arbeitsblatt den doppelten Kastenrand weg).
+    0,6 Buchstabenhöhen (1,5 warf beim Arbeitsblatt den doppelten Kastenrand weg).
   - `BoxEdges` (neue Quelle `FoundLineSource.Box`, Status „Flächenkanten“): Abstand zur örtlichen Papierfarbe je Kanal
     (weit geglättet nur über papierähnliche Pixel — ein dunkler Balken zog die Schätzung sonst zu sich, und das Papier galt
     als Fläche), buchstabengroße und dünne Tinte ausgeschlossen (fette Überschriften verschmolzen sonst mit dem Balken),
@@ -1692,7 +1691,7 @@ Test oder Nachweis.
   überspannen (acht kurze Rasterstriche im Kasten sagten sonst 1,314 statt DIN). `DewarpSpec.GridOnly` (nur Gitter) und
   `Dewarp.LineErrors` (Modellrest je Linie) für Werkzeuge und einen späteren zweiten Durchgang.
 - **Messung** (echter Fehler gegen den Generator, Mittel/max px): Schulbuch-Blatt 0,4/4,5 → 0,5/2,8 · Schulbuch-Doppelseite 2,0 →
-  1,4 · Schulbuch wellig 6,7 → 5,9 · Arbeitsblatt-Blatt 2,0 → 1,9 · Arbeitsblatt-Doppelseite 1,1 → 1,9 (schlechter; mit 6 statt 8 Linien
+  1,4 · Schulbuch wellig 6,7 → 5,9 · Arbeitsblatt 2,0 → 1,9 · Arbeitsblatt-Doppelseite 1,1 → 1,9 (schlechter; mit 6 statt 8 Linien
   je Richtung sogar 6,6 — die Auswahl ist dort empfindlich). 130 echte DocUNet-Fotos: in der Stichprobe 3 besser, 6
   gleich, keins schlechter; die schweren Fälle (Bon in der Hand, Heftrücken) scheitern in beiden Fassungen am Blattmodell.
 - **Zweiter Durchgang** (Linien im Ergebnis erneut suchen, nur Gitter nachziehen): auf dem Generator ±0,1 px, beim
@@ -1716,8 +1715,8 @@ Test oder Nachweis.
   ist durchweg schlechter. **Kein Download-Ziel:** im Katalog steht eine leere Adresse, die Datei liegt von Hand unter
   `KI-Modelle/syntheticdoc/syntheticdoc_121x177.onnx` (Programmordner oder `%LOCALAPPDATA%\ImageConverter\KI-Modelle`);
   `AiModelItem.ShowDownload` blendet den Knopf ohne Adresse aus. Hosten (Git-Release oder Hugging Face) ist offen.
-- **Rechnung (`AiDewarp`):** Bild verkleinert auf 1600 px, Verkleinern aufs Modellmaß mit Flächenmittel (wie PIL mit
-  Vorfilter — bilinear ohne Filter lag daneben); zwei Läufe, der zweite auf dem Ausschnitt um das gefundene Blatt (+ 4 %);
+- **Rechnung (`AiDewarp`):** Bild verkleinert auf 1600 px, Verkleinern aufs Modellmaß mit Flächenmittel (wie verbreitete
+  Implementierungen mit Vorfilter — bilinear ohne Filter lag daneben); zwei Läufe, der zweite auf dem Ausschnitt um das gefundene Blatt (+ 4 %);
   Gitterwerte mit align_corners = True (±1 = Mitten der äußersten Pixel des Ausschnitts — mit Pixelkanten gerechnet lag es
   um ein halbes Pixel daneben). Das Modell kennt kein Seitenverhältnis (es gibt in der Originalpipeline einfach das
   Eingabeformat zurück): wir nehmen 9 Gitterzeilen und 4 -spalten als Linien für unser Blattmodell → `PageAspect`, DIN;
@@ -1896,7 +1895,7 @@ Test oder Nachweis.
 
 ## 61. Upscaling mit KI: Gruppe unter „Größe“, PiSA-SR ohne Python (0.5.76 beta)
 
-- **Wunsch des Benutzers:** Vergrößern wie Referenzwerkzeug, aber lokal und so, dass das Original erkennbar bleibt; drei Stufen
+- **Wunsch des Benutzers:** Vergrößern auf dem Stand der Technik, lokal und so, dass das Original erkennbar bleibt; drei Stufen
   (x4v3 · UltraSharpV2 · PiSA-SR), Knopf statt Rechnen bei jeder Änderung, Fortschritt mit Restzeit, fertige Kacheln
   sofort sichtbar, Vorher/Nachher und richtig hineinzoomen — auch schon während der Rechnung. Konzept `KONZEPT.md` §1 N,
   Doku `docs/KI-UPSCALING.md` (mit Liste zum Entfernen).
@@ -1943,7 +1942,7 @@ Test oder Nachweis.
 ## 63. KI auf der Grafikkarte: DirectML unter Windows, automatisch (0.5.79 beta)
 
 - **Wunsch des Benutzers:** AMD- und NVIDIA-Grafikkarten nutzen, ohne Schalter — ist eine da, wird sie genommen.
-  Was noch fehlt (Linux mit der RX 6650 XT, NVIDIA unter Linux, fp16, größere Kacheln): `docs/KI-GRAFIKKARTE.md`.
+  Was noch fehlt (Linux mit der eigenen AMD-Karte des Debian-Rechners, NVIDIA unter Linux, fp16, größere Kacheln): `docs/KI-GRAFIKKARTE.md`.
 - **Umsetzung:** Paket `Microsoft.ML.OnnxRuntime.DirectML` für Windows (nach Zielplattform in `ImageConverter.Core.csproj`),
   `OnnxSessions` wählt die erste vorhandene Anbindung (DirectML, MIGraphX, ROCm, CUDA, WebGPU) und fällt beim Öffnen auf
   die CPU zurück (`GpuProblem`); Anzeige in Einstellungen › KI-Modelle. Zeitschätzung getrennt für CPU und Grafikkarte.
@@ -1951,7 +1950,7 @@ Test oder Nachweis.
   überall 1.24.4 statt 1.30 (sonst findet die Anbindung ihre API-Fassung nicht). (2) `DirectML.dll` kopiert das Paket nur bei
   fester x64-Plattform; ohne sie nähme Windows die zu alte aus System32 — von Hand kopiert und vor `onnxruntime.dll` geladen.
   (3) DirectML braucht `EnableMemoryPattern = false` und Ausführung der Reihe nach.
-- **Gemessen** (Notebook-Prozessor, eingebaute Radeon, gemeinsamer Speicher; 500 × 300 → 2000 × 1200): x4v3 3,2 → 2,0 s,
+- **Gemessen** (Laptop-Prozessor mit 8 Kernen, eingebaute Grafik, gemeinsamer Speicher; 500 × 300 → 2000 × 1200): x4v3 3,2 → 2,0 s,
   UltraSharpV2 120 → 80 s, PiSA-SR 355 → 137 s, Ergebnis jeweils gleich (PSNR identisch). Eine eingebaute Grafik teilt sich
   den langsamen Arbeitsspeicher mit der CPU — mehr als Faktor 2–3 ist da nicht drin; eigene Karten sind viel schneller.
 
@@ -1961,11 +1960,11 @@ Test oder Nachweis.
 - **Falle:** Normierungen in fp16 (Mittelwert/Streuung über viele Werte) und Softmax laufen über — dort vorher nach fp32
   wandeln, danach zurück. Konstanten in Mul/Add müssen den Typ des Graphen haben (`Net.Const`), Resize-Skalen und die
   Skalen der InstanceNormalization bleiben fp32.
-- **Gemessen:** PiSA-SR 137 → 97 s auf der eingebauten Radeon, Ergebnis gegen fp32 53 dB (im Mittel 0,2 Stufen).
+- **Gemessen:** PiSA-SR 137 → 97 s auf der eingebauten Grafik, Ergebnis gegen fp32 53 dB (im Mittel 0,2 Stufen).
 
 ## 65. PiSA-SR: Kacheln erst am Ende sichtbar; Grafikkarte/CPU nicht zu sehen (0.5.83 beta)
 
-- **Meldung des Benutzers:** bei „KI wie Referenzwerkzeug“ keine Kacheln, und nicht erkennbar, ob Grafikkarte oder CPU rechnet.
+- **Meldung des Benutzers:** bei PiSA-SR keine Kacheln, und nicht erkennbar, ob Grafikkarte oder CPU rechnet.
 - **Ursache:** PiSA-SR lief in drei Durchgängen über das ganze Bild (Encoder, UNet, Decoder) — fertige Bildteile gab es erst
   im letzten. Jetzt streifenweise: je Zeile Decoder-Kacheln nur so viel Encoder und UNet, wie die Zeilen darüber brauchen
   (eine Latentzeile ist fertig, wenn alle Kacheln mit Anfang davor gerechnet sind). Ergebnis bitgleich (0 Stufen
@@ -2063,8 +2062,8 @@ Test oder Nachweis.
 
 - **Entdeckt in:** 0.5.103 beta (18.10.2026), Benutzer auf dem Debian-Rechner: PiSA-SR ×4 „braucht 34 Minuten“;
   **behoben in:** 0.5.104 beta.
-- **Was:** Die Schätzung („Skalieren (≈ …)“) rechnet mit festen Sekunden je Megapixel, gemessen auf dem Notebook-Prozessor.
-  Der Ryzen 9 7950X3D ist bei PiSA-SR auf der CPU etwa 6× so schnell (58 s statt 355 s am selben Ausschnitt) — angezeigt
+- **Was:** Die Schätzung („Skalieren (≈ …)“) rechnet mit festen Sekunden je Megapixel, gemessen auf dem Laptop (8 Kerne).
+  Der Debian-Rechner (16 Kerne) ist bei PiSA-SR auf der CPU etwa 6× so schnell (58 s statt 355 s am selben Ausschnitt) — angezeigt
   wurde also rund das Sechsfache.
 - **Warum:** `Upscalers.Measured` verfeinerte die Werte nach jedem Lauf, aber nur im Speicher; nach dem Neustart galten
   wieder die Vorgaben. Außerdem zählte ein kleiner erster Lauf nur anteilig (0,15 MP → halbes Gewicht), obwohl die Vorgabe

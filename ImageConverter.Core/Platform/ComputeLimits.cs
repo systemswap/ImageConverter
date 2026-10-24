@@ -14,7 +14,7 @@ namespace ImageConverter.Core.Platform;
 /// processing still runs at full speed.</item>
 /// <item><b>Upper limit</b> in percent of the CPU: applies to the program's own parallel loops
 /// (<see cref="Options"/>), the AI runtime (<see cref="OnnxThreads"/>) and ImageMagick. Measured
-/// (Ryzen 9 7950X3D, PiSA-SR): with 8 instead of 16 cores only about a quarter slower.</item>
+/// (16-core desktop processor, PiSA-SR): with 8 instead of 16 cores only about a quarter slower.</item>
 /// </list>
 /// </remarks>
 public static class ComputeLimits

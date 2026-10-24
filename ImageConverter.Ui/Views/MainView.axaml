@@ -791,7 +791,7 @@
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <!-- Nachbau von Referenzwerkzeug CS5 „Bild > Korrekturen > Gleiche Farbe“ ohne Quellbild -->
+                        <!-- „Gleiche Farbe“ ohne Quellbild -->
                         <HeaderedContentControl Header="{l:T 'GLEICHE FARBE'}">
                             <StackPanel>
                                 <!-- Gesamt: das ganze Bild heller/dunkler, gerechnet nach der Bereichs-Luminanz darunter -->
@@ -856,7 +856,7 @@
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <!-- Luminanzmaske (wie in Referenzwerkzeug): Dunkles bekommt viel, Mitteltöne anteilig, Helles nichts — pixelgenau.
+                        <!-- Luminanzmaske: Dunkles bekommt viel, Mitteltöne anteilig, Helles nichts — pixelgenau.
                              Eigene Gruppe neben „Gleiche Farbe“, lässt sich unabhängig ausschalten oder entfernen. -->
                         <HeaderedContentControl Header="{l:T 'LUMINANZMASKE'}">
                             <StackPanel>

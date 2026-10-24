@@ -47,12 +47,12 @@ public enum Tint
 /// <param name="MatchLimit">"Match colour", luminance threshold (percent brightness of the regions, 5–100): brighter
 /// regions stay unchanged; 100 = no threshold. Only when brightening.</param>
 /// <param name="MatchTarget">"Match colour", luminance target (percent brightness, 5–100): dark regions are lifted only
-/// up to this value (per region, at most by the luminance factor); 0 = off, everything in the same ratio as in
-/// Referenzwerkzeug.</param>
+/// up to this value (per region, at most by the luminance factor); 0 = off, everything in the same
+/// ratio.</param>
 /// <param name="MatchGlobal">"Match colour", luminance "Overall" −100 … +100: makes the whole image brighter or darker
-/// once more (like Referenzwerkzeug 1–200 %), without masks, after the region luminance. The region luminance evens out regions
+/// once more (1–200 %), without masks, after the region luminance. The region luminance evens out regions
 /// but does not make the image brighter as a whole.</param>
-/// <param name="MaskAmount">Luminosity mask (own group, like the luminosity masks in Referenzwerkzeug): strength 0–200 (% more
+/// <param name="MaskAmount">Luminosity mask (own group): strength 0–200 (% more
 /// light in the darkest tones).</param>
 /// <param name="MaskEnd">Luminosity mask: fade-out point (percent brightness, 5–100); nothing above it.</param>
 /// <param name="MaskCurve">Luminosity mask: gradient 0–100 (soft … steep), see <see cref="LumMask.Power"/>.</param>
@@ -170,8 +170,8 @@ public sealed record Adjustments(
 /// <remarks>
 /// Order: white balance (eyedroppers) → dehaze → shadows/highlights → "Match colour" (neutralise, colour, luminance,
 /// overall) → luminosity mask → brightness and contrast → vibrance → saturation → tint.
-/// Shadows and highlights act locally as in Referenzwerkzeug: whether an area counts as dark or bright is decided by its
-/// surroundings at every scale (local Laplacian filter, as in Referenzwerkzeug), not by the single pixel. A dark detail in a
+/// Shadows and highlights act locally: whether an area counts as dark or bright is decided by its
+/// surroundings at every scale (local Laplacian filter), not by the single pixel. A dark detail in a
 /// bright area therefore stays dark, and the image does not become flat.
 /// </remarks>
 public static class Adjust
@@ -412,7 +412,7 @@ public static class Adjust
         var saturation = (float)Math.Clamp(a.Saturation / 100, -1, 1);
         var vibrance = (float)Math.Clamp(a.Vibrance / 100, -1, 1);
         var curve = ToneCurve(a.Brightness / 100, a.Contrast / 100);
-        // As in Referenzwerkzeug 1–200 %, extended up to 300 %: useful with a target value, where the factor is only the upper
+        // 1–200 %, extended up to 300 %: useful with a target value, where the factor is only the upper
         // limit for deep shadows. Brightening the image as a whole is the job of "Overall" (MatchGlobal).
         var luminance = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchLuminance / 100, -1, 2));
         var limit = (float)Math.Clamp(a.MatchLimit / 100, 0.05, 1);
@@ -424,7 +424,7 @@ public static class Adjust
         var warmth = (float)Math.Clamp(a.Warmth / 100, -1, 1);
         var shiftA = -castA * neutralize + warmth * WarmthA;
         var shiftB = -castB * neutralize + warmth * WarmthB;
-        // Order as in Referenzwerkzeug: first white balance and exposure ("Match colour"), then the contrast curve, then
+        // Order: first white balance and exposure ("Match colour"), then the contrast curve, then
         // vibrance/saturation, so that a colour cast is gone before contrast and chroma amplify it.
         var global = Math.Max(0.01f, 1 + (float)Math.Clamp(a.MatchGlobal / 100, -1, 1));
         var balance = luminance != 1 || global != 1 || shiftA != 0 || shiftB != 0;
@@ -450,7 +450,7 @@ public static class Adjust
         }
 
         // Luminance with threshold or target: original and brightened version blended per scale (Laplacian pyramid,
-        // like exposure fusion after Mertens or in Google's HDR+), coarse brightness over large areas, edges over a
+        // like exposure fusion after Mertens), coarse brightness over large areas, edges over a
         // few pixels. Blending per pixel leaves a bright fringe at soft mask edges.
         var lifted = regions is not null ? LiftByRegions(Toned, width, height, luminance, regions, limit, target) : null;
 
@@ -463,7 +463,7 @@ public static class Adjust
 
                 if (balance)
                 {
-                    // "Match colour" in Oklab (before the contrast curve, like the white balance in Referenzwerkzeug).
+                    // "Match colour" in Oklab (before the contrast curve, like the white balance).
                     var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
                     if (shiftA != 0 || shiftB != 0)
                     {
@@ -497,7 +497,7 @@ public static class Adjust
                     var m = LumMask.Weight(L, areaMap?.AreaBrightness(x, y) ?? L, maskEnd, maskPower);
                     if (a.MaskPreview)
                     {
-                        // Show the mask: white = receives everything, black = nothing, like a mask in Referenzwerkzeug.
+                        // Show the mask: white = receives everything, black = nothing.
                         result[i] = result[i + 1] = result[i + 2] = m;
                         continue;
                     }
@@ -680,8 +680,8 @@ public static class Adjust
     }
 
     /// <summary>
-    /// "Match colour" (Referenzwerkzeug CS5, without source image), luminance slider: the brightness is <em>multiplied</em> as in
-    /// Referenzwerkzeug (Lab L, 1–200 %), so the contrast ratios are kept and the image looks more luminous than with a gamma
+    /// "Match colour" (without source image), luminance slider: the brightness is <em>multiplied</em>
+    /// (Lab L, 1–200 %), so the contrast ratios are kept and the image looks more luminous than with a gamma
     /// that only raises the midtones. Above 0.8 it rolls off smoothly towards white so that nothing clips.
     /// </summary>
     private static float Shoulder(float l)
@@ -719,7 +719,7 @@ public static class Adjust
     private const float StrongChroma = 0.2f;
 
     /// <summary>
-    /// Vibrance as in Referenzwerkzeug: strongly boosts pale colours, strong colours hardly at all, and protects skin tones, so
+    /// Vibrance: strongly boosts pale colours, strong colours hardly at all, and protects skin tones, so
     /// that images become livelier without faces turning orange. Towards the left, pale colours turn grey first, strong
     /// colours last longer.
     /// </summary>

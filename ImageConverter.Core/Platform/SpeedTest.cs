@@ -40,7 +40,7 @@ public sealed record SpeedMeasure(double CpuSeconds, double? GpuSeconds, string 
 /// Speed test (Settings › Performance): runs the same work once on the graphics card and once on the CPU.
 /// </summary>
 /// <remarks>
-/// On fast processors the CPU is often as fast or faster (measured: Ryzen 9 7950X3D against RX 6650 XT, see
+/// On fast processors the CPU is often as fast or faster (measured: 16-core desktop processor against a dedicated graphics card, see
 /// docs/KI-GRAFIKKARTE.md), on laptops the graphics card is considerably faster; hence the speed is measured
 /// instead of assumed. Each device first gets a warm-up run (compiling kernels, loading the model), then the best
 /// of two times counts.

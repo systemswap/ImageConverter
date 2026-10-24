@@ -322,7 +322,7 @@ public static class AiModelCatalog
         Gpu: true);
 
     /// <summary>
-    /// Gets the slow upscaling model PiSA-SR (CVPR 2025, comparable to Referenzwerkzeug): the authors' LoRA on Stable Diffusion 2.1.
+    /// Gets the slow upscaling model PiSA-SR (CVPR 2025, generative, invents fine detail): the authors' LoRA on Stable Diffusion 2.1.
     /// </summary>
     /// <remarks>
     /// The weights are downloaded (LoRA from Google Drive, SD 2.1 from the mirror); the app builds the ONNX files itself on

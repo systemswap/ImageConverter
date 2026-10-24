@@ -38,11 +38,11 @@ public static class Upscalers
     };
 
     // Defaults: seconds per megapixel of the original, measured on a 500 × 300 → 2000 × 1200 crop of the "Panorama" test
-    // photo on a Notebook-Prozessor (CPU: x4v3 3.5 s, UltraSharpV2 2 min, PiSA-SR 6 min; GPU = its integrated Radeon through
+    // photo on an 8-core laptop processor (CPU: x4v3 3.5 s, UltraSharpV2 2 min, PiSA-SR 6 min; GPU = its integrated graphics through
     // DirectML). The estimate uses the computing effort (tiles including overlap, Work) instead of the area: for small
     // images the tiles overlap proportionally more, and the area alone was wrong there. Values measured on this computer
     // (speed test, every run) replace the defaults and are saved (Learned/Restore); otherwise a fast computer would
-    // estimate with the laptop values after every start (Ryzen 9 7950X3D: PiSA-SR about 6× as fast).
+    // estimate with the laptop values after every start (16-core desktop processor: PiSA-SR about 6× as fast).
     // See docs/FEHLERGEDAECHTNIS.md, No. 73.
     private static readonly Dictionary<(UpscaleMethod, bool Gpu), double> DefaultSecondsPerMegapixel = new()
     {

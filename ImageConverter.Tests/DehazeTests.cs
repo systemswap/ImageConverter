@@ -81,8 +81,8 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Contrast and colours come back while the brightness stays (brightness compensation as in Adobe
-    /// products); without the compensation the result would become dark.
+    /// Contrast and colours come back while the brightness stays (brightness
+    /// compensation); without the compensation the result would become dark.
     /// </summary>
     [Fact]
     public void HazyImage_GetsContrastAndColourBack_WithoutGettingDark()
@@ -144,7 +144,7 @@ public class DehazeTests
     }
 
     /// <summary>
-    /// Clear image: as in Referenzwerkzeug, contrast, clarity and sharpness also act without haze, but moderately
+    /// Clear image: contrast, clarity and sharpness also act without haze, but moderately
     /// (no HDR look), and the brightness stays.
     /// </summary>
     [Fact]

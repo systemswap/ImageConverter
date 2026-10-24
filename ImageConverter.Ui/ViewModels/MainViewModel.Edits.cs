@@ -10,7 +10,7 @@ using ImageMagick;
 
 namespace ImageConverter.ViewModels;
 
-/// <summary>Functions that can be switched off (eye icon in the "Edits" list, as in Referenzwerkzeug).</summary>
+/// <summary>Functions that can be switched off (eye icon in the "Edits" list).</summary>
 [Flags]
 public enum EditSteps
 {

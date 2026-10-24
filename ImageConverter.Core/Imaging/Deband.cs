@@ -5,14 +5,14 @@ namespace ImageConverter.Core.Imaging;
 /// Smooths steps in soft gradients (debanding) on floating-point pixels.
 /// </summary>
 /// <remarks>
-/// <para>Method as in flash3kyuu_deband (f3kdb) and the deband filter of libplacebo (mpv, FFmpeg): per pixel, four
+/// <para>Method as in common video deband filters: per pixel, four
 /// samples in a random direction and distance (a cross of two opposite pairs); the pixel is replaced by their mean,
 /// but only where all four deviate by less than the threshold. In a gradient the neighbouring steps lie so close that
 /// they are averaged: the staircase becomes a ramp with intermediate values that only the floating-point chain can
 /// hold. Real edges and structure lie above the threshold and stay. Two rounds: first a small radius, then twice the
-/// radius with half the threshold (as in libplacebo); long flat gradients need the large radius, steeper ones the
+/// radius with half the threshold (as in common implementations); long flat gradients need the large radius, steeper ones the
 /// small one.</para>
-/// <para>Stricter than libplacebo (where only the distance to the mean counts): every single sample must lie within
+/// <para>Stricter than common implementations (where only the distance to the mean counts): every single sample must lie within
 /// the threshold, and the effect fades out before the threshold. Otherwise fine, low-contrast structures in the
 /// distance disappear, which the dehaze filter is meant to bring out afterwards.</para>
 /// </remarks>

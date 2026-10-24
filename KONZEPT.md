@@ -1,7 +1,7 @@
 # ImageConverter — Konzept
 
 **Ziel:** Schlanker, schnell bedienbarer Bildkonverter für Linux (primär) und Windows.
-Positionierung: Alternative zu *Referenzwerkzeug* (GNOME) — gleiche Einfachheit, aber mit
+Positionierung: so einfach wie ein schlichter Konverter, aber mit
 Zuschneiden, Schärfen und Rauschreduktion.
 
 **Leitsatz:** Ein Fenster. Bild rein, 3–4 Regler, Export. Alles Weitere versteckt sich
@@ -64,7 +64,7 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
 - In der Gruppe „Größe“ (eigene Gruppe „Auflösung & DPI“ entfallen), nur das Zahlenfeld, Erklärung im Tooltip.
 - Anzeige der resultierenden Druckgröße in cm/inch live mitlaufen lassen.
 
-### D. Zuschneiden (Referenzwerkzeug-artige Auswahl) — Kernfeature
+### D. Zuschneiden (Auswahlrahmen mit Griffen) — Kernfeature
 
 - Rechteck-Overlay auf dem Bild mit **8 Griffen** (4 Ecken + 4 Kantenmitten),
   Innenfläche zum **Verschieben** per Drag.
@@ -194,9 +194,9 @@ Fotografiertes Blatt oder Buch wölbt sich, gerade Linien werden zu Bögen. Rech
 (Stand 10/2026): Die KI-Verfahren (UVDoc 2023, DocTr++, DocRes 2024, DocMatcher,
 ForCenNet, DvD 2025, Axis-Aligned Dewarping, BookNet 2026) arbeiten vollautomatisch,
 schneiden auf das Blatt zu und lassen sich nicht nachbessern; keines nimmt Vorgaben
-des Benutzers. Interaktiv gibt es nur Teile: Referenzwerkzeug Advanced (obere und untere
-Kurve), Referenzwerkzeug „Adaptive Weitwinkelkorrektur“ (Linien nachziehen, Gitter wird
-optimiert; Carroll/Agrawala/Agarwala 2009). Das echte Seitenverhältnis liefert nur ein
+des Benutzers. Interaktiv gibt es nur Teile: obere und untere
+Kurve vorgeben oder Linien nachziehen, deren Gitter dann
+optimiert wird (Carroll/Agrawala/Agarwala 2009). Das echte Seitenverhältnis liefert nur ein
 Blattmodell im Raum (page_dewarp, Zucker 2016; Kim/Koo/Cho 2015; Kil u. a. 2017).
 Daher: eigenes Werkzeug, das beides verbindet.
 
@@ -286,14 +286,14 @@ Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
 ### N. Upscaling (Wunsch vom 14.10.2026, Konzept mit Messplatz und Modellwahl — umgesetzt in 0.5.76 beta, siehe `docs/KI-UPSCALING.md`)
 
 **Ziel:** Vergrößern auf dem Stand der Technik, ohne etwas Neues ins Bild zu erfinden — das
-Original muss ohne Weiteres wiederzuerkennen sein. Vorbild Referenzwerkzeug/Referenzwerkzeug „Precision“
-(laut Hersteller: Auflösung höher, Inhalt und Aufbau bleiben, keine neuen Elemente). Wunsch
+Original muss ohne Weiteres wiederzuerkennen sein: Auflösung höher, Inhalt und Aufbau
+bleiben, keine neuen Elemente. Wunsch
 als Messlatte: Panorama aus 5000+ px auf 600 px verkleinert, wieder vergrößert, sieht aus
 wie das Original — idealerweise mit Nadeln und Blättern im Wald.
 
 **Was physikalisch geht (ehrlich):** Auf 600 px sind einzelne Nadeln und Blätter nicht mehr im
 Bild, nur ihre mittlere Farbe und Struktur. Jedes Verfahren, das sie „zurückbringt“, malt
-*plausible* Nadeln — nicht die echten. Das ist unvermeidlich und auch bei Referenzwerkzeug/Referenzwerkzeug so.
+*plausible* Nadeln — nicht die echten. Das ist bei jedem Verfahren unvermeidlich.
 Sauber wird es durch eine **Treue-Sicherung** (unten): das Ergebnis muss, wieder verkleinert,
 genau das Original ergeben. Dann ist alles Gemalte feiner als ein Originalpixel, und das
 Bild bleibt in jeder Größe, in der es vorher zu sehen war, dasselbe.
@@ -305,7 +305,7 @@ Zielgröße; „Upscaling“ bestimmt, *wie* vergrößert wird. Aktiv, sobald da
 Bild ist (sonst ausgegraut, Hinweis „nur beim Vergrößern“; steht „Nicht vergrößern“ an, sagt
 die Gruppe das und löst den Haken mit einem Klick).
 - **Verfahren** (ComboBox): Filter · KI sofort (x4v3, der bisherige) · KI mittel
-  (UltraSharpV2) · KI wie Referenzwerkzeug (PiSA-SR) — hinter jedem Eintrag die geschätzte Zeit für das
+  (UltraSharpV2) · KI langsam (PiSA-SR) — hinter jedem Eintrag die geschätzte Zeit für das
   aktuelle Bild; nicht heruntergeladene Modelle sichtbar, aber ausgegraut („im Tab KI
   herunterladen“).
 - **Knopf „Upscalen“:** rechnet nur auf Abruf, nie bei jeder Pixeländerung. Gerechnet wird das
@@ -333,7 +333,7 @@ die Gruppe das und löst den Haken mit einem Klick).
 - **Keine feste Größengrenze** (Wunsch: auch sehr große Ergebnisse): gerechnet wird in Kacheln;
   vor dem Start prüft die App den Arbeitsspeicher und nennt Zeit und Bedarf; nur wenn es nicht
   passt, schlägt sie ×2 oder den Filter vor.
-- **Nur lokal, nur ONNX** (Wunsch; Referenzwerkzeug & Co. nur als Vergleich, nie eingebaut). Mindestens
+- **Nur lokal, nur ONNX** (Wunsch; keine Online-Dienste). Mindestens
   CPU; AMD-Grafik: unter Windows über DirectML (`Microsoft.ML.OnnxRuntime.DirectML`, jede
   DirectX-12-Karte), unter Linux ROCm/MIGraphX oder WebGPU prüfen.
 
@@ -356,7 +356,7 @@ von PiSA-SR (roh dunkler und orangestichig) vollständig.
 |---|---|---|---|---|
 | KI sofort | Real-ESRGAN general x4v3 (schon im Katalog) | 4 MB | BSD-3 | 3 s |
 | KI mittel | 4x-UltraSharpV2 (DAT, 05/2025, Kim2091), ONNX fp32 opset 17 | 52 MB | CC BY-NC-SA 4.0 (privat in Ordnung) | 2 min |
-| KI wie Referenzwerkzeug | PiSA-SR (CVPR 2025, SD 2.1-base + Dual-LoRA, ein Schritt) | ≈ 5,2 GB fp32 (2,6 GB fp16) + 33 MB LoRA | Code Apache-2.0, SD 2.1 OpenRAIL++, LoRA ohne Angabe | 7,5 min |
+| KI langsam | PiSA-SR (CVPR 2025, SD 2.1-base + Dual-LoRA, ein Schritt) | ≈ 5,2 GB fp32 (2,6 GB fp16) + 33 MB LoRA | Code Apache-2.0, SD 2.1 OpenRAIL++, LoRA ohne Angabe | 7,5 min |
 
 **Messplatz** (`~/.cache/imageconverter-build/pisa/`, Skript `werkzeug/messplatz.py`): zwei
 Ausschnitte des Panoramas (2000 × 1200, Kiefernnadeln und Waldhang) auf 500 × 300 verkleinert und
@@ -393,7 +393,7 @@ mit `HERKUNFT.md`: Quellen, SHA-256, Lizenzen) neben den Code-Sicherungen — St
 stammt deshalb aus der ScanCode-Lizenzdatenbank. Daraus baut die App ihre ONNX-Dateien selbst
 (wie SyntheticDoc); ein besseres Modell kann einen Platz später ersetzen.
 
-**Bewusst nicht:** Online-Dienste (Referenzwerkzeug, Referenzwerkzeug, Referenzwerkzeug-Cloud) — nur lokal; SUPIR, TSD-SR
+**Bewusst nicht:** Online-Dienste — nur lokal; SUPIR, TSD-SR
 (zu groß, praktisch nur mit Grafikkarte); Prompt- oder „Kreativ“-Modi.
 
 **Umgesetzt (0.5.76 beta):** alle drei Verfahren, Treue und Details, Knopf mit Rückfrage (ganzes Bild oder sichtbarer
@@ -476,7 +476,7 @@ Ziel: schlank bleiben, nicht aufblähen.
 |---|---|
 | Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
 | KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
-| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter wie Referenzwerkzeug), Dunst (Dark Channel Prior, Luftlicht je Bereich, Farbton bleibt, Sonnenhof geschützt; Durchläufe 1–10, Vorgabe 3 sachte; Feineinstellung Klarheit/Kontrast/Dynamik/Schärfe/Kanten/Helligkeit/Entstufen; in 32 Bit gerechnet, Regler bis 300 — Stand 0.4.45 ist die Referenz), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“ (Referenzwerkzeug CS5), evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
+| Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter), Dunst (Dark Channel Prior, Luftlicht je Bereich, Farbton bleibt, Sonnenhof geschützt; Durchläufe 1–10, Vorgabe 3 sachte; Feineinstellung Klarheit/Kontrast/Dynamik/Schärfe/Kanten/Helligkeit/Entstufen; in 32 Bit gerechnet, Regler bis 300 — Stand 0.4.45 ist die Referenz), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“, evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
 | Ausgabe | Metadaten, Farbprofil, Dateiname |
 
 „Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von
@@ -501,7 +501,7 @@ Ausschnitt auf, springt die Leiste auf „Standard“ (dort liegt der Zuschnitt)
   automatisiertes Testen der Pipeline gratis.
 
 **Alternative, falls dir GNOME-Integration wichtiger ist als Windows:**
-GTK4 + libadwaita (Rust oder Python) — so ist Referenzwerkzeug gebaut, sieht auf GNOME
+GTK4 + libadwaita (Rust oder Python) — sieht auf GNOME
 perfekt aus, Flatpak-Pfad ist ausgetreten. Preis: Windows-Support wird mühsam.
 → Da du Windows ausdrücklich willst, bleibt Avalonia die richtige Wahl.
 
@@ -672,7 +672,7 @@ vielen Stellen einzeln geschützt.
    Sonnenstrahlen (Schwankung im Ring), Treppen im Himmel, Detail, Kontrast — jede
    Änderung wird gegen die Referenz geprüft.
 
-**Entschieden (08.10.2026):** Puffer in linearem Licht (wie Referenzwerkzeug; Kurven und Farbe
+**Entschieden (08.10.2026):** Puffer in linearem Licht (Kurven und Farbe
 je Pixel über Oklab). 16-Bit-Export zuerst als PNG und TIFF; JPEG XL/AVIF mit 10/12 Bit
 später als eigener Punkt.
 
@@ -805,4 +805,4 @@ KI-Entrauschung und -Upscaling · SVG-Rasterung · Wasserzeichen/Rahmen
 3. **Flatpak zusätzlich zum AppImage?** (Empfehlung: ja, wegen Rechtsklick.)
 4. **Übersetzungs-Workflow**: `.resx` im Repo vs. gettext/Weblate für Community.
 5. **Lizenz & Projektname** — „ImageConverter" ist generisch; bei Veröffentlichung
-   ein eigener Name (Referenzwerkzeug heißt ja auch nicht „Converter").
+   ein eigener Name.

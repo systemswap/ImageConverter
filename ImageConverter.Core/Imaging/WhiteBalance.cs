@@ -40,7 +40,7 @@ public readonly record struct WbSample(double R, double G, double B, int Count =
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item>Black and white set the tonal end points per colour channel (like the Levels dialog in Referenzwerkzeug): the black spot
+/// <item>Black and white set the tonal end points per colour channel (levels): the black spot
 /// becomes fully black, the white spot fully white. This also removes a cast separately in shadows and highlights.</item>
 /// <item>Neutral makes the grey spot colourless while its brightness stays. With white, this is done through the midtones
 /// per channel (white stays white); without white, through a gain per channel, which physically corresponds to

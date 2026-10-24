@@ -221,7 +221,7 @@ public class AdjustTests
 
         var mid = Oklab.FromSrgb(Gray(result, 100) / 255f, Gray(result, 100) / 255f, Gray(result, 100) / 255f).L;
         var midBefore = Oklab.FromSrgb(100 / 255f, 100 / 255f, 100 / 255f).L;
-        Assert.InRange(mid / midBefore, 1.4, 1.55);              // ×1.5 (Referenzwerkzeug: luminance 150)
+        Assert.InRange(mid / midBefore, 1.4, 1.55);              // ×1.5 (luminance 150)
         Assert.True(Gray(result, 200) < Gray(result, 255));       // bright tones stay distinguishable
         Assert.Equal(0, Gray(result, 0));                        // black stays black
     }

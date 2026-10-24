@@ -8,8 +8,8 @@ Einstellungen › KI-Modelle (`AiViewModel.GpuStatus`).
 
 | System | Hersteller | Weg | Stand |
 |---|---|---|---|
-| Windows | AMD, NVIDIA, Intel | DirectML (DirectX 12) über das Paket `Microsoft.ML.OnnxRuntime.DirectML` | **eingebaut**, gemessen auf der Radeon des Notebook-Prozessor |
-| Linux | AMD (RX 6650 XT im Debian-Rechner) | MIGraphX (ROCm) oder WebGPU (Vulkan) | **App vorbereitet**, Laufzeit fehlt; WebGPU gebaut und gemessen (0.5.96): lohnt hier nicht, siehe „WebGPU unter Linux“ |
+| Windows | AMD, NVIDIA, Intel | DirectML (DirectX 12) über das Paket `Microsoft.ML.OnnxRuntime.DirectML` | **eingebaut**, gemessen auf einer integrierten Grafikkarte (Laptop) |
+| Linux | AMD (eigene Karte im Debian-Rechner) | MIGraphX (ROCm) oder WebGPU (Vulkan) | **App vorbereitet**, Laufzeit fehlt; WebGPU gebaut und gemessen (0.5.96): lohnt hier nicht, siehe „WebGPU unter Linux“ |
 | Linux | NVIDIA | CUDA (`Microsoft.ML.OnnxRuntime.Gpu.Linux`) | **App vorbereitet**, Paket nicht eingebunden |
 | Windows | NVIDIA, schneller als DirectML | CUDA oder TensorRT-RTX | nicht nötig, DirectML reicht für den Anfang |
 
@@ -26,22 +26,22 @@ Speichermuster, Ausführung der Reihe nach (Vorgabe von DirectML). Scheitert das
 (das Paket tut es nur bei fester x64-Plattform); `NativeLibraries` lädt sie vor `onnxruntime.dll` aus `Tools/OnnxRuntime`,
 sonst nähme Windows die ältere aus System32.
 
-## Messungen (Notebook-Prozessor mit Radeon Vega 8, gemeinsamer Speicher, 14.10.2026)
+## Messungen (Laptop mit integrierter Grafik, gemeinsamer Speicher, 14.10.2026)
 
 Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
 
 | Modell | CPU (8 Kerne) | Grafikkarte (DirectML) | Ergebnis gleich? |
 |---|---|---|---|
 | x4v3 („KI schnell“) | 3,2 s | 2,0 s | ja (PSNR identisch) |
-| PiSA-SR („KI wie Referenzwerkzeug“) | 355 s | 137 s (fp32), **97 s (fp16)** | fp32 identisch; fp16 gegen fp32 53 dB, im Mittel 0,2 von 255 Stufen, zum wahren Bild 23,41 statt 23,43 dB |
+| PiSA-SR („KI langsam“) | 355 s | 137 s (fp32), **97 s (fp16)** | fp32 identisch; fp16 gegen fp32 53 dB, im Mittel 0,2 von 255 Stufen, zum wahren Bild 23,41 statt 23,43 dB |
 | UltraSharpV2 („KI mittel“) | 120 s | 80 s | ja (PSNR identisch) |
 
 ## Was noch gebraucht wird
 
-1. **AMD unter Linux (RX 6650 XT, RDNA2 / gfx1032):**
+1. **AMD unter Linux (eigene Karte des Debian-Rechners, RDNA2 / gfx1032):**
    - Es gibt kein fertiges NuGet-Paket: den ROCm-Weg hat ONNX Runtime seit 1.23 entfernt, für den Nachfolger MIGraphX
      liefern weder Microsoft noch AMD Pakete für .NET (nur Python-Pakete von AMD, Community-Bauten).
-   - **Weg A, MIGraphX:** auf dem Debian-Rechner ROCm 7 installieren (AMD-Paketquelle; die RX 6650 XT steht nicht in
+   - **Weg A, MIGraphX:** auf dem Debian-Rechner ROCm 7 installieren (AMD-Paketquelle; die Karte steht nicht in
      AMDs Liste, läuft üblicherweise mit `HSA_OVERRIDE_GFX_VERSION=10.3.0`), dann ONNX Runtime 1.24.4 selbst bauen:
      `./build.sh --config Release --build_shared_lib --parallel --use_migraphx --migraphx_home /opt/rocm`. Die fertige
      `libonnxruntime.so` (+ `libonnxruntime_providers_migraphx.so`, `…_shared.so`) nach `Tools/OnnxRuntime/` neben die
@@ -72,7 +72,7 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
 ## Geschwindigkeitstest: Grafikkarte oder CPU (0.5.100 beta)
 
 Wunsch des Benutzers (18.10.2026): Nicht annehmen, dass die Grafikkarte schneller ist, sondern messen und das
-Schnellere nehmen — auf dem Debian-Rechner mit Ryzen 9 7950X3D ist die CPU oft gleich schnell oder schneller (siehe
+Schnellere nehmen — auf dem Debian-Rechner mit 16-Kern-Prozessor ist die CPU oft gleich schnell oder schneller (siehe
 unten), auf dem Laptop die Grafikkarte deutlich schneller.
 
 - **Wo:** Einstellungen › Leistung (seit 0.5.103 eigene Seite links ganz oben; vorher unter „KI-Modelle“), Knopf
@@ -101,7 +101,7 @@ unten), auf dem Laptop die Grafikkarte deutlich schneller.
   `rocm-opencl-icd` (aus Debian selbst, 5.7), Fedora `rocm-opencl`.
 - **Mehrere Grafikkarten** (eigene Karte und die im Prozessor): `GpuFilters.Open` nimmt seit 0.5.102 die mit den meisten
   Recheneinheiten (vorher die erste gefundene). Nicht nach Speicher: mit ROCm-OpenCL meldet die eingebaute Grafik des
-  Ryzen (gfx1036) 31 GB geteilten Arbeitsspeicher, die RX 6650 XT (gfx1032) 8 GB — 0.5.101 wählte deshalb die schwache.
+  Prozessors (gfx1036) 31 GB geteilten Arbeitsspeicher, die eigene Karte (gfx1032) 8 GB — 0.5.101 wählte deshalb die schwache.
   Welche Karte gewählt wurde und welche es gab, steht im Log neben dem Programm.
 - **Falle beim Messen mit eigenen Testprogrammen:** In einer dateibasierten App (`dotnet run Datei.cs`) wirft
   `ILGPU.Context` einen Fehler im Typinitialisierer, weil dort `PublishAot` voreingestellt ist — `#:property
@@ -132,7 +132,7 @@ Zeitschätzung soll schon vor dem ersten Lauf stimmen.
 
 ### CPU-Feinschliff für PiSA-SR — gemessen, verworfen
 
-Gemessen auf dem Ryzen 9 7950X3D (16 Kerne, zwei Gruppen zu 8: eine mit 3D-V-Cache, eine höher getaktet — keine
+Gemessen auf dem Debian-Rechner (16 Kerne, zwei Gruppen zu 8: eine mit zusätzlichem Cache, eine höher getaktet — keine
 Effizienzkerne), PiSA-SR fp32 auf der CPU:
 
 | Versuch | Zeit | Ergebnis |
@@ -154,7 +154,7 @@ Effizienzkerne), PiSA-SR fp32 auf der CPU:
 
 ## WebGPU unter Linux (gebaut und gemessen, 18.10.2026)
 
-Messplatz: Debian 13, AMD Ryzen 9 7950X3D (16 Kerne), Radeon RX 6650 XT (8 GB, Mesa/RADV), Stand 0.5.96 beta.
+Messplatz: Debian 13, Desktop-Prozessor mit 16 Kernen, eigene AMD-Grafikkarte (RDNA2, 8 GB, Mesa/RADV), Stand 0.5.96 beta.
 Panorama-Ausschnitt 500 × 300 → 2000 × 1200 (Kachelmodelle zusätzlich 1800 × 800 → 7200 × 3200), Zeit ohne Laden.
 
 | Modell | CPU | WebGPU | Bemerkung |
@@ -167,7 +167,7 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200 (Kachelmodelle zusätzlich 1800 
 | UltraSharpV2 („KI mittel“) | **56 s** | Abbruch | `Conv`: Ausgabe ließ sich nicht anlegen (Grafikspeicher) |
 
 **Ergebnis:** Auf diesem Rechner ist die CPU so schnell wie oder schneller als WebGPU; die Laufzeit mit WebGPU wird
-deshalb **nicht** ausgeliefert, die App rechnet unter Linux weiter auf der CPU. Der Laptop (Notebook-Prozessor, 355 s auf der
+deshalb **nicht** ausgeliefert, die App rechnet unter Linux weiter auf der CPU. Der Laptop (8 Kerne, 355 s auf der
 CPU) profitiert unter Windows weiter von DirectML. Die WebGPU-Anbindung von ONNX Runtime ist für Faltungen und die
 Aufmerksamkeit großer Kacheln (noch) nicht schnell genug; schneller wäre nur MIGraphX (Weg A, braucht ROCm).
 
@@ -188,7 +188,7 @@ Aufmerksamkeit großer Kacheln (noch) nicht schnell genug; schneller wäre nur M
   wird). Zuerst sah es nach vollem Grafikspeicher aus — war es nicht (eine Sitzung allein belegt ebenso 8,4 GB und läuft).
 - Anbieter-Optionen werden ohne Präfix übergeben (`AppendExecutionProvider("WebGPU", { ["preserveDevice"] = "1" })`);
   Liste in `onnxruntime/core/providers/webgpu/webgpu_provider_options.h`.
-- Es rechnet die RX 6650 XT (`gpu_busy_percent` der Karte 90 %, die im Prozessor eingebaute 0 %).
+- Es rechnet die eigene Karte (`gpu_busy_percent` der Karte 90 %, die im Prozessor eingebaute 0 %).
 
 Quellen: ONNX Runtime — Execution Providers (DirectML, ROCm „removed since 1.23“, MIGraphX, CUDA), Install-Seite
 (DirectML „sustained engineering“), Microsoft Learn „What is Windows ML?“; NuGet-Abfrage vom 14.10.2026

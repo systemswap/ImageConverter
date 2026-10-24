@@ -2,7 +2,7 @@ namespace ImageConverter.Core.Imaging;
 
 /// <summary>
 /// Blends two versions of an image with a mask, level by level of a Laplacian pyramid (Burt and Adelson 1983; the
-/// basis of exposure fusion after Mertens 2007 and of the tone mapping in Google's HDR+).
+/// basis of exposure fusion after Mertens 2007).
 /// </summary>
 /// <remarks>
 /// Coarse brightness is blended over large areas, fine edges only over a few pixels, so even a soft mask leaves no halo

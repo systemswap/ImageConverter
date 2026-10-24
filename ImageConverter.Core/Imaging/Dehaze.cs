@@ -6,18 +6,18 @@ namespace ImageConverter.Core.Imaging;
 /// image = scene · t + air light · (1 − t), where t is the transmission of the air.
 /// </summary>
 /// <remarks>
-/// Structure based on the dark channel prior (He, Sun, Tang 2009/2011) with the improvements that Adobe describes in its
-/// dehaze patent (US 9 305 339 B2) and that address the known weaknesses in the literature:
+/// Structure based on the dark channel prior (He, Sun, Tang 2009/2011) with the improvements described in the
+/// dehaze patent US 9 305 339 B2 and that address the known weaknesses in the literature:
 /// <list type="number">
 /// <item>Computing in linear light: the model applies to quantities of light, not to gamma-encoded values (otherwise
 ///   colour shifts and wrong brightness).</item>
-/// <item>Air light: the brightest 1 % of the dark channel, of which the middle part is used (Adobe: median), so that
+/// <item>Air light: the brightest 1 % of the dark channel, of which the middle part is used (patent: median), so that
 ///   the sun in the picture does not determine it.</item>
 /// <item>Transmission from the dark channel on a downscaled copy, refined with a guided filter with a colour guide image
 ///   and brought to full size edge-preservingly (Fast Guided Filter, He 2015).</item>
 /// <item>Tolerance: whatever resembles the air light (sky, white walls) does not count as dense haze (otherwise colour
 ///   casts and noise in the sky).</item>
-/// <item>Brightness compensation as in Adobe's method: matched to the original on a large scale, so that only local
+/// <item>Brightness compensation as in the patent: matched to the original on a large scale, so that only local
 ///   contrast and colour are gained; otherwise the image becomes dark.</item>
 /// </list>
 /// </remarks>
@@ -237,7 +237,7 @@ internal static partial class Dehaze
         // Chroma: haze reduces it by the factor t, so restoring up to 1/t is justified, plus a small remainder; thin haze
         // (fields at medium distance) thus gains hardly any colour
 
-        // Perception as in Referenzwerkzeug: the model alone leaves smog and thin haze almost unchanged (the dark channel always
+        // Perception: the model alone leaves smog and thin haze almost unchanged (the dark channel always
         // finds something black between houses and trees). Added are local contrast (clarity), fine sharpening, a gentle
         // S-curve and vibrance, growing with the slider, more slowly above 100. Clarity and sharpening not in the sky
         // (noise).
@@ -515,7 +515,7 @@ internal static partial class Dehaze
 
     /// <summary>
     /// Air light (B, G, R, linear) for the whole image: among the pixels whose dark channel belongs to the brightest 1 %,
-    /// the middle 20 % are averaged (Adobe: median), so that the sun or lights do not determine it. At least 0.25
+    /// the middle 20 % are averaged (patent: median), so that the sun or lights do not determine it. At least 0.25
     /// (linear), so that dark images without haze are not ruined.
     /// </summary>
     internal static float[] AirLight(float[] lin, int w, int h) =>
@@ -682,7 +682,7 @@ internal static partial class Dehaze
     /// <summary>
     /// Protects the sky: areas without structure that are not dark are sky, not haze in front of a landscape. Without
     /// protection the dark channel removes the sky as "haze": it shifts to turquoise or gets a violet cast next to the
-    /// sun. A remainder of the effect stays (as in Referenzwerkzeug, the sky becomes slightly bluer).
+    /// sun. A remainder of the effect stays (the sky becomes slightly bluer).
     /// </summary>
     /// <remarks>
     /// Structure is the difference of two copies smoothed to different degrees (band pass): even gradients (sky towards
@@ -769,7 +769,7 @@ internal static partial class Dehaze
     private const float SkyProtection = 0.85f;
 
     /// <summary>
-    /// Brightness compensation (Adobe: "guided brightness scaling"): the large-scale brightness of the result is matched
+    /// Brightness compensation (patent: "guided brightness scaling"): the large-scale brightness of the result is matched
     /// to that of the original; local contrast and colour remain gained. The ratio is smoothed with the colour guided
     /// filter; a plain blur would carry the brightening from the land across the horizon into the sky (bright band).
     /// Factor limited to 0.5 … 3.

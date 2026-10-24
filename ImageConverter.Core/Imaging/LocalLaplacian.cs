@@ -3,7 +3,7 @@ namespace ImageConverter.Core.Imaging;
 
 /// <summary>
 /// Local Laplacian filter (Paris, Hasinoff, Kautz 2011; fast variant after Aubry et al. 2014), the technique behind
-/// shadows/highlights/clarity in Referenzwerkzeug and Referenzwerkzeug.
+/// shadows/highlights/clarity.
 /// </summary>
 /// <remarks>
 /// A tone curve is not applied pixel by pixel but layer by layer of a Laplacian pyramid: each detail layer takes on the
