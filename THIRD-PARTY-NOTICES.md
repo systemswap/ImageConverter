@@ -20,6 +20,8 @@ Lizenz es steht und wo der Lizenztext liegt.
 | Magick.NET (Anbindung an ImageMagick, Mehrkern-Fassung Q16-OpenMP-x64) | 14.17.2 | Apache-2.0 | https://github.com/dlemstra/Magick.NET |
 | Microsoft.ML.OnnxRuntime.Managed (Anbindung an die ONNX Runtime) | 1.24.4 | MIT | https://github.com/microsoft/onnxruntime |
 | PDFsharp (Druck, „Als PDF speichern“) | 6.2.4 | MIT | https://github.com/empira/PDFsharp |
+| MetadataExtractor (Bildinformationen anzeigen: EXIF, IPTC, XMP, ICC, Herstellerdaten) | 2.9.3 | Apache-2.0 | https://github.com/drewnoakes/metadata-extractor-dotnet |
+| XmpCore (XMP lesen, von MetadataExtractor benutzt) | 6.1.10.1 | BSD-3-Clause (Adobe XMP) – `licenses/xmpcore-BSD-3-Clause.txt` | https://github.com/drewnoakes/xmp-core-dotnet |
 | ILGPU, ILGPU.Algorithms (Bildfilter auf der Grafikkarte über OpenCL/CUDA) | 1.5.1 | University of Illinois/NCSA – `licenses/ilgpu-NCSA.txt` | https://github.com/m4rs-mt/ILGPU |
 | System.Drawing.Common (Drucken, nur Windows), System.Numerics.Tensors, Microsoft.Extensions.*, Microsoft.IO.RecyclableMemoryStream | | MIT | https://github.com/dotnet |
 | Tmds.DBus.Protocol | 0.94.1 | MIT | https://github.com/tmds/Tmds.DBus |

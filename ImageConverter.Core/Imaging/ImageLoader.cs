@@ -110,7 +110,7 @@ public static class ImageLoader
                 var turned = info.Orientation is OrientationType.LeftTop or OrientationType.RightTop
                     or OrientationType.RightBottom or OrientationType.LeftBottom;
                 var (w, h) = turned ? ((int)info.Height, (int)info.Width) : ((int)info.Width, (int)info.Height);
-                return (w, h, ReadDpi(info.Density));
+                return (w, h, info.Density is { } density ? ReadDpi(density) : DefaultDpi);
             }
             catch (MagickException)
             {

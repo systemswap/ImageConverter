@@ -7,6 +7,7 @@
              xmlns:m="using:ImageConverter.Models"
              xmlns:c="using:ImageConverter.Controls"
              xmlns:ai="using:ImageConverter.Ai"
+             xmlns:meta="using:ImageConverter.Core.Metadata"
              mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="760"
              x:Class="ImageConverter.Views.MainView"
              x:DataType="vm:MainViewModel"
@@ -1051,6 +1052,69 @@
                                 </ToolTip.Tip>
                             </TextBox>
                         </Grid>
+                    </HeaderedContentControl>
+
+                    <!-- ============================== Bildinformationen: was die Originaldatei über sich sagt (nur Anzeige).
+                         Unter AUSGABE, damit die Einstellungen oben bleiben; die lange Liste ist zugeklappt und rollt für sich. -->
+                    <HeaderedContentControl Header="{l:T 'BILDINFORMATIONEN'}" IsVisible="{Binding HasImage}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Classes="hint" TextWrapping="Wrap"
+                                       Text="{l:T 'Aus der Originaldatei – Bearbeitungen ändern das nicht. Was beim Speichern übernommen wird, bestimmt „EXIF“ oben.'}" />
+                            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding MetadataNote}"
+                                       IsVisible="{Binding MetadataNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                            <ItemsControl ItemsSource="{Binding MetadataGroups}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="10" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:MetadataGroupView">
+                                        <StackPanel Spacing="2">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock FontWeight="SemiBold" FontSize="12" Text="{Binding Title}" />
+                                                <TextBlock Classes="hint" Foreground="#C77700" VerticalAlignment="Center" Text="{Binding RemovedNote}"
+                                                           IsVisible="{Binding RemovedNote, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Fields}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="meta:MetadataField">
+                                                        <Grid ColumnDefinitions="104,*" Margin="0,1">
+                                                            <TextBlock Grid.Column="0" Classes="label" VerticalAlignment="Top" TextWrapping="Wrap" Margin="0,0,6,0" Text="{Binding Label}" />
+                                                            <SelectableTextBlock Grid.Column="1" FontSize="12" TextWrapping="Wrap" Text="{Binding Value}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Expander Header="{Binding MetadataTagsHeader}" IsVisible="{Binding HasMetadataTags}"
+                                      HorizontalAlignment="Stretch" Padding="8,6">
+                                <StackPanel Spacing="6">
+                                    <Button Classes="subtle" HorizontalAlignment="Left" Content="{l:T 'Alles kopieren'}"
+                                            Command="{Binding CopyMetadataCommand}"
+                                            ToolTip.Tip="{l:T 'Übersicht und alle Einträge als Text in die Zwischenablage.'}" />
+                                    <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding MetadataTags}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="meta:MetadataTag">
+                                                    <Grid ColumnDefinitions="*,*" Margin="0,1">
+                                                        <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Top" TextWrapping="Wrap" Margin="0,0,8,0">
+                                                            <Run Text="{Binding Directory}" /><Run Text=" · " /><Run Text="{Binding Name}" />
+                                                        </TextBlock>
+                                                        <SelectableTextBlock Grid.Column="1" FontSize="11.5" TextWrapping="Wrap" Text="{Binding Value}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
                     </HeaderedContentControl>
 
                     </StackPanel>

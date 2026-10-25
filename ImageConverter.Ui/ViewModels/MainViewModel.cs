@@ -89,6 +89,7 @@ public partial class MainViewModel : ViewModelBase
         }
         UpdateFileDetails();
         RequestEstimate();
+        RefreshMetadataTexts();
     }
 
     private CancellationTokenSource? _releaseCts;

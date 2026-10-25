@@ -106,6 +106,14 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
   für Web-Export: entfernen).
 - ICC-Profil: behalten, in sRGB konvertieren, oder verwerfen. Default für Web: sRGB.
 - Rotations-Tag beim Export normalisieren.
+- **Bildinformationen anzeigen** (Gruppe unter „Ausgabe“, nur Anzeige): Übersicht in Abschnitten
+  (Datei, Kamera, Aufnahme, Ort, Urheber und Beschreibung, Farbprofil) und darunter, zugeklappt und
+  mit eigener Bildlaufleiste, alle Einträge der Datei; „Alles kopieren“ legt beides als Text in die
+  Zwischenablage. Gelesen wird die Originaldatei mit MetadataExtractor (nur lesen, kein Netz), allein
+  in `ImageConverter.Core/Metadata/ImageMetadataReader.cs`. Abschnitte, die die gewählte
+  EXIF-Einstellung beim Speichern entfernt, sind markiert. Grenzen gegen präparierte Dateien:
+  höchstens 3000 Einträge, Werte bis 400 Zeichen, Steuerzeichen ersetzt, verschachtelte XML-Entitäten in XMP
+  blähen sich nicht auf (Test `ImageMetadataTests`).
 
 ### H. Lokalisierung
 
@@ -477,7 +485,7 @@ Ziel: schlank bleiben, nicht aufblähen.
 | Standard | Format, Zuschnitt, Größe, Auflösung & DPI, Schärfen & Rauschen |
 | KI | KI-Verbesserung (Modelle mit mehr Gesichtsdetails prüfen) |
 | Tools | Helligkeit, Kontrast, Tiefen, Lichter (Local Laplacian Filter), Dunst (Dark Channel Prior, Luftlicht je Bereich, Farbton bleibt, Sonnenhof geschützt; Durchläufe 1–10, Vorgabe 3 sachte; Feineinstellung Klarheit/Kontrast/Dynamik/Schärfe/Kanten/Helligkeit/Entstufen; in 32 Bit gerechnet, Regler bis 300 — Stand 0.4.45 ist die Referenz), Dynamik, Sättigung, Färben (mit Farbton), geplant: „Gleiche Farbe“, evtl. KI gegen JPEG-Artefakte — **je Funktion nur ein Regler** |
-| Ausgabe | Metadaten, Farbprofil, Dateiname |
+| Ausgabe | Metadaten, Farbprofil, Dateiname, Bildinformationen |
 
 „Gleiche Einstellungen für alle Bilder“ bleibt oben über den Rubriken, unabhängig von
 der gewählten Kachel, und erscheint nur bei mehreren Bildern. Zieht man im Bild einen

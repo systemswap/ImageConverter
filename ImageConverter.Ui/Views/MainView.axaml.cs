@@ -41,6 +41,7 @@ public partial class MainView : UserControl
             _vm.MultiExportRequested -= OnMultiExportRequested;
             _vm.PrintRequested -= OnPrintRequested;
             _vm.SettingsRequested -= OnSettingsRequested;
+            _vm.CopyTextRequested -= OnCopyTextRequested;
             _vm.ChoiceRequested -= OnChoiceRequested;
             _vm.VisibleImageArea = null;
         }
@@ -53,9 +54,17 @@ public partial class MainView : UserControl
             _vm.MultiExportRequested += OnMultiExportRequested;
             _vm.PrintRequested += OnPrintRequested;
             _vm.SettingsRequested += OnSettingsRequested;
+            _vm.CopyTextRequested += OnCopyTextRequested;
             _vm.ChoiceRequested += OnChoiceRequested;
             _vm.VisibleImageArea = () => Crop.VisibleImageRect();
         }
+    }
+
+    /// <summary>Text from the view model onto the system clipboard.</summary>
+    private async Task OnCopyTextRequested(string text)
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await Avalonia.Input.Platform.ClipboardExtensions.SetValueAsync(clipboard, Avalonia.Input.DataFormat.Text, text);
     }
 
     private SettingsWindow? _settings;
