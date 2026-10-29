@@ -273,12 +273,26 @@ public sealed class OnnxSessions : IDisposable
             var names = inputs.Keys.ToArray();
             using var outputs = session.Run(runOptions, names, names.Select(n => inputs[n]).ToArray(),
                 [session.OutputNames[0]]);
-            return outputs[0].GetTensorDataAsSpan<float>().ToArray();
+            return Floats(outputs[0]);
         }
         catch (OnnxRuntimeException) when (ct.IsCancellationRequested)
         {
             throw new OperationCanceledException(ct);
         }
+    }
+
+    /// <summary>
+    /// The values of an output tensor as single precision; half precision is converted (BEN2 returns its mask as
+    /// float16 although its input is float32).
+    /// </summary>
+    private static float[] Floats(OrtValue value)
+    {
+        if (value.GetTensorTypeAndShape().ElementDataType != Microsoft.ML.OnnxRuntime.Tensors.TensorElementType.Float16)
+            return value.GetTensorDataAsSpan<float>().ToArray();
+        var half = value.GetTensorDataAsSpan<Float16>();
+        var result = new float[half.Length];
+        for (var i = 0; i < half.Length; i++) result[i] = (float)half[i];
+        return result;
     }
 
     /// <summary>Like <see cref="Run(InferenceSession, IReadOnlyDictionary{string, OrtValue}, CancellationToken)"/>, but returns the named outputs (SyntheticDoc: grid and shadow map).</summary>
@@ -291,7 +305,7 @@ public sealed class OnnxSessions : IDisposable
         {
             var names = inputs.Keys.ToArray();
             using var outputs = session.Run(runOptions, names, names.Select(n => inputs[n]).ToArray(), outputNames);
-            return outputs.Select(o => o.GetTensorDataAsSpan<float>().ToArray()).ToArray();
+            return outputs.Select(Floats).ToArray();
         }
         catch (OnnxRuntimeException) when (ct.IsCancellationRequested)
         {

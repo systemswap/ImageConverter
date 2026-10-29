@@ -2323,3 +2323,15 @@ Test oder Nachweis.
   auch in der Historie ersetzt.
 - **Nicht tun:** Herkunft von Testmaterial oder die eigene Hardware nennen – Messungen mit allgemeiner
   Geräteklasse angeben.
+
+## 83. BEN2: Fehler „requested type System.Single does not match actual type Float16“ (0.6.35 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.35-beta, beim ersten Freistellen mit BEN2 in der App.
+  **Behoben:** 0.6.36-beta.
+- **Was:** BEN2 nimmt float32 entgegen, gibt seine Maske aber als float16 aus. `OnnxSessions.Run` las
+  jeden Ausgang als float32 – ONNX Runtime bricht dann mit dem Typfehler ab. Im Messplatz (Python)
+  fiel es nicht auf, weil numpy beide Typen still annimmt.
+- **Lösung:** Ausgänge werden nach ihrem Typ gelesen, float16 wird in float32 umgewandelt (gilt für alle
+  Modelle). Geprüft mit dem echten BEN2 an zwei Testbildern (`hintergrund-probe`).
+- **Nicht tun:** Aus dem Eingangstyp auf den Ausgangstyp schließen – bei neuen Modellen Eingänge *und*
+  Ausgänge mit Typ prüfen (`session.get_outputs()[i].type`).
