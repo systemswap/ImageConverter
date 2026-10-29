@@ -189,15 +189,23 @@ public sealed class OnnxSessions : IDisposable
                 GpuProblem = e.Message;
             }
         }
-        using var cpu = CpuOptions();
+        using var cpu = CpuOptions(model);
         return new InferenceSession(path, cpu);
     }
 
     /// <summary>Options for the CPU: as many threads as the limit allows (Settings › Performance).</summary>
-    internal static SessionOptions CpuOptions()
+    /// <param name="model">Model the session is for; null = general options.</param>
+    /// <remarks>
+    /// Background models (Swin transformer at 1024²) need 6–7 GB per run on the CPU. With the memory arena the runtime
+    /// kept all of it while the session stayed open and the arena grew with every run (BiRefNet lite: 7.0 GB after the
+    /// first, 11.7 GB after the second run). Without it the process falls back to about 1 GB after each run, at about
+    /// 5 % more time (docs/FEHLERGEDAECHTNIS.md, No. 88).
+    /// </remarks>
+    internal static SessionOptions CpuOptions(AiModel? model = null)
     {
         var o = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
         if (ComputeLimits.OnnxThreads is { } threads) o.IntraOpNumThreads = threads;
+        if (model?.Kind == AiModelKind.Background) o.EnableCpuMemArena = false;
         return o;
     }
 

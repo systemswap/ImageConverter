@@ -85,6 +85,10 @@ Fehlergedächtnis eintragen.
 
 ## Als Nächstes
 
+- **Speicher-Pool der ONNX Runtime bei anderen Modellen messen:** Für die Hintergrund-Modelle ist er aus
+  (Fehlergedächtnis #88); ob Verbessern (GFPGAN, CodeFormer …) und Entfernen (LaMa, MI-GAN) ebenfalls Speicher
+  festhalten, ist nicht gemessen.
+
 - **Fenstertests im Testprojekt:** Abläufe mit geladenen Bildern (Blättern während einer KI-Berechnung,
   Rückgängig über mehrere Bilder, Fehlergedächtnis #85/#86) lassen sich bisher nur im unsichtbaren Fenster
   außerhalb des Projekts prüfen. Mit `Avalonia.Headless` im Testprojekt würden sie zu festen Tests – neues

@@ -70,6 +70,12 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
    Speichern: PNG, WebP, TIFF, AVIF, JPEG XL mit Transparenz; JPEG/BMP mit Weiß. Upscaling vergrößert die Maske mit.
 
 Zeiten nach dem Modell (8 Testbilder bis 3000 px, CPU): Kanten + Farben 0,2–2,9 s, unscharf 0,2–1,5 s.
+Bei 24 MP (Desktop mit 32 Threads, BiRefNet lite auf der CPU): Erkennen 5 s, roter Pinsel 0,05 s, grüner Pinsel mit
+Zoom-Lauf 5 s, Kanten + Farben 0,4–1,5 s, unscharf 0,4–0,8 s.
+
+Speicher: Das Modell braucht auf der CPU je Lauf 6–7 GB Zwischenspeicher. Hintergrund-Modelle laufen deshalb ohne
+den Speicher-Pool der ONNX Runtime – sonst blieb er nach dem Lauf belegt und wuchs (7,0 → 11,7 GB, Fehlergedächtnis
+#88). Danach hält das Programm rund 1 GB.
 Prüfung: `BackgroundTests` (Ersatzmodell: Kanten, Rot, Grün mit Zoom, Farbsaum, Unscharf, Ausschnitt);
 `~/.cache/imageconverter-build/hintergrund-probe` (Kern an den Testbildern), `hintergrund-ui` (Rubrik im unsichtbaren
 Fenster: Automatik, Rot, Grün, Unscharf, Export PNG, Rückgängig).

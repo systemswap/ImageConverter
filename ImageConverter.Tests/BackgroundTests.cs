@@ -235,4 +235,13 @@ public class BackgroundTests
         var e = Assert.Throws<InvalidDataException>(() => BackgroundRemover.Detect(img, Whole, model, CancellationToken.None));
         Assert.DoesNotContain("Index", e.Message);
     }
+    [Fact]
+    public void BackgroundModels_RunWithoutTheMemoryArena_OnTheCpu()
+    {
+        // With the arena the runtime kept 7–12 GB after a background run as long as the session was open (No. 88)
+        using var background = OnnxSessions.CpuOptions(AiModelCatalog.BiRefNetLite);
+        using var other = OnnxSessions.CpuOptions(AiModelCatalog.Allround);
+        Assert.False(background.EnableCpuMemArena);
+        Assert.True(other.EnableCpuMemArena);
+    }
 }

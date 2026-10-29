@@ -2414,3 +2414,23 @@ Test oder Nachweis.
 - **Wo im Code:** `BackgroundRemover.ToRgb`, `BackgroundRemover.CheckMask`.
 - **Test:** `BackgroundTests.GreyscaleImage_GetsTransparentBackground_WithItsGreyValues`,
   `BackgroundTests.UnusableModelOutput_IsReportedClearly` (kurz, leer, NaN) – schlagen mit dem alten Kern fehl.
+
+## 88. Hintergrund: Nach zwei Durchläufen hielt das Programm fast 12 GB Speicher (0.6.40 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.40-beta, Analyserunde „Hintergrund entfernen“, Speichermessung im Prüfprogramm
+  (`hintergrund-probe`, Modus `arena`: BiRefNet lite auf der CPU, Bild 3000 × 2000, drei Läufe, Arbeitsspeicher
+  des Prozesses alle 5 ms). **Behoben:** 0.6.41-beta.
+- **Was:** Nach dem ersten „Hintergrund entfernen“ belegte das Programm 7,0 GB, nach dem zweiten 11,7 GB – und
+  behielt das, bis ein anderes großes Modell geöffnet wurde. Auf Rechnern mit 16 GB lagert das System dann aus.
+- **Warum:** Die ONNX Runtime legt auf der CPU einen Speicher-Pool (Arena) an und gibt ihn erst mit der Sitzung
+  zurück; der Pool wuchs mit jedem Lauf. Die Hintergrund-Modelle (Swin-Transformer bei 1024²) brauchen je Lauf
+  6–7 GB Zwischenspeicher; die Sitzung bleibt im Cache offen, damit der nächste Versuch nicht neu lädt.
+- **Lösung:** Hintergrund-Modelle laufen auf der CPU ohne Arena (`OnnxSessions.CpuOptions(model)`). Gemessen:
+  Spitze 6,2–6,9 GB je Lauf (das Modell selbst), danach 0,8–1,0 GB; Zeit 4,5–4,9 s statt 4,3–4,6 s (+5 %).
+  Ergebnis pixelgleich (Fingerabdruck der Bilder bei 24 MP vorher/nachher). Verworfen: die Sitzung nach jedem Lauf
+  schließen – der grüne Pinsel rechnet das Modell noch einmal, und jedes Öffnen kostet Sekunden.
+- **Nicht tun:** Große Modelle mit Arena in einer Sitzung halten, die im Cache offen bleibt.
+- **Wo im Code:** `OnnxSessions.CpuOptions`, `OnnxSessions.Open`.
+- **Test:** `BackgroundTests.BackgroundModels_RunWithoutTheMemoryArena_OnTheCpu`; Messung im Prüfprogramm (Modus
+  `arena`, Varianten `standard` und `ohne-arena`). Andere Modelle (Verbessern, Entfernen) sind nicht gemessen –
+  siehe offene Punkte.
