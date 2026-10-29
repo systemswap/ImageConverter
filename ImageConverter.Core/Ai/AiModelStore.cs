@@ -139,7 +139,9 @@ public sealed class AiModelStore
     /// <exception cref="InvalidDataException">Size or checksum do not match: a different or incomplete file.</exception>
     public async Task ImportAsync(AiModel model, string file, IProgress<double>? progress, CancellationToken ct)
     {
-        var total = new FileInfo(file).Length;
+        // The size of a symbolic link is that of the link itself (a few bytes); the file behind it counts (No. 89)
+        var info = new FileInfo(file);
+        var total = (info.ResolveLinkTarget(returnFinalTarget: true) as FileInfo ?? info).Length;
         if (total != model.DownloadSize)
             throw new InvalidDataException(Tr.T("Das ist nicht die erwartete Datei: {0} statt {1} Bytes. Gebraucht wird „{2}“.",
                 total, model.DownloadSize, model.MainFile));

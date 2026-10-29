@@ -2434,3 +2434,18 @@ Test oder Nachweis.
 - **Test:** `BackgroundTests.BackgroundModels_RunWithoutTheMemoryArena_OnTheCpu`; Messung im Prüfprogramm (Modus
   `arena`, Varianten `standard` und `ohne-arena`). Andere Modelle (Verbessern, Entfernen) sind nicht gemessen –
   siehe offene Punkte.
+
+## 89. Modell-Import: Verknüpfung auf die richtige Datei wurde abgelehnt (0.6.41 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.41-beta, Analyserunde „Hintergrund entfernen“, neuer Test für „Datei wählen …“
+  (RMBG-2.0). **Behoben:** 0.6.42-beta.
+- **Was:** Wählte man eine symbolische Verknüpfung auf die richtige Modelldatei, meldete der Import „Das ist nicht
+  die erwartete Datei: 56 statt … Bytes“.
+- **Warum:** `new FileInfo(file).Length` liefert bei einer Verknüpfung deren eigene Größe (die Länge des Ziels als
+  Text), nicht die der Datei dahinter.
+- **Lösung:** Die Größe kommt vom endgültigen Ziel (`ResolveLinkTarget(true)`); kopiert wird ohnehin der Inhalt,
+  im Modellordner liegt also eine echte Datei.
+- **Nicht tun:** Dateigrößen aus Benutzerauswahl ohne Auflösen von Verknüpfungen vergleichen.
+- **Wo im Code:** `AiModelStore.ImportAsync`.
+- **Test:** `AiTests.Import_ChecksSizeAndChecksum_AndLeavesNothingBehind` (auch falsche Größe, falscher Inhalt
+  ohne Reste, dieselbe Datei noch einmal, Abbruch mittendrin).
