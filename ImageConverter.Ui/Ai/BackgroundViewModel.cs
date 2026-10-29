@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -51,7 +52,11 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         _ai = ai;
         _ai.ModelsChanged += (_, _) => Rescan();
         _main.PropertyChanged += OnMainPropertyChanged;
-        _main.FilesReplaced += (_, _) => ClearAll();
+        _main.FilesReplaced += (_, _) =>
+        {
+            ClearAll();
+            _mask = null;   // the images are gone; the mask held one of them
+        };
         Rescan();
     }
 
@@ -245,8 +250,12 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
     [ObservableProperty] public partial string? Status { get; set; }
 
-    /// <summary>Last result and the image before it: a new attempt starts again from the image before.</summary>
-    private (MagickImage Result, MagickImage Base)? _last;
+    /// <summary>
+    /// The image each result was computed from: a new attempt on a result (other model, strokes, mode) starts again from
+    /// that image instead of building on the result. Held at the result itself, so that switching images, undo and redo do
+    /// not lose it; entries go with their result.
+    /// </summary>
+    private readonly ConditionalWeakTable<MagickImage, MagickImage> _bases = new();
 
     /// <summary>Mask of the last run (per image, model and area): new strokes, mode or blur need no new model run.</summary>
     private (MagickImage Image, string ModelId, BackgroundMask Mask)? _mask;
@@ -266,8 +275,8 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             return;
         }
 
-        var again = _last is { } last && ReferenceEquals(current, last.Result);
-        var start = again ? _last!.Value.Base : current;
+        var again = _bases.TryGetValue(current, out var before);
+        var start = again ? before! : current;
         int pw, ph;
         lock (start) (pw, ph) = ((int)start.Width, (int)start.Height);
         var region = ShownRegion(pw, ph);
@@ -313,7 +322,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
             if (ok && _main.CurrentImage is { } result)
             {
-                _last = (result, start);
+                _bases.AddOrUpdate(result, start);
                 if (mask is not null) _mask = (start, model.Id, mask);
                 StrokesApplied = strokes.Length > 0;
                 Status = Tr.T("Fertig nach {0:0.0} s — rückgängig mit Strg+Z. Nachbessern mit Rot oder Grün, dann noch einmal anwenden: rechnet vom Bild davor und ohne neues Erkennen.",
@@ -386,12 +395,11 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
     // ------------------------------------------------------------ Image change
 
+    /// <summary>Another image: its strokes and status go; the bases stay with their results (see <see cref="_bases"/>).</summary>
     private void ClearAll()
     {
         Strokes = [];
         StrokesApplied = false;
-        _last = null;
-        _mask = null;
         Status = null;
     }
 

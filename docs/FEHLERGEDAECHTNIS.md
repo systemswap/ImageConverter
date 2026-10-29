@@ -2335,3 +2335,17 @@ Test oder Nachweis.
   Modelle). Geprüft mit dem echten BEN2 an zwei Testbildern (`hintergrund-probe`).
 - **Nicht tun:** Aus dem Eingangstyp auf den Ausgangstyp schließen – bei neuen Modellen Eingänge *und*
   Ausgänge mit Typ prüfen (`session.get_outputs()[i].type`).
+
+## 84. Hintergrund: neuer Versuch rechnete auf dem Ergebnis statt auf dem Original (0.6.36 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.36-beta, vom Nutzer: „Hintergrund entfernen“ ein zweites Mal mit anderem
+  Modell nahm nicht das ursprüngliche Bild. **Behoben:** 0.6.37-beta.
+- **Was:** Das Ausgangsbild eines Versuchs war nur als „letztes Ergebnis“ gemerkt und wurde beim Wechsel
+  auf ein anderes Bild gelöscht; nach Rückgängig auf einen früheren Versuch passte es auch nicht mehr.
+  Dann rechnete der neue Versuch auf dem freigestellten Bild weiter.
+- **Lösung:** Zu jedem Ergebnis wird sein Ausgangsbild am Ergebnis selbst gemerkt
+  (`ConditionalWeakTable`), unabhängig von Bildwechsel, Rückgängig und Wiederholen. Geprüft im
+  unsichtbaren Fenster (`hintergrund-ui`): lite + Rot → anderes Bild und zurück → BEN2 → Rückgängig →
+  lite: jedes Mal vom Original.
+- **Nicht tun:** Den Bezug „Ergebnis → Ausgang“ an den gerade gezeigten Zustand binden – er gehört zum
+  Ergebnisbild.
