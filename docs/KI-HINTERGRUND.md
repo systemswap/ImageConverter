@@ -49,4 +49,20 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 
 `~/.cache/imageconverter-build/hintergrund/` (`messplatz.py`: CPU-Zeiten, Masken, Vergleichsbögen; `gpu.py`: Zeit mit
 DirectML und Abweichung zur CPU). Acht Testbilder: lange Haare, Zuckerwatte, Zopf vor Palmen, ganze Person mit Blumen,
-Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor Himmel. Ergebnis folgt.
+Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor Himmel (Bilder bis 3000 px).
+
+### Ergebnis (29.10.2026, Ryzen 7 5875U)
+
+| Modell | CPU je Bild | Grafikkarte (DirectML) | Qualität |
+|---|---|---|---|
+| BiRefNet general | 24 s | 11–13 s mit `onnx-community/BiRefNet-ONNX` `model_fp16.onnx` und **ohne Graph-Optimierung**; Abweichung zu fp32 im Mittel 0,02–0,05 Stufen, > 8 Stufen an 0,005–0,05 % der Pixel. fp32 auf der Grafikkarte: bricht ab (Speicher) | am saubersten: Zuckerwatte ohne die Leute daneben, Pilz, Gruppe |
+| BiRefNet lite | 11 s | 7–9 s (fp32, ohne Graph-Optimierung), bitgleich bis 1 Stufe | gut, lässt öfter Reste stehen (Beine im Hintergrund) |
+| BEN2 | 17 s | 9 s, aber **weicht ab** (bis 122 Stufen, Mittel 0,7) — vorerst CPU | feinste Haare (abstehende Strähnen), behält aber Personen im Hintergrund (Zuckerwatte) |
+| RMBG-2.0 | 23 s | 14 s, gleich (höchstens 1 Stufe), mit Optimierung | etwa wie BiRefNet general |
+| BiRefNet HR-matting | 116–196 s | lädt nicht | **verworfen**: zu langsam, Speicher reichte beim 6. Bild nicht, Schleier und falsche Reste (Blatt beim Pilz, Sand) |
+
+- **DirectML und BiRefNet:** Mit Graph-Optimierung bricht das Laden ab („Split … Cannot parse data from external tensors“) —
+  bei allen BiRefNet-Dateien; RMBG-2.0 (gleiches Netz, anders exportiert) lädt. Ohne Optimierung geht es.
+- **Grenze:** Landschaft ohne klares Motiv (Äste vor Himmel): BiRefNet entfernt alles, BEN2/RMBG-2.0 behalten zufällige
+  Teile. Das Verfahren stellt ein Motiv frei — Himmel ersetzen bräuchte ein eigenes Himmel-Modell.
+- **Farbsaum:** An Armen vor Grün bleibt ein grüner Rand (alle Modelle) — der Schritt „Farbsaum entfernen“ ist nötig.
