@@ -19,6 +19,10 @@
     bei jedem Bau stehen; die Modelle kommen nicht ins Paket, die Sprachdateien schon.
     Jedes Ziel loescht nur seine eigene Ausgabe.
 
+    Liegt eine lokale Sicherung der Modelle in tools\KI-Models\<Modell>\ (gleicher Aufbau
+    wie KI-Modelle\, nicht im Git), kommt sie neben jedes gebaute Programm: kopiert wird nur,
+    was dort fehlt oder in der Sicherung neuer ist.
+
 .PARAMETER Target
     windows (Standard), linux oder beides.
 
@@ -132,6 +136,24 @@ function Copy-Notices([string]$dest) {
     }
 }
 
+# Modelle aus der lokalen Sicherung neben das Programm: nur fehlende und neuere Dateien
+# (Aenderungszeit), ueber eine .part-Datei, damit ein Abbruch keine halbe Datei hinterlaesst.
+function Copy-Models([string]$dest) {
+    $backup = Join-Path $root 'tools\KI-Models'
+    if (-not (Test-Path $backup)) { return }
+    $copied = 0
+    Get-ChildItem $backup -Recurse -File | Where-Object { $_.Extension -ne '.part' } | ForEach-Object {
+        $target = Join-Path (Join-Path $dest 'KI-Modelle') $_.FullName.Substring($backup.Length + 1)
+        if (-not (Test-Path $target) -or $_.LastWriteTimeUtc -gt (Get-Item $target).LastWriteTimeUtc) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+            Copy-Item $_.FullName "$target.part" -Force
+            Move-Item "$target.part" $target -Force
+            $copied++
+        }
+    }
+    Write-Host "  KI-Modelle aus tools\KI-Models: $copied Datei(en) kopiert"
+}
+
 # ------------------------------------------------------------------ Windows
 if ($Target -in @('windows', 'beides')) {
     $winDir = Join-Path $outDir 'windows-x64'
@@ -157,6 +179,7 @@ if ($Target -in @('windows', 'beides')) {
             Start-Sleep -Seconds 5
         }
     }
+    Copy-Models $winDir
 }
 
 # -------------------------------------------------------------------- Linux
@@ -179,6 +202,7 @@ if ($Target -in @('linux', 'beides')) {
         $dest = if ($name -like '*.desktop') { "$share\applications\$name" } else { Join-Path $linuxDir $name }
         [System.IO.File]::WriteAllText($dest, $text, (New-Object System.Text.UTF8Encoding $false))
     }
+    Copy-Models $linuxDir
     Write-Host 'Unter Linux: chmod +x ImageConverter einrichten.sh entfernen.sh; ./einrichten.sh'
 }
 

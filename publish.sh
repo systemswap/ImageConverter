@@ -27,6 +27,10 @@ set -Eeuo pipefail
 # Pakete, die Sprachdateien schon. Alles andere wird ersetzt. Ein Linux-Bau lässt
 # den Windows-Stand stehen und umgekehrt.
 #
+# Liegt eine lokale Sicherung der Modelle in tools/KI-Models/<Modell>/ (gleicher
+# Aufbau wie KI-Modelle/, nicht im Git), kommt sie neben jedes gebaute Programm:
+# kopiert wird nur, was dort fehlt oder in der Sicherung neuer ist.
+#
 # Aufruf ohne Argumente fragt erst nach der Paketform, dann nach dem Ziel.
 # Ohne Rückfrage (Reihenfolge egal, Paketform sonst „eine Datei“):
 #   ./publish.sh beides
@@ -181,6 +185,25 @@ publish() {
   fi
 }
 
+# Modelle aus der lokalen Sicherung neben das Programm: nur fehlende und neuere Dateien
+# (Änderungszeit), über eine .part-Datei, damit ein Abbruch keine halbe Datei hinterlässt.
+MODEL_BACKUP="$PROJECT_DIR/tools/KI-Models"
+bundle_models() {
+  local dest="$1/KI-Modelle" src rel target copied=0
+  [ -d "$MODEL_BACKUP" ] || return 0
+  while IFS= read -r -d '' src; do
+    rel="${src#"$MODEL_BACKUP"/}"
+    target="$dest/$rel"
+    if [ ! -e "$target" ] || [ "$src" -nt "$target" ]; then
+      mkdir -p "$(dirname "$target")"
+      cp -p "$src" "$target.part"
+      mv -f "$target.part" "$target"
+      copied=$((copied + 1))
+    fi
+  done < <(find "$MODEL_BACKUP" -type f ! -name '*.part' -print0)
+  echo "   KI-Modelle aus tools/KI-Models: $copied Datei(en) kopiert"
+}
+
 # Paket ohne die heruntergeladenen KI-Modelle und ohne das Log.
 package() {
   local folder="$1" archive="$2"
@@ -247,6 +270,7 @@ APPRUN
   install -m 0755 "$PROJECT_DIR/packaging/linux/einrichten.sh" "$PROJECT_DIR/packaging/linux/entfernen.sh" "$LINUX_DIR/"
 
   package linux-x64 ImageConverter-linux-x64.tar.gz
+  bundle_models "$LINUX_DIR"
 fi
 
 # ---------------------------------------------------------------- Windows
@@ -266,6 +290,7 @@ if [ "$TARGET" = all ] || [ "$TARGET" = windows ]; then
   install -m 0644 "$PROJECT_DIR/packaging/windows/einrichten.ps1" "$WINDOWS_DIR/einrichten.ps1"
 
   package windows-x64 ImageConverter-windows-x64.zip
+  bundle_models "$WINDOWS_DIR"
 fi
 
 echo
