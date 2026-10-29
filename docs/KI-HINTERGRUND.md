@@ -51,7 +51,7 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 DirectML und Abweichung zur CPU). Acht Testbilder: lange Haare, Zuckerwatte, Zopf vor Palmen, ganze Person mit Blumen,
 Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor Himmel (Bilder bis 3000 px).
 
-### Ergebnis (29.10.2026, Ryzen 7 5875U)
+### Ergebnis (29.10.2026, Notebook mit integrierter Grafik)
 
 | Modell | CPU je Bild | Grafikkarte (DirectML) | Qualität |
 |---|---|---|---|
