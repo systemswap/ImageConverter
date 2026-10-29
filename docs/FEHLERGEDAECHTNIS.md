@@ -2349,3 +2349,46 @@ Test oder Nachweis.
   lite: jedes Mal vom Original.
 - **Nicht tun:** Den Bezug „Ergebnis → Ausgang“ an den gerade gezeigten Zustand binden – er gehört zum
   Ergebnisbild.
+
+## 85. KI-Bildschritte: Bildwechsel während der Berechnung gab das Bild frei, aus dem gerechnet wurde (0.6.38 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.38-beta, Analyserunde „Hintergrund entfernen“, im unsichtbaren Fenster
+  (`hintergrund-ui`): Hintergrund auf Bild A starten, sofort zu Bild B blättern → „Bearbeiten fehlgeschlagen:
+  Cannot access a disposed object. Object name: 'MagickImage'“. **Behoben:** 0.6.39-beta.
+- **Was und wo:** Betraf jeden Bildschritt, der im Hintergrund rechnet (Hintergrund, Entfernen, KI-Verbesserung),
+  wenn man währenddessen blättert oder neue Bilder öffnet. Blättern ist dabei absichtlich erlaubt.
+- **Warum:** Beim Verlassen eines unbearbeiteten Bildes gibt `ShowFileAsync` es sofort frei (#79). Die laufende
+  Berechnung hatte es zu dem Zeitpunkt noch nicht als Bearbeitung eingetragen und las weiter daraus. Erwischt die
+  Freigabe ImageMagick mitten in einer Rechnung, droht ein Absturz statt einer Meldung. Ebenso gab
+  `DisposeAllHistories` (neue Bilder öffnen) alle Bilder frei, auch frühere Stände, aus denen ein neuer Versuch
+  rechnet; das Ergebnis wäre danach in den Verlauf der neuen Bilder geraten – „Rückgängig“ hätte dort ein Bild
+  der alten Auswahl eingesetzt.
+- **Lösung:** `ApplyEditAsync` merkt sich den Verlauf, auf dem gerechnet wird (`_editingHistory`). Die Freigabe
+  beim Blättern (`ReleaseIfUnusedAsync`) lässt ihn stehen und holt sie nach, wenn der Schritt endet und das Bild
+  unbearbeitet blieb (Abbruch, Fehler). `DisposeAllHistories` sammelt die Bilder während eines Schritts in
+  `_disposeAfterEdit` und gibt sie am Ende frei; ein Ergebnis, dessen Verlauf es nicht mehr gibt, wird verworfen.
+  Verworfen: Blättern während einer Berechnung sperren – lange KI-Schritte sollen das Weiterarbeiten an anderen
+  Bildern nicht blockieren.
+- **Nicht tun:** Bilder freigeben, ohne zu prüfen, ob ein laufender Schritt sie noch liest – auch frühere Stände
+  aus dem Verlauf.
+- **Wo im Code:** `MainViewModel.Editing.cs` (`ApplyEditAsync`, `ReleaseIfUnusedAsync`, `DisposeAllHistories`),
+  `MainViewModel.cs` (`ShowFileAsync`).
+- **Test:** im unsichtbaren Fenster `~/.cache/imageconverter-build/hintergrund-ui` mit BiRefNet lite: A starten →
+  zu B blättern (A behält sein Ergebnis, Rückgängig geht) und starten → neue Bilder öffnen (keine Meldung,
+  kein Ergebnis und kein Rückgängig im neuen Bild). Im Testprojekt fehlt eine Fensterumgebung (siehe offene Punkte).
+
+## 86. Hintergrund und Entfernen: Ergebnis des falschen Bildes gemerkt (0.6.38 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.38-beta, Analyserunde „Hintergrund entfernen“, beim Lesen von
+  `BackgroundViewModel.Apply`, dann nachgestellt. **Behoben:** 0.6.39-beta.
+- **Was:** Hintergrund auf Bild A berechnen, währenddessen zu Bild B wechseln, dann auf B anwenden → B bekam
+  Bild A als Ergebnis (gemessen: 1200 × 800 statt 900 × 600). Bei „Entfernen“ (seit 0.5.37) dasselbe Muster.
+- **Warum:** Nach dem Rechnen nahmen beide Rubriken `_main.CurrentImage` als ihr Ergebnis und merkten sich dazu
+  ihr Ausgangsbild. War inzwischen B zu sehen, galt B als Ergebnis von A; der nächste „neue Versuch“ auf B rechnete
+  deshalb von A.
+- **Lösung:** `ApplyBackgroundAsync` und `ApplyRetouchAsync` geben das berechnete Bild selbst zurück
+  (`ApplyProducingAsync`); die Rubriken merken sich genau dieses.
+- **Nicht tun:** Nach einem langen Schritt „das gerade gezeigte Bild“ für sein Ergebnis halten.
+- **Wo im Code:** `MainViewModel.Editing.cs` (`ApplyProducingAsync`), `BackgroundViewModel.Apply`,
+  `RetouchViewModel.Remove`.
+- **Test:** `hintergrund-ui` (wie #85); mit dem alten Merken zeigt Schritt 2 „FALSCH (Bild A)“.

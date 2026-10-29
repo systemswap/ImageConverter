@@ -304,7 +304,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         try
         {
             BackgroundMask? mask = cached;
-            var ok = await _main.ApplyBackgroundAsync(_ =>
+            var result = await _main.ApplyBackgroundAsync(_ =>
             {
                 var session = _ai.Sessions.Get(model, path);
                 var segment = new OnnxSegmentModel(session, model);
@@ -320,7 +320,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
                mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), again);
 
-            if (ok && _main.CurrentImage is { } result)
+            if (result is not null)
             {
                 _bases.AddOrUpdate(result, start);
                 if (mask is not null) _mask = (start, model.Id, mask);

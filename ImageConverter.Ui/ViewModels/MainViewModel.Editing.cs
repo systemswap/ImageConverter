@@ -60,6 +60,15 @@ public partial class MainViewModel
 
     [ObservableProperty] public partial bool IsEditing { get; set; }
 
+    /// <summary>
+    /// The history an editing step is computing on. The step reads its images on a worker thread while the user may
+    /// switch to another image or open new ones; those images must stay alive until it ends (No. 85).
+    /// </summary>
+    private EditHistory? _editingHistory;
+
+    /// <summary>Images released while an editing step was running; disposed when it ends (No. 85).</summary>
+    private readonly List<MagickImage> _disposeAfterEdit = [];
+
     partial void OnIsEditingChanged(bool value) => NotifyUndoRedo();
 
     private void NotifyUndoRedo()
@@ -399,13 +408,22 @@ public partial class MainViewModel
 
         CommitPendingSettings();   // pending slider movements become a separate step before this one
         IsEditing = true;
+        _editingHistory = h;
+        // Long steps (AI): another image may be displayed in the meantime.
+        var path = _files[_fileIndex];
         try
         {
-            // Long steps (AI): another image may be displayed in the meantime.
-            var path = _files[_fileIndex];
             var source = h.Current;
             var before = CaptureSettings();
             var result = await Task.Run(() => operation(source));
+
+            // New images were opened meanwhile: the history is gone, its result must not enter the new one
+            if (!_histories.TryGetValue(path, out var still) || still != h)
+            {
+                if (!ReferenceEquals(result, source)) result.Dispose();
+                step.Plain?.Dispose();
+                return false;
+            }
 
             await StopPreviewAsync();   // redo images might be being read right now
             _undo.Push(new Snapshot(path, source, before, Step: step, Recipe: recipeAfter is null ? null : h.Recipe));
@@ -428,9 +446,34 @@ public partial class MainViewModel
         }
         finally
         {
+            _editingHistory = null;
+            foreach (var img in _disposeAfterEdit) img.Dispose();
+            _disposeAfterEdit.Clear();
             IsEditing = false;
             NotifyUndoRedo();
+            // Another image is shown by now: release this one if the step left it unedited (failed or cancelled)
+            if (h != _history) await ReleaseIfUnusedAsync(path, h);
         }
+    }
+
+    /// <summary>
+    /// Releases a file that is no longer displayed if nothing refers to it: unedited images are not kept in memory, edited
+    /// ones are (otherwise a crop would be lost when moving on to another image). An image an editing step is still
+    /// computing on stays until the step ends (No. 85).
+    /// </summary>
+    /// <param name="path">Path of the file.</param>
+    /// <param name="history">Its history.</param>
+    /// <returns>A task that completes when the image has been released or kept.</returns>
+    private async Task ReleaseIfUnusedAsync(string path, EditHistory history)
+    {
+        if (history == _history || history == _editingHistory || IsReferencedByHistory(path, history)
+            || !_histories.TryGetValue(path, out var known) || known != history)
+            return;
+        await StopPreviewAsync();
+        _histories.Remove(path);
+        history.Current.Dispose();   // unedited: Current is the original
+        RequestPreview();
+        ReleaseMemorySoon();
     }
 
     /// <summary>
@@ -482,9 +525,9 @@ public partial class MainViewModel
     /// <param name="operation">Computes the new image from the current one.</param>
     /// <param name="detail">Short info for the "Edits" list.</param>
     /// <param name="replaces">New attempt from the image before the last removal; replaces that step in the "Edits" list.</param>
-    /// <returns>true on success.</returns>
-    internal Task<bool> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces) =>
-        ApplyEditAsync(operation, null, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces });
+    /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
+    internal Task<MagickImage?> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces });
 
     /// <summary>
     /// Replaces or blurs the background ("Hintergrund" tab): an image step in the pixel image like a removal; undo returns
@@ -494,9 +537,20 @@ public partial class MainViewModel
     /// <param name="label">Name in the "Edits" list ("Hintergrund entfernt" / "Hintergrund unscharf").</param>
     /// <param name="detail">Short info for the "Edits" list (model, strength).</param>
     /// <param name="replaces">New attempt from the image before the last background step.</param>
-    /// <returns>true on success.</returns>
-    internal Task<bool> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail, bool replaces) =>
-        ApplyEditAsync(operation, null, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces });
+    /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
+    internal Task<MagickImage?> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail, bool replaces) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces });
+
+    /// <summary>
+    /// An image step that reports the image it produced. The caller must not take <see cref="CurrentImage"/> instead:
+    /// while the step computed, the user may have switched to another image (No. 86).
+    /// </summary>
+    private async Task<MagickImage?> ApplyProducingAsync(Func<MagickImage, MagickImage> operation, ImageStep step)
+    {
+        MagickImage? produced = null;
+        var ok = await ApplyEditAsync(img => produced = operation(img), null, step);
+        return ok ? produced : null;
+    }
 
     /// <summary>The current pixel image in full resolution (with AI and removal edits, without geometry); read only.</summary>
     internal MagickImage? CurrentImage => _history?.Current;
@@ -629,7 +683,9 @@ public partial class MainViewModel
         foreach (var s in _undo) if (s.Image is not null) images.Add(s.Image);
         foreach (var s in _redo) if (s.Image is not null) images.Add(s.Image);
         foreach (var s in _undo.Concat(_redo)) if (s.Step?.Plain is { } plain) images.Add(plain);
-        foreach (var img in images) img.Dispose();
+        // A running editing step may still read any of them (also an earlier state): dispose them when it ends (No. 85)
+        if (_editingHistory is not null) _disposeAfterEdit.AddRange(images);
+        else foreach (var img in images) img.Dispose();
 
         _histories.Clear();
         _undo.Clear();

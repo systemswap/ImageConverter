@@ -327,17 +327,8 @@ public partial class MainViewModel : ViewModelBase
                 ResetHistoryBaseline();
             }
 
-            // Do not keep unedited images in memory, but keep edited ones;
-            // otherwise a crop would be lost when moving on to another image.
-            if (previous is not null && previous != history && previousPath is not null
-                && !IsReferencedByHistory(previousPath, previous))
-            {
-                await StopPreviewAsync();
-                _histories.Remove(previousPath);
-                previous.Current.Dispose();   // unedited: Current is the original
-                RequestPreview();
-                ReleaseMemorySoon();
-            }
+            if (previous is not null && previous != history && previousPath is not null)
+                await ReleaseIfUnusedAsync(previousPath, previous);
         }
         catch (OperationCanceledException)
         {

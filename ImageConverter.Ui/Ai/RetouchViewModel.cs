@@ -182,13 +182,13 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
         var progress = new Progress<double>(f => _ai.ShowActivity(Tr.T("Entfernen · {0:0} %", f * 100), f * 100, CancelCommand));
         try
         {
-            var ok = await _main.ApplyRetouchAsync(_ =>
+            var result = await _main.ApplyRetouchAsync(_ =>
             {
                 var session = _ai.Sessions.Get(model, path);
                 return Inpainter.Run(start, strokes, new OnnxInpaintModel(session, model), progress, cts.Token);
             }, Tr.T(model.Name), again);
 
-            if (ok && _main.CurrentImage is { } result)
+            if (result is not null)
             {
                 _last = (result, start);
                 StrokesApplied = true;

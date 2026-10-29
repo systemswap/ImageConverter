@@ -85,5 +85,10 @@ Fehlergedächtnis eintragen.
 
 ## Als Nächstes
 
+- **Fenstertests im Testprojekt:** Abläufe mit geladenen Bildern (Blättern während einer KI-Berechnung,
+  Rückgängig über mehrere Bilder, Fehlergedächtnis #85/#86) lassen sich bisher nur im unsichtbaren Fenster
+  außerhalb des Projekts prüfen. Mit `Avalonia.Headless` im Testprojekt würden sie zu festen Tests – neues
+  Paket, nur nach Zustimmung.
+
 - Code-Wächter (Analyzer, `.editorconfig`): erst an einer Kopie messen, dem Nutzer vorlegen
   (gemeinsame Regeln, `Code-Qualitaet.md` §3). Einschalten ändert Code – nur mit Zustimmung.
