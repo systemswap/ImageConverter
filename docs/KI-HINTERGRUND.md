@@ -101,3 +101,25 @@ Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor H
 - **Grenze:** Landschaft ohne klares Motiv (Äste vor Himmel): BiRefNet entfernt alles, BEN2/RMBG-2.0 behalten zufällige
   Teile. Das Verfahren stellt ein Motiv frei — Himmel ersetzen bräuchte ein eigenes Himmel-Modell.
 - **Farbsaum:** An Armen vor Grün bleibt ein grüner Rand (alle Modelle) — der Schritt „Farbsaum entfernen“ ist nötig.
+
+## Analyserunde (29.10.2026, 0.6.38–0.6.42 beta)
+
+Geprüft mit BiRefNet lite auf der CPU (Desktop, 32 Threads), Ersatzmodellen und künstlichen Bildern; Prüfprogramme
+außerhalb des Projekts: `~/.cache/imageconverter-build/hintergrund-ui` (unsichtbares Fenster: Blättern und neue
+Bilder während der Berechnung) und `hintergrund-probe` (Modi `eingaben`, `grau`, `modelle`, `formate`, `messen`,
+`arena`, `fuzz`).
+
+| Bereich | Ergebnis |
+|---|---|
+| Blättern während der Berechnung | **Fehler #85** (Bild freigegeben, aus dem gerechnet wurde – betraf alle KI-Bildschritte) und **#86** (Ergebnis des falschen Bildes gemerkt) – behoben |
+| Bildarten | CMYK, Palette, schon transparent: in Ordnung. **Graustufen: Fehler #87** – behoben |
+| Größen | 1 × 1, 2 × 2, 4000 × 3, 3 × 4000, Ausschnitt 10 × 10 am Rand: in Ordnung |
+| Präparierte Modellausgaben | falsche Länge, leer, NaN: **#87** – jetzt klare Meldung; ±unendlich ohne Absturz |
+| Rundläufe transparent | PNG/TIFF 16 Bit mit Alpha, WebP/AVIF/JPEG XL mit Alpha, JPEG/BMP mit weißem Hintergrund: in Ordnung |
+| Speicher | **#88**: Speicher-Pool der ONNX Runtime hielt bis 11,7 GB – für Hintergrund-Modelle aus, pixelgleich |
+| Modell-Import | **#89**: Verknüpfung abgelehnt – behoben; falsche Größe/Inhalt, Abbruch, gleiche Datei: in Ordnung |
+| Fuzzing | 2500 + 1500 Läufe (Größen, Ausschnitte, Striche außerhalb, NaN-Punkte, Radius bis 10⁶, Stärke −1…5): keine Fehler, langsamster Lauf 0,36 s. Speicher stabil (220–255 MB), sobald der Pufferpool wie im Programm nach jedem Lauf geleert wird – ohne Leeren wuchs er im Prüfprogramm, kein Fehler des Programms |
+| Tempo | nichts zu holen: Pinsel 0,05 s, Kanten + Farben unter 1,5 s bei 24 MP; den Rest braucht das Modell |
+
+Nicht geprüft: Grafikkarte (DirectML gibt es nur unter Windows), die anderen Hintergrund-Modelle (nur BiRefNet
+lite ist hier geladen), echte Fotos.
