@@ -445,6 +445,8 @@ public static class English
         ["Gespeichert: {0}  ·  {1}"] = "Saved: {0}  ·  {1}",
         ["Export fehlgeschlagen: {0}"] = "Export failed: {0}",
         ["Pixel konnten nicht gelesen werden."] = "Could not read the pixels.",
+        ["Das Modell lieferte {0} statt {1} Werte – passt die Modelldatei?"] = "The model returned {0} instead of {1} values – is it the right model file?",
+        ["Das Modell lieferte ungültige Werte – bitte noch einmal oder mit einem anderen Modell versuchen."] = "The model returned invalid values – please try again or use another model.",
 
         // ------------------------------------------------------------ Export window
         ["Bilder exportieren"] = "Export images",

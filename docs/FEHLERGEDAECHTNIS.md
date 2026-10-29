@@ -2392,3 +2392,25 @@ Test oder Nachweis.
 - **Wo im Code:** `MainViewModel.Editing.cs` (`ApplyProducingAsync`), `BackgroundViewModel.Apply`,
   `RetouchViewModel.Remove`.
 - **Test:** `hintergrund-ui` (wie #85); mit dem alten Merken zeigt Schritt 2 „FALSCH (Bild A)“.
+
+## 87. Hintergrund: Schwarz-Weiß-Bilder brachen ab; unbrauchbare Modellausgabe ohne klare Meldung (0.6.39 beta)
+
+- **Entdeckt:** 29.10.2026, 0.6.39-beta, Analyserunde „Hintergrund entfernen“, Prüfprogramm
+  `~/.cache/imageconverter-build/hintergrund-probe` (Bildarten, Größen, präparierte Modellausgaben).
+  **Behoben:** 0.6.40-beta.
+- **Was:** (1) Graustufenbilder – PNG 8/16 Bit, JPEG, TIFF, über den Loader des Programms geladen – brachen mit
+  „InvalidOperationException: Green“ ab. (2) Lieferte ein Modell eine Maske falscher Größe, kam „Bearbeiten
+  fehlgeschlagen: One or more errors occurred. (Index was outside the bounds of the array.)“ – 33-mal
+  hintereinander. (3) NaN in der Maske machte stillschweigend das ganze Bild transparent.
+- **Warum:** (1) Der Loader lässt Schwarz-Weiß-Fotos und Scans in Graustufen (nur CMYK wird gewandelt);
+  `Compose` sucht den Grün-Kanal, den ein Graubild nicht hat. (2)/(3) `Detect` nahm die Modellausgabe ungeprüft;
+  der Fehler zeigte sich erst tief in der parallelen Kantenberechnung bzw. gar nicht.
+- **Lösung:** `ToRgb` wandelt Graustufen (wie CMYK) vor dem Rechnen nach sRGB – die Grauwerte bleiben genau
+  (R = G = B). `CheckMask` prüft Länge und Endlichkeit der Maske und meldet verständlich. Nicht übernommen: der
+  Graukanal bleibt beim Entfernen (`Inpainter`) wie er ist – dort schreibt der Schritt bewusst nur den einen
+  Kanal und bricht nicht ab.
+- **Nicht tun:** Annehmen, dass ein geladenes Bild R, G und B hat; Modellausgaben ungeprüft in parallele Schleifen
+  geben.
+- **Wo im Code:** `BackgroundRemover.ToRgb`, `BackgroundRemover.CheckMask`.
+- **Test:** `BackgroundTests.GreyscaleImage_GetsTransparentBackground_WithItsGreyValues`,
+  `BackgroundTests.UnusableModelOutput_IsReportedClearly` (kurz, leer, NaN) – schlagen mit dem alten Kern fehl.

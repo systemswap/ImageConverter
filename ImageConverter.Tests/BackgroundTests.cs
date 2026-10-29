@@ -181,4 +181,58 @@ public class BackgroundTests
         Assert.True(AlphaAt(px, 200, 200) > 0.99f);
         Assert.True(AlphaAt(px, 460, 200) < 0.01f, "blaue Scheibe liegt außerhalb");
     }
+    [Fact]
+    public void GreyscaleImage_GetsTransparentBackground_WithItsGreyValues()
+    {
+        // Black-and-white photos and scans stay greyscale when loaded; Compose needs colour channels (No. 87)
+        using var img = Scene();
+        img.ColorSpace = ColorSpace.Gray;
+        img.ColorType = ColorType.Grayscale;
+        var grey = Rgba(AddAlpha((MagickImage)img.Clone()));
+        // In grey both discs are darker than the background (luma about 0.2–0.3 against 0.5)
+        using var result = Remove(img, new FixedModelOn(rgb => rgb < 0.38f), []);
+        var px = Rgba(result);
+
+        Assert.True(result.HasAlpha);
+        Assert.True(AlphaAt(px, 20, 20) < 0.01f, $"Hintergrund: {AlphaAt(px, 20, 20)}");
+        var centre = (200 * W + 200) * 4;
+        Assert.True(AlphaAt(px, 200, 200) > 0.99f);
+        Assert.InRange(px[centre], grey[centre] - 300, grey[centre] + 300);   // grey value kept, R = G = B
+        Assert.Equal(px[centre], px[centre + 1]);
+        Assert.Equal(px[centre], px[centre + 2]);
+    }
+
+    /// <summary>Takes as subject what a test on the red plane says (hard threshold at the model size).</summary>
+    private sealed class FixedModelOn(Func<float, bool> subject) : ISegmentModel
+    {
+        public int Size => 128;
+        public float[] Run(float[] rgb, CancellationToken ct) =>
+            Enumerable.Range(0, Size * Size).Select(i => subject(rgb[i]) ? 1f : 0f).ToArray();
+    }
+
+    /// <summary>A model that returns what it is given, regardless of the image.</summary>
+    private sealed class FixedModel(Func<int, float[]> output) : ISegmentModel
+    {
+        public int Size => 128;
+        public float[] Run(float[] rgb, CancellationToken ct) => output(Size * Size);
+    }
+
+    [Theory]
+    [InlineData("kurz")]
+    [InlineData("leer")]
+    [InlineData("nan")]
+    public void UnusableModelOutput_IsReportedClearly(string kind)
+    {
+        // A mask of the wrong size failed deep in the refinement with dozens of index errors; NaN made everything
+        // silently transparent (No. 87)
+        using var img = Scene();
+        var model = new FixedModel(n => kind switch
+        {
+            "kurz" => new float[n / 2],
+            "leer" => [],
+            _ => Enumerable.Range(0, n).Select(i => i % 7 == 0 ? float.NaN : 1f).ToArray(),
+        });
+        var e = Assert.Throws<InvalidDataException>(() => BackgroundRemover.Detect(img, Whole, model, CancellationToken.None));
+        Assert.DoesNotContain("Index", e.Message);
+    }
 }

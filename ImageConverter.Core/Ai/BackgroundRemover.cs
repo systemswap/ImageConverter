@@ -110,7 +110,31 @@ public static class BackgroundRemover
         var input = RegionRgb(image, region, model.Size, model.Size, interleaved: false);
         ct.ThrowIfCancellationRequested();
         var raw = model.Run(input, ct);
+        CheckMask(raw, model.Size);
         return new BackgroundMask(region, w, h, Resample(raw, model.Size, model.Size, w, h), guide);
+    }
+
+    /// <summary>
+    /// The model must return one finite value per pixel. A mask of another size failed deep in the refinement with dozens
+    /// of index errors, and NaN made everything silently transparent (No. 87).
+    /// </summary>
+    /// <exception cref="InvalidDataException">The mask has the wrong size or contains invalid values.</exception>
+    private static void CheckMask(float[] raw, int size)
+    {
+        if (raw.Length != size * size)
+            throw new InvalidDataException(Tr.T("Das Modell lieferte {0} statt {1} Werte – passt die Modelldatei?", raw.Length, size * size));
+        foreach (var v in raw)
+            if (!float.IsFinite(v))
+                throw new InvalidDataException(Tr.T("Das Modell lieferte ungültige Werte – bitte noch einmal oder mit einem anderen Modell versuchen."));
+    }
+
+    /// <summary>
+    /// Brings greyscale and CMYK images to RGB: the steps read and write red, green and blue. Grey values stay exactly as
+    /// they are (R = G = B); black-and-white photos and scans load as greyscale (No. 87).
+    /// </summary>
+    private static void ToRgb(MagickImage image)
+    {
+        if (image.ColorSpace is ColorSpace.CMYK or ColorSpace.Gray or ColorSpace.LinearGray) image.ColorSpace = ColorSpace.sRGB;
     }
 
     /// <summary>
@@ -191,7 +215,7 @@ public static class BackgroundRemover
         var blurred = mode == BackgroundMode.Blur ? BlurredBackground(mask.Guide, refined, w, h, blur) : null;
 
         var result = ImageOps.CloneOf(image);
-        if (result.ColorSpace == ColorSpace.CMYK) result.ColorSpace = ColorSpace.sRGB;
+        ToRgb(result);
         result.ColorType = mode == BackgroundMode.Transparent || result.HasAlpha ? ColorType.TrueColorAlpha : ColorType.TrueColor;
         // A private pixel buffer: a fresh copy shares its pixels, writing into it blackened the rest (No. 35)
         result.Evaluate(Channels.All, EvaluateOperator.Add, 0);
@@ -467,7 +491,7 @@ public static class BackgroundRemover
     private static float[] RegionRgb(MagickImage image, SourceRect region, int w, int h, bool interleaved)
     {
         using var crop = ImageOps.CloneOf(image);
-        if (crop.ColorSpace == ColorSpace.CMYK) crop.ColorSpace = ColorSpace.sRGB;
+        ToRgb(crop);
         crop.Crop(new MagickGeometry(region.X, region.Y, (uint)region.Width, (uint)region.Height));
         crop.ResetPage();
         using var small = ImageOps.Resize(crop, w, h, ResampleFilter.Lanczos3, gammaCorrect: false);
