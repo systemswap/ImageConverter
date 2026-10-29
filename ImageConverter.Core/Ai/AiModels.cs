@@ -23,6 +23,9 @@ public enum AiModelKind
 
     /// <summary>Weights from which the app builds a model (Stable Diffusion for PiSA-SR); downloaded only together with the main model.</summary>
     Part,
+
+    /// <summary>Separates the subject from the background (the "Hintergrund" tab): one mask for the whole image.</summary>
+    Background,
 }
 
 /// <summary>
@@ -53,6 +56,14 @@ public enum AiModelKind
 /// Whether the model may run on the graphics card. Only models that have been tested there: an error in the graphics
 /// driver or in DirectML is a memory fault that the app cannot catch. See docs/FEHLERGEDAECHTNIS.md, No. 67 and No. 69.
 /// </param>
+/// <param name="GpuWithoutOptimization">
+/// Whether the model must be opened on the graphics card without graph optimisation: with it, DirectML fails to load
+/// BiRefNet ("Split … Cannot parse data from external tensors"). See docs/KI-HINTERGRUND.md.
+/// </param>
+/// <param name="ManualPage">
+/// For models without a download address (<paramref name="Url"/> empty): page where the user downloads the file
+/// after agreeing to the terms (RMBG-2.0); the model list then shows instructions instead of "Herunterladen".
+/// </param>
 public sealed record AiModel(
     string Id,
     string Name,
@@ -71,7 +82,9 @@ public sealed record AiModel(
     int TileSize = 512,
     bool FixedTile = true,
     string[]? Requires = null,
-    bool Gpu = false)
+    bool Gpu = false,
+    bool GpuWithoutOptimization = false,
+    string? ManualPage = null)
 {
     /// <summary>Gets the IDs of further models that are downloaded together with this one; never null.</summary>
     public string[] Requires { get; init; } = Requires ?? [];
@@ -373,9 +386,118 @@ public static class AiModelCatalog
         "681c555376658c81dc273f2d737a2aeb23ddb6d1d8e5b3a7064636d359a22668", IsZip: false,
         MainFile: "model.fp16.safetensors", License: Sd21License, NonCommercial: false, Origin: Sd21Origin);
 
+    // Background removal (docs/KI-HINTERGRUND.md): BiRefNet from the author's release, the others from fixed commits
+    private const string BiRefNetRelease = "https://github.com/ZhengPeng7/BiRefNet/releases/download/v1/";
+    private const string BiRefNetOnnxRepo = "https://huggingface.co/onnx-community/BiRefNet-ONNX/resolve/534d3c82d3bb8b2f0867db6dfbc3a525b8e42f67/";
+    private const string Ben2Repo = "https://huggingface.co/PramaLLC/BEN2/resolve/e48a20765fb421d19dcdb0bf3cc61e802ca5ec8f/";
+
+    /// <summary>Gets BiRefNet general (1024 px), the default model for background removal.</summary>
+    public static AiModel BiRefNetGeneral { get; } = new(
+        "birefnet-general",
+        "BiRefNet",
+        "Hintergrund entfernen – sauberstes Motiv, Standard",
+        "BiRefNet (2024): erkennt das Motiv und stellt es mit feinen Kanten frei, auch Haare und Durchsichtiges. " +
+        "Lässt Personen und Dinge im Hintergrund am zuverlässigsten weg. Rund 25 s je Bild auf der CPU.",
+        AiModelKind.Background,
+        BiRefNetRelease + "BiRefNet-general-epoch_244.onnx",
+        972_666_916,
+        "58f621f00f5d756097615970a88a791584600dcf7c45b18a0a6267535a1ebd3c",
+        IsZip: false,
+        MainFile: "BiRefNet-general-epoch_244.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "Peng Zheng u. a. (BiRefNet, CAAI AIR 2024), ONNX vom Autor",
+        TileSize: 1024);
+
+    /// <summary>
+    /// Gets BiRefNet general in half precision for the graphics card: DirectML cannot run the full-precision file on an
+    /// integrated graphics card. Optional; used instead of <see cref="BiRefNetGeneral"/> when the AI runs on the graphics card.
+    /// </summary>
+    public static AiModel BiRefNetGeneralGpu { get; } = new(
+        "birefnet-general-gpu",
+        "BiRefNet · Zusatz für die Grafikkarte",
+        "Nur nötig, wenn die KI auf der Grafikkarte rechnet – etwa doppelt so schnell",
+        "Dieselbe KI in halber Genauigkeit. Die App nimmt sie statt der vollen, wenn die Grafikkarte rechnet; das " +
+        "Ergebnis ist fast gleich (im Mittel unter 0,1 Stufen Unterschied). Ohne Grafikkarte überflüssig.",
+        AiModelKind.Background,
+        BiRefNetOnnxRepo + "onnx/model_fp16.onnx",
+        489_666_272,
+        "3654c741eb80bd926ada8fed1713b506ccf8d30eb1f6487e87eb9f234f33df09",
+        IsZip: false,
+        MainFile: "model_fp16.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "Peng Zheng u. a. (BiRefNet), ONNX in halber Genauigkeit von onnx-community",
+        TileSize: 1024,
+        Gpu: true,
+        GpuWithoutOptimization: true);
+
+    /// <summary>Gets BiRefNet lite (Swin tiny, 1024 px): about twice as fast, leaves more remnants.</summary>
+    public static AiModel BiRefNetLite { get; } = new(
+        "birefnet-lite",
+        "BiRefNet lite",
+        "Hintergrund entfernen – schnell",
+        "Kleine Fassung von BiRefNet: etwa doppelt so schnell, lässt aber öfter Reste vom Hintergrund stehen.",
+        AiModelKind.Background,
+        BiRefNetRelease + "BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx",
+        224_005_088,
+        "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333",
+        IsZip: false,
+        MainFile: "BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "Peng Zheng u. a. (BiRefNet lite), ONNX vom Autor",
+        TileSize: 1024,
+        Gpu: true,
+        GpuWithoutOptimization: true);
+
+    /// <summary>Gets BEN2 base: finest hair, but keeps people in the background more often. CPU only (differs on DirectML).</summary>
+    public static AiModel Ben2 { get; } = new(
+        "ben2",
+        "BEN2",
+        "Hintergrund entfernen – feine Haare",
+        "BEN2 (2025): rechnet unsichere Randpixel ein zweites Mal nach – besonders gut bei abstehenden Haaren und Fell. " +
+        "Behält dafür öfter Personen im Hintergrund; dann mit dem roten Pinsel nachhelfen.",
+        AiModelKind.Background,
+        Ben2Repo + "BEN2_Base.onnx",
+        222_932_053,
+        "22cea62108ff53b7ccc20f7a008bf30494228d84b1687f29ecbe76936a998101",
+        IsZip: false,
+        MainFile: "BEN2_Base.onnx",
+        License: "MIT",
+        NonCommercial: false,
+        Origin: "Maxwell Meyer, Jack Spruyt (BEN2, Prama LLC)",
+        TileSize: 1024);
+
+    /// <summary>
+    /// Gets RMBG-2.0 by Bria (BiRefNet architecture, trained on licensed data). Non-commercial only and downloadable only after
+    /// agreeing to Bria's terms, so it has no download address: the user places the file by hand (<see cref="AiModel.ManualPage"/>).
+    /// </summary>
+    public static AiModel Rmbg2 { get; } = new(
+        "rmbg-2.0",
+        "RMBG-2.0",
+        "Hintergrund entfernen – etwa wie BiRefNet, nur nicht-kommerziell",
+        "RMBG-2.0 von Bria: gleiches Netz wie BiRefNet, mit lizenzierten Bildern trainiert. Bria gibt die Datei nur nach " +
+        "Zustimmung frei: 1. Bei Hugging Face anmelden und auf der Seite des Modells das Formular ausfüllen (Name, E-Mail, " +
+        "„Non commercial use“). 2. Im selben Browser „onnx/model.onnx“ herunterladen (1,02 GB). 3. Die Datei in den Ordner " +
+        "legen, den „Ordner öffnen“ zeigt – die App erkennt sie dann von selbst.",
+        AiModelKind.Background,
+        "",
+        1_024_331_469,
+        "5b486f08200f513f460da46dd701db5fbb47d79b4be4b708a19444bcd4e79958",
+        IsZip: false,
+        MainFile: "model.onnx",
+        License: "CC-BY-NC-4.0",
+        NonCommercial: true,
+        Origin: "Bria AI (RMBG-2.0), Datei von Hugging Face „briaai/RMBG-2.0“ nach Zustimmung",
+        TileSize: 1024,
+        Gpu: true,
+        ManualPage: "https://huggingface.co/briaai/RMBG-2.0");
+
     /// <summary>Gets all models of the catalogue.</summary>
     public static IReadOnlyList<AiModel> All { get; } =
-        [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, UltraSharpV2, PiSaSr, Sd21Unet, Sd21Vae, Sd21Text, FaceDetector, FaceParser];
+        [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, UltraSharpV2, PiSaSr, Sd21Unet, Sd21Vae, Sd21Text,
+         BiRefNetGeneral, BiRefNetGeneralGpu, BiRefNetLite, Ben2, Rmbg2, FaceDetector, FaceParser];
 
     /// <summary>Looks up a model by its ID.</summary>
     /// <param name="id">Model ID (<see cref="AiModel.Id"/>), compared case-sensitively.</param>

@@ -148,7 +148,7 @@ public sealed class OnnxSessions : IDisposable
             }
 
             EnsureNoTelemetry();
-            session = Open(path, model.Gpu);
+            session = Open(path, model);
             _open[path] = session;
             _modelOf[path] = model.Id;
             return session;
@@ -174,13 +174,14 @@ public sealed class OnnxSessions : IDisposable
     }
 
     /// <summary>Opens a session on the graphics card if enabled, available and allowed for the model; if that fails, on the CPU.</summary>
-    private InferenceSession Open(string path, bool allowGpu)
+    private InferenceSession Open(string path, AiModel model)
     {
-        if (allowGpu && UseGpu && GpuProvider is { } provider && GpuProblem is null && PreferGpu)
+        if (model.Gpu && UseGpu && GpuProvider is { } provider && GpuProblem is null && PreferGpu)
         {
             try
             {
                 using var gpu = GpuOptions(provider);
+                if (model.GpuWithoutOptimization) gpu.GraphOptimizationLevel = GraphOptimizationLevel.ORT_DISABLE_ALL;
                 return new InferenceSession(path, gpu);
             }
             catch (Exception e) when (e is OnnxRuntimeException or EntryPointNotFoundException or DllNotFoundException)

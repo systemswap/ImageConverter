@@ -3,10 +3,11 @@ using ImageMagick;
 
 namespace ImageConverter.Core.Ai;
 
-/// <summary>A brush stroke over something that is to be removed.</summary>
+/// <summary>A brush stroke over something that is to be removed (or, in the "Hintergrund" tab, kept).</summary>
 /// <param name="Points">Points of the stroke in image pixels; a single point marks a round spot.</param>
 /// <param name="Radius">Brush radius in image pixels.</param>
-public sealed record BrushStroke(IReadOnlyList<(double X, double Y)> Points, double Radius);
+/// <param name="Keep">Background removal only: green stroke, this stays; false = red, this goes.</param>
+public sealed record BrushStroke(IReadOnlyList<(double X, double Y)> Points, double Radius, bool Keep = false);
 
 /// <summary>
 /// An inpainting model (LaMa, MI-GAN): receives a square crop and a mask and repaints the marked area to match
