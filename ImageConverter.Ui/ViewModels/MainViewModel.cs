@@ -63,6 +63,12 @@ public partial class MainViewModel : ViewModelBase
         // AI module (separable, see the Ai/ folder)
         Ai = new AiViewModel(this);
         Retouch = new RetouchViewModel(this, Ai);
+        Background = new BackgroundViewModel(this, Ai);
+        Ai.BusyElsewhere = () => Retouch.IsRunning || Background.IsRunning;
+        Background.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(BackgroundViewModel.IsTabActive)) OnPropertyChanged(nameof(ActiveBrush));
+        };
         PropertyChanged += OnUpscaleRelevantChange;   // upscaling follows the image and the size
 
         // Language change: have computed texts (hints, print size …) queried again.
@@ -74,6 +80,12 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>Removal (watermarks, text …) with a brush and an inpainting model; part of the AI module.</summary>
     public RetouchViewModel Retouch { get; }
+
+    /// <summary>Background removal or blur ("Hintergrund" tab); part of the AI module.</summary>
+    public BackgroundViewModel Background { get; }
+
+    /// <summary>The tab whose brush paints in the preview: "Hintergrund" when it is selected, otherwise "Entfernen".</summary>
+    public IBrushTool ActiveBrush => Background.IsTabActive ? Background : Retouch;
 
     /// <summary>"Language" tab of the settings.</summary>
     public LanguageViewModel Language { get; } = new();

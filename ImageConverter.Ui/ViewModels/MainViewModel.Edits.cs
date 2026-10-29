@@ -35,10 +35,11 @@ public enum EditSteps
     LumMask = 65536,
     Grain = 131072,
     Dewarp = 262144,
+    Background = 524288,
 }
 
 /// <summary>Kind of an image step in the history (changes the image or its geometry, not only settings).</summary>
-public enum ImageStepKind { Crop, Rotate, Flip, Ai, Applied, Retouch }
+public enum ImageStepKind { Crop, Rotate, Flip, Ai, Applied, Retouch, Background }
 
 /// <summary>One row of the "Edits" list: a function that acts on the image.</summary>
 public partial class EditRow(MainViewModel owner, EditSteps step, string name, string detail, bool canHide, string? note)
@@ -523,6 +524,11 @@ public partial class MainViewModel
             if (retouch.Count > 0)
                 rows.Add(new EditRow(this, EditSteps.Retouch, Tr.T("Entfernt"),
                     retouch.Count == 1 ? retouch[0].Detail ?? "" : Tr.T("{0}× · zuletzt {1}", retouch.Count, retouch[^1].Detail ?? ""),
+                    false, Tr.T("Lässt sich nicht ausschalten — nur mit Rückgängig zurücknehmen.")));
+            // Background: the last one counts (a new attempt replaces the one before)
+            var background = steps.Skip(applied + 1).Select(s => s.Step!).LastOrDefault(s => s.Kind == ImageStepKind.Background);
+            if (background is not null)
+                rows.Add(new EditRow(this, EditSteps.Background, background.Label, background.Detail ?? "",
                     false, Tr.T("Lässt sich nicht ausschalten — nur mit Rückgängig zurücknehmen.")));
             // Geometry: one row per stage, in the fixed order of the recipe (always computed from the pixel image)
             var recipe = h.Recipe;

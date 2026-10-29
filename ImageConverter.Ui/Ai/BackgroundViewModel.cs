@@ -1,0 +1,429 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using ImageConverter.Core.Ai;
+using ImageConverter.Core.Ai.Upscale;
+using ImageConverter.ViewModels;
+using ImageMagick;
+
+namespace ImageConverter.Ai;
+
+/// <summary>What the mouse does in the "Hintergrund" tab.</summary>
+public enum BackgroundTool
+{
+    /// <summary>Nothing: the model finds the subject by itself; the mouse works as usual (before/after divider, crop).</summary>
+    Auto,
+
+    /// <summary>Red brush: what it touches goes.</summary>
+    Remove,
+
+    /// <summary>Green brush: what it touches stays.</summary>
+    Keep,
+}
+
+/// <summary>
+/// "Hintergrund" tab: the model finds the subject automatically; the background becomes transparent or blurred. Rough red
+/// and green strokes correct the result: red removes whole objects, green keeps them (and adds what a zoomed run finds).
+/// See docs/KI-HINTERGRUND.md.
+/// </summary>
+/// <remarks>
+/// The model works on the displayed area of the image (after crop). Its mask is kept: changing strokes, mode or blur
+/// computes again in a few seconds without the model. As with "Entfernen", a new attempt starts from the image before the
+/// last one instead of building on its result.
+/// </remarks>
+public partial class BackgroundViewModel : ViewModelBase, IBrushTool
+{
+    private readonly MainViewModel _main;
+    private readonly AiViewModel _ai;
+    private CancellationTokenSource? _runCts;
+
+    public BackgroundViewModel(MainViewModel main, AiViewModel ai)
+    {
+        _main = main;
+        _ai = ai;
+        _ai.ModelsChanged += (_, _) => Rescan();
+        _main.PropertyChanged += OnMainPropertyChanged;
+        _main.FilesReplaced += (_, _) => ClearAll();
+        Rescan();
+    }
+
+    // ------------------------------------------------------------ Models
+
+    /// <summary>Installed background models (BiRefNet also when only its graphics-card add-on is there).</summary>
+    public ObservableCollection<AiModel> Available { get; } = [];
+
+    public bool HasModels => Available.Count > 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModelHint))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
+    public partial AiModel? SelectedModel { get; set; }
+
+    public string? ModelHint => SelectedModel is { } m ? Tr.T(m.Description) : null;
+
+    private void Rescan()
+    {
+        var store = _ai.Store;
+        var usable = AiModelCatalog.All
+            .Where(m => m.Kind == AiModelKind.Background && m != AiModelCatalog.BiRefNetGeneralGpu
+                        && (store.IsInstalled(m) || m == AiModelCatalog.BiRefNetGeneral && store.IsInstalled(AiModelCatalog.BiRefNetGeneralGpu)))
+            .ToList();
+        var selected = SelectedModel;
+        Available.Clear();
+        foreach (var m in usable) Available.Add(m);
+        SelectedModel = selected is not null && usable.Contains(selected) ? selected : usable.FirstOrDefault();
+        OnPropertyChanged(nameof(HasModels));
+    }
+
+    /// <summary>
+    /// The file that actually runs: BiRefNet in half precision when the graphics card computes (or when only that file is
+    /// there), otherwise the selected model itself.
+    /// </summary>
+    private (AiModel Model, string Path)? Resolve(AiModel model)
+    {
+        var store = _ai.Store;
+        if (model == AiModelCatalog.BiRefNetGeneral && store.PathOf(AiModelCatalog.BiRefNetGeneralGpu) is { } half
+            && (_ai.Sessions.OnGpu || !store.IsInstalled(model)))
+            return (AiModelCatalog.BiRefNetGeneralGpu, half);
+        return store.PathOf(model) is { } path ? (model, path) : null;
+    }
+
+    /// <summary>Opens the settings on the "Hintergrund" page for downloading models.</summary>
+    [RelayCommand]
+    private Task OpenModels() => _main.OpenSettingsCommand.ExecuteAsync(SettingsPage.Background);
+
+    // ------------------------------------------------------------ Tab and tool
+
+    /// <summary>Whether the "Hintergrund" tab is selected.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBrushing))]
+    public partial bool IsTabActive { get; set; }
+
+    partial void OnIsTabActiveChanged(bool value)
+    {
+        if (!value) return;
+        // Painting happens on the unrotated image: close the rotation, perspective and dewarp tools and the eyedropper.
+        _main.RotationTool = false;
+        _main.PerspectiveTool = false;
+        _main.DewarpTool = false;
+        _main.IsPicking = false;
+    }
+
+    /// <summary>Automatic, red or green brush.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBrushing), nameof(BrushKeep), nameof(IsAuto), nameof(IsRemoveBrush), nameof(IsKeepBrush), nameof(ToolHint))]
+    public partial BackgroundTool Tool { get; set; }
+
+    public bool IsAuto
+    {
+        get => Tool == BackgroundTool.Auto;
+        set { if (value) Tool = BackgroundTool.Auto; }
+    }
+
+    public bool IsRemoveBrush
+    {
+        get => Tool == BackgroundTool.Remove;
+        set { if (value) Tool = BackgroundTool.Remove; }
+    }
+
+    public bool IsKeepBrush
+    {
+        get => Tool == BackgroundTool.Keep;
+        set { if (value) Tool = BackgroundTool.Keep; }
+    }
+
+    public string ToolHint => Tool switch
+    {
+        BackgroundTool.Remove => Tr.T("Rot: grob über etwas malen, das weg soll – das ganze Objekt, das der Strich berührt, verschwindet."),
+        BackgroundTool.Keep => Tr.T("Grün: grob über etwas malen, das bleiben soll – fehlt ein Teil des Motivs, wird um den Strich genauer nachgerechnet."),
+        _ => Tr.T("Das Motiv wird ohne Markierung erkannt. Passt etwas nicht: mit Rot oder Grün grob nachbessern und noch einmal anwenden."),
+    };
+
+    /// <summary>Whether the brush paints: a brush chosen, tab selected, an image loaded, no computation running.</summary>
+    public bool IsBrushing
+    {
+        get => IsTabActive && Tool != BackgroundTool.Auto && _main.HasImage && !IsRunning;
+        set { }   // Esc in the preview does not end the brush; the tab does that
+    }
+
+    /// <summary>Green brush: new strokes keep.</summary>
+    public bool BrushKeep => Tool == BackgroundTool.Keep;
+
+    /// <summary>Brush size as a diameter in screen pixels.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BrushSizeLabel))]
+    public partial double BrushSize { get; set; } = 40;
+
+    public string BrushSizeLabel => $"{BrushSize:0} px";
+
+    /// <summary>All strokes, oldest first, in the displayed image (a new list on every change so that the preview updates).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStrokes))]
+    [NotifyCanExecuteChangedFor(nameof(UndoStrokeCommand), nameof(ClearStrokesCommand))]
+    public partial IReadOnlyList<BrushStroke> Strokes { get; set; } = [];
+
+    public bool HasStrokes => Strokes.Count > 0;
+
+    /// <summary>The strokes have been applied; hidden in the preview until something is added.</summary>
+    [ObservableProperty] public partial bool StrokesApplied { get; set; }
+
+    System.Windows.Input.ICommand IBrushTool.AddStrokeCommand => AddStrokeCommand;
+
+    [RelayCommand]
+    private void AddStroke(BrushStroke stroke)
+    {
+        Strokes = [.. Strokes, stroke];
+        StrokesApplied = false;
+        Status = null;
+    }
+
+    private bool CanEditStrokes => HasStrokes && !IsRunning;
+
+    [RelayCommand(CanExecute = nameof(CanEditStrokes))]
+    private void UndoStroke()
+    {
+        Strokes = Strokes.Take(Strokes.Count - 1).ToArray();
+        StrokesApplied = false;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditStrokes))]
+    private void ClearStrokes()
+    {
+        Strokes = [];
+        StrokesApplied = false;
+        Status = null;
+    }
+
+    // ------------------------------------------------------------ Mode
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTransparent), nameof(IsBlur), nameof(ApplyText), nameof(ShowFormatHint))]
+    public partial BackgroundMode Mode { get; set; }
+
+    public bool IsTransparent
+    {
+        get => Mode == BackgroundMode.Transparent;
+        set { if (value) Mode = BackgroundMode.Transparent; }
+    }
+
+    public bool IsBlur
+    {
+        get => Mode == BackgroundMode.Blur;
+        set { if (value) Mode = BackgroundMode.Blur; }
+    }
+
+    /// <summary>Strength of the blur in percent; computed only on "Anwenden" (not while dragging).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BlurLabel))]
+    public partial double BlurStrength { get; set; } = 50;
+
+    public string BlurLabel => $"{BlurStrength:0} %";
+
+    public string ApplyText => Mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf machen") : Tr.T("Hintergrund entfernen");
+
+    /// <summary>Transparent, but the output format has no transparency (JPEG, BMP): the background becomes white there.</summary>
+    public bool ShowFormatHint => Mode == BackgroundMode.Transparent && _main.SelectedFormat is "JPEG" or "BMP";
+
+    /// <summary>Switches the output format to PNG, which keeps the transparency.</summary>
+    [RelayCommand]
+    private void UsePng() => _main.SelectedFormat = "PNG";
+
+    // ------------------------------------------------------------ Computation
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBrushing))]
+    [NotifyCanExecuteChangedFor(nameof(ApplyCommand), nameof(CancelCommand), nameof(UndoStrokeCommand), nameof(ClearStrokesCommand))]
+    public partial bool IsRunning { get; set; }
+
+    [ObservableProperty] public partial string? Status { get; set; }
+
+    /// <summary>Last result and the image before it: a new attempt starts again from the image before.</summary>
+    private (MagickImage Result, MagickImage Base)? _last;
+
+    /// <summary>Mask of the last run (per image, model and area): new strokes, mode or blur need no new model run.</summary>
+    private (MagickImage Image, string ModelId, BackgroundMask Mask)? _mask;
+
+    /// <summary>Seconds the model took last time, per model file (for the time shown while it runs).</summary>
+    private readonly Dictionary<string, double> _seconds = [];
+
+    private bool CanApply => SelectedModel is not null && !IsRunning && _main.HasImage && !_main.IsEditing;
+
+    [RelayCommand(CanExecute = nameof(CanApply))]
+    private async Task Apply()
+    {
+        if (SelectedModel is not { } chosen || _main.CurrentImage is not { } current) return;
+        if (Resolve(chosen) is not var (model, path))
+        {
+            Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
+            return;
+        }
+
+        var again = _last is { } last && ReferenceEquals(current, last.Result);
+        var start = again ? _last!.Value.Base : current;
+        int pw, ph;
+        lock (start) (pw, ph) = ((int)start.Width, (int)start.Height);
+        var region = ShownRegion(pw, ph);
+        var strokes = Strokes.Select(ToPixels).ToArray();
+        var cached = _mask is { } m && ReferenceEquals(m.Image, start) && m.ModelId == model.Id && m.Mask.Region == region ? m.Mask : null;
+        var (mode, blur) = (Mode, BlurStrength / 100);
+
+        using var cts = new CancellationTokenSource();
+        _runCts = cts;
+        IsRunning = true;
+        AppLog.Activity($"Hintergrund: {model.Name}");
+        var clock = Stopwatch.StartNew();
+        Status = Tr.T("Wird berechnet …");
+        var expected = _seconds.TryGetValue(model.Id, out var s) ? s : Expected(model);
+        var phase = cached is null ? Tr.T("Hintergrund · Motiv wird erkannt (etwa {0:0} s) …", expected) : Tr.T("Hintergrund · Kanten …");
+        _ai.ShowActivity(phase, 0, CancelCommand);
+        // The model reports no progress: show the expected time running down
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(250) };
+        timer.Tick += (_, _) =>
+        {
+            if (IsRunning)
+                _ai.ShowActivity(phase, Math.Min(95, clock.Elapsed.TotalSeconds / Math.Max(1, expected) * 100), CancelCommand);
+        };
+        if (cached is null) timer.Start();
+        try
+        {
+            BackgroundMask? mask = cached;
+            var ok = await _main.ApplyBackgroundAsync(_ =>
+            {
+                var session = _ai.Sessions.Get(model, path);
+                var segment = new OnnxSegmentModel(session, model);
+                if (mask is null)
+                {
+                    var t = Stopwatch.StartNew();
+                    mask = BackgroundRemover.Detect(start, region, segment, cts.Token);
+                    _seconds[model.Id] = t.Elapsed.TotalSeconds;
+                }
+                Dispatcher.UIThread.Post(() => phase = Tr.T("Hintergrund · Kanten …"));
+                var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, segment, cts.Token));
+                return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token);
+            }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
+               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), again);
+
+            if (ok && _main.CurrentImage is { } result)
+            {
+                _last = (result, start);
+                if (mask is not null) _mask = (start, model.Id, mask);
+                StrokesApplied = strokes.Length > 0;
+                Status = Tr.T("Fertig nach {0:0.0} s — rückgängig mit Strg+Z. Nachbessern mit Rot oder Grün, dann noch einmal anwenden: rechnet vom Bild davor und ohne neues Erkennen.",
+                    clock.Elapsed.TotalSeconds);
+            }
+            else
+            {
+                Status = cts.IsCancellationRequested ? Tr.T("Abgebrochen.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Status = Tr.T("Fehler: {0}", ex.Message);
+        }
+        finally
+        {
+            timer.Stop();
+            _runCts = null;
+            IsRunning = false;
+            AppLog.Activity(null);
+            _ai.HideActivity();
+        }
+    }
+
+    /// <summary>Time of one model run measured on a notebook with integrated graphics (docs/KI-HINTERGRUND.md).</summary>
+    private double Expected(AiModel model) =>
+        (model.Id, _ai.Sessions.OnGpu && model.Gpu) switch
+        {
+            ("birefnet-lite", false) => 11,
+            ("birefnet-lite", true) => 8,
+            ("ben2", _) => 17,
+            ("rmbg-2.0", true) => 14,
+            ("birefnet-general-gpu", true) => 12,
+            (_, _) => 24,
+        };
+
+    [RelayCommand(CanExecute = nameof(IsRunning))]
+    private void Cancel() => _runCts?.Cancel();
+
+    /// <summary>The displayed area (after crop, perspective …) as a rectangle of the pixel image: the model looks only there.</summary>
+    private SourceRect ShownRegion(int pw, int ph)
+    {
+        var (w, h) = (_main.DocumentSize.Width, _main.DocumentSize.Height);
+        if (w <= 0 || h <= 0) return new SourceRect(0, 0, pw, ph);
+        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+        // Points along the border: with perspective or a dewarped page the edges are curved in the pixel image
+        for (var i = 0; i <= 16; i++)
+        {
+            var f = i / 16.0;
+            foreach (var (x, y) in new[] { (f * w, 0.0), (f * w, (double)h), (0.0, f * h), ((double)w, f * h) })
+            {
+                var (px, py) = _main.ShownToPixels(x, y);
+                (x0, y0, x1, y1) = (Math.Min(x0, px), Math.Min(y0, py), Math.Max(x1, px), Math.Max(y1, py));
+            }
+        }
+        var left = Math.Clamp((int)Math.Floor(x0), 0, pw - 1);
+        var top = Math.Clamp((int)Math.Floor(y0), 0, ph - 1);
+        var right = Math.Clamp((int)Math.Ceiling(x1), left + 1, pw);
+        var bottom = Math.Clamp((int)Math.Ceiling(y1), top + 1, ph);
+        return new SourceRect(left, top, right - left, bottom - top);
+    }
+
+    /// <summary>Maps a stroke from the displayed image to the pixel image (see <see cref="RetouchViewModel"/>).</summary>
+    private BrushStroke ToPixels(BrushStroke s)
+    {
+        var points = s.Points.Select(p => _main.ShownToPixels(p.X, p.Y)).ToArray();
+        var radius = s.Points.Count == 0 ? s.Radius : s.Points.Average(p => _main.ShownLengthToPixels(p.X, p.Y, s.Radius));
+        return s with { Points = points, Radius = radius };
+    }
+
+    // ------------------------------------------------------------ Image change
+
+    private void ClearAll()
+    {
+        Strokes = [];
+        StrokesApplied = false;
+        _last = null;
+        _mask = null;
+        Status = null;
+    }
+
+    private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(MainViewModel.HasImage):
+                OnPropertyChanged(nameof(IsBrushing));
+                ApplyCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(MainViewModel.IsEditing):
+                ApplyCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(MainViewModel.SelectedFormat):
+                OnPropertyChanged(nameof(ShowFormatHint));
+                break;
+            case nameof(MainViewModel.CurrentFileName):
+                if (!IsRunning) ClearAll();
+                break;
+            case nameof(MainViewModel.DocumentSize):
+                // Displayed dimensions changed: strokes lie in the displayed image and no longer fit
+                var now = (_main.DocumentSize.Width, _main.DocumentSize.Height);
+                if (!IsRunning && _size is { } size && size != now)
+                {
+                    Strokes = [];
+                    StrokesApplied = false;
+                }
+                _size = now;
+                break;
+        }
+    }
+
+    private (int W, int H)? _size;
+}

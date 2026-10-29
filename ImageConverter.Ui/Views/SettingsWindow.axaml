@@ -67,6 +67,12 @@
                             <TextBlock Classes="tileHint" Text="{l:T 'Wasserzeichen · Schrift'}" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="NavBackground" Classes="tile" GroupName="seite" Margin="14,0,0,0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Hintergrund'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Freistellen · Unscharf'}" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavDewarp" Classes="tile" GroupName="seite" Margin="14,0,0,0">
                         <StackPanel Margin="10,0,0,0">
                             <TextBlock Classes="tileName" Text="{l:T 'Begradigen'}" />
@@ -145,6 +151,10 @@
                 <StackPanel Spacing="12" IsVisible="{Binding #NavRemove.IsChecked}">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Retusche / Entfernen'}" />
                     <ai:AiModelPageView DataContext="{Binding Ai.RemovePage}" />
+                </StackPanel>
+                <StackPanel Spacing="12" IsVisible="{Binding #NavBackground.IsChecked}">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Hintergrund'}" />
+                    <ai:AiModelPageView DataContext="{Binding Ai.BackgroundPage}" />
                 </StackPanel>
                 <StackPanel Spacing="12" IsVisible="{Binding #NavDewarp.IsChecked}">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Begradigen'}" />

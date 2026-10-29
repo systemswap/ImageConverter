@@ -22,7 +22,7 @@ namespace ImageConverter.Ai;
 /// The mark remains after a removal: a new attempt (different model, extended mark) starts again from the image before
 /// the removal instead of building on the first result. Only "Neue Markierung" (new mark) starts from the current image.
 /// </remarks>
-public partial class RetouchViewModel : ViewModelBase
+public partial class RetouchViewModel : ViewModelBase, IBrushTool
 {
     private readonly MainViewModel _main;
     private readonly AiViewModel _ai;
@@ -33,7 +33,6 @@ public partial class RetouchViewModel : ViewModelBase
         _main = main;
         _ai = ai;
         _ai.ModelsChanged += (_, _) => Rescan();
-        _ai.BusyElsewhere = () => IsRunning;
         _main.PropertyChanged += OnMainPropertyChanged;
         _main.FilesReplaced += (_, _) => ClearAll();
         Rescan();
@@ -97,6 +96,11 @@ public partial class RetouchViewModel : ViewModelBase
     public partial double BrushSize { get; set; } = 40;
 
     public string BrushSizeLabel => $"{BrushSize:0} px";
+
+    /// <summary>Removal paints only red.</summary>
+    public bool BrushKeep => false;
+
+    System.Windows.Input.ICommand IBrushTool.AddStrokeCommand => AddStrokeCommand;
 
     /// <summary>The mark: all strokes, oldest first (a new list on every change so that the preview updates).</summary>
     [ObservableProperty]

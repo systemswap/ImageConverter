@@ -12,6 +12,7 @@ public enum SettingsPage
     Improve,
     Faces,
     Remove,
+    Background,
     Dewarp,
     Upscale,
 }

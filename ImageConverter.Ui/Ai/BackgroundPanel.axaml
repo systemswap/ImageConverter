@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:ai="using:ImageConverter.Ai"
+             xmlns:core="using:ImageConverter.Core.Ai"
+             x:Class="ImageConverter.Ai.BackgroundPanel"
+             x:DataType="ai:BackgroundViewModel">
+
+    <!-- Hintergrund: Motiv automatisch freistellen, Hintergrund transparent oder unscharf; Rot/Grün zum Nachbessern -->
+    <HeaderedContentControl Header="{l:T 'HINTERGRUND'}">
+        <StackPanel>
+
+            <!-- Noch kein Modell -->
+            <StackPanel IsVisible="{Binding !HasModels}" Spacing="6">
+                <TextBlock Classes="hint" TextWrapping="Wrap"
+                           Text="{l:T 'Zum Freistellen wird ein Modell gebraucht (BiRefNet, BEN2 oder RMBG-2.0). Es läuft komplett auf deinem Rechner und wird einmalig heruntergeladen.'}" />
+                <Button HorizontalAlignment="Left" Content="{l:T 'Modelle laden …'}" Command="{Binding OpenModelsCommand}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding HasModels}">
+                <Grid Classes="row" ColumnDefinitions="76,*">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Modell'}" />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Available}" SelectedItem="{Binding SelectedModel}"
+                              IsEnabled="{Binding !IsRunning}"
+                              ToolTip.Tip="{Binding ModelHint}">
+                        <ComboBox.SelectionBoxItemTemplate>
+                            <DataTemplate x:DataType="core:AiModel">
+                                <TextBlock Text="{l:TItem Path=Name}" />
+                            </DataTemplate>
+                        </ComboBox.SelectionBoxItemTemplate>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:AiModel">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="{l:TItem Path=Name}" />
+                                    <TextBlock Classes="hint" FontSize="11" Text="{l:TItem Path=Purpose}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <!-- Was mit dem Hintergrund passiert -->
+                <Grid Classes="row" ColumnDefinitions="76,*">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Hintergrund'}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14">
+                        <RadioButton GroupName="hgModus" Content="{l:T 'Transparent'}" IsChecked="{Binding IsTransparent}"
+                                     ToolTip.Tip="{l:T 'Der Hintergrund wird durchsichtig (Schachbrett in der Vorschau). Speichern als PNG, WebP, TIFF, AVIF oder JPEG XL.'}" />
+                        <RadioButton GroupName="hgModus" Content="{l:T 'Unscharf'}" IsChecked="{Binding IsBlur}"
+                                     ToolTip.Tip="{l:T 'Der Hintergrund bleibt, wird aber weichgezeichnet – wie bei einem Porträt mit offener Blende.'}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsBlur}">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
+                    <Slider Grid.Column="1" Minimum="5" Maximum="100" Value="{Binding BlurStrength}"
+                            ToolTip.Tip="{l:T 'Wie stark der Hintergrund verschwimmt. Wird erst mit „Hintergrund unscharf machen“ gerechnet.'}" />
+                    <TextBlock Grid.Column="2" Classes="value" Text="{Binding BlurLabel}" />
+                </Grid>
+
+                <!-- Automatik oder Pinsel -->
+                <Grid Classes="row" ColumnDefinitions="76,*">
+                    <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Maus'}" />
+                    <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                        <RadioButton GroupName="hgWerkzeug" Margin="0,0,14,0" Content="{l:T 'Automatik'}" IsChecked="{Binding IsAuto}"
+                                     ToolTip.Tip="{l:T 'Kein Pinsel: Das Motiv wird von selbst erkannt. Die Maus arbeitet wie gewohnt (Vorher/Nachher, Zuschnitt).'}" />
+                        <RadioButton GroupName="hgWerkzeug" Margin="0,0,14,0" Content="{l:T 'Rot: weg'}" IsChecked="{Binding IsRemoveBrush}"
+                                     Foreground="#E04040"
+                                     ToolTip.Tip="{l:T 'Grob über etwas malen, das nicht zum Motiv gehört – das ganze Objekt verschwindet.'}" />
+                        <RadioButton GroupName="hgWerkzeug" Content="{l:T 'Grün: bleibt'}" IsChecked="{Binding IsKeepBrush}"
+                                     Foreground="#2FA84F"
+                                     ToolTip.Tip="{l:T 'Grob über etwas malen, das bleiben soll – es wird vor Rot geschützt, fehlende Teile werden genauer nachgerechnet.'}" />
+                    </WrapPanel>
+                </Grid>
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,0,0,4" Text="{Binding ToolHint}" />
+
+                <StackPanel IsVisible="{Binding !IsAuto}">
+                    <Grid Classes="row" ColumnDefinitions="76,*,Auto">
+                        <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Pinsel'}" />
+                        <Slider Grid.Column="1" Minimum="6" Maximum="200" Value="{Binding BrushSize}"
+                                ToolTip.Tip="{l:T 'Größe des Pinsels auf dem Bildschirm. Zum genauen Malen mit Strg + Mausrad hineinzoomen — der Pinsel bleibt gleich groß.'}" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrushSizeLabel}" />
+                    </Grid>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,6,*" IsVisible="{Binding HasStrokes}">
+                    <Button Grid.Column="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Letzter Strich'}" Command="{Binding UndoStrokeCommand}"
+                            ToolTip.Tip="{l:T 'Den zuletzt gemalten Strich wieder wegnehmen.'}" />
+                    <Button Grid.Column="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Alle Striche weg'}" Command="{Binding ClearStrokesCommand}"
+                            ToolTip.Tip="{l:T 'Alle roten und grünen Striche löschen; das nächste Anwenden ist wieder rein automatisch.'}" />
+                </Grid>
+
+                <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Margin="0,8,0,0" Content="{Binding ApplyText}"
+                        Command="{Binding ApplyCommand}"
+                        ToolTip.Tip="{l:T 'Erkennt das Motiv und rechnet den Hintergrund heraus. Rückgängig mit Strg+Z. Noch einmal anwenden (Striche, Modus, Stärke geändert) rechnet wieder vom Bild davor.'}" />
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding Status}" />
+
+                <!-- JPEG/BMP kennen keine Transparenz -->
+                <Border IsVisible="{Binding ShowFormatHint}" Margin="0,8,0,0" Padding="10,8"
+                        Background="#1FE0A100" BorderBrush="#66E0A100" BorderThickness="1"
+                        CornerRadius="{DynamicResource RadiusControl}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="hint" TextWrapping="Wrap"
+                                   Text="{l:T 'Das Ausgabeformat JPEG/BMP kennt keine Transparenz – dort wird der Hintergrund weiß.'}" />
+                        <Button HorizontalAlignment="Left" Content="{l:T 'Als PNG speichern'}" Command="{Binding UsePngCommand}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Text="{l:T 'Läuft lokal auf deinem Rechner. Gerechnet wird der sichtbare Bildausschnitt; Haare und Kanten in voller Auflösung.'}" />
+            </StackPanel>
+        </StackPanel>
+    </HeaderedContentControl>
+</UserControl>

@@ -486,6 +486,18 @@ public partial class MainViewModel
     internal Task<bool> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces) =>
         ApplyEditAsync(operation, null, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces });
 
+    /// <summary>
+    /// Replaces or blurs the background ("Hintergrund" tab): an image step in the pixel image like a removal; undo returns
+    /// to the image before.
+    /// </summary>
+    /// <param name="operation">Computes the new image from the current one.</param>
+    /// <param name="label">Name in the "Edits" list ("Hintergrund entfernt" / "Hintergrund unscharf").</param>
+    /// <param name="detail">Short info for the "Edits" list (model, strength).</param>
+    /// <param name="replaces">New attempt from the image before the last background step.</param>
+    /// <returns>true on success.</returns>
+    internal Task<bool> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail, bool replaces) =>
+        ApplyEditAsync(operation, null, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces });
+
     /// <summary>The current pixel image in full resolution (with AI and removal edits, without geometry); read only.</summary>
     internal MagickImage? CurrentImage => _history?.Current;
 

@@ -479,8 +479,8 @@ public static class AiModelCatalog
         "Hintergrund entfernen – etwa wie BiRefNet, nur nicht-kommerziell",
         "RMBG-2.0 von Bria: gleiches Netz wie BiRefNet, mit lizenzierten Bildern trainiert. Bria gibt die Datei nur nach " +
         "Zustimmung frei: 1. Bei Hugging Face anmelden und auf der Seite des Modells das Formular ausfüllen (Name, E-Mail, " +
-        "„Non commercial use“). 2. Im selben Browser „onnx/model.onnx“ herunterladen (1,02 GB). 3. Die Datei in den Ordner " +
-        "legen, den „Ordner öffnen“ zeigt – die App erkennt sie dann von selbst.",
+        "„Non commercial use“). 2. Im selben Browser „onnx/model.onnx“ herunterladen (1,02 GB). 3. Hier „Datei wählen …“ " +
+        "und die Datei auswählen – die App prüft sie und kopiert sie in ihren Modellordner.",
         AiModelKind.Background,
         "",
         1_024_331_469,

@@ -127,6 +127,58 @@ public sealed class AiModelStore
     }
 
     /// <summary>
+    /// Takes over a model file the user downloaded by hand (models without a download address, such as RMBG-2.0): copies
+    /// it into <see cref="DownloadFolder"/> if size and checksum match.
+    /// </summary>
+    /// <remarks>Like <see cref="DownloadAsync"/>, the copy goes to a ".part" file first; the source stays where it is.</remarks>
+    /// <param name="model">Model the file belongs to.</param>
+    /// <param name="file">The downloaded file.</param>
+    /// <param name="progress">Receives the copied fraction, 0…1.</param>
+    /// <param name="ct">Cancels the copy.</param>
+    /// <returns>A task that completes when the model is installed.</returns>
+    /// <exception cref="InvalidDataException">Size or checksum do not match: a different or incomplete file.</exception>
+    public async Task ImportAsync(AiModel model, string file, IProgress<double>? progress, CancellationToken ct)
+    {
+        var total = new FileInfo(file).Length;
+        if (total != model.DownloadSize)
+            throw new InvalidDataException(Tr.T("Das ist nicht die erwartete Datei: {0} statt {1} Bytes. Gebraucht wird „{2}“.",
+                total, model.DownloadSize, model.MainFile));
+
+        var dir = Path.Combine(DownloadFolder, model.Id);
+        Directory.CreateDirectory(dir);
+        var part = Path.Combine(dir, model.MainFile + ".part");
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            await using (var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true))
+            await using (var output = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
+            {
+                var buffer = new byte[1 << 16];
+                long done = 0;
+                int read;
+                while ((read = await input.ReadAsync(buffer, ct)) > 0)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read), ct);
+                    hash.AppendData(buffer, 0, read);
+                    done += read;
+                    progress?.Report(done / (double)total);
+                }
+            }
+
+            var actual = Convert.ToHexStringLower(hash.GetHashAndReset());
+            if (!string.Equals(actual, model.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(Tr.T("Die Datei hat die richtige Größe, aber nicht die erwartete Prüfsumme — eine andere Fassung des Modells?"));
+            File.Move(part, Path.Combine(dir, model.MainFile), overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(part)) File.Delete(part);
+            if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                Directory.Delete(dir);
+        }
+    }
+
+    /// <summary>
     /// Extracts only files, without subfolders. Paths from the archive are discarded, so nothing can be written
     /// outside the model folder. The .onnx files come last, so that the main model counts as installed only when
     /// everything else is in place.

@@ -181,7 +181,7 @@ public sealed class CropView : Control
         set => SetValue(BrushSizeProperty, value);
     }
 
-    /// <summary>The strokes painted so far (image pixels), drawn in red over the image.</summary>
+    /// <summary>The strokes painted so far (image pixels), drawn in red over the image (green for <see cref="BrushStroke.Keep"/>).</summary>
     public static readonly StyledProperty<IReadOnlyList<BrushStroke>?> BrushStrokesProperty =
         AvaloniaProperty.Register<CropView, IReadOnlyList<BrushStroke>?>(nameof(BrushStrokes));
 
@@ -189,6 +189,16 @@ public sealed class CropView : Control
     {
         get => GetValue(BrushStrokesProperty);
         set => SetValue(BrushStrokesProperty, value);
+    }
+
+    /// <summary>New strokes keep instead of remove ("Hintergrund" tab, green brush).</summary>
+    public static readonly StyledProperty<bool> BrushKeepProperty =
+        AvaloniaProperty.Register<CropView, bool>(nameof(BrushKeep));
+
+    public bool BrushKeep
+    {
+        get => GetValue(BrushKeepProperty);
+        set => SetValue(BrushKeepProperty, value);
     }
 
     /// <summary>The strokes have already been removed: hide them until a new stroke is added (then all are shown again).</summary>
@@ -476,7 +486,7 @@ public sealed class CropView : Control
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
             CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty,
             PickActiveProperty, PickMarkersProperty, BrushActiveProperty, BrushStrokesProperty, BrushDimProperty, BrushSizeProperty,
-            WarpLinesProperty, RedrawTokenProperty);
+            BrushKeepProperty, WarpLinesProperty, RedrawTokenProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -1183,7 +1193,7 @@ public sealed class CropView : Control
             e.Pointer.Capture(null);
             if (points is { Count: > 0 } && BrushCommand is { } paint)
             {
-                var stroke = new BrushStroke(points.Select(q => (q.X, q.Y)).ToArray(), BrushSize / 2 / _scale);
+                var stroke = new BrushStroke(points.Select(q => (q.X, q.Y)).ToArray(), BrushSize / 2 / _scale, BrushKeep);
                 if (paint.CanExecute(stroke)) paint.Execute(stroke);
             }
             InvalidateVisual();
@@ -2079,26 +2089,28 @@ public sealed class CropView : Control
     }
 
     private static readonly IBrush BrushFill = new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0x30, 0x30));
+    private static readonly IBrush BrushKeepFill = new ImmutableSolidColorBrush(Color.FromRgb(0x30, 0xD0, 0x50));
     private static readonly IPen BrushRingPen = new ImmutablePen(Brushes.White, 1.5);
 
-    /// <summary>Draws the removal mark: strokes in semi-transparent red (overlaps not darker), plus the brush circle.</summary>
+    /// <summary>Draws the mark: strokes in semi-transparent red, green for "keep" (overlaps not darker), plus the brush circle.</summary>
     private void RenderBrush(DrawingContext context)
     {
-        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius)).ToList() ?? [];
-        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale));
+        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius, s.Keep)).ToList() ?? [];
+        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale, BrushKeep));
         if (strokes.Count > 0)
         {
             using (context.PushOpacity(0.5))
             {
-                foreach (var (points, radius) in strokes)
+                foreach (var (points, radius, keep) in strokes)
                 {
                     var r = radius * _scale;
+                    var fill = keep ? BrushKeepFill : BrushFill;
                     if (points.Count == 1)
                     {
-                        context.DrawEllipse(BrushFill, null, ToScreenPoint(points[0]), r, r);
+                        context.DrawEllipse(fill, null, ToScreenPoint(points[0]), r, r);
                         continue;
                     }
-                    var pen = new Pen(BrushFill, 2 * r, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+                    var pen = new Pen(fill, 2 * r, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
                     var line = new StreamGeometry();
                     using (var g = line.Open())
                     {

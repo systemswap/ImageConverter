@@ -56,6 +56,7 @@ public partial class AiViewModel : ViewModelBase
             Group("BEGRADIGEN", "Fotografierte, gewölbte oder zerknitterte Blätter mit einem Klick gerade ziehen – Symbol „KI begradigen“ in der Vorschau.", AiModelKind.Dewarp),
             Group("UPSCALING", "Vergrößern mit KI – unter „Größe“, Liste „Verfahren“ (KI-Scaler). Real-ESRGAN x4v3 ist dieselbe Datei wie „Allround“ oben.", AiModelKind.Upscale, AiModelCatalog.Allround),
             Group("STABLE DIFFUSION 2.1", "Teile für PiSA-SR. Werden mit PiSA-SR automatisch geladen; die App baut daraus beim ersten Gebrauch ihr Modell.", AiModelKind.Part),
+            Group("HINTERGRUND", "Motiv freistellen, Hintergrund transparent oder unscharf – in der Rubrik „Hintergrund“. Ein Modell reicht; BiRefNet ist der Standard.", AiModelKind.Background),
         ];
         // One settings page per use case; helper models and parts appear with the use case that needs them.
         ImprovePage = new([ModelGroups[0]]);
@@ -63,6 +64,7 @@ public partial class AiViewModel : ViewModelBase
         RemovePage = new([ModelGroups[3]]);
         DewarpPage = new([ModelGroups[4]]);
         UpscalePage = new([ModelGroups[5], ModelGroups[6]]);
+        BackgroundPage = new([ModelGroups[7]]);
 
 
         Rescan();
@@ -286,6 +288,10 @@ public partial class AiViewModel : ViewModelBase
     public AiModelPage RemovePage { get; }
     public AiModelPage DewarpPage { get; }
     public AiModelPage UpscalePage { get; }
+    public AiModelPage BackgroundPage { get; }
+
+    /// <summary>Asks the user for a file (set by the settings window); null when no window can show a dialog.</summary>
+    internal Func<string, Task<string?>>? PickFile { get; set; }
 
     /// <param name="also">Models of other groups that are needed here as well (one file, two entries).</param>
     private AiModelGroup Group(string title, string hint, AiModelKind kind, params AiModel[] also) =>
@@ -1040,6 +1046,14 @@ public partial class AiViewModel : ViewModelBase
         WatchFolders();   // the folder may only exist now
     }
 
+    /// <summary>Takes over a file downloaded by hand (RMBG-2.0) after checking size and checksum.</summary>
+    internal async Task ImportAsync(AiModelItem item, string file)
+    {
+        await Store.ImportAsync(item.Model, file, item.ProgressReporter, item.Token);
+        Rescan();
+        WatchFolders();
+    }
+
     internal void Delete(AiModelItem item)
     {
         _sessions.Dispose();   // release opened models; otherwise the file is locked
@@ -1050,7 +1064,7 @@ public partial class AiViewModel : ViewModelBase
     internal bool IsBusy => IsRunning || _main.IsUpscaling || BusyElsewhere?.Invoke() == true;
 
 
-    /// <summary>Reports whether the removal tab is computing (models must not be deleted then).</summary>
+    /// <summary>Reports whether the removal or background tab is computing (models must not be deleted then).</summary>
     internal Func<bool>? BusyElsewhere { get; set; }
 
     private void WatchFolders()
@@ -1120,14 +1134,57 @@ public partial class AiModelItem : ObservableObject
         Tr.T("{0}  ·  Lizenz {1}", Model.SizeText, Model.License) + (Model.NonCommercial ? " " + Tr.T("(nur nicht-kommerziell)") : "");
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateText), nameof(ShowDownload))]
-    [NotifyCanExecuteChangedFor(nameof(DownloadCommand), nameof(DeleteCommand))]
+    [NotifyPropertyChangedFor(nameof(StateText), nameof(ShowDownload), nameof(ShowManual))]
+    [NotifyCanExecuteChangedFor(nameof(DownloadCommand), nameof(DeleteCommand), nameof(ImportCommand))]
     public partial bool IsInstalled { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateText), nameof(ShowDownload))]
-    [NotifyCanExecuteChangedFor(nameof(DownloadCommand), nameof(DeleteCommand), nameof(CancelCommand))]
+    [NotifyPropertyChangedFor(nameof(StateText), nameof(ShowDownload), nameof(ShowManual))]
+    [NotifyCanExecuteChangedFor(nameof(DownloadCommand), nameof(DeleteCommand), nameof(CancelCommand), nameof(ImportCommand))]
     public partial bool IsDownloading { get; set; }
+
+    /// <summary>Whether to offer the hand download (page of the provider, choose the file); only for models without a URL.</summary>
+    public bool ShowManual => !IsInstalled && !IsDownloading && Model.ManualPage is not null;
+
+    /// <summary>Opens the provider's page, where the user agrees to the terms and downloads the file.</summary>
+    [RelayCommand]
+    private void OpenPage()
+    {
+        if (Model.ManualPage is { } page && !ImageConverter.Services.FolderOpener.TryOpen(page))
+            Problem = Tr.T("Kein Browser gefunden. Die Seite ist: {0}", page);
+    }
+
+    private bool CanImport => !IsInstalled && !IsDownloading && Model.ManualPage is not null;
+
+    /// <summary>Takes over the downloaded file: asks for it, checks size and checksum and copies it into the model folder.</summary>
+    [RelayCommand(CanExecute = nameof(CanImport))]
+    private async Task Import()
+    {
+        if (_owner.PickFile is not { } pick || await pick(Tr.T("Heruntergeladene Datei „{0}“ wählen", Model.MainFile)) is not { } file) return;
+        _cts = new CancellationTokenSource();
+        IsDownloading = true;
+        Progress = 0;
+        Problem = null;
+        try
+        {
+            await _owner.ImportAsync(this, file);
+        }
+        catch (OperationCanceledException)
+        {
+            Problem = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Problem = ex.Message;
+        }
+        finally
+        {
+            IsDownloading = false;
+            _cts.Dispose();
+            _cts = null;
+            Refresh();
+        }
+    }
 
     [ObservableProperty] public partial double Progress { get; set; }
     [ObservableProperty] public partial string? Problem { get; set; }

@@ -1,8 +1,27 @@
-# Hintergrund entfernen (Konzept, in Arbeit)
+# Hintergrund entfernen
 
-Stand 29.10.2026. Eigene Rubrik „Hintergrund“ in der Leiste links. Das Modell stellt das Motiv frei; der Hintergrund wird
-**transparent** oder **unscharf** (Porträt-Effekt, Regler für die Stärke). Nachbessern mit dem Pinsel (behalten / weg).
-Ein Bildschritt in „Bearbeitungen“ (ausschaltbar, Rückgängig), vor Größe/Upscaling und allen Filtern.
+Stand 29.10.2026 (0.6.35 beta). Eigene Rubrik „Hintergrund“ in der Leiste links. Das Modell stellt das Motiv frei; der
+Hintergrund wird **transparent** oder **unscharf** (Porträt-Effekt, Regler „Stärke“). Ein Bildschritt im Pixelbild wie
+„Entfernt“: Zeile „Hintergrund entfernt“ / „Hintergrund unscharf“ in „Bearbeitungen“, Rückgängig mit Strg+Z, vor
+Geometrie, Größe/Upscaling und allen Filtern.
+
+## Bedienung
+
+- **Maus: Automatik** (Standard): kein Pinsel, das Motiv wird ohne Markierung erkannt. Die Maus arbeitet wie sonst
+  (Vorher/Nachher-Strich, Zuschnitt).
+- **Rot: weg** — grob über etwas malen, das nicht zum Motiv gehört: jedes Objekt, das der Strich berührt, verschwindet
+  ganz (dazu alles direkt unter dem Strich).
+- **Grün: bleibt** — grob über etwas malen, das bleiben soll: berührte Objekte sind vor Rot geschützt. Fehlt ein Teil des
+  Motivs, rechnet das Modell den Bereich um die grünen Striche (Rahmen + 50 %) vergrößert noch einmal und ergänzt die
+  Objekte, die Grün dort berührt.
+- **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild davor und nimmt die gemerkte Maske — ohne
+  neue Erkennung, 1–3 s. Der Regler rechnet erst beim Klick, nicht beim Ziehen.
+- Gerechnet wird der **sichtbare Ausschnitt** (nach Zuschnitt); außerhalb ist transparent bzw. unverändert.
+- JPEG/BMP: Hinweis mit „Als PNG speichern“ — beim Speichern als JPEG/BMP wird der Hintergrund weiß.
+- Modelle: Einstellungen › KI › Hintergrund. RMBG-2.0: „Seite öffnen“, dort zustimmen und laden, dann „Datei wählen …“ —
+  die App prüft Größe und Prüfsumme und kopiert die Datei in ihren Modellordner.
+- BiRefNet general: rechnet die Grafikkarte (DirectML), nimmt die App den „Zusatz für die Grafikkarte“ (fp16), wenn er
+  geladen ist; sonst die volle Datei auf der CPU.
 
 ## Modelle
 
@@ -30,20 +49,30 @@ Bria gibt das Modell nur nach Zustimmung frei; die App kann es deshalb nicht sel
    profit“). Damit gehen Name und E-Mail an Bria; der Zugang ist sofort frei.
 3. Im selben Browser https://huggingface.co/briaai/RMBG-2.0/resolve/main/onnx/model.onnx öffnen (1,02 GB, volle
    Genauigkeit; die anderen Dateien im Ordner `onnx` sind kleinere, ungenauere Fassungen).
-4. Die Datei in den Modellordner der App legen (`KI-Modelle/` neben dem Programm, Unterordner wie im
-   Download-Manager angegeben) — die App erkennt sie an Größe und Prüfsumme.
+4. In den Einstellungen bei RMBG-2.0 „Datei wählen …“ und die Datei aus dem Download-Ordner wählen — die App prüft Größe
+   und Prüfsumme und kopiert sie nach `KI-Modelle/rmbg-2.0/model.onnx` (neben dem Programm, sonst im Benutzerordner).
 
 Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 
-## Rechnung
+## Rechnung (`ImageConverter.Core/Ai/BackgroundRemover.cs`)
 
-1. Bild auf die Kante des Modells (1024 bzw. 2048), rechnen — Windows auf der Grafikkarte (DirectML) wie die Upscaler,
-   sonst CPU.
-2. Maske kantentreu auf die volle Auflösung (Guided Filter, Führung = Originalfoto) — keine Treppen auch bei 24 MP.
-3. Farbsaum entfernen: Vordergrundfarbe der halbtransparenten Pixel schätzen (Germer u. a. 2020, „Fast Multi-Level
-   Foreground Estimation“), sonst bleibt an Haaren ein Rand in der alten Hintergrundfarbe.
-4. Ergebnis: Alpha (16 Bit) zum Bild. Speichern: PNG, WebP, TIFF, AVIF, JPEG XL mit Transparenz; JPEG/BMP mit Weiß
-   (Hinweis in „Format“). Drucken: Weiß. Upscaling vergrößert die Maske mit.
+1. **Erkennen:** Ausschnitt auf 1024² (Modellkante) und auf die Arbeitsgröße (lange Kante ≤ 2048), Modell rechnen,
+   Logits → Sigmoid, Maske auf die Arbeitsgröße.
+2. **Pinsel:** Objekte = zusammenhängende Flächen mit Alpha > ½, bis in ihre weichen Ränder (Alpha > 0,02) erweitert.
+   Grün zuerst (vergrößerter zweiter Lauf, berührte Objekte dazu), dann Rot (berührte Objekte und Pixel unter dem
+   Strich auf 0, außer grün geschützte Objekte).
+3. **Kanten:** Guided Filter (σ 2, ε 10⁻³) mit dem Foto als Führung; die Koeffizienten bei Arbeitsgröße, angewendet mit
+   dem Foto in voller Auflösung (Fast Guided Filter) — keine Treppen auch bei 24 MP.
+4. **Farbsaum:** Vordergrundfarbe per Blur Fusion (Forte & Pitié 2021, zwei Durchgänge r ≈ 90 und 6) — sonst bleibt an
+   Haaren und Armen ein Rand in der alten Hintergrundfarbe (an den Testbildern weg).
+5. **Ergebnis:** transparent = Alpha (16 Bit) mit geschätzter Vordergrundfarbe; unscharf = F·α + B·(1 − α), B = Gauß
+   (σ = Stärke × 2 % der langen Kante) nur über den Hintergrund (normierte Faltung, das Motiv färbt nicht ab).
+   Speichern: PNG, WebP, TIFF, AVIF, JPEG XL mit Transparenz; JPEG/BMP mit Weiß. Upscaling vergrößert die Maske mit.
+
+Zeiten nach dem Modell (8 Testbilder bis 3000 px, CPU): Kanten + Farben 0,2–2,9 s, unscharf 0,2–1,5 s.
+Prüfung: `BackgroundTests` (Ersatzmodell: Kanten, Rot, Grün mit Zoom, Farbsaum, Unscharf, Ausschnitt);
+`~/.cache/imageconverter-build/hintergrund-probe` (Kern an den Testbildern), `hintergrund-ui` (Rubrik im unsichtbaren
+Fenster: Automatik, Rot, Grün, Unscharf, Export PNG, Rückgängig).
 
 ## Messplatz
 

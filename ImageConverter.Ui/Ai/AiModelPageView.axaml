@@ -44,6 +44,15 @@
                                                     <Button Classes="primary" Content="{l:T 'Herunterladen'}"
                                                             IsVisible="{Binding ShowDownload}"
                                                             Command="{Binding DownloadCommand}" />
+                                                    <!-- Ohne Download-Adresse (RMBG-2.0): Seite des Anbieters, dann die geladene Datei wählen -->
+                                                    <Button Classes="subtle" Content="{l:T 'Seite öffnen'}"
+                                                            IsVisible="{Binding ShowManual}"
+                                                            Command="{Binding OpenPageCommand}"
+                                                            ToolTip.Tip="{l:T 'Öffnet die Seite des Anbieters im Browser: dort anmelden, zustimmen und die Datei herunterladen.'}" />
+                                                    <Button Classes="primary" Content="{l:T 'Datei wählen …'}"
+                                                            IsVisible="{Binding ShowManual}"
+                                                            Command="{Binding ImportCommand}"
+                                                            ToolTip.Tip="{l:T 'Die heruntergeladene Datei auswählen. Die App prüft Größe und Prüfsumme und kopiert sie in ihren Modellordner.'}" />
                                                     <Button Classes="subtle" Content="{l:T 'Abbrechen'}"
                                                             IsVisible="{Binding IsDownloading}"
                                                             Command="{Binding CancelCommand}" />

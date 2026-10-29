@@ -185,6 +185,22 @@
                             </Grid>
                         </RadioButton>
 
+                        <RadioButton x:Name="TabBackground" Classes="tile" GroupName="rubrik"
+                                     IsChecked="{Binding Background.IsTabActive}"
+                                     ToolTip.Tip="{l:T 'Hintergrund: Motiv automatisch freistellen, Hintergrund transparent oder unscharf'}">
+                            <Grid ColumnDefinitions="40,Auto">
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Data="M 5,3 H 19 A 2,2 0 0 1 21,5 V 19 A 2,2 0 0 1 19,21 H 5 A 2,2 0 0 1 3,19 V 5 A 2,2 0 0 1 5,3 Z M 9,10 A 3,3 0 1 0 15,10 A 3,3 0 1 0 9,10 Z M 6,21 A 6,5 0 0 1 18,21" />
+                                    </Canvas>
+                                </Viewbox>
+                                <StackPanel Grid.Column="1" IsVisible="{Binding #RailExpand.IsChecked}">
+                                    <TextBlock Classes="tileName" Text="{l:T 'Hintergrund'}" />
+                                    <TextBlock Classes="tileHint" Text="{l:T 'Freistellen · Transparent · Unscharf'}" />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+
                         <RadioButton x:Name="TabTools" Classes="tile" GroupName="rubrik"
                                      ToolTip.Tip="{l:T 'Tools: Helligkeit · Kontrast · Tiefen · Lichter · Dunst · Dynamik · Sättigung · Färben · Gleiche Farbe'}">
                             <Grid ColumnDefinitions="40,Auto">
@@ -675,6 +691,7 @@
                     <!-- ############################## Rubrik KI (eigenes Modul, Ordner Ai/) -->
                     <ai:AiPanel DataContext="{Binding Ai}" IsVisible="{Binding #TabAi.IsChecked}" />
                     <ai:RetouchPanel DataContext="{Binding Retouch}" IsVisible="{Binding #TabRetouch.IsChecked}" />
+                    <ai:BackgroundPanel DataContext="{Binding Background}" IsVisible="{Binding #TabBackground.IsChecked}" />
 
                     <!-- ############################## Rubrik Tools — je Funktion ein Regler -->
                     <StackPanel Spacing="10" IsVisible="{Binding #TabTools.IsChecked}">
@@ -1198,11 +1215,12 @@
                                     PickActive="{Binding IsPicking}"
                                     PickCommand="{Binding PickAtCommand}"
                                     PickMarkers="{Binding WbMarkers}"
-                                    BrushActive="{Binding Retouch.IsBrushing}"
-                                    BrushSize="{Binding Retouch.BrushSize}"
-                                    BrushStrokes="{Binding Retouch.Strokes}"
-                                    BrushDim="{Binding Retouch.StrokesApplied}"
-                                    BrushCommand="{Binding Retouch.AddStrokeCommand}"
+                                    BrushActive="{Binding ActiveBrush.IsBrushing}"
+                                    BrushSize="{Binding ActiveBrush.BrushSize}"
+                                    BrushStrokes="{Binding ActiveBrush.Strokes}"
+                                    BrushDim="{Binding ActiveBrush.StrokesApplied}"
+                                    BrushKeep="{Binding ActiveBrush.BrushKeep}"
+                                    BrushCommand="{Binding ActiveBrush.AddStrokeCommand}"
                                     CropCommand="{Binding CropToSelectionCommand}"
                                     GestureCompletedCommand="{Binding CommitSettingsStepCommand}"
                                     SelectionEnabled="{Binding SelectionActive}" />
