@@ -2486,3 +2486,21 @@ Test oder Nachweis.
 - **Nicht tun:** Eine Sperre halten, während eine Methode läuft, die intern parallel arbeitet. Prüfstände nur mit kleinen
   Bildern fahren: Immer auch eines über den Parallel-Grenzen nehmen.
 - **Test:** `hintergrund-ui` mit dem Bild 3000 × 2250, alle Schritte; `hintergrund-speicher` läuft durch.
+
+## 92. Hintergrund: Auf der Grafikkarte blieben nach dem Lauf bis zu 15,6 GB belegt (0.7.2 beta)
+
+- **Entdeckt:** 30.10.2026, 0.7.2-beta, Speichermessung unter Windows (DirectML); in der Analyserunde zu #88 war die Grafikkarte
+  nicht prüfbar. **Behoben:** 0.7.3-beta.
+- **Was:** Nach „Hintergrund entfernen“ belegte das Programm 16,8 GB (BiRefNet lite), bis ein anderes Modell geöffnet wurde.
+  Gemessen je Modell offen / geschlossen: lite 15 631 / 338 MB, general (fp16) 8 781 / 89 MB, RMBG-2.0 13 490 / 323 MB.
+- **Warum:** Der Speicher-Pool aus #88 ist nur der CPU-Teil; DirectML hält seinen Speicher, solange die Sitzung offen ist. Die
+  Einstellung aus #88 greift dort nicht.
+- **Lösung:** Sitzung auf der Grafikkarte nach dem Lauf schließen (`Release`) und nur öffnen, wenn das Modell wirklich rechnet
+  (rote Striche, Modus und Stärke brauchen dank gemerkter Maske keins). Gemessen im Ablauf in der App: danach 1,4–1,9 GB statt
+  16,8 GB; roter Strich 2,6 s, grüner mit Zoom-Lauf 15,9 s (mit Neuladen). #88 hatte das Schließen für die CPU verworfen;
+  dort bleibt es dabei, weil danach ohnehin nur rund 1 GB belegt ist.
+- **Bleibt:** Die Spitze während des Laufs (lite 15,6 GB) ist nicht behoben; sie kommt vom Rechenweg.
+- **Nicht tun:** Messwerte aus einem Lauf nehmen, dessen Messfaden den Rücksetzwert überschreiben kann: Die Spalte „Spitze“ des
+  App-Ablaufs (`hintergrund-speicher`) ist deshalb unbrauchbar, gültig sind die Einzelmessungen (`sitzung-speicher`).
+- **Wo im Code:** `BackgroundViewModel.Apply`.
+- **Test:** `~/.cache/imageconverter-build/sitzung-speicher` (je Modell und Weg), `hintergrund-speicher` (Ablauf in der App).

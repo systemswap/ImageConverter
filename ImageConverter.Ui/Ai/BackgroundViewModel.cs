@@ -323,16 +323,16 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             BackgroundMask? mask = cached;
             var result = await _main.ApplyBackgroundAsync(_ =>
             {
-                var session = _ai.Sessions.Get(model, path);
-                var segment = new OnnxSegmentModel(session, model);
+                // Opened only when needed: with the remembered mask, red strokes, mode and strength need no model
+                OnnxSegmentModel Segment() => new(_ai.Sessions.Get(model, path), model);
                 if (mask is null)
                 {
                     var t = Stopwatch.StartNew();
-                    mask = BackgroundRemover.Detect(start, region, segment, cts.Token);
+                    mask = BackgroundRemover.Detect(start, region, Segment(), cts.Token);
                     _seconds[model.Id] = t.Elapsed.TotalSeconds;
                 }
                 Dispatcher.UIThread.Post(() => phase = Tr.T("Hintergrund · Kanten …"));
-                var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, segment, cts.Token));
+                var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, Segment(), cts.Token));
                 return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token);
             }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
                mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards);
@@ -360,6 +360,8 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         finally
         {
             timer.Stop();
+            // On the graphics card the runtime keeps all its memory until the session closes (up to 15.6 GB, No. 92)
+            if (_ai.Sessions.OnGpu && model.Gpu) _ai.Sessions.Release(model.Id);
             if (shownOriginal is not null && ReferenceEquals(_main.OverrideBitmap, shownOriginal))
             {
                 _main.OverrideBitmap = null;   // the new result (or, after cancelling, the previous one) is shown again

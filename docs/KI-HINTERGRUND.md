@@ -95,7 +95,21 @@ Zoom-Lauf 5 s, Kanten + Farben 0,4–1,5 s, unscharf 0,4–0,8 s.
 
 Speicher: Das Modell braucht auf der CPU je Lauf 6–7 GB Zwischenspeicher. Hintergrund-Modelle laufen deshalb ohne
 den Speicher-Pool der ONNX Runtime – sonst blieb er nach dem Lauf belegt und wuchs (7,0 → 11,7 GB, Fehlergedächtnis
-#88). Danach hält das Programm rund 1 GB.
+#88). Danach hält das Programm rund 1 GB. Auf der Grafikkarte wird die Sitzung nach dem Lauf geschlossen (#92).
+
+Je Modell (Notebook mit integrierter Grafik, je eigener Prozess, 1024², MB privater Speicher, 30.10.2026):
+
+| Modell | Weg | Laden | Rechnen | Spitze | danach, offen | geschlossen |
+|---|---|---|---|---|---|---|
+| BiRefNet lite | CPU | 5,0 s | 12,0 s | 5 213–6 262 | 331 | 32 |
+| BiRefNet lite | Grafikkarte | 6,0 s | 9,1 s | 15 647 | 15 631 | 338 |
+| BEN2 | CPU | 3,2 s | 15,5 s | 3 674 | 493 | 33 |
+| BiRefNet general | CPU | 6,8 s | 23,8 s | 6 016–7 101 | 1 108 | 36 |
+| BiRefNet general (fp16) | Grafikkarte | 19,3 s | 17,8 s | 8 797 | 8 781 | 89 |
+| RMBG-2.0 | CPU | 10,7 s | 27,7 s | 6 096–7 154 | 1 075 | 33 |
+| RMBG-2.0 | Grafikkarte | 9,0 s | 16,0 s | 13 505 | 13 490 | 323 |
+
+Die Spitze auf der Grafikkarte bleibt: Sie ist der Preis des Rechenwegs, bei lite für 3 s Gewinn rund 10 GB mehr.
 Prüfung: `BackgroundTests` (Ersatzmodell: Kanten, Rot, Grün mit Zoom, Farbsaum, Unscharf, Ausschnitt);
 `~/.cache/imageconverter-build/hintergrund-probe` (Kern an den Testbildern), `hintergrund-ui` (Rubrik im unsichtbaren
 Fenster: Automatik, Rot, Grün, Unscharf, Export PNG, Rückgängig).
