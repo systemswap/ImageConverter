@@ -2780,7 +2780,7 @@ Test oder Nachweis.
   seiner Mitte voll; am Rand festgehalten, blieb ein breiter Streifen halb erfasst. Die Vorschau zeichnete weiche Striche hart.
 - **Lösung:** Die Pinselmitte darf bis einen Pinsel-Radius über den Rand (`ClampToBrushArea`), ein Strich darf dort beginnen, solange der
   Pinsel das Bild berührt (`TouchesImage`). Gezeichnet wird nur über dem Bild (Ausschnitt), weiche Striche in Schichten mit demselben
-  Verlauf wie die Rechnung, der Pinsel-Kreis zeigt innen gestrichelt, bis wohin er voll wirkt. Rechnung (Raster, Teilstücke, Umrechnung
+  Verlauf wie die Rechnung, der Pinsel-Kreis ist bei weichem Pinsel radial gefüllt (Mitte deckend, zum Rand auslaufend). Rechnung (Raster, Teilstücke, Umrechnung
   über das Gitter) verträgt Punkte außerhalb.
 - **Wo im Code:** `CropView` (`ClampToBrushArea`, `TouchesImage`, `RenderBrush`, `DrawStroke`, `BrushHardness`, `BrushStrength`),
   `IBrushTool.StrokeHardness`/`StrokeStrength`.

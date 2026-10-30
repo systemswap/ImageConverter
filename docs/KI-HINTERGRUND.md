@@ -18,10 +18,10 @@ Geometrie, Größe/Upscaling und allen Filtern.
 - **Stärke** (nur Grün, 10–100 %): wie viel von dem, was ein neuer grüner Strich überdeckt, bleibt – ein Geländer mit 40 % ist im
   Unscharf-Modus zu 40 % scharf, beim Entfernen zu 40 % sichtbar (Maske halb durchsichtig). Nur Striche mit voller Stärke ergänzen
   ganze Objekte über den Zoom-Lauf. In der Vorschau sind schwächere Striche blasser.
-- **Härte** (Rot und Grün, 0–100 %): 100 % harte Kante; weniger lässt die Wirkung vom inneren Teil des Pinsels (Härte × Radius) bis
-  zum Rand weich auslaufen (Smoothstep). Bei Rot gilt das für das, was direkt unter dem Strich weggeht; berührte Objekte gehen
+- **Härte** (Rot und Grün, 0–100 %): 100 % harte Kante; weniger lässt die Wirkung radial von der Mitte des Pinsels zum Rand auslaufen
+  – voll bis Härte × Radius, dann weich (Smoothstep) bis 0 am Rand; bei 0 % schon ab der Mitte. Bei Rot gilt das für das, was direkt unter dem Strich weggeht; berührte Objekte gehen
   weiter ganz. Jeder Strich behält Stärke und Härte, mit denen er gemalt wurde. Die Vorschau zeichnet weiche Striche mit demselben
-  Verlauf; der Pinsel-Kreis zeigt innen gestrichelt, bis wohin er voll wirkt. Die Pinselmitte darf bis einen Radius über den Bildrand,
+  Verlauf; der Pinsel-Kreis ist bei weichem Pinsel radial gefüllt (Mitte deckend, zum Rand auslaufend). Die Pinselmitte darf bis einen Radius über den Bildrand,
   damit sich auch ein weicher Pinsel bis in Ränder und Ecken führen lässt (gezeichnet wird nur über dem Bild).
 - **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild vor dem Hintergrund-Schritt und nimmt die
   gemerkte Maske — ohne neue Erkennung, 1–3 s. Der Regler rechnet erst beim Klick, nicht beim Ziehen.

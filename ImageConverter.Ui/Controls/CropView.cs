@@ -2132,8 +2132,8 @@ public sealed class CropView : Control
 
     /// <summary>
     /// Draws the mark: strokes in semi-transparent red, green for "keep" (overlaps not darker; weaker green paler), soft strokes
-    /// with the same falloff from the middle of the brush to its edge as the computation, plus the brush circle with the
-    /// radius up to which a soft brush acts fully.
+    /// with the same falloff from the middle of the brush to its edge as the computation, plus the brush circle (a soft brush
+    /// filled with its radial falloff).
     /// </summary>
     private void RenderBrush(DrawingContext context)
     {
@@ -2182,17 +2182,28 @@ public sealed class CropView : Control
         if (BrushActive && _brushHover is { } hover)
         {
             var r = BrushSize / 2;
+            // A soft brush shows its falloff: filled in its colour from the middle, fading out radially to the edge
+            if (BrushHardness < 1)
+            {
+                var color = BrushKeep ? KeepColor : RemoveColor;
+                var inner = Math.Clamp(BrushHardness, 0, 1);
+                var fill = new RadialGradientBrush();
+                for (var k = 0; k <= 8; k++)
+                {
+                    var t = inner + (1 - inner) * k / 8.0;   // radius fraction
+                    var v = 1 - (t - inner) / Math.Max(1e-6, 1 - inner);
+                    fill.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(110 * v * v * (3 - 2 * v)), color.R, color.G, color.B), t));
+                }
+                fill.GradientStops.Insert(0, new GradientStop(Color.FromArgb(110, color.R, color.G, color.B), 0));
+                context.DrawEllipse(fill, null, hover, r, r);
+            }
             context.DrawEllipse(null, QuadShadowPen, hover, r, r);
             context.DrawEllipse(null, BrushRingPen, hover, r, r);
-            if (BrushHardness < 1 && r * BrushHardness >= 2)
-                context.DrawEllipse(null, BrushInnerRingPen, hover, r * BrushHardness, r * BrushHardness);
         }
     }
 
     private static readonly Color RemoveColor = Color.FromRgb(0xFF, 0x30, 0x30);
     private static readonly Color KeepColor = Color.FromRgb(0x30, 0xD0, 0x50);
-    private static readonly IPen BrushInnerRingPen = new ImmutablePen(new ImmutableSolidColorBrush(Colors.White, 0.8), 1,
-        new ImmutableDashStyle([3, 3], 0));
 
     /// <summary>One stroke with round ends (a single point as a disc).</summary>
     private void DrawStroke(DrawingContext context, IReadOnlyList<Point> points, double r, IBrush fill)

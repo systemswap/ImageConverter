@@ -84,7 +84,7 @@
                     <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding !IsAuto}">
                         <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Härte'}" />
                         <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding BrushHardness}"
-                                ToolTip.Tip="{l:T 'Wie weich ein neuer Strich zum Rand ausläuft: 100 % harte Kante, weniger läuft vom inneren Teil des Pinsels weich aus. Schon gemalte Striche behalten ihre Härte.'}" />
+                                ToolTip.Tip="{l:T 'Wie weich ein neuer Strich ausläuft: 100 % harte Kante; weniger läuft radial von der Mitte des Pinsels zum Rand aus, bei 0 % schon ab der Mitte. Der Pinsel-Kreis zeigt es. Schon gemalte Striche behalten ihre Härte.'}" />
                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrushHardnessLabel}" />
                     </Grid>
                     <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsKeepBrush}">
