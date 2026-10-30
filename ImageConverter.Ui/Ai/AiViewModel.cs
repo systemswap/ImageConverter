@@ -869,7 +869,7 @@ public partial class AiViewModel : ViewModelBase
         // "Bearbeitungen" (edits) list.
         var details = run.SupportsDetails && (blend.Texture > 0 || blend.Folds > 0 || blend.Grain > 0);
         var plainBlend = blend with { Texture = 0, Folds = 0, Grain = 0 };
-        bool ok;
+        MagickImage? result;
         _committing = true;
         try
         {
@@ -880,14 +880,16 @@ public partial class AiViewModel : ViewModelBase
                 img.Dispose();
                 return back;
             }
-            ok = await _main.ApplyImageEditAsync(_ => (Upright(run.Compose(blend)), details ? Upright(run.Compose(plainBlend)) : null),
-                StepLabel(), StepDetail(blend), details ? SkinDetail(blend) : null, setup.LookAfter);
+            result = await _main.ApplyImageEditAsync(_ => (Upright(run.Compose(blend)), details ? Upright(run.Compose(plainBlend)) : null),
+                StepLabel(), StepDetail(blend), details ? SkinDetail(blend) : null, setup.LookAfter, setup.Current);
         }
         finally
         {
             _committing = false;
         }
-        if (ok && _main.CurrentImage is { } result) _lastAi = (result, setup.Base, setup.Baked);
+        var ok = result is not null;
+        // The produced image itself, not the one shown now: the user may have switched images meanwhile (No. 86)
+        if (result is not null) _lastAi = (result, setup.Base, setup.Baked);
         ClearRun();
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
     }

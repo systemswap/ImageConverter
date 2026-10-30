@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Imaging;
 using ImageConverter.ViewModels;
 using ImageMagick;
 
@@ -117,6 +118,7 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
     [RelayCommand]
     private void AddStroke(BrushStroke stroke)
     {
+        if (Strokes.Count == 0) _paintedOn = _main.ShownGeometry;
         Strokes = [.. Strokes, stroke];
         StrokesApplied = false;
         Status = null;
@@ -186,7 +188,7 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
             {
                 var session = _ai.Sessions.Get(model, path);
                 return Inpainter.Run(start, strokes, new OnnxInpaintModel(session, model), progress, cts.Token);
-            }, Tr.T(model.Name), again);
+            }, Tr.T(model.Name), again, current);
 
             if (result is not null)
             {
@@ -246,18 +248,31 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
                 RemoveCommand.NotifyCanExecuteChanged();
                 break;
             case nameof(MainViewModel.CurrentFileName):
-                // different image: the mark belongs to the previous one
-                if (!IsRunning) ClearAll();
+                // Different image: the mark belongs to the previous one; also while computing, the run took its strokes
+                // along (No. 98)
+                ClearAll();
                 break;
             case nameof(MainViewModel.DocumentSize):
                 // Displayed dimensions changed (crop, rotation, tool view, or undoing them): the mark lies in the
                 // displayed image and no longer fits.
                 var now = (_main.DocumentSize.Width, _main.DocumentSize.Height);
-                if (!IsRunning && _size is { } size && size != now) ClearAll();
+                if (_size is { } size && size != now) ClearAll();
                 _size = now;
+                break;
+            case nameof(MainViewModel.ShownGeometry):
+                // Flipped, rotated by 180°, a geometry eye or its undo: same dimensions, but the strokes would hit other
+                // places (No. 98)
+                if (Strokes.Count > 0 && _paintedOn is { } painted && painted != _main.ShownGeometry)
+                {
+                    ClearAll();
+                    Status = Tr.T("Die Markierung passte nach Drehen, Spiegeln oder Zuschneiden nicht mehr und wurde entfernt.");
+                }
                 break;
         }
     }
+
+    /// <summary>Geometry of the displayed image when the first of the current strokes was painted.</summary>
+    private (GeometryRecipe Recipe, GeometryStages Stages)? _paintedOn;
 
     private (int W, int H)? _size;
 }

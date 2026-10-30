@@ -485,7 +485,8 @@ public partial class MainViewModel
 
     // ------------------------------------------------------------ Computation
 
-    private bool CanUpscale => HasImage && !IsUpscaling && HasSizeChange && (!AiScalingActive || !UpscaleModelMissing);
+    // Not while an image step computes: the result would be stored for the new image but computed from the old (No. 98)
+    private bool CanUpscale => HasImage && !IsUpscaling && !IsEditing && HasSizeChange && (!AiScalingActive || !UpscaleModelMissing);
 
     /// <summary>
     /// "Scale": with a filter in seconds, with an AI scaler in minutes; above 4× or for a long duration after a

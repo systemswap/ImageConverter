@@ -2570,3 +2570,37 @@ Test oder Nachweis.
 - **Nicht tun:** Farbraum und Filter in Vorschau und Export in verschiedener Reihenfolge rechnen. Beim Vergleich zweier Wege jede Stufe einzeln prüfen.
 - **Wo im Code:** `ImageExporter.FiltersInSrgb`, `Render`, `RenderCached`.
 - **Test:** `ColorOrderTests` (auch: die andere Reihenfolge ergibt wirklich etwas anderes); `~/.cache/imageconverter-build/sichtbar-probe`, `stufen-probe`.
+
+## 98. KI-Schritte: Ergebnis und Striche landeten beim Blättern im falschen Bild, Upscaling und Export mischten Stände (0.7.11 beta)
+
+- **Entdeckt:** 31.10.2026, 0.7.11-beta, Prüfung des Ablaufs nach dem Eindruck des Nutzers, „dass bei verschiedenen KI-Features nicht
+  immer das richtige Ausgangsbild genommen wird“: drei Prüfdurchgänge durch den Code, dann jeder Fall im unsichtbaren Fenster mit echten
+  Modellen nachgestellt (`~/.cache/imageconverter-build/kette-ui`, Fälle 1–6). **Behoben:** 0.7.12-beta.
+- **Was (alle mit dem alten Code nachgestellt):**
+  1. KI-Verbesserung „Übernehmen“, währenddessen geblättert: Die nächste KI auf Bild B rechnete von Bild A (Ergebnis 3000 × 2000 statt
+     600 × 400) – das Muster von #86, bei der KI noch offen.
+  2. Neuer Hintergrund-Versuch, sofort geblättert: B bekam das freigestellte Bild A. Zwischen Klick und eigentlichem Start zeigt die
+     Rubrik erst das Ausgangsbild an (`ShowOriginalAsync`); in dieser Zeit waren Blättern und Strg+Z frei.
+  3. Upscaling, Speichern, Drucken und KI begradigen waren während eines laufenden Bildschritts frei: Ein vergrößertes Bild aus dem
+     Stand vor dem Hintergrund konnte unter dem neuen Stand gespeichert werden, ein Export Stände mischen.
+  4. Striche blieben nach Spiegeln (oder 180°, Geometrie-Auge, Rückgängig davon) stehen und trafen eine andere Stelle: verworfen
+     wurde nur, wenn sich die angezeigte Größe änderte.
+  5. Blättern während Entfernen/Hintergrund rechnete: Die Striche von A blieben auf B und wurden beim nächsten Anwenden mitgenommen.
+  6. KI begradigen, währenddessen geblättert: „Cannot access a disposed object“ – das unbearbeitete Bild wurde freigegeben, während
+     das Modell daraus las (#85); das Rezept wäre sonst in B gelandet.
+- **Warum:** Jede Rubrik prüfte nur ihren eigenen Ablauf. Der gemeinsame Bildschritt (`ApplyEditAsync`) wusste nicht, für welchen
+  Stand der Aufrufer Ausgangsbild, Striche und Ausschnitt vorbereitet hatte; die Sperren kannten nur das Upscaling.
+- **Lösung:** `ApplyEditAsync(expected:)` tut nichts, wenn inzwischen ein anderes Pixelbild zu sehen ist (Meldung „bitte noch einmal
+  anwenden“); Hintergrund, Entfernen und KI-Übernehmen geben das Bild mit, für das sie vorbereitet haben. `ApplyImageEditAsync` gibt
+  das erzeugte Bild zurück, die KI merkt sich dieses. Upscaling, Speichern, Drucken und KI begradigen verlangen `!IsEditing`.
+  KI begradigen läuft selbst als Bildschritt (`IsEditing`, `_editingHistory`) und verwirft sein Gitter, wenn inzwischen ein anderes
+  Bild zu sehen ist. `ShownGeometry` wird bei jeder Neuanzeige gemeldet; die Pinsel-Rubriken merken sich die Geometrie ihres ersten
+  Strichs und verwerfen die Markierung, sobald sie nicht mehr passt. Striche gehen beim Bildwechsel auch während einer Berechnung weg
+  (der Lauf hat seine schon mitgenommen).
+- **Nicht tun:** Nach einem `await` annehmen, dass noch dasselbe Bild zu sehen ist; Befehle, die das Bild lesen, nur gegen das
+  Upscaling sperren.
+- **Wo im Code:** `MainViewModel.Editing.cs` (`ApplyEditAsync`, `ApplyImageEditAsync`, `OnIsEditingChanged`, `ShowCurrentAsync`),
+  `MainViewModel.Dewarp.cs` (`StraightenWithAi`, `EndStraightening`), `MainViewModel.Export.cs`/`Upscale.cs` (`CanExport`,
+  `CanUpscale`), `MainViewModel.Edits.cs` (`ShowDocumentAsync`), `AiViewModel.Commit`, `BackgroundViewModel`, `RetouchViewModel`.
+- **Test:** `kette-ui` Fälle 1–6: neu alle richtig, alter Code alle falsch (Fall 6 mit der Freigabe-Meldung). Im Testprojekt fehlt die
+  Fensterumgebung (offene Punkte).

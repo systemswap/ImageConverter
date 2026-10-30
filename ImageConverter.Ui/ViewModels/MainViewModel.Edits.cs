@@ -451,7 +451,10 @@ public partial class MainViewModel
     internal static MagickImage? Unorient(MagickImage image, int turns, bool flip) =>
         flip ? Orient(image, turns, true) : Orient(image, (4 - turns) % 4, false);
 
-    /// <summary>Recipe and stages as the image is currently displayed (read on the UI thread, then use in the background).</summary>
+    /// <summary>
+    /// Recipe and stages as the image is currently displayed (read on the UI thread, then use in the background). Raised
+    /// whenever the display is set again; brush tools compare it with the geometry their strokes were painted on.
+    /// </summary>
     internal (GeometryRecipe Recipe, GeometryStages Stages) ShownGeometry => (CurrentRecipe, CurrentStages & ToolView);
 
     /// <summary>Converts AI preview pixels (rotated pixel image, reduced) to the way the image is displayed.</summary>
@@ -518,6 +521,7 @@ public partial class MainViewModel
         await StopPreviewAsync();
         EmptyGeometryTrash();
         await SetDocumentAsync(doc);
+        OnPropertyChanged(nameof(ShownGeometry));   // brush strokes lie in the displayed image (No. 98)
         if (sizeChanges && await Task.Run(() => ResultDocument) is { } result)
         {
             int w, ht;

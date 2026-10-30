@@ -69,7 +69,15 @@ public partial class MainViewModel
     /// <summary>Images released while an editing step was running; disposed when it ends (No. 85).</summary>
     private readonly List<MagickImage> _disposeAfterEdit = [];
 
-    partial void OnIsEditingChanged(bool value) => NotifyUndoRedo();
+    partial void OnIsEditingChanged(bool value)
+    {
+        NotifyUndoRedo();
+        // Upscaling, saving and AI straightening read the image a running step is about to replace (No. 98)
+        UpscaleCommand.NotifyCanExecuteChanged();
+        ExportCommand.NotifyCanExecuteChanged();
+        PrintCommand.NotifyCanExecuteChanged();
+        StraightenWithAiCommand.NotifyCanExecuteChanged();
+    }
 
     private void NotifyUndoRedo()
     {
@@ -400,11 +408,20 @@ public partial class MainViewModel
     /// <param name="settingsAfter">Settings afterwards (for example a neutral look), in the same step; null leaves them unchanged.</param>
     /// <param name="step">What the step was, for the "Edits" list (and for repeating it on another image).</param>
     /// <param name="recipeAfter">Geometry afterwards (in the same step, for example "Apply selection"); null leaves it unchanged.</param>
+    /// <param name="expected">The pixel image the caller prepared the step for (start image, strokes, crop); if another image
+    /// or state is shown by now, nothing is done. null = no check.</param>
     /// <returns>true on success; false if nothing was done, the step was cancelled or failed.</returns>
     private async Task<bool> ApplyEditAsync(Func<MagickImage, MagickImage> operation,
-        Func<SettingsState, SettingsState>? settingsAfter, ImageStep step, GeometryRecipe? recipeAfter = null)
+        Func<SettingsState, SettingsState>? settingsAfter, ImageStep step, GeometryRecipe? recipeAfter = null,
+        MagickImage? expected = null)
     {
         if (_history is not { } h || IsEditing || _fileIndex < 0) return false;
+        // Prepared for another state: between preparing and starting the user switched images or pressed Ctrl+Z (No. 98)
+        if (expected is not null && !ReferenceEquals(h.Current, expected))
+        {
+            ErrorMessage = Tr.T("Das Bild wurde inzwischen gewechselt oder geändert – bitte noch einmal anwenden.");
+            return false;
+        }
 
         CommitPendingSettings();   // pending slider movements become a separate step before this one
         IsEditing = true;
@@ -514,18 +531,21 @@ public partial class MainViewModel
     /// <param name="skinDetail">Short info for the "Skin &amp; details" row; null for none.</param>
     /// <param name="lookAfter">Look that applies afterwards (for example neutral, if it was baked into the image), in the same
     /// step, so that undo restores image and sliders together. null leaves the sliders unchanged.</param>
-    /// <returns>true on success.</returns>
-    internal Task<bool> ApplyImageEditAsync(Func<MagickImage, (MagickImage Result, MagickImage? Plain)> operation,
-        string label, string? detail, string? skinDetail, Look? lookAfter = null)
+    /// <param name="expected">The pixel image the result was computed for; nothing is done if another one is shown by now.</param>
+    /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
+    internal async Task<MagickImage?> ApplyImageEditAsync(Func<MagickImage, (MagickImage Result, MagickImage? Plain)> operation,
+        string label, string? detail, string? skinDetail, Look? lookAfter, MagickImage expected)
     {
         var step = new ImageStep(ImageStepKind.Ai, label, detail, null, skinDetail);
-        return ApplyEditAsync(img =>
+        MagickImage? produced = null;
+        var ok = await ApplyEditAsync(img =>
             {
                 var (result, plain) = operation(img);
                 step.Plain = plain;
-                return result;
+                return produced = result;
             },
-            lookAfter is null ? null : s => WithLook(s, lookAfter), step);
+            lookAfter is null ? null : s => WithLook(s, lookAfter), step, expected: expected);
+        return ok ? produced : null;
     }
 
     /// <summary>
@@ -536,9 +556,10 @@ public partial class MainViewModel
     /// <param name="operation">Computes the new image from the current one.</param>
     /// <param name="detail">Short info for the "Edits" list.</param>
     /// <param name="replaces">New attempt from the image before the last removal; replaces that step in the "Edits" list.</param>
+    /// <param name="expected">The pixel image shown when the step was prepared; nothing is done if it changed meanwhile.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
-    internal Task<MagickImage?> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces) =>
-        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces });
+    internal Task<MagickImage?> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces, MagickImage expected) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces }, expected);
 
     /// <summary>
     /// Replaces or blurs the background ("Hintergrund" tab): an image step in the pixel image like a removal; undo returns
@@ -550,19 +571,20 @@ public partial class MainViewModel
     /// <param name="start">The image <paramref name="operation"/> computes from; later attempts start from it again.</param>
     /// <param name="replaces">New attempt directly on the previous one: takes its place, the previous result is released.</param>
     /// <param name="discards">Number of later image steps the new attempt no longer contains (it starts from before them).</param>
+    /// <param name="expected">The pixel image shown when the step was prepared; nothing is done if it changed meanwhile.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
     internal Task<MagickImage?> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail,
-        MagickImage start, bool replaces, int discards) =>
-        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces, Base = start, Discards = discards });
+        MagickImage start, bool replaces, int discards, MagickImage expected) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces, Base = start, Discards = discards }, expected);
 
     /// <summary>
     /// An image step that reports the image it produced. The caller must not take <see cref="CurrentImage"/> instead:
     /// while the step computed, the user may have switched to another image (No. 86).
     /// </summary>
-    private async Task<MagickImage?> ApplyProducingAsync(Func<MagickImage, MagickImage> operation, ImageStep step)
+    private async Task<MagickImage?> ApplyProducingAsync(Func<MagickImage, MagickImage> operation, ImageStep step, MagickImage expected)
     {
         MagickImage? produced = null;
-        var ok = await ApplyEditAsync(img => produced = operation(img), null, step);
+        var ok = await ApplyEditAsync(img => produced = operation(img), null, step, expected: expected);
         return ok ? produced : null;
     }
 
@@ -672,6 +694,7 @@ public partial class MainViewModel
         ResetHistoryBaseline();
 
         NotifyUndoRedo();
+        OnPropertyChanged(nameof(ShownGeometry));   // brush strokes lie in the displayed image (No. 98)
         RequestPreview();
     }
 

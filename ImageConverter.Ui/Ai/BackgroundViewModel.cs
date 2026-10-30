@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Core.Ai;
+using ImageConverter.Core.Imaging;
 using ImageConverter.Core.Ai.Upscale;
 using ImageConverter.ViewModels;
 using ImageMagick;
@@ -186,6 +187,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     [RelayCommand]
     private void AddStroke(BrushStroke stroke)
     {
+        if (Strokes.Count == 0) _paintedOn = _main.ShownGeometry;
         Strokes = [.. Strokes, stroke];
         StrokesApplied = false;
         Status = null;
@@ -335,7 +337,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                 var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, Segment(), cts.Token));
                 return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token);
             }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
-               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards);
+               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards, current);
 
             if (result is not null)
             {
@@ -474,20 +476,34 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                 OnPropertyChanged(nameof(ShowFormatHint));
                 break;
             case nameof(MainViewModel.CurrentFileName):
-                if (!IsRunning) ClearAll();
+                // Also while computing: the run took its strokes along, these belong to the previous image (No. 98)
+                ClearAll();
                 break;
             case nameof(MainViewModel.DocumentSize):
                 // Displayed dimensions changed: strokes lie in the displayed image and no longer fit
                 var now = (_main.DocumentSize.Width, _main.DocumentSize.Height);
-                if (!IsRunning && _size is { } size && size != now)
+                if (_size is { } size && size != now)
                 {
                     Strokes = [];
                     StrokesApplied = false;
                 }
                 _size = now;
                 break;
+            case nameof(MainViewModel.ShownGeometry):
+                // Flipped, rotated by 180°, a geometry eye or its undo: same dimensions, but the strokes would hit other
+                // places (No. 98)
+                if (Strokes.Count > 0 && _paintedOn is { } painted && painted != _main.ShownGeometry)
+                {
+                    Strokes = [];
+                    StrokesApplied = false;
+                    Status = Tr.T("Die Markierung passte nach Drehen, Spiegeln oder Zuschneiden nicht mehr und wurde entfernt.");
+                }
+                break;
         }
     }
+
+    /// <summary>Geometry of the displayed image when the first of the current strokes was painted.</summary>
+    private (GeometryRecipe Recipe, GeometryStages Stages)? _paintedOn;
 
     private (int W, int H)? _size;
 }

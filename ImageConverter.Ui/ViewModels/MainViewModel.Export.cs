@@ -169,7 +169,8 @@ public partial class MainViewModel
     /// <summary>Folder of the most recently exported image, for "Open folder".</summary>
     [ObservableProperty] public partial string? LastExportFolder { get; set; }
 
-    private bool CanExport => HasImage && !IsExporting && !IsUpscaling;
+    // Not while an image step computes: the file would mix the state before and after it (No. 98)
+    private bool CanExport => HasImage && !IsExporting && !IsUpscaling && !IsEditing;
 
     /// <summary>The view opens the export window (modal) and waits until it is closed.</summary>
     public event Func<ExportDialogViewModel, Task>? MultiExportRequested;

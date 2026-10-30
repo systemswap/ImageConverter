@@ -274,7 +274,7 @@ public partial class MainViewModel
     public partial bool IsStraighteningWithAi { get; set; }
 
     // Not coupled to HasImage: the command would not be notified of changes and would stay disabled; without an image the icon is invisible anyway.
-    private bool CanStraightenWithAi => !IsUpscaling && !IsStraighteningWithAi;
+    private bool CanStraightenWithAi => !IsUpscaling && !IsStraighteningWithAi && !IsEditing;
 
     /// <summary>
     /// "Remove shadows" (right-click on the AI icon): removes the SyntheticDoc shadow map during rendering.
@@ -321,6 +321,13 @@ public partial class MainViewModel
             OnPropertyChanged(nameof(AiStraightenActive));
             return;
         }
+        // Runs like an image step: no other step meanwhile, and the image it reads stays alive when the user switches
+        // images (No. 98, No. 85)
+        if (IsEditing || CurrentPath is not { } path) return;
+        IsEditing = true;
+        _editingHistory = h;
+        var hidden = HiddenSteps;
+        var (pw, ph) = PixelSize();
         IsStraighteningWithAi = true;
         AppLog.Activity($"KI begradigen: {model.Name}");
         var fallback = System.IO.Path.Combine(Ai.Store.DownloadFolder, model.Id);
@@ -334,7 +341,7 @@ public partial class MainViewModel
             var focal = Dewarp.Focal35Of(h.Current);
             var grid = await Task.Run(() =>
             {
-                if (CurrentPath is not { } path || DocumentFor(path, h, HiddenSteps, GeometryRecipe.DewarpView) is not { } doc) return null;
+                if (DocumentFor(path, h, hidden, GeometryRecipe.DewarpView) is not { } doc) return null;
                 var (gridOnnx, shadowOnnx) = Core.Ai.SyntheticDoc.SyntheticDocModel.OnnxFor(checkpoint, fallback);
                 var session = Ai.Sessions.Get(model, gridOnnx);
                 var shadowSession = Ai.Sessions.Get(model, shadowOnnx);
@@ -342,9 +349,15 @@ public partial class MainViewModel
                 return Core.Ai.SyntheticDoc.SyntheticDocDewarp.Run(session, shadowSession, doc, focal, AiRemoveShadows, CancellationToken.None);
             });
             if (grid is null) return;
-            var (pw, ph) = PixelSize();
+            // Another image is shown by now: the grid belongs to the one it was computed for
+            if (h != _history)
+            {
+                ErrorMessage = Tr.T("Das Bild wurde inzwischen gewechselt – KI begradigen bitte noch einmal starten.");
+                return;
+            }
             var next = h.Recipe.AiDewarpedInView(grid, pw, ph, focal);
             var (fw, fh) = await Task.Run(() => next.FlatSize(pw, ph));
+            EndStraightening(h, path);
             var detail = $"{fw} × {fh} px";
             if (grid.PageAspect is { } a)
                 detail += " · " + (grid.Din ? Tr.T("Seite 1 : {0:0.00} (DIN)", Math.Max(a, 1 / a)) : Tr.T("Seite 1 : {0:0.00}", Math.Max(a, 1 / a)));
@@ -358,11 +371,21 @@ public partial class MainViewModel
         }
         finally
         {
+            if (IsStraighteningWithAi) EndStraightening(h, path);
             IsStraighteningWithAi = false;
             AppLog.Activity(null);
             ActivityText = null;
             OnPropertyChanged(nameof(AiStraightenActive));
         }
+    }
+
+    /// <summary>Ends the guard of the AI straightening; releases the image if the user moved on and it stayed unedited.</summary>
+    private void EndStraightening(EditHistory h, string path)
+    {
+        IsStraighteningWithAi = false;
+        _editingHistory = null;
+        IsEditing = false;
+        if (h != _history) _ = ReleaseIfUnusedAsync(path, h);
     }
 
     /// <summary>
