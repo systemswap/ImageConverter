@@ -539,13 +539,14 @@ public partial class MainViewModel
     /// <param name="replaces">New attempt directly on the previous AI step: takes its place, the previous result is released.</param>
     /// <param name="discards">Number of later image steps the result no longer contains (it started from before them).</param>
     /// <param name="baked">Look rendered into the result ("Erst Einstellungen"); null if none.</param>
+    /// <param name="replay">The same AI step on another image, for switching off an earlier step.</param>
     /// <param name="expected">The pixel image the result was computed for; nothing is done if another one is shown by now.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
     internal async Task<MagickImage?> ApplyImageEditAsync(Func<MagickImage, (MagickImage Result, MagickImage? Plain)> operation,
         string label, string? detail, string? skinDetail, Look? lookAfter, MagickImage start, bool replaces, int discards,
-        Look? baked, MagickImage expected)
+        Look? baked, StepReplay replay, MagickImage expected)
     {
-        var step = new ImageStep(ImageStepKind.Ai, label, detail, null, skinDetail)
+        var step = new ImageStep(ImageStepKind.Ai, label, detail, replay, skinDetail)
         {
             Base = start, Replaces = replaces, Discards = discards, Baked = baked,
         };
@@ -570,11 +571,12 @@ public partial class MainViewModel
     /// <param name="start">The image <paramref name="operation"/> computes from; a new attempt starts from it again.</param>
     /// <param name="replaces">New attempt directly on the previous removal: takes its place, the previous result is released.</param>
     /// <param name="strokes">The marking removed (in the displayed image).</param>
+    /// <param name="replay">The same removal on another image, for switching off an earlier step.</param>
     /// <param name="expected">The pixel image shown when the step was prepared; nothing is done if it changed meanwhile.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
     internal Task<MagickImage?> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, MagickImage start,
-        bool replaces, IReadOnlyList<Core.Ai.BrushStroke> strokes, MagickImage expected) =>
-        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null)
+        bool replaces, IReadOnlyList<Core.Ai.BrushStroke> strokes, StepReplay replay, MagickImage expected) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, replay)
         {
             Base = start, Replaces = replaces, Strokes = strokes,
         }, expected);
@@ -589,11 +591,12 @@ public partial class MainViewModel
     /// <param name="start">The image <paramref name="operation"/> computes from; later attempts start from it again.</param>
     /// <param name="replaces">New attempt directly on the previous one: takes its place, the previous result is released.</param>
     /// <param name="discards">Number of later image steps the new attempt no longer contains (it starts from before them).</param>
+    /// <param name="replay">The same background step on another image, for switching off an earlier step.</param>
     /// <param name="expected">The pixel image shown when the step was prepared; nothing is done if it changed meanwhile.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
     internal Task<MagickImage?> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail,
-        MagickImage start, bool replaces, int discards, MagickImage expected) =>
-        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces, Base = start, Discards = discards }, expected);
+        MagickImage start, bool replaces, int discards, StepReplay replay, MagickImage expected) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, replay) { Replaces = replaces, Base = start, Discards = discards }, expected);
 
     /// <summary>
     /// An image step that reports the image it produced. The caller must not take <see cref="CurrentImage"/> instead:
@@ -696,6 +699,8 @@ public partial class MainViewModel
         if (_history is not { } h) return;
         CommitPendingSettings();   // for example a slider was moved while the AI was computing
 
+        // Switched-off image steps: the remaining ones computed again first (No. 102)
+        await EnsureVariantAsync();
         // Pixel image + recipe in the background (perspective correction of a large image takes time)
         DropGeometryDocsExcept(CurrentPath);
         var shown = await Task.Run(() => ShownDocument) ?? h.Current;

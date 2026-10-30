@@ -2689,3 +2689,34 @@ Test oder Nachweis.
   `MainViewModel.Upscale.cs` (`UpscaleEntry`, `UpdateUpscaleStatus`, `UpscaleForBatchAsync`), `MainViewModel.Size.cs`.
 - **Test:** `AiTests.EnhancePreview_OfACutOutImage_KeepsItsTransparency` (scheitert am alten Kern); `kette-ui` Fälle 14–16 (14 und 15 mit
   dem alten Code falsch; 16 prüft die neue Breite). 18 und 19 nur am Code geprüft, nicht nachgestellt.
+
+## 102. „Bearbeitungen“: KI-Verbesserung, Entfernen und Hintergrund ließen sich nicht (mehr) ausschalten (0.7.16 beta)
+
+- **Entdeckt:** 31.10.2026, 0.7.16-beta, vom Nutzer: „KI entfernen kann ich nicht deaktivieren … Hintergrund entfernen oder unscharf
+  lässt sich auch nicht aktivieren oder deaktivieren. Hat das einen Grund?“ **Geändert:** 0.7.17-beta (Wahl des Nutzers: „schaltbar mit
+  Nachrechnen“).
+- **Was:** Entfernen und Hintergrund hatten in der Liste immer „Lässt sich nicht ausschalten“. Die KI war nur schaltbar, solange nach
+  ihr nichts anderes kam; danach „festgeschrieben“.
+- **Warum:** Diese Schritte ändern das Pixelbild selbst. Ausschalten heißt: das Bild vor dem Schritt nehmen und alle späteren Schritte
+  darauf neu rechnen. Dafür war `ImageStep.Replay` gedacht, aber kein Schritt setzte es; nur eine Kette aus lauter KI-Schritten ließ sich
+  ohne Nachrechnen abtrennen.
+- **Lösung:** Jeder der drei Schritte gibt eine Wiederholung mit (`StepReplay`): Entfernen mit Markierung (Pixel) und Modell, Hintergrund
+  mit der gemerkten Maske samt Pinsel-Ergebnis – das Führungsbild für Kanten und Farben kommt aus dem neuen Bild (`BackgroundRemover.Rebase`),
+  kein Modell-Lauf –, die KI mit Modell, Mischung, Drehung und eingerechnetem Look; Gesichter werden auf dem neuen Bild gesucht.
+  `PixelsFor` nimmt das Bild vor dem ersten ausgeschalteten Schritt und rechnet die eingeschalteten späteren darauf nach; das Ergebnis wird
+  gemerkt. Im Oberflächen-Faden wird nie nachgerechnet (dort steht bis dahin das aktuelle Bild), sondern vorher im Hintergrund
+  (`EnsureVariantAsync`: Anzeige „die übrigen werden neu gerechnet …“, andere Schritte gesperrt). Schaltbar ist eine Zeile, solange alle
+  Schritte ab ihr die Bildgröße behalten.
+- **Mitbehoben:** `LiveSteps` zählte einen ersetzten KI- oder Hintergrund-Versuch noch mit, wenn danach andere Schritte kamen (nur die
+  Schritte *nach* ihm fielen weg). Beim Nachrechnen hätte das KI auf KI ergeben. Jetzt ersetzt ein Schritt, der von einem früheren Bild
+  aus rechnet, alles ab diesem Bild.
+- **Nicht tun:** Im Oberflächen-Faden Modelle laufen lassen; einen Schritt für „abtrennbar“ halten, nur weil das Bild davor gemerkt ist –
+  die späteren Schritte gehören nachgerechnet.
+- **Wo im Code:** `MainViewModel.Edits.cs` (`StepReplay`, `LiveSteps`, `StepsSinceApplied`, `CanHideKind`, `VariantOf`, `PixelsFor`,
+  `EnsureVariantAsync`, `ApplyImageVariantAsync`, `TakeOverHiddenStepsAsync`, `RefreshEditRows`), `MainViewModel.Editing.cs`
+  (Schnittstellen der drei Schritte, `ShowCurrentAsync`), `AiViewModel.ReplayAi`, `RetouchViewModel.Remove`, `BackgroundViewModel.Apply`,
+  `BackgroundRemover.Rebase`.
+- **Test:** `kette-ui` Fall 18 mit echten Modellen (Allround, MI-GAN, BiRefNet lite): Kette KI → Entfernen → Hintergrund, jede Zeile
+  einzeln aus und wieder an; Hintergrund aus = Stand nach Entfernen (bitgleich), Entfernen aus = Stelle wie nach der KI (Abstand 1 von
+  65535, mit Entfernen 5064), KI aus = Motiv wie im Original (1 gegen 851), alles an = aktuelles Bild. Gesichter-Modelle nicht nachgestellt
+  (kein Testbild mit Gesicht).

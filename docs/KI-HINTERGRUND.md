@@ -67,7 +67,9 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
    fertigen Inhalt, und die Regler rechnen danach nur im sichtbaren Bereich. Die Rubriken Hintergrund und Entfernen sagen es, wenn ein
    späterer Schritt zuerst kam; erzwungen wird es nicht (sonst müsste jede spätere Änderung alle folgenden KI-Schritte neu rechnen). Ein
    neuer Versuch rechnet bei allen drei vom Bild vor ihrem letzten Schritt (`ImageStep.Base`, Fehlergedächtnis #99); Entfernen nur,
-   solange die Markierung ergänzt und nicht gelöscht wurde.
+   solange die Markierung ergänzt und nicht gelöscht wurde. In „Bearbeitungen“ lassen sich alle drei ausschalten: Das Programm nimmt das
+   Bild vor dem ersten ausgeschalteten Schritt und rechnet die eingeschalteten späteren darauf nach – Entfernen mit derselben Markierung,
+   Hintergrund mit der gemerkten Maske (ohne Modell-Lauf, 1–3 s), eine KI-Verbesserung mit ihrem Modell (Fehlergedächtnis #102).
 2. **Geometrie** (`GeometryRecipe`): Begradigen, Entzerren, Gerade richten, Zuschnitt, Drehen/Spiegeln.
 3. **Größe** und Rauschen: beim Vergrößern erst Rauschen, sonst danach.
 4. **Regler:** Dunst, Tiefen/Lichter, Licht und Farbe, Schärfen, Körnung.

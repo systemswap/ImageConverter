@@ -294,8 +294,8 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
             return;
         }
-        // AI or Skin & details switched off: the step works on what is displayed (No. 100)
-        if (!await _main.TakeOverHiddenAiAsync()) return;
+        // Image steps switched off: the step works on what is displayed (No. 100)
+        if (!await _main.TakeOverHiddenStepsAsync()) return;
         current = _main.CurrentImage ?? current;
 
         // A new attempt starts from the image before the last background step, not from its result
@@ -339,6 +339,12 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         try
         {
             BackgroundMask? mask = cached;
+            // The same background step on another image (an earlier step switched off): the remembered mask with the
+            // strokes applied, the edges and colours from the new image; no model run (No. 102)
+            (BackgroundMask Mask, float[] Alpha)? used = null;
+            MainViewModel.StepReplay replay = (input, _, ct) => used is var (m, a)
+                ? BackgroundRemover.Compose(input, BackgroundRemover.Rebase(m, input), a, mode, blur, ct)
+                : throw new InvalidOperationException(Tr.T("Hintergrund-Schritt ohne Maske."));
             var result = await _main.ApplyBackgroundAsync(_ =>
             {
                 // Opened only when needed: with the remembered mask, red strokes, mode and strength need no model
@@ -351,9 +357,10 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                 }
                 Dispatcher.UIThread.Post(() => phase = Tr.T("Hintergrund · Kanten …"));
                 var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, Segment(), cts.Token));
+                used = (mask with { Guide = [] }, alpha);   // the guide comes from the image a replay works on
                 return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token);
             }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
-               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards, current);
+               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards, replay, current);
 
             if (result is not null)
             {

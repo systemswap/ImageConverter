@@ -141,6 +141,16 @@ public static class BackgroundRemover
     }
 
     /// <summary>
+    /// The same mask for another image of the same size (the image without an earlier step that was switched off): the
+    /// subject probabilities stay, the guide for the edges and colours comes from the new image (No. 102).
+    /// </summary>
+    /// <param name="mask">Mask computed on another image; its guide is not used.</param>
+    /// <param name="image">Image of the same size as the one the mask was computed on.</param>
+    /// <returns>The mask with the guide of <paramref name="image"/>.</returns>
+    public static BackgroundMask Rebase(BackgroundMask mask, MagickImage image) =>
+        mask with { Guide = RegionRgb(image, mask.Region, mask.Width, mask.Height, interleaved: true) };
+
+    /// <summary>
     /// Applies the brush strokes to the detected mask: red removes the objects it touches, green keeps them and adds what a
     /// zoomed run finds around the green strokes.
     /// </summary>

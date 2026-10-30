@@ -171,8 +171,8 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
             Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
             return;
         }
-        // AI or Skin & details switched off: the step works on what is displayed (No. 100)
-        if (!await _main.TakeOverHiddenAiAsync()) return;
+        // Image steps switched off: the step works on what is displayed (No. 100)
+        if (!await _main.TakeOverHiddenStepsAsync()) return;
         current = _main.CurrentImage ?? current;
 
         // A new attempt starts from the image before the last removal while nothing came after it and the marking still
@@ -195,11 +195,14 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
         var progress = new Progress<double>(f => _ai.ShowActivity(Tr.T("Entfernen · {0:0} %", f * 100), f * 100, CancelCommand));
         try
         {
+            // The same removal on another image (an earlier step switched off): same marking, same model (No. 102)
+            MainViewModel.StepReplay replay = (input, _, ct) =>
+                Inpainter.Run(input, strokes, new OnnxInpaintModel(_ai.Sessions.Get(model, path), model), null, ct);
             var result = await _main.ApplyRetouchAsync(_ =>
             {
                 var session = _ai.Sessions.Get(model, path);
                 return Inpainter.Run(start, strokes, new OnnxInpaintModel(session, model), progress, cts.Token);
-            }, Tr.T(model.Name), start, again, marking, current);
+            }, Tr.T(model.Name), start, again, marking, replay, current);
 
             if (result is not null)
             {

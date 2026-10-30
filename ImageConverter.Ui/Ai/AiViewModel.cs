@@ -557,8 +557,8 @@ public partial class AiViewModel : ViewModelBase
 
         if (!rerun)
         {
-            // AI or Skin & details switched off: the step works on what is displayed (No. 100)
-            if (!await _main.TakeOverHiddenAiAsync()) return;
+            // Image steps switched off: the step works on what is displayed (No. 100)
+            if (!await _main.TakeOverHiddenStepsAsync()) return;
             current = _main.CurrentImage ?? current;
         }
 
@@ -905,9 +905,14 @@ public partial class AiViewModel : ViewModelBase
                 img.Dispose();
                 return back;
             }
+            // The same AI step on another image (an earlier step switched off): same model, blend, orientation and rendered-in
+            // look; faces are found again (No. 102)
+            var (model, fidelity, geometry, shownWidth) = (_runModel!, _runFidelity / 100, _main.ShownGeometry, _main.ShownPixelWidth());
+            MainViewModel.StepReplay replay = (input, plain, ct) => ReplayAi(model, plain ? plainBlend : blend, fidelity, setup.Turns, setup.Flip,
+                setup.Baked, shownWidth, geometry.Recipe, geometry.Stages, input, ct);
             result = await _main.ApplyImageEditAsync(_ => (Upright(run.Compose(blend)), details ? Upright(run.Compose(plainBlend)) : null),
                 StepLabel(), StepDetail(blend), details ? SkinDetail(blend) : null, setup.LookAfter,
-                setup.Base, setup.Replaces, setup.Discards, setup.Baked, setup.Current);
+                setup.Base, setup.Replaces, setup.Discards, setup.Baked, replay, setup.Current);
         }
         finally
         {
@@ -919,6 +924,50 @@ public partial class AiViewModel : ViewModelBase
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
     }
 
+
+    /// <summary>
+    /// Repeats a committed AI step on another image of the same size (the image without an earlier step that was switched
+    /// off): the same model and blend, the same orientation and rendered-in look; faces are found again on the new image.
+    /// </summary>
+    /// <returns>A new image owned by the caller.</returns>
+    /// <exception cref="InvalidOperationException">The model or the face detection is no longer installed.</exception>
+    private MagickImage ReplayAi(AiModel model, AiBlend blend, double fidelity, int turns, bool flip, MainViewModel.Look? baked,
+        int shownWidth, GeometryRecipe recipe, GeometryStages stages, MagickImage input, CancellationToken ct)
+    {
+        var modelPath = Store.PathOf(model) ?? throw new InvalidOperationException(Tr.T("Das Modell „{0}“ fehlt.", model.Name));
+        var looked = baked is { IsNone: false } look ? MainViewModel.RenderLook(input, look, null, shownWidth) : input;
+        var oriented = MainViewModel.Orient(looked, turns, flip);
+        var source = oriented ?? looked;
+        try
+        {
+            IAiRun run;
+            if (model.Kind == AiModelKind.Face)
+            {
+                var detectorPath = Store.PathOf(AiModelCatalog.FaceDetector)
+                                   ?? throw new InvalidOperationException(Tr.T("Die Gesichtserkennung fehlt — bitte in den Einstellungen herunterladen."));
+                var faces = VisibleFaces(AiFaces.Detect(source, _sessions.Get(AiModelCatalog.FaceDetector, detectorPath)),
+                    new RunSetup(input, source, null, null, false, input, turns, flip), recipe, stages);
+                if (faces.Count == 0) return ImageOps.CloneOf(looked);
+                var parserPath = Store.PathOf(AiModelCatalog.FaceParser);
+                var face = new OnnxFaceModel(_sessions.Get(model, modelPath), model) { Fidelity = fidelity };
+                var parser = parserPath is null ? null : new OnnxFaceParser(_sessions.Get(AiModelCatalog.FaceParser, parserPath));
+                run = AiFaces.Run(source, faces, face, parser, null, ct);
+            }
+            else
+            {
+                run = AiEnhancer.Run(source, new OnnxTileModel(_sessions.Get(model, modelPath), model), 1, null, ct);
+            }
+            var composed = run.Compose(blend);
+            if (MainViewModel.Unorient(composed, turns, flip) is not { } upright) return composed;
+            composed.Dispose();
+            return upright;
+        }
+        finally
+        {
+            oriented?.Dispose();
+            if (!ReferenceEquals(looked, input)) looked.Dispose();
+        }
+    }
 
     /// <summary>New images: resets everything as after program start (first installed model, default slider values).</summary>
     private void ResetToStart()
