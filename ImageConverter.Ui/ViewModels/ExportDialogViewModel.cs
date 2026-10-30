@@ -50,7 +50,7 @@ public partial class ExportDialogViewModel : ViewModelBase
     public ExportDialogViewModel(MainViewModel main)
     {
         _main = main;
-        Items = new ObservableCollection<ExportItem>(main.OpenFiles.Select(p => new ExportItem(p)));
+        Items = new ObservableCollection<ExportItem>(main.OpenFiles.Select(p => new ExportItem(p) { Include = main.PreselectForExport(p) }));
         foreach (var item in Items)
             item.PropertyChanged += (_, e) =>
             {

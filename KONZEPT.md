@@ -138,7 +138,8 @@ seinen Namen in allen Sprachen.
 - **Als Bildbetrachter** (seit 0.8.6): Darstellung Hell · Dunkel · wie das System (Einstellungen › Allgemein, Knopf ☾/☀ oben rechts,
   gemerkt). Dunkel ist ein gedämpftes, neutrales Grau ohne Farbstich mit gebrochenem Weiß als Schrift. Pfeile links/rechts blättern
   (außer ein Regler, Eingabefeld oder Zuschnittrahmen braucht sie), Bild auf/ab immer, Pos1/Ende erstes/letztes Bild; F11 Vollbild mit nur
-  Bild und unterer Leiste, Esc zurück.
+  Bild und unterer Leiste, Esc zurück. Ein einzeln geöffnetes Bild (auch per „Öffnen mit“) bringt die übrigen Bilder seines Ordners mit
+  (sortiert wie beim Öffnen eines Ordners); beim Exportieren sind nur das geöffnete und geänderte Bilder vorausgewählt.
 
 - **Linux**: `.desktop`-Datei mit `MimeType=image/jpeg;image/png;…` ⇒ erscheint unter
   „Öffnen mit" im Nautilus/Dolphin/Thunar-Rechtsklick. Dateien als Argumente annehmen

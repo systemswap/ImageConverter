@@ -235,6 +235,17 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
+        // What the user chose counts as chosen (preselected when exporting). A single picture (for example with „Öffnen mit“)
+        // brings the other pictures of its folder along, for browsing with the arrow keys; it is shown first.
+        var chosen = new HashSet<string>(found, StringComparer.Ordinal);
+        var start = 0;
+        if (found.Count == 1 && skipped.Count == 0 && File.Exists(found[0]) && FolderOf(found[0]) is { Count: > 1 } siblings)
+        {
+            start = siblings.FindIndex(p => string.Equals(p, found[0], StringComparison.Ordinal));
+            if (start >= 0) found = siblings;
+            else start = 0;
+        }
+
         // The new selection replaces the old one including its history. Wait for the preview computation
         // first, because it may still be reading an image that is about to be released.
         await StopPreviewAsync();
@@ -245,14 +256,47 @@ public partial class MainViewModel : ViewModelBase
 
         _files.Clear();
         _files.AddRange(found);
+        _chosen = chosen;
         NotifyFileList();
 
         ErrorMessage = skipped.Count > 0
             ? Tr.T("{0} Datei(en) übersprungen — Format wird nicht unterstützt.", skipped.Count)
             : null;
 
-        await ShowFileAsync(0);
+        await ShowFileAsync(start);
     }
+
+    /// <summary>The pictures the user opened (not the ones of the folder that came along).</summary>
+    private HashSet<string> _chosen = new(StringComparer.Ordinal);
+
+    /// <summary>All readable pictures in the folder of a file, sorted as when a folder is opened; null if it cannot be read.</summary>
+    private static List<string>? FolderOf(string file)
+    {
+        try
+        {
+            var full = Path.GetFullPath(file);
+            if (Path.GetDirectoryName(full) is not { } folder) return null;
+            var all = Directory.EnumerateFiles(folder).Where(ImageFormats.CanRead).Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+            // The opened file under the same spelling as in the list
+            var i = all.FindIndex(p => string.Equals(p, full, StringComparison.Ordinal));
+            if (i < 0) return null;
+            all[i] = file;
+            return all;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether a picture is preselected in the export window: opened by the user, changed (image steps, crop, settings), or all
+    /// with "same settings for all" – the pictures that only came along from the folder stay unticked.
+    /// </summary>
+    internal bool PreselectForExport(string path) =>
+        ApplyToAll || _chosen.Contains(path)
+        || _histories.TryGetValue(path, out var h) && h.IsEdited
+        || _undo.Any(s => s.FilePath == path);
 
     [RelayCommand(CanExecute = nameof(CanBrowse))]
     private Task PreviousFile() => ShowFileAsync((_fileIndex - 1 + _files.Count) % _files.Count);
