@@ -39,8 +39,11 @@ public sealed class LookCache : IDisposable
     internal readonly record struct InputKey(SourceRef Source, int Width, int Height, ResampleFilter Filter, bool Gamma,
         double Denoise, double ColorDenoise);
 
-    /// <summary>Scaled image (for profiles, alpha, density) and its pixels after denoising.</summary>
-    internal sealed record Input(MagickImage Resized, float[] Pixels, bool Processed);
+    /// <summary>
+    /// Scaled image (for profiles, alpha, density) and its pixels after denoising: with <paramref name="Area"/> only the
+    /// visible rectangle, and <paramref name="Whole"/> holds the whole image the result is written back into.
+    /// </summary>
+    internal sealed record Input(MagickImage Resized, float[] Pixels, bool Processed, VisibleArea? Area = null, float[]? Whole = null);
 
     /// <summary>Number of stages that were recomputed in the last run (for tests).</summary>
     internal int Computed { get; private set; }

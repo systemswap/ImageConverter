@@ -190,14 +190,17 @@ public static class ImageExporter
             try
             {
                 var px = Pixels.FromMagick(resized);
-                var noise = !noiseFirst && (o.Denoise > 0.01 || o.ColorDenoise > 0.01);
-                if (noise)
+                int rw, rh;
+                lock (resized) (rw, rh) = ((int)resized.Width, (int)resized.Height);
+                var area = VisibleArea.Of(px, rw, rh);
+                var whole = area is null ? null : px;
+                if (area is { } a)
                 {
-                    int rw, rh;
-                    lock (resized) (rw, rh) = ((int)resized.Width, (int)resized.Height);
-                    px = Swap(px, Denoiser.Apply(px, rw, rh, o.Denoise, o.ColorDenoise, 1, plan));
+                    (px, rw, rh) = (a.Cut(px, rw), a.Width, a.Height);
                 }
-                return new LookCache.Input(resized, px, noise);
+                var noise = !noiseFirst && (o.Denoise > 0.01 || o.ColorDenoise > 0.01);
+                if (noise) px = Swap(px, Denoiser.Apply(px, rw, rh, o.Denoise, o.ColorDenoise, 1, plan));
+                return new LookCache.Input(resized, px, noise, area, whole);
             }
             catch
             {
@@ -207,8 +210,9 @@ public static class ImageExporter
         });
 
         var image = input.Resized;
-        int w, h;
-        lock (image) (w, h) = ((int)image.Width, (int)image.Height);
+        int imageWidth, imageHeight;
+        lock (image) (imageWidth, imageHeight) = ((int)image.Width, (int)image.Height);
+        var (w, h) = input.Area is { } visible ? (visible.Width, visible.Height) : (imageWidth, imageHeight);
         var adjust = o.Adjustments is { IsNone: false } a ? a : null;
         var grainy = o.Grain is { IsNone: false };
         MagickImage result;
@@ -241,7 +245,15 @@ public static class ImageExporter
                 if (!ReferenceEquals(work, looked) && !ReferenceEquals(work, grained)) PixelPool.Return(work);
                 work = grained;
             }
-            lock (image) result = Pixels.ToMagick16(work, w, h, image.HasAlpha);
+            var output = work;
+            if (input.Area is { } written)
+            {
+                output = PixelPool.Rent(input.Whole!.Length);
+                Array.Copy(input.Whole, output, output.Length);
+                written.Paste(work, output, imageWidth);
+            }
+            lock (image) result = Pixels.ToMagick16(output, imageWidth, imageHeight, image.HasAlpha);
+            if (!ReferenceEquals(output, work)) PixelPool.Return(output);
             if (!ReferenceEquals(work, looked)) PixelPool.Return(work);
             CopyProfiles(image, result);
             lock (image) result.Density = image.Density;
@@ -308,7 +320,12 @@ public static class ImageExporter
         // rounding happens only when encoding. Profiles are taken over.
         int w, h;
         lock (image) (w, h) = ((int)image.Width, (int)image.Height);
+        var (imageWidth, imageHeight) = (w, h);
         var pixels = Pixels.FromMagick(image);
+        // A transparent image: only the rectangle around the visible pixels, as if it had been cropped to it
+        var area = VisibleArea.Of(pixels, w, h);
+        var whole = area is null ? null : pixels;
+        if (area is { } visible) (pixels, w, h) = (visible.Cut(pixels, w), visible.Width, visible.Height);
         if (noise) pixels = Swap(pixels, Denoiser.Apply(pixels, w, h, denoise, colorDenoise, 1, plan));
         if (adjust is not null) pixels = Swap(pixels, Adjust.Apply(pixels, w, h, adjust, plan));
         if (sharpenAmount > 0.01)
@@ -321,8 +338,14 @@ public static class ImageExporter
             plan?.Next();
             pixels = Swap(pixels, Grain.Apply(pixels, w, h, grain, grainScale));
         }
+        if (area is { } written)
+        {
+            written.Paste(pixels, whole!, imageWidth);
+            PixelPool.Return(pixels);
+            pixels = whole!;
+        }
         MagickImage processed;
-        lock (image) processed = Pixels.ToMagick16(pixels, w, h, image.HasAlpha);
+        lock (image) processed = Pixels.ToMagick16(pixels, imageWidth, imageHeight, image.HasAlpha);
         PixelPool.Return(pixels);
         CopyProfiles(image, processed);
         lock (image) processed.Density = image.Density;

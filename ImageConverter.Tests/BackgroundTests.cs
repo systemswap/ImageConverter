@@ -230,6 +230,89 @@ public class BackgroundTests
         Assert.True(max * 255 < 1, $"Motiv hängt vom entfernten Hintergrund ab: {max * 255:0.00} Stufen");
     }
 
+    /// <summary>A transparent image with one visible block, whose position and size are chosen freely.</summary>
+    private static MagickImage VisibleBlock(int imageW, int imageH, int x0, int y0, int bw, int bh)
+    {
+        var img = new MagickImage(MagickColors.Black, (uint)imageW, (uint)imageH);
+        img.Alpha(AlphaOption.Set);
+        img.Depth = 16;
+        var data = new ushort[imageW * imageH * 4];
+        for (var y = 0; y < imageH; y++)
+        for (var x = 0; x < imageW; x++)
+        {
+            var i = (y * imageW + x) * 4;
+            var inside = x >= x0 && x < x0 + bw && y >= y0 && y < y0 + bh;
+            // Relative to the block, so that a crop of it holds exactly the same pixels
+            int bx = x - x0, by = y - y0;
+            data[i] = (ushort)(((bx * 37 + by * 11) % 200 + 30) * 257);
+            data[i + 1] = (ushort)(((bx * 13 + by * 29) % 180 + 40) * 257);
+            data[i + 2] = (ushort)(((bx + by) % 150 + 50) * 257);
+            data[i + 3] = inside ? (ushort)65535 : (ushort)0;
+        }
+        using (var pixels = img.GetPixelsUnsafe()) pixels.SetArea(0, 0, (uint)imageW, (uint)imageH, data);
+        return img;
+    }
+
+    private static ExportOptions Look(int width, int height) => new(OutputFormat.Png, 90, true, width, height, ResampleFilter.Lanczos3, false,
+        0.3, 0.5, 1, 96, MetadataMode.KeepAll, ColorMode.KeepProfile, new Adjustments(Brightness: 10, Shadows: 20, Highlights: 20, Dehaze: 30), HighBitDepth: true, ColorDenoise: 0.3);
+
+    /// <summary>The rule: the filters behave as if the image had been cropped to its visible pixels.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Filters_OnTransparentImage_EqualACropToTheVisiblePixels(bool cached)
+    {
+        const int W2 = 640, H2 = 480, X0 = 200, Y0 = 120, Bw = 240, Bh = 180;
+        using var whole = VisibleBlock(W2, H2, X0, Y0, Bw, Bh);
+        using var crop = VisibleBlock(Bw, Bh, 0, 0, Bw, Bh);
+        using var cache = new LookCache();
+        using var fromWhole = ImageExporter.Render(whole, Look(W2, H2), null, cached ? cache : null);
+        using var fromCrop = ImageExporter.Render(crop, Look(Bw, Bh));
+
+        var a = Rgba(fromWhole);
+        var b = Rgba(fromCrop);
+        for (var y = 0; y < Bh; y++)
+        for (var x = 0; x < Bw * 4; x++)
+            Assert.Equal(b[y * Bw * 4 + x], a[((y + Y0) * W2 + X0) * 4 + x]);
+        // Outside the rectangle nothing was computed
+        using var before = whole.Clone();
+        var untouched = Rgba((MagickImage)before);
+        var outside = (10 * W2 + 10) * 4;
+        for (var c = 0; c < 4; c++) Assert.Equal(untouched[outside + c], a[outside + c]);
+    }
+
+    /// <summary>Size estimate and export must see the same image.</summary>
+    [Fact]
+    public void CachedAndPlainRender_AgreeOnTransparentImages()
+    {
+        using var img = VisibleBlock(640, 480, 200, 120, 240, 180);
+        using var cache = new LookCache();
+        using var plain = ImageExporter.Render(img, Look(320, 240));
+        using var viaCache = ImageExporter.Render(img, Look(320, 240), null, cache);
+        Assert.Equal(Rgba(plain), Rgba(viaCache));
+    }
+
+    [Theory]
+    [InlineData(false, 0, 0, 40, 30, null)]              // opaque: whole image
+    [InlineData(true, 10, 5, 20, 20, "10,5,20,20")]      // a block
+    [InlineData(true, 0, 0, 40, 30, null)]               // visible up to all four edges
+    [InlineData(true, 39, 29, 1, 1, "24,14,16,16")]      // one pixel in the corner: at least 16 × 16, within the image
+    [InlineData(true, 15, 15, 1, 1, "7,7,16,16")]        // one pixel in the middle
+    public void VisibleArea_FindsTheRectangle(bool transparent, int x0, int y0, int bw, int bh, string? expected)
+    {
+        const int W2 = 40, H2 = 30;
+        var px = new float[W2 * H2 * 4];
+        for (var y = 0; y < H2; y++)
+        for (var x = 0; x < W2; x++)
+            px[(y * W2 + x) * 4 + 3] = !transparent || (x >= x0 && x < x0 + bw && y >= y0 && y < y0 + bh) ? 1 : 0;
+        var area = VisibleArea.Of(px, W2, H2);
+        Assert.Equal(expected, area is { } a ? $"{a.X},{a.Y},{a.Width},{a.Height}" : null);
+    }
+
+    [Fact]
+    public void VisibleArea_NothingVisible_LeavesTheImageToTheFilters() =>
+        Assert.Null(VisibleArea.Of(new float[40 * 30 * 4], 40, 30));
+
     /// <summary>Always the same two discs, whatever the image shows.</summary>
     private sealed class FixedDiscs : ISegmentModel
     {
