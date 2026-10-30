@@ -556,7 +556,7 @@ public partial class MainViewModel
                 step.Plain = plain;
                 return produced = result;
             },
-            lookAfter is null ? null : s => WithLook(s, lookAfter), step, expected: expected);
+            lookAfter is null ? null : s => KeepHidden(WithLook(s, lookAfter), s), step, expected: expected);
         return ok ? produced : null;
     }
 

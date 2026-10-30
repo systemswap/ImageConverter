@@ -242,6 +242,29 @@ public class AiTests
     }
 
     [Fact]
+    public void EnhancePreview_OfACutOutImage_KeepsItsTransparency()
+    {
+        // After "Hintergrund entfernen" the open AI result showed the removed background again until it was committed (No. 101)
+        using var src = Noise(90, 70, alpha: true);
+        using (var pixels = src.GetPixelsUnsafe())
+        {
+            var a = (int)pixels.GetChannelIndex(PixelChannel.Alpha)!.Value;
+            for (var y = 0; y < 70; y++)
+            for (var x = 0; x < 90; x++)
+            {
+                var v = pixels.GetPixel(x, y).ToArray();
+                v[a] = x < 45 ? (ushort)0 : ushort.MaxValue;   // left half transparent, right half opaque
+                pixels.SetPixel(x, y, v);
+            }
+        }
+        var run = AiEnhancer.Run(src, new BlackModel(4, 32), 1, null, default);
+        var preview = run.Preview(new AiBlend(1), new AiPreviewSize(90, 70));
+
+        Assert.True(preview.Bgra[(35 * 90 + 10) * 4 + 3] < 0.01f, "links durchsichtig");
+        Assert.True(preview.Bgra[(35 * 90 + 80) * 4 + 3] > 0.99f, "rechts deckend");
+    }
+
+    [Fact]
     public void Nms_KeepsBestOfOverlappingFaces()
     {
         (double, double)[] lm = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)];

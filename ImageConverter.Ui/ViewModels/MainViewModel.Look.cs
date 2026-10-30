@@ -84,12 +84,26 @@ public partial class MainViewModel
     internal bool SettingsShared => ApplyToAll && _files.Count > 1;
 
     /// <summary>Bakes the look into the image at full size (background thread). Without effect, returns the image itself.</summary>
-    internal static MagickImage RenderLook(MagickImage image, Look look, WorkPlan? plan = null)
+    /// <param name="image">Pixel image; not modified.</param>
+    /// <param name="look">The look.</param>
+    /// <param name="plan">Progress plan; null for none.</param>
+    /// <param name="shownWidth">Width of the finished image in pixels of <paramref name="image"/> (after crop, rotation …):
+    /// the sharpening radius refers to it, as in the export; null = the width of <paramref name="image"/>. With a crop to
+    /// half the width, the image width doubled the radius (No. 101).</param>
+    internal static MagickImage RenderLook(MagickImage image, Look look, WorkPlan? plan = null, int? shownWidth = null)
     {
         if (look.IsNone) return image;
         int width;
         lock (image) width = (int)image.Width;
-        return ImageExporter.RenderLook(image, look.Noise, look.ColorNoise, look.Adjust, look.SharpenAmount, look.SharpenSigma(width), plan);
+        return ImageExporter.RenderLook(image, look.Noise, look.ColorNoise, look.Adjust, look.SharpenAmount,
+            look.SharpenSigma(shownWidth ?? width), plan);
+    }
+
+    /// <summary>Width of the finished image (geometry applied, nothing scaled) in pixels of the pixel image.</summary>
+    internal int ShownPixelWidth()
+    {
+        var (pw, ph) = PixelSize();
+        return _history is { } h ? h.Recipe.SizeFor(pw, ph, StagesShown(HiddenSteps)).Width : pw;
     }
 
     /// <summary>Grain for preview and export; not part of the look, because it is never baked into the image before the AI.</summary>
@@ -133,6 +147,36 @@ public partial class MainViewModel
         var result = Pixels.ToBytes(pixels, dither: true);
         PixelPool.Trim();
         return result;
+    }
+
+    /// <summary>
+    /// Settings of switched-off functions keep their values when the sliders are set from a look: the look left them out,
+    /// so they were never rendered into the image. Before, "Erst Einstellungen" set them to zero (No. 101).
+    /// </summary>
+    /// <param name="after">Settings with the new look.</param>
+    /// <param name="before">Settings before; their <see cref="SettingsState.Hidden"/> says what is switched off.</param>
+    /// <returns><paramref name="after"/> with the values of the switched-off functions from <paramref name="before"/>.</returns>
+    private static SettingsState KeepHidden(SettingsState after, SettingsState before)
+    {
+        var hidden = before.Hidden;
+        var s = after;
+        if ((hidden & EditSteps.Denoise) != 0) s = s with { NoiseReduction = before.NoiseReduction };
+        if ((hidden & EditSteps.ColorNoise) != 0) s = s with { ColorNoiseReduction = before.ColorNoiseReduction };
+        if ((hidden & EditSteps.Sharpen) != 0) s = s with { SharpenAmount = before.SharpenAmount, SharpenRadius = before.SharpenRadius };
+        if ((hidden & EditSteps.Dehaze) != 0) s = s with { Dehaze = before.Dehaze };
+        if ((hidden & EditSteps.Light) != 0)
+            s = s with { Brightness = before.Brightness, Contrast = before.Contrast, Shadows = before.Shadows, Highlights = before.Highlights };
+        if ((hidden & EditSteps.Color) != 0)
+            s = s with { Saturation = before.Saturation, Vibrance = before.Vibrance, SelectedTint = before.SelectedTint, TintHue = before.TintHue };
+        if ((hidden & EditSteps.MatchColor) != 0)
+            s = s with
+            {
+                MatchLuminance = before.MatchLuminance, MatchLimit = before.MatchLimit, MatchTarget = before.MatchTarget,
+                MatchGlobal = before.MatchGlobal, Neutralize = before.Neutralize, Warmth = before.Warmth,
+            };
+        if ((hidden & EditSteps.WhiteBalance) != 0) s = s with { WbNeutral = before.WbNeutral, WbBlack = before.WbBlack, WbWhite = before.WbWhite };
+        if ((hidden & EditSteps.LumMask) != 0) s = s with { MaskAmount = before.MaskAmount };
+        return s;
     }
 
     /// <summary>Returns the settings with another look (everything else stays).</summary>

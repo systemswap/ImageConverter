@@ -236,6 +236,22 @@ public static class AiEnhancer
         return result;
     }
 
+    /// <summary>
+    /// The alpha channel at preview size, reduced like the colours (<see cref="Shrink"/>): an open result of a cut-out
+    /// image keeps its transparency in the preview instead of showing the removed background again (No. 101).
+    /// </summary>
+    /// <returns>Alpha 0…1 per pixel; null if <paramref name="mapping"/> has no alpha.</returns>
+    internal static float[]? ShrinkAlpha(ushort[] data, int width, int height, string mapping, AiPreviewSize size)
+    {
+        if (!mapping.Contains('A')) return null;
+        using var full = WritePixels(data, width, height, mapping);
+        using var small = ImageOps.Resize(full, size.Width, size.Height, size.Filter, size.GammaCorrect);
+        var px = ReadPixels(small, "A");
+        var result = new float[px.Length];
+        for (var i = 0; i < px.Length; i++) result[i] = px[i] / 65535f;
+        return result;
+    }
+
     internal static MagickImage WritePixels(ushort[] data, int width, int height, string mapping)
     {
         // Read directly from the 16-bit array (Q16: Quantum = ushort). Going through a byte copy of the same

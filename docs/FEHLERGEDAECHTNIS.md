@@ -2653,3 +2653,39 @@ Test oder Nachweis.
   `RetouchViewModel.Remove`, `BackgroundViewModel.Apply`, `AiViewModel.ComputeAsync`.
 - **Test:** `kette-ui` Fälle 11–13, ganze Bilder per Fingerabdruck gegen denselben Schritt auf dem Original: neu richtig, alter Code
   alle falsch.
+
+## 101. KI „Erst Einstellungen“, Vorschau und Upscaling: Regler überschrieben, ausgeschaltete gelöscht, Hintergrund wieder sichtbar (0.7.14 beta)
+
+- **Entdeckt:** 31.10.2026, 0.7.14-beta, dieselbe Prüfung wie #98 (Fälle 14–16 in `kette-ui`, Test im Testprojekt). **Behoben:** 0.7.15-beta.
+- **Was:**
+  14. „Erst Einstellungen“ mit einer ausgeschalteten Einstellung (Dunst 30, Auge aus): nach dem Übernehmen stand Dunst auf 0, obwohl er nie
+      eingerechnet war – der Wert war weg.
+  15. Regler verstellt, während das Ergebnis offen war: Übernehmen rechnete den alten Look ein und setzte die Regler auf null – die
+      Änderung war verloren, ohne Hinweis.
+  16. Mit Zuschnitt wurde beim Einrechnen mit einem zu großen Radius geschärft: Bezug war die Breite des ungeschnittenen Pixelbilds statt
+      die des fertigen Bildes (Zuschnitt auf die halbe Breite: doppelter Radius gegenüber dem Export).
+  17. Offenes KI-Ergebnis eines freigestellten Bildes: Die Vorschau war deckend und zeigte den entfernten Hintergrund (je nach gespeicherter
+      Farbe), erst „Übernehmen“ stellte die Transparenz her; der Look darüber rechnete über die ganze Fläche.
+  18. Upscaling über 4× (zwei Durchgänge): Treue, Details und Gamma nach dem Berechnen wirkten nur noch auf den zweiten Durchgang, ohne
+      dass es jemand sah.
+  19. Stapel-Export: Das fertige ×4-Bild des offenen Bildes konnte während des Speicherns freigegeben werden, wenn ein Regler das Mischen neu
+      anstieß (der Papierkorb kannte nur den Einzel-Export).
+- **Warum:** 14: `CurrentLook` liefert ausgeschaltete Funktionen als 0, `Neutral()`/`WithLook` schrieben diese 0 in die Regler. 15: Beim
+  Übernehmen wurde nur das Bild geprüft, nicht die Regler. 16: `RenderLook` nahm die Bildbreite. 17: `EnhanceRun`/`FaceRun.Preview` setzten
+  Alpha fest auf 1. 18: Der erste Durchgang wird mit den Werten beim Start gemischt und verkleinert, bevor der zweite rechnet. 19: Das ×4-Bild
+  wurde ohne Besitz weitergegeben.
+- **Lösung:** 14: `KeepHidden` behält die Werte ausgeschalteter Funktionen. 15: `RunSetup.LookAtStart`; weichen die Regler beim Übernehmen
+  ab, lehnt es mit „bitte neu berechnen“ ab. 16: `RenderLook(shownWidth:)` mit `ShownPixelWidth()` (Breite nach Geometrie in Pixeln des
+  Pixelbilds), wie im Export. 17: `AiEnhancer.ShrinkAlpha` – die Vorschau nimmt das Alpha des Originals. 18: Das Ergebnis bleibt (ein
+  neues Berechnen dauert bei PiSA-SR schnell 20 Minuten und mehr); `UpscaleEntry.FirstPass` merkt sich die Werte, die Statuszeile sagt, dass die
+  Änderung nur den zweiten Durchgang erreicht und wie lange ein volles Neuberechnen dauert. 19: Der Stapel-Export bekommt eine eigene Kopie
+  (teilt die Pixel, bis geschrieben wird).
+- **Bleibt offen:** Beim Einrechnen messen Dunst, „Gleiche Farbe“, Weißabgleich und Luminanzmaske auf dem ganzen Pixelbild statt auf dem
+  Ausschnitt (offene Punkte).
+- **Nicht tun:** Regler aus einem maskierten Look zurückschreiben; ein offenes Ergebnis übernehmen, ohne zu prüfen, ob die Regler noch
+  dieselben sind; Bilder aus einem Zwischenspeicher ohne Besitz an lange Abläufe geben.
+- **Wo im Code:** `MainViewModel.Look.cs` (`KeepHidden`, `RenderLook`, `ShownPixelWidth`), `MainViewModel.Editing.cs`
+  (`ApplyImageEditAsync`), `AiViewModel` (`RunSetup`, `Commit`), `AiEnhancer.ShrinkAlpha`, `EnhanceRun`, `FaceRun`,
+  `MainViewModel.Upscale.cs` (`UpscaleEntry`, `UpdateUpscaleStatus`, `UpscaleForBatchAsync`), `MainViewModel.Size.cs`.
+- **Test:** `AiTests.EnhancePreview_OfACutOutImage_KeepsItsTransparency` (scheitert am alten Kern); `kette-ui` Fälle 14–16 (14 und 15 mit
+  dem alten Code falsch; 16 prüft die neue Breite). 18 und 19 nur am Code geprüft, nicht nachgestellt.

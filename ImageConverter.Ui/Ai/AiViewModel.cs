@@ -399,9 +399,11 @@ public partial class AiViewModel : ViewModelBase
     /// <param name="Flip">Whether <paramref name="Input"/> is also mirrored. The result is turned back with these values before committing.</param>
     /// <param name="Replaces">New attempt directly on the previous AI step: the commit takes its place.</param>
     /// <param name="Discards">Image steps after the previous AI step that the result no longer contains.</param>
+    /// <param name="LookAtStart">The sliders when computing; "Übernehmen" sets them to <paramref name="LookAfter"/> only while
+    /// they are unchanged.</param>
     private sealed record RunSetup(MagickImage Base, MagickImage Input, MainViewModel.Look? Baked,
         MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current, int Turns = 0, bool Flip = false,
-        bool Replaces = false, int Discards = 0);
+        bool Replaces = false, int Discards = 0, MainViewModel.Look? LookAtStart = null);
 
     /// <summary>
     /// Result of the model, not yet committed: strength and skin texture re-blend it live (<see cref="IAiRun"/>);
@@ -620,15 +622,16 @@ public partial class AiViewModel : ViewModelBase
                         Progress = p.Fraction * 100;
                         Activity(p.Step, p.Fraction * 100, cancel: true);
                     }), cts.Token);
+                    var shownWidth = _main.ShownPixelWidth();
                     rendered = await Task.Run(() =>
                     {
-                        var looked = MainViewModel.RenderLook(from, apply, plan);
+                        var looked = MainViewModel.RenderLook(from, apply, plan, shownWidth);
                         if (MainViewModel.Orient(looked, runTurns, runFlip) is not { } turned) return looked;
                         looked.Dispose();
                         return turned;
                     }, cts.Token);
                     setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false, current, runTurns, runFlip,
-                        start.Replaces, start.Discards);
+                        start.Replaces, start.Discards, _main.CurrentLook());
                 }
                 else
                 {
@@ -637,7 +640,7 @@ public partial class AiViewModel : ViewModelBase
                     var from = start.Base;
                     rendered = await Task.Run(() => MainViewModel.Orient(from, runTurns, runFlip), cts.Token);
                     setup = new RunSetup(start.Base, rendered ?? start.Base, null, start.Restore, LookOnTop: !lookFirst, current, runTurns, runFlip,
-                        start.Replaces, start.Discards);
+                        start.Replaces, start.Discards, _main.CurrentLook());
                 }
                 image = setup.Input;
             }
@@ -873,6 +876,13 @@ public partial class AiViewModel : ViewModelBase
         {
             ClearRun();
             Status = Tr.T("Das Bild wurde inzwischen geändert — bitte neu berechnen.");
+            return;
+        }
+        // Sliders moved while the result was open, and the commit sets them (a look rendered in or restored): it would
+        // put a different look into the image than was computed and overwrite the moves (No. 101)
+        if (setup.LookAfter is not null && setup.LookAtStart is { } atStart && _main.CurrentLook() != atStart)
+        {
+            Status = Tr.T("Die Regler wurden nach dem Berechnen verändert — bitte neu berechnen, damit das Ergebnis zu ihnen passt.");
             return;
         }
 

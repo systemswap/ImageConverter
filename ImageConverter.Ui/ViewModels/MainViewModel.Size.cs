@@ -79,7 +79,11 @@ public partial class MainViewModel
         NotifySizeDerived();
     }
 
-    partial void OnGammaCorrectChanged(bool value) => RequestPreview();
+    partial void OnGammaCorrectChanged(bool value)
+    {
+        RequestPreview();
+        UpdateUpscaleStatus();   // with two passes the first one keeps the gamma it was computed with
+    }
 
     /// <summary>New image or new state after crop/rotation: target = original.</summary>
     private void ApplySourceSize(int width, int height)

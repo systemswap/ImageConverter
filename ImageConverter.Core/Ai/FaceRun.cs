@@ -68,7 +68,18 @@ public sealed class FaceRun : IAiRun
     public AiPixels Preview(AiBlend blend, AiPreviewSize size)
     {
         var small = Small(size);
-        return ToPixels(Mix(small.Image, small.HighPass, size.Width, size.Height, small.K, blend, size), size);
+        return ToPixels(Mix(small.Image, small.HighPass, size.Width, size.Height, small.K, blend, size), size, SmallAlpha(size));
+    }
+
+    // Alpha of the image before the model at preview size (null without), so that a cut-out image stays transparent (No. 101)
+    private (AiPreviewSize Size, float[]? Alpha)? _smallAlpha;
+
+    private float[]? SmallAlpha(AiPreviewSize size)
+    {
+        if (_smallAlpha is { } a && a.Size == size) return a.Alpha;
+        var alpha = AiEnhancer.ShrinkAlpha(_pixels, _w, _h, _mapping, size);
+        _smallAlpha = (size, alpha);
+        return alpha;
     }
 
     /// <summary>
@@ -221,7 +232,7 @@ public sealed class FaceRun : IAiRun
         return full with { Field = field, X0 = x0, Y0 = y0, Width = sw, Height = sh };
     }
 
-    private static AiPixels ToPixels(float[] image, AiPreviewSize size)
+    private static AiPixels ToPixels(float[] image, AiPreviewSize size, float[]? alpha = null)
     {
         int sw = size.Width, sh = size.Height;
         var bgra = new float[sw * sh * 4];
@@ -233,7 +244,7 @@ public sealed class FaceRun : IAiRun
                 bgra[p * 4] = Math.Clamp(image[p * 3 + 2], 0f, 1f);
                 bgra[p * 4 + 1] = Math.Clamp(image[p * 3 + 1], 0f, 1f);
                 bgra[p * 4 + 2] = Math.Clamp(image[p * 3], 0f, 1f);
-                bgra[p * 4 + 3] = 1f;
+                bgra[p * 4 + 3] = alpha?[p] ?? 1f;
             }
         });
         return new AiPixels(bgra, sw, sh);

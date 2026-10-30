@@ -596,6 +596,8 @@ public static class English
         ["Wird übernommen …"] = "Applying …",
         ["Übernommen — rückgängig mit Strg+Z."] = "Applied — undo with Ctrl+Z.",
         ["Das Bild wurde inzwischen geändert — bitte neu berechnen."] = "The image has changed in the meantime — please compute again.",
+        ["Die Regler wurden nach dem Berechnen verändert — bitte neu berechnen, damit das Ergebnis zu ihnen passt."] = "The sliders were changed after computing — please compute again so that the result matches them.",
+        ["Treue, Details oder Gamma geändert: Bei über 4× wirkt das jetzt nur auf den zweiten Durchgang. Für das volle Ergebnis neu berechnen (≈ {0})."] = "Fidelity, details or gamma changed: above 4× this now only affects the second pass. Compute again for the full result (≈ {0}).",
         ["Das Bild wurde inzwischen gewechselt oder geändert – bitte noch einmal anwenden."] = "The image was switched or changed in the meantime – please apply again.",
         ["Neu berechnen rechnet vom Bild vor der KI – nicht KI auf KI."] = "Computing again starts from the image before the AI – not AI on AI.",
         ["Die ausgeschaltete KI wurde dafür aus dem Bild genommen – gerechnet wird auf dem gezeigten Bild (Strg+Z holt sie zurück)."] = "The switched-off AI was taken out of the image for this – the step works on the image shown (Ctrl+Z brings it back).",

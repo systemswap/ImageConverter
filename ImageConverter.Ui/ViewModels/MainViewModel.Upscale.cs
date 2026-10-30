@@ -285,9 +285,11 @@ public partial class MainViewModel
 
     /// <summary>
     /// The latest result: the whole image or only a region (Region in image pixels, BaseRegion in pixels of the base of
-    /// the last pass; identical for a single pass).
+    /// the last pass; identical for a single pass). <c>FirstPass</c>: with two passes, the fidelity, details and gamma the
+    /// first one was blended and reduced with; the sliders afterwards only reach the last pass (No. 101).
     /// </summary>
-    private sealed record UpscaleEntry(UpscaleKey Key, SourceRect? Region, SourceRect? BaseRegion, UpscaleResult Result, TimeSpan Took);
+    private sealed record UpscaleEntry(UpscaleKey Key, SourceRect? Region, SourceRect? BaseRegion, UpscaleResult Result, TimeSpan Took,
+        (double Fidelity, double Details, bool Gamma)? FirstPass = null);
 
     private UpscaleEntry? _upscale;
     private (UpscaleResult Result, double Fidelity, double Details, MagickImage Image)? _upscaledImage;
@@ -469,8 +471,13 @@ public partial class MainViewModel
         var estimate = Upscalers.Format(CurrentEstimate());
         if (MatchingUpscale() is { } e)
         {
+            // Two passes: the first was blended with the values at the time; a full result needs a new computation, which
+            // takes long, so the result stays and the status says so instead of dropping it
+            var partly = e.FirstPass is { } first && first != (UpscaleFidelity, UpscaleDetails, GammaCorrect)
+                ? "\n" + Tr.T("Treue, Details oder Gamma geändert: Bei über 4× wirkt das jetzt nur auf den zweiten Durchgang. Für das volle Ergebnis neu berechnen (≈ {0}).", estimate)
+                : "";
             UpscaleStatus = Tr.T("Berechnet ({0}) — Vorschau und Speichern verwenden es.", Upscalers.Format(e.Took))
-                            + (inspect is null ? "" : "\n" + inspect);
+                            + partly + (inspect is null ? "" : "\n" + inspect);
             return;
         }
         if (MatchingUpscale(wholeOnly: false) is not null)
@@ -668,7 +675,7 @@ public partial class MainViewModel
             Ai.RefreshGpuStatus();
             // Release the model before the result is composed; fidelity and details no longer need it.
             if (Upscalers.ModelOf(method) is { } usedModel) Ai.Sessions.Release(usedModel.Id);
-            _upscale = new UpscaleEntry(key, region, baseRegion, result, took);
+            _upscale = new UpscaleEntry(key, region, baseRegion, result, took, plan.Passes > 1 ? (f0, d0, gamma) : null);
             _upscaledImage = null;
             if (region is null)
             {
@@ -1121,9 +1128,13 @@ public partial class MainViewModel
         int w, h;
         lock (image) (w, h) = ((int)image.Width, (int)image.Height);
         if (s.Upscaler == UpscaleMethod.Filter || (o.Width <= w && o.Height <= h)) return null;
+        // An own copy (it shares the pixels until written): a slider move during the export composes a new ×4 image and
+        // puts this one into the trash, which the preview empties – it must not be released while being saved (No. 101)
         if (path == CurrentPath && SelectedUpscaler.Method == s.Upscaler && UpscaleTwice == s.UpscaleTwice && MatchingUpscale() is not null
             && await UpscaledForExportAsync() is { } ready)
-            return (ready, false);
+        {
+            return (ImageOps.CloneOf(ready), true);
+        }
         if (Upscalers.ModelOf(s.Upscaler) is not { } m || !UpscaleModelInstalled(m)) return null;
 
         var plan = Upscalers.Plan(w, h, o.Width, o.Height, s.UpscaleTwice);

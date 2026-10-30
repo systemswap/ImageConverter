@@ -85,6 +85,10 @@ Fehlergedächtnis eintragen.
 
 ## Als Nächstes
 
+- **KI „Erst Einstellungen“ mit Zuschnitt:** Beim Einrechnen messen Dunst, „Gleiche Farbe“, Weißabgleich und Luminanzmaske auf dem ganzen
+  Pixelbild statt auf dem sichtbaren Ausschnitt; das Ergebnis kann dann von Vorschau und Export ohne KI abweichen (Fehlergedächtnis #101).
+  Lösung bräuchte ein Einrechnen mit Messung auf dem Ausschnitt.
+
 - **Vorschau gegen Export, Rest:** Seit Fehlergedächtnis #97 bleibt bei verkleinerter Vorschau ein kleiner Abstand (Blöcke 16 × 16, Rauschen 0,3,
   Dunst 45, Tiefen/Lichter 20, Schärfen 0,5: Mittel 0,6–1,6, einzelne Stellen bis 15 Stufen; passt das Bild in die Vorschau: 0,3). Er kommt
   vom Rechnen in anderer Größe, kein Fehler. Nicht gleich sind außerdem „Profil behalten“ bei breitem Farbraum (der Export rechnet dort im
