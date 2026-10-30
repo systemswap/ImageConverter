@@ -90,6 +90,12 @@ public partial class MainViewModel
 
         /// <summary>Removal: a new attempt from the image before the last removal; replaces that step in the list.</summary>
         public bool Replaces { get; init; }
+
+        /// <summary>Background: the image it was computed from, which later attempts start from again. An older entry of the history (or the original) holds it.</summary>
+        public MagickImage? Base { get; init; }
+
+        /// <summary>Background: number of image steps before this one that its result no longer contains (it started from the image before them).</summary>
+        public int Discards { get; init; }
     }
 
     /// <summary>Switched-off functions; part of the settings state (per image, undo, export).</summary>
@@ -153,6 +159,34 @@ public partial class MainViewModel
     /// <summary>The image steps of a file that led to the current state (oldest first).</summary>
     private List<Snapshot> ImageStepsOf(string path) =>
         _undo.Where(s => s.FilePath == path && s.Image is not null && s.Step is not null).Reverse().ToList();
+
+    /// <summary>The steps that are still part of the image: without those a later background attempt started before.</summary>
+    private static List<Snapshot> LiveSteps(List<Snapshot> steps)
+    {
+        var live = new List<Snapshot>();
+        foreach (var s in steps)
+        {
+            var gone = Math.Min(s.Step!.Discards, live.Count);
+            live.RemoveRange(live.Count - gone, gone);
+            live.Add(s);
+        }
+        return live;
+    }
+
+    /// <summary>
+    /// The latest background step of the displayed file, since the last "Apply selection" (which made everything before it
+    /// permanent): the image a new attempt starts from, the step's short info and the number of image steps done after it.
+    /// </summary>
+    internal (MagickImage Base, string Detail, int Later)? LastBackground()
+    {
+        if (CurrentPath is not { } path) return null;
+        var steps = ImageStepsOf(path);
+        var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
+        var last = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Background);
+        if (last <= applied) return null;
+        var step = steps[last];
+        return (step.Step!.Base ?? step.Image!, step.Step.Detail ?? "", steps.Count - last - 1);
+    }
 
     /// <summary>
     /// Index of the first AI step that still counts: after the last "Selection applied" step (which has already taken an
@@ -305,6 +339,24 @@ public partial class MainViewModel
             }
         }
         return doc;
+    }
+
+    /// <summary>
+    /// A pixel image that has left the history (a background attempt replaced by the next one): it and its variants with
+    /// geometry go to the trash, which the next display empties while the preview is stopped.
+    /// </summary>
+    private void ReleaseReplaced(MagickImage image)
+    {
+        lock (_geometryDocs)
+        {
+            foreach (var list in _geometryDocs.Values)
+            {
+                _geometryTrash.AddRange(list.Where(e => ReferenceEquals(e.Pixels, image) && !ReferenceEquals(e.Image, image)).Select(e => e.Image));
+                list.RemoveAll(e => ReferenceEquals(e.Pixels, image));
+            }
+            // A running upscale may still read it; then the finalizer releases it
+            if (!IsUpscaling && !_variants.Values.Any(v => ReferenceEquals(v.Image, image))) _geometryTrash.Add(image);
+        }
     }
 
     /// <summary>Releases evicted variants; call only while the preview is stopped.</summary>
@@ -499,7 +551,7 @@ public partial class MainViewModel
         if (_history is { } h && CurrentPath is { } path)
         {
             // AI as one row (later runs replace earlier ones), Skin & details of the last AI as a separate row
-            var steps = ImageStepsOf(path);
+            var steps = LiveSteps(ImageStepsOf(path));
             if (FirstLiveAi(steps) >= 0)
             {
                 var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;

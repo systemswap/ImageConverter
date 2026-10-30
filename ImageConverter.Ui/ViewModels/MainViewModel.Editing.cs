@@ -426,9 +426,20 @@ public partial class MainViewModel
             }
 
             await StopPreviewAsync();   // redo images might be being read right now
+            // A new background attempt right after the previous one takes its place: undo leads to the state before that
+            // step and the previous result is released (otherwise every attempt stays in memory).
+            MagickImage? replaced = null;
+            if (step is { Kind: ImageStepKind.Background, Replaces: true }
+                && _undo.TryPeek(out var top) && top.FilePath == path && top.Step?.Kind == ImageStepKind.Background && top.Image is { } earlier)
+            {
+                _undo.Pop();
+                (replaced, source, before) = (source, earlier, top.Settings);
+                step = step with { Replaces = false, Discards = top.Step.Discards };
+            }
             _undo.Push(new Snapshot(path, source, before, Step: step, Recipe: recipeAfter is null ? null : h.Recipe));
             ClearRedo();
             h.Current = result;
+            if (replaced is not null) ReleaseReplaced(replaced);
             if (recipeAfter is not null) h.Recipe = recipeAfter;
             if (settingsAfter is not null) ChangeSettings(path, settingsAfter);   // belongs to this step (the snapshot holds the state before)
             if (h == _history) await ShowCurrentAsync();
@@ -536,10 +547,13 @@ public partial class MainViewModel
     /// <param name="operation">Computes the new image from the current one.</param>
     /// <param name="label">Name in the "Edits" list ("Hintergrund entfernt" / "Hintergrund unscharf").</param>
     /// <param name="detail">Short info for the "Edits" list (model, strength).</param>
-    /// <param name="replaces">New attempt from the image before the last background step.</param>
+    /// <param name="start">The image <paramref name="operation"/> computes from; later attempts start from it again.</param>
+    /// <param name="replaces">New attempt directly on the previous one: takes its place, the previous result is released.</param>
+    /// <param name="discards">Number of later image steps the new attempt no longer contains (it starts from before them).</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
-    internal Task<MagickImage?> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail, bool replaces) =>
-        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces });
+    internal Task<MagickImage?> ApplyBackgroundAsync(Func<MagickImage, MagickImage> operation, string label, string detail,
+        MagickImage start, bool replaces, int discards) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Background, label, detail, null) { Replaces = replaces, Base = start, Discards = discards });
 
     /// <summary>
     /// An image step that reports the image it produced. The caller must not take <see cref="CurrentImage"/> instead:

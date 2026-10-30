@@ -834,8 +834,8 @@ public partial class AiViewModel : ViewModelBase
         new(MainViewModel.RenderLookPreview(frame.Bgra, frame.Width, frame.Height, look, plan,
             grain, targetWidth > 0 ? (double)frame.Width / targetWidth : 1), frame.Width, frame.Height);
 
-    /// <summary>The image before the AI at preview size, without adjustments (for the "before" side).</summary>
-    private static AiPreviewFrame Original(MagickImage image, AiPreviewSize size)
+    /// <summary>The image before the AI at preview size, without adjustments (for the "before" side; "Hintergrund" while it recomputes).</summary>
+    internal static AiPreviewFrame Original(MagickImage image, AiPreviewSize size)
     {
         using var small = ImageOps.Resize(image, size.Width, size.Height, size.Filter, size.GammaCorrect);
         var pixels = ImageOps.ToDisplayPixels(small);

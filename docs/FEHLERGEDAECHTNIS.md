@@ -2449,3 +2449,27 @@ Test oder Nachweis.
 - **Wo im Code:** `AiModelStore.ImportAsync`.
 - **Test:** `AiTests.Import_ChecksSizeAndChecksum_AndLeavesNothingBehind` (auch falsche Größe, falscher Inhalt
   ohne Reste, dieselbe Datei noch einmal, Abbruch mittendrin).
+
+## 90. Hintergrund: Neuer Versuch rechnete auf dem freigestellten Bild, wenn danach ein anderer Bildschritt kam (0.7.0)
+
+- **Entdeckt:** 30.10.2026, 0.7.0, vom Nutzer: „nimmt das zweite Modell das Bild ohne Hintergrund“. **Behoben:** 0.7.1-beta.
+- **Was:** Direkt hintereinander stimmte es schon (pixelgleich gemessen), sah aber falsch aus: Die Vorschau zeigte bis zum
+  neuen Ergebnis das alte, und das neue ist wieder ohne Hintergrund. Falsch gerechnet wurde, wenn nach dem Hintergrund ein
+  anderer Bildschritt kam (KI, Entfernen): Das aktuelle Bild galt dann nicht mehr als Ergebnis eines Versuchs (#84), und der
+  nächste Versuch rechnete darauf weiter. Die vorhandene Transparenz wird dabei mit der neuen Maske multipliziert; was
+  einmal weg war, blieb weg.
+- **Lösung:** Der Ausgang steht jetzt im Verlauf statt in einer eigenen Tabelle: Der Hintergrund-Schritt merkt sich sein
+  Ausgangsbild (`ImageStep.Base`), `LastBackground` sucht ihn seit dem letzten „Auswahl anwenden“. Spätere Schritte sind im
+  neuen Ergebnis nicht enthalten (`ImageStep.Discards`, `LiveSteps` nimmt ihre Zeilen aus „Bearbeitungen“), Strg+Z holt
+  sie zurück; der Hinweis sagt es vorher. Hat die KI das Bild danach vergrößert, rechnet die App nicht und meldet das, weil
+  Zuschnitt und Striche zur anderen Größe gehören. Die Vorschau zeigt beim neuen Versuch sofort das Bild davor.
+- **Speicher:** Ein neuer Versuch direkt auf dem vorigen ersetzt dessen Schritt, das alte Ergebnis wird freigegeben
+  (`ReleaseReplaced`). Vorher blieb jeder Versuch im Rückgängig-Stapel. Läuft ein Upscaling, das noch daraus lesen könnte,
+  bleibt die Freigabe dem Finalizer überlassen.
+- **Nicht tun:** Aus „sieht gleich aus“ auf den Rechenweg schließen, in beide Richtungen; einen einzelnen Pixel prüfen statt
+  das ganze Bild. Mein Test zu #84 hat nur eine Stelle geprüft und den Fall mit Zwischenschritt nicht abgedeckt.
+- **Wo im Code:** `MainViewModel.Edits.cs` (`LastBackground`, `LiveSteps`, `ReleaseReplaced`), `MainViewModel.Editing.cs`
+  (`ApplyEditAsync`), `BackgroundViewModel.Apply`.
+- **Test:** unsichtbares Fenster `~/.cache/imageconverter-build/hintergrund-ui`, echte Modelle, ganzes Bild verglichen: lite →
+  BEN2, auch mit Regler und mit Zwischenschritt, gleich BEN2 direkt (0 Werte verschieden); Gegenprobe BEN2 auf dem
+  freigestellten Bild: 3,5 Mio. Werte verschieden. Im Testprojekt fehlt die Fensterumgebung (siehe offene Punkte).

@@ -14,8 +14,14 @@ Geometrie, Größe/Upscaling und allen Filtern.
 - **Grün: bleibt** — grob über etwas malen, das bleiben soll: berührte Objekte sind vor Rot geschützt. Fehlt ein Teil des
   Motivs, rechnet das Modell den Bereich um die grünen Striche (Rahmen + 50 %) vergrößert noch einmal und ergänzt die
   Objekte, die Grün dort berührt.
-- **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild davor und nimmt die gemerkte Maske — ohne
-  neue Erkennung, 1–3 s. Der Regler rechnet erst beim Klick, nicht beim Ziehen.
+- **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild vor dem Hintergrund-Schritt und nimmt die
+  gemerkte Maske — ohne neue Erkennung, 1–3 s. Der Regler rechnet erst beim Klick, nicht beim Ziehen.
+- **Anderes Modell:** dasselbe mit neuer Erkennung; das Ergebnis ist pixelgleich mit diesem Modell direkt auf dem Bild
+  davor. Die Vorschau zeigt während der Rechnung das Bild davor. Der neue Versuch ersetzt den vorigen: Dessen Ergebnis wird
+  freigegeben, Strg+Z führt zum Stand vor dem Hintergrund-Schritt.
+- **Bildschritte danach** (KI, Entfernen): Ein neuer Versuch geht trotzdem zum Bild vor dem Hintergrund-Schritt zurück; sie
+  sind dann nicht enthalten. Das sagt der Hinweis vorher, Strg+Z holt sie zurück. Hat die KI das Bild danach vergrößert,
+  meldet die App das und rechnet nicht. „Auswahl anwenden“ macht alles Bisherige endgültig: Danach ist das Bild der Ausgang.
 - Gerechnet wird der **sichtbare Ausschnitt** (nach Zuschnitt); außerhalb ist transparent bzw. unverändert.
 - JPEG/BMP: Hinweis mit „Als PNG speichern“ — beim Speichern als JPEG/BMP wird der Hintergrund weiß.
 - Modelle: Einstellungen › KI › Hintergrund. RMBG-2.0: „Seite öffnen“, dort zustimmen und laden, dann „Datei wählen …“ —
@@ -53,6 +59,20 @@ Bria gibt das Modell nur nach Zustimmung frei; die App kann es deshalb nicht sel
    und Prüfsumme und kopiert sie nach `KI-Modelle/rmbg-2.0/model.onnx` (neben dem Programm, sonst im Benutzerordner).
 
 Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
+
+## Reihenfolge in der Kette
+
+1. **Pixelbild:** Original, dann KI, Entfernen und Hintergrund in der Reihenfolge der Klicks.
+2. **Geometrie** (`GeometryRecipe`): Begradigen, Entzerren, Gerade richten, Zuschnitt, Drehen/Spiegeln.
+3. **Größe** und Rauschen: beim Vergrößern erst Rauschen, sonst danach.
+4. **Regler:** Dunst, Tiefen/Lichter, Licht und Farbe, Schärfen, Körnung.
+5. **Ausgabe:** Farbprofil, Metadaten.
+
+Das Modell sieht das Bild also ohne Regler (Stufe 4); sie bleiben beim neuen Versuch stehen und wirken danach auf das
+Ergebnis. Es sieht aber KI- und Entfernen-Schritte, die vor dem Hintergrund-Schritt liegen.
+
+Transparente Pixel sparen in den Stufen 3–4 heute keine Rechenzeit: Die Filter rechnen alle Pixel und kopieren Alpha nur
+durch. Unter voll transparenten Pixeln liegen die alten Farben, die Filter sehen sie also (Wirkung nicht gemessen).
 
 ## Rechnung (`ImageConverter.Core/Ai/BackgroundRemover.cs`)
 

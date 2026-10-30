@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -52,6 +51,8 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         _ai = ai;
         _ai.ModelsChanged += (_, _) => Rescan();
         _main.PropertyChanged += OnMainPropertyChanged;
+        // Every image step, undo, redo and image switch rebuilds the "Edits" list: the shown image may have changed
+        _main.EditRows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(AgainHint));
         _main.FilesReplaced += (_, _) =>
         {
             ClearAll();
@@ -68,7 +69,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     public bool HasModels => Available.Count > 0;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ModelHint))]
+    [NotifyPropertyChangedFor(nameof(ModelHint), nameof(AgainHint))]
     [NotifyCanExecuteChangedFor(nameof(ApplyCommand))]
     public partial AiModel? SelectedModel { get; set; }
 
@@ -251,11 +252,15 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     [ObservableProperty] public partial string? Status { get; set; }
 
     /// <summary>
-    /// The image each result was computed from: a new attempt on a result (other model, strokes, mode) starts again from
-    /// that image instead of building on the result. Held at the result itself, so that switching images, undo and redo do
-    /// not lose it; entries go with their result.
+    /// After a background step: what the next run starts from. It always starts from the image before that step, never from
+    /// the result, even with other image steps (AI, removal) in between; those are then not part of the new result.
     /// </summary>
-    private readonly ConditionalWeakTable<MagickImage, MagickImage> _bases = new();
+    public string? AgainHint => _main.LastBackground() switch
+    {
+        null => null,
+        { Later: 0 } last => Tr.T("Zu sehen: Ergebnis von {0}. Anwenden rechnet neu vom Bild vor dem Hintergrund-Schritt.", last.Detail),
+        { } last => Tr.T("Zu sehen: Ergebnis von {0}, danach weitere Bildschritte ({1}). Anwenden rechnet neu vom Bild vor dem Hintergrund-Schritt, die späteren Schritte sind dann nicht enthalten (Strg+Z holt sie zurück).", last.Detail, last.Later),
+    };
 
     /// <summary>Mask of the last run (per image, model and area): new strokes, mode or blur need no new model run.</summary>
     private (MagickImage Image, string ModelId, BackgroundMask Mask)? _mask;
@@ -275,10 +280,20 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             return;
         }
 
-        var again = _bases.TryGetValue(current, out var before);
-        var start = again ? before! : current;
+        // A new attempt starts from the image before the last background step, not from its result
+        var earlier = _main.LastBackground();
+        var start = earlier?.Base ?? current;
+        var discards = earlier?.Later ?? 0;
         int pw, ph;
         lock (start) (pw, ph) = ((int)start.Width, (int)start.Height);
+        int nowW, nowH;
+        lock (current) (nowW, nowH) = ((int)current.Width, (int)current.Height);
+        if ((pw, ph) != (nowW, nowH))
+        {
+            // Enlarged by the AI after the background step: crop and strokes refer to the other size
+            Status = Tr.T("Das Bild wurde nach dem Hintergrund-Schritt in der Größe geändert. Bitte erst mit Strg+Z bis dorthin zurückgehen.");
+            return;
+        }
         var region = ShownRegion(pw, ph);
         var strokes = Strokes.Select(ToPixels).ToArray();
         var cached = _mask is { } m && ReferenceEquals(m.Image, start) && m.ModelId == model.Id && m.Mask.Region == region ? m.Mask : null;
@@ -289,7 +304,9 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         IsRunning = true;
         AppLog.Activity($"Hintergrund: {model.Name}");
         var clock = Stopwatch.StartNew();
-        Status = Tr.T("Wird berechnet …");
+        Status = earlier is not null ? Tr.T("Rechnet mit {0} neu vom Bild vor dem Hintergrund-Schritt …", Tr.T(chosen.Name)) : Tr.T("Wird berechnet …");
+        // Show the image the new attempt starts from right away instead of the previous result
+        var shownOriginal = earlier is not null ? await ShowOriginalAsync(start) : null;
         var expected = _seconds.TryGetValue(model.Id, out var s) ? s : Expected(model);
         var phase = cached is null ? Tr.T("Hintergrund · Motiv wird erkannt (etwa {0:0} s) …", expected) : Tr.T("Hintergrund · Kanten …");
         _ai.ShowActivity(phase, 0, CancelCommand);
@@ -318,15 +335,18 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                 var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, segment, cts.Token));
                 return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token);
             }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
-               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), again);
+               mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards);
 
             if (result is not null)
             {
-                _bases.AddOrUpdate(result, start);
                 if (mask is not null) _mask = (start, model.Id, mask);
                 StrokesApplied = strokes.Length > 0;
-                Status = Tr.T("Fertig nach {0:0.0} s — rückgängig mit Strg+Z. Nachbessern mit Rot oder Grün, dann noch einmal anwenden: rechnet vom Bild davor und ohne neues Erkennen.",
-                    clock.Elapsed.TotalSeconds);
+                Status = earlier is not null
+                    ? Tr.T("Mit {0} neu vom Bild vor dem Hintergrund-Schritt gerechnet ({1:0.0} s). Rückgängig mit Strg+Z.",
+                        Tr.T(chosen.Name), clock.Elapsed.TotalSeconds)
+                    : Tr.T("Fertig nach {0:0.0} s — rückgängig mit Strg+Z. Nachbessern mit Rot oder Grün, dann noch einmal anwenden: rechnet vom Bild davor und ohne neues Erkennen.",
+                        clock.Elapsed.TotalSeconds);
+                OnPropertyChanged(nameof(AgainHint));
             }
             else
             {
@@ -340,10 +360,46 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         finally
         {
             timer.Stop();
+            if (shownOriginal is not null && ReferenceEquals(_main.OverrideBitmap, shownOriginal))
+            {
+                _main.OverrideBitmap = null;   // the new result (or, after cancelling, the previous one) is shown again
+                _main.OverrideBeforeBitmap = null;
+            }
             _runCts = null;
             IsRunning = false;
             AppLog.Activity(null);
             _ai.HideActivity();
+        }
+    }
+
+    /// <summary>
+    /// Shows the image a new attempt starts from in the preview while it computes, displayed with the current geometry,
+    /// without adjustments.
+    /// </summary>
+    /// <returns>The bitmap shown, or null if the image could not be prepared.</returns>
+    private async Task<Avalonia.Media.Imaging.Bitmap?> ShowOriginalAsync(MagickImage start)
+    {
+        var geometry = _main.ShownGeometry;
+        var preview = _main.PreviewSize();
+        int pw, ph;
+        lock (start) (pw, ph) = ((int)start.Width, (int)start.Height);
+        var size = AiPreviewSize.Fit(pw, ph, Math.Max(preview.Width, preview.Height)) with { Filter = preview.Filter, GammaCorrect = preview.GammaCorrect };
+        try
+        {
+            var shown = await Task.Run(() =>
+            {
+                AiPreviewFrame frame;
+                lock (start) frame = AiViewModel.Original(start, size);
+                return MainViewModel.ShowWithGeometry(frame, 0, false, geometry.Recipe, geometry.Stages);
+            });
+            var bitmap = ImageConverter.Imaging.BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
+            _main.OverrideBitmap = bitmap;
+            _main.OverrideBeforeBitmap = bitmap;
+            return bitmap;
+        }
+        catch (Exception ex) when (ex is MagickException or InvalidOperationException)
+        {
+            return null;   // only a display aid: the computation itself goes on
         }
     }
 
@@ -395,7 +451,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
     // ------------------------------------------------------------ Image change
 
-    /// <summary>Another image: its strokes and status go; the bases stay with their results (see <see cref="_bases"/>).</summary>
+    /// <summary>Another image: its strokes and status go; what a new attempt starts from stays in the history of the image.</summary>
     private void ClearAll()
     {
         Strokes = [];

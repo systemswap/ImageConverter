@@ -360,7 +360,14 @@ public class AiTests
             var real = Path.Combine(source, "richtig.onnx");
             await File.WriteAllBytesAsync(real, payload);
             var link = Path.Combine(source, "verknuepfung.onnx");
-            File.CreateSymbolicLink(link, real);
+            try
+            {
+                File.CreateSymbolicLink(link, real);
+            }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                link = real;   // Windows allows links only with developer mode or as administrator: test the rest
+            }
             await store.ImportAsync(model, link, null, default);
             var installed = store.PathOf(model)!;
             Assert.Null(new FileInfo(installed).LinkTarget);

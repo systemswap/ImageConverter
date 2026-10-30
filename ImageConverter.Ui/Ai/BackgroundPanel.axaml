@@ -100,6 +100,9 @@
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
                            IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
                            Text="{Binding Status}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0" FontWeight="SemiBold"
+                           IsVisible="{Binding AgainHint, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding AgainHint}" />
 
                 <!-- JPEG/BMP kennen keine Transparenz -->
                 <Border IsVisible="{Binding ShowFormatHint}" Margin="0,8,0,0" Padding="10,8"
