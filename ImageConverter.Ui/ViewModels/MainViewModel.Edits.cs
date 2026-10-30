@@ -88,14 +88,24 @@ public partial class MainViewModel
         /// <summary>The same AI result without "Skin &amp; details" (only if there were any), used to switch them off.</summary>
         public MagickImage? Plain { get; set; }
 
-        /// <summary>Removal: a new attempt from the image before the last removal; replaces that step in the list.</summary>
+        /// <summary>A new attempt of the step directly before it (same kind): takes its place in the history.</summary>
         public bool Replaces { get; init; }
 
-        /// <summary>Background: the image it was computed from, which later attempts start from again. An older entry of the history (or the original) holds it.</summary>
+        /// <summary>
+        /// AI, removal, background: the image the step was computed from, which a new attempt starts from again (No. 99).
+        /// An older entry of the history (or the original) holds it.
+        /// </summary>
         public MagickImage? Base { get; init; }
 
-        /// <summary>Background: number of image steps before this one that its result no longer contains (it started from the image before them).</summary>
+        /// <summary>Number of image steps before this one that its result no longer contains (it started from the image before them).</summary>
         public int Discards { get; init; }
+
+        /// <summary>AI: the look rendered into the result ("Erst Einstellungen"); a new attempt renders it again.</summary>
+        public Look? Baked { get; init; }
+
+        /// <summary>Removal: the strokes it removed (in the displayed image); a new attempt starts from <see cref="Base"/>
+        /// only while the marking still begins with them.</summary>
+        public IReadOnlyList<Core.Ai.BrushStroke>? Strokes { get; init; }
     }
 
     /// <summary>Switched-off functions; part of the settings state (per image, undo, export).</summary>
@@ -160,6 +170,9 @@ public partial class MainViewModel
     private List<Snapshot> ImageStepsOf(string path) =>
         _undo.Where(s => s.FilePath == path && s.Image is not null && s.Step is not null).Reverse().ToList();
 
+    /// <summary>The image steps of a file that its current image still contains (<see cref="LiveSteps"/>).</summary>
+    private List<Snapshot> LiveStepsOf(string path) => LiveSteps(ImageStepsOf(path));
+
     /// <summary>The steps that are still part of the image: without those a later background attempt started before.</summary>
     private static List<Snapshot> LiveSteps(List<Snapshot> steps)
     {
@@ -174,19 +187,27 @@ public partial class MainViewModel
     }
 
     /// <summary>
-    /// The latest background step of the displayed file, since the last "Apply selection" (which made everything before it
-    /// permanent): the image a new attempt starts from, the step's short info and the number of image steps done after it.
+    /// The latest step of a kind in the displayed file that its image still contains, since the last "Apply selection" (which
+    /// made everything before it permanent): the image a new attempt starts from, the step and the number of image steps
+    /// done after it. One place for AI, removal and background, so that their new attempts follow the same rules (No. 99).
     /// </summary>
-    internal (MagickImage Base, string Detail, int Later)? LastBackground()
+    /// <param name="kind">Kind of step.</param>
+    /// <returns>The step, or null if there is none.</returns>
+    internal (MagickImage Base, ImageStep Step, int Later)? LastStep(ImageStepKind kind)
     {
         if (CurrentPath is not { } path) return null;
-        var steps = ImageStepsOf(path);
+        var steps = LiveStepsOf(path);
         var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
-        var last = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Background);
+        var last = steps.FindLastIndex(s => s.Step!.Kind == kind);
         if (last <= applied) return null;
         var step = steps[last];
-        return (step.Step!.Base ?? step.Image!, step.Step.Detail ?? "", steps.Count - last - 1);
+        return (step.Step!.Base ?? step.Image!, step.Step, steps.Count - last - 1);
     }
+
+    /// <summary>The latest background step (see <see cref="LastStep"/>) with its short info.</summary>
+    /// <returns>Start image of a new attempt, short info and number of later image steps; null if there is none.</returns>
+    internal (MagickImage Base, string Detail, int Later)? LastBackground() =>
+        LastStep(ImageStepKind.Background) is { } last ? (last.Base, last.Step.Detail ?? "", last.Later) : null;
 
     /// <summary>
     /// Index of the first AI step that still counts: after the last "Selection applied" step (which has already taken an
@@ -214,7 +235,7 @@ public partial class MainViewModel
     private bool CanHideAi(string path, EditHistory h, out string? reason)
     {
         reason = null;
-        var steps = ImageStepsOf(path);
+        var steps = LiveStepsOf(path);
         var first = FirstLiveAi(steps);
         if (first < 0) return false;
 
@@ -237,7 +258,7 @@ public partial class MainViewModel
     /// <summary>Determines whether the last AI step has "Skin &amp; details" that can be switched off.</summary>
     private bool CanHideSkin(string path, EditHistory h)
     {
-        var steps = ImageStepsOf(path);
+        var steps = LiveStepsOf(path);
         if (FirstLiveAi(steps) < 0) return false;
         var last = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Ai);
         return steps[last].Step!.Plain is { } plain && SameSize(plain, After(steps, last, h)) && Replayable(steps, last + 1);
@@ -265,7 +286,7 @@ public partial class MainViewModel
         if (_variants.TryGetValue((path, variant), out var cached) && ReferenceEquals(cached.Current, h.Current))
             return cached.Image;
 
-        var steps = ImageStepsOf(path);
+        var steps = LiveStepsOf(path);
         int from;
         MagickImage doc;
         if (variant == EditSteps.Ai)
@@ -555,7 +576,7 @@ public partial class MainViewModel
         if (_history is { } h && CurrentPath is { } path)
         {
             // AI as one row (later runs replace earlier ones), Skin & details of the last AI as a separate row
-            var steps = LiveSteps(ImageStepsOf(path));
+            var steps = LiveStepsOf(path);
             if (FirstLiveAi(steps) >= 0)
             {
                 var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
@@ -705,6 +726,29 @@ public partial class MainViewModel
     /// "Skin &amp; details" is taken out of the image, switched-off geometry stages leave the recipe. One step, undoable
     /// with Ctrl+Z.
     /// </summary>
+    /// <summary>
+    /// Makes the pixel image what is displayed while the AI or its "Skin &amp; details" are switched off: one image step.
+    /// </summary>
+    /// <param name="hidden">What is switched off.</param>
+    /// <param name="settingsAfter">Settings in the same step (switched-off functions cleared).</param>
+    /// <param name="recipeAfter">Geometry in the same step; null leaves it unchanged.</param>
+    /// <returns>null if nothing was switched off that changes the pixel image; otherwise whether the step was done.</returns>
+    private async Task<bool?> ApplyImageVariantAsync(EditSteps hidden, Func<SettingsState, SettingsState> settingsAfter,
+        GeometryRecipe? recipeAfter)
+    {
+        if (_history is not { } h || CurrentPath is not { } path || PixelsFor(path, h, hidden) is var shown && ReferenceEquals(shown, h.Current))
+            return null;
+        var copy = ImageOps.CloneOf(shown);
+        var aiOut = (hidden & EditSteps.Ai) != 0;
+        var last = LiveStepsOf(path).Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
+        // AI removed completely: from here on no AI counts. Only Skin & details removed: the AI stays, without them, and a
+        // new AI attempt still starts from the image before it (No. 99).
+        var step = aiOut
+            ? new ImageStep(ImageStepKind.Applied, Tr.T("Auswahl angewendet"), Tr.T("ohne KI"), null)
+            : new ImageStep(ImageStepKind.Ai, last.Label, last.Detail, null) { Base = last.Base, Baked = last.Baked };
+        return await ApplyEditAsync(_ => copy, settingsAfter, step, recipeAfter);
+    }
+
     [RelayCommand(CanExecute = nameof(CanApplySelection))]
     private async Task ApplySelection()
     {
@@ -716,19 +760,7 @@ public partial class MainViewModel
         var recipeAfter = _history is { } hr ? WithoutHiddenStages(hr.Recipe, hidden) : null;
         if (recipeAfter is not null && recipeAfter == _history!.Recipe) recipeAfter = null;
 
-        if (_history is { } h && CurrentPath is { } path && PixelsFor(path, h, hidden) is var shown && !ReferenceEquals(shown, h.Current))
-        {
-            var copy = ImageOps.CloneOf(shown);
-            var aiOut = (hidden & EditSteps.Ai) != 0;
-            var steps = ImageStepsOf(path);
-            var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
-            // AI removed completely: from here on no AI counts. Only Skin & details removed: the AI stays, without them.
-            var step = aiOut
-                ? new ImageStep(ImageStepKind.Applied, Tr.T("Auswahl angewendet"), Tr.T("ohne KI"), null)
-                : new ImageStep(ImageStepKind.Ai, last.Label, last.Detail, null);
-            await ApplyEditAsync(_ => copy, Cleared, step, recipeAfter);
-            return;
-        }
+        if (await ApplyImageVariantAsync(hidden, Cleared, recipeAfter) is not null) return;
 
         if (recipeAfter is not null && _history is { } hg && CurrentPath is { } gpath)
         {

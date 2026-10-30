@@ -2604,3 +2604,32 @@ Test oder Nachweis.
   `CanUpscale`), `MainViewModel.Edits.cs` (`ShowDocumentAsync`), `AiViewModel.Commit`, `BackgroundViewModel`, `RetouchViewModel`.
 - **Test:** `kette-ui` Fälle 1–6: neu alle richtig, alter Code alle falsch (Fall 6 mit der Freigabe-Meldung). Im Testprojekt fehlt die
   Fensterumgebung (offene Punkte).
+
+## 99. KI-Schritte: Neuer Versuch nahm nach Rückgängig, Bildwechsel oder anderen Schritten das falsche Ausgangsbild (0.7.12 beta)
+
+- **Entdeckt:** 31.10.2026, 0.7.12-beta, dieselbe Prüfung wie #98 (Fälle 7–9 in `kette-ui`). **Behoben:** 0.7.13-beta.
+- **Was (mit dem alten Code nachgestellt):**
+  7. Entfernen, zweiter Versuch mit anderem Modell, Strg+Z, noch einmal Entfernen: rechnete auf dem ersten Ergebnis weiter statt vom
+     Original (Fingerabdruck anders als eine frische Entfernung) – #84, bei Entfernen noch offen.
+  8. KI mit „Erst Einstellungen“ (Look ins Bild gerechnet), KI auf einem anderen Bild, zurück, neu berechnen: Der Look fehlte im neuen
+     Ergebnis – es war gleich der KI ohne Look.
+  9. KI, dann Hintergrund, dann neue KI: KI auf KI, auf dem schon verbesserten Bild – gegen die Regel „immer vom Stand vor der KI“.
+- **Warum:** Jede Rubrik führte ihr eigenes Gedächtnis für den neuen Versuch: Entfernen und KI je ein einzelnes Feld „letztes
+  Ergebnis → Ausgang“ für alle Bilder, gültig nur, solange genau dieses Ergebnis zu sehen war; nur der Hintergrund las es seit #90 aus
+  dem Verlauf. Nach Strg+Z, Bildwechsel oder einem anderen Schritt passte das Feld nicht mehr, und der Ausweg lief auf das aktuelle Bild
+  oder ein Bild ohne den eingerechneten Look.
+- **Lösung:** Ein Gedächtnis für alle drei, im Verlauf: Der Schritt trägt sein Ausgangsbild (`ImageStep.Base`), die KI dazu den
+  eingerechneten Look (`Baked`), Entfernen seine Markierung (`Strokes`). `LastStep(kind)` sucht den letzten Schritt der Art unter den
+  Schritten, die das Bild noch enthält (`LiveStepsOf`). Ein neuer Versuch direkt danach ersetzt ihn (`Replaces`, für alle drei; Strg+Z
+  führt zum Stand davor, der alte Versuch wird freigegeben). Entfernen rechnet nur dann vom Bild davor, wenn die Markierung noch mit
+  der entfernten beginnt (ergänzt, nicht gelöscht) – sonst baut es auf, wie bisher (Fall 10). Die KI rechnet immer vom Bild vor der
+  KI; kamen danach andere Bildschritte, sind sie nicht enthalten (`Discards`) – der Hinweis sagt es vorher, Strg+Z holt sie zurück, wie
+  beim Hintergrund. „Neu anwenden“ mit nur ausgeschaltetem „Haut & Details“ gibt Ausgangsbild und Look an den neuen KI-Schritt weiter.
+  Ausblenden, Neu anwenden und die Liste lesen nur noch die Schritte, die das Bild enthält.
+- **Nicht tun:** Den Ausgang eines Versuchs an „das gerade gezeigte Bild“ oder ein Feld pro Rubrik binden; er gehört zum Schritt im
+  Verlauf.
+- **Wo im Code:** `MainViewModel.Edits.cs` (`ImageStep`, `LastStep`, `LiveStepsOf`, `ApplyImageVariantAsync`),
+  `MainViewModel.Editing.cs` (`ApplyEditAsync`, `ApplyImageEditAsync`, `ApplyRetouchAsync`), `AiViewModel.ChooseStart`/`AgainHint`,
+  `RetouchViewModel.Remove`.
+- **Test:** `kette-ui` Fälle 7–10 mit echten Modellen (MI-GAN, LaMa, Allround, BiRefNet lite), ganze Bilder per Fingerabdruck
+  verglichen: neu alle richtig; alter Code 7–9 falsch, 10 richtig (bleibt so).

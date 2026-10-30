@@ -139,7 +139,6 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
     {
         Strokes = [];
         StrokesApplied = false;
-        _last = null;
         Status = null;
     }
 
@@ -151,12 +150,6 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
     public partial bool IsRunning { get; set; }
 
     [ObservableProperty] public partial string? Status { get; set; }
-
-    /// <summary>
-    /// Last removal: its result and the image before it. If the result is still the current image and the mark has not
-    /// been cleared, a new attempt starts from the image before, so that nothing accumulates.
-    /// </summary>
-    private (MagickImage Result, MagickImage Base)? _last;
 
     private bool CanRemove => HasStrokes && SelectedModel is not null && !IsRunning && _main.HasImage && !_main.IsEditing;
 
@@ -170,10 +163,16 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
             return;
         }
 
-        var again = _last is { } last && ReferenceEquals(current, last.Result);
-        var start = again ? _last!.Value.Base : current;
+        // A new attempt starts from the image before the last removal while nothing came after it and the marking still
+        // begins with the strokes it removed (added to, not cleared): nothing accumulates. Otherwise it builds on the
+        // current image. Taken from the history, so that undo, image switches and other steps cannot mix it up (No. 99).
+        var marking = Strokes;
+        var last = _main.LastStep(ImageStepKind.Retouch);
+        var again = last is { Later: 0, Step.Strokes: { } removed }
+                    && marking.Count >= removed.Count && marking.Take(removed.Count).SequenceEqual(removed);
+        var start = again ? last!.Value.Base : current;
         // The strokes were painted on the displayed image (rotated, cropped …); filling happens in the pixel image.
-        var strokes = Strokes.Select(ToPixels).ToArray();
+        var strokes = marking.Select(ToPixels).ToArray();
         using var cts = new CancellationTokenSource();
         _runCts = cts;
         IsRunning = true;
@@ -188,11 +187,10 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
             {
                 var session = _ai.Sessions.Get(model, path);
                 return Inpainter.Run(start, strokes, new OnnxInpaintModel(session, model), progress, cts.Token);
-            }, Tr.T(model.Name), again, current);
+            }, Tr.T(model.Name), start, again, marking, current);
 
             if (result is not null)
             {
-                _last = (result, start);
                 StrokesApplied = true;
                 Status = Tr.T("Entfernt nach {0:0.0} s — rückgängig mit Strg+Z. Anderes Modell oder Markierung ergänzt: noch einmal „Entfernen“ rechnet wieder vom Bild davor.",
                     clock.Elapsed.TotalSeconds);
@@ -232,7 +230,6 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
     {
         Strokes = [];
         StrokesApplied = false;
-        _last = null;
         Status = null;
     }
 

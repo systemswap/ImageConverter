@@ -42,6 +42,7 @@ public partial class AiViewModel : ViewModelBase
     public AiViewModel(MainViewModel main)
     {
         _main = main;
+        _main.EditRows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(AgainHint));   // the history changed
         Store = AiModelStore.CreateDefault();
         _sessions.Measured = AppSettings.Load().AiSpeed;   // last speed test: GPU or CPU
         Upscalers.OnGpu = _sessions.OnGpu;
@@ -396,8 +397,11 @@ public partial class AiViewModel : ViewModelBase
     /// <param name="Current">The current image at computation time; "Übernehmen" (commit) only works while it is still current.</param>
     /// <param name="Turns">Quarter turns by which <paramref name="Input"/> is rotated (faces upright, as displayed).</param>
     /// <param name="Flip">Whether <paramref name="Input"/> is also mirrored. The result is turned back with these values before committing.</param>
+    /// <param name="Replaces">New attempt directly on the previous AI step: the commit takes its place.</param>
+    /// <param name="Discards">Image steps after the previous AI step that the result no longer contains.</param>
     private sealed record RunSetup(MagickImage Base, MagickImage Input, MainViewModel.Look? Baked,
-        MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current, int Turns = 0, bool Flip = false);
+        MainViewModel.Look? LookAfter, bool LookOnTop, MagickImage Current, int Turns = 0, bool Flip = false,
+        bool Replaces = false, int Discards = 0);
 
     /// <summary>
     /// Result of the model, not yet committed: strength and skin texture re-blend it live (<see cref="IAiRun"/>);
@@ -409,12 +413,6 @@ public partial class AiViewModel : ViewModelBase
 
     /// <summary>Faces found for the pending result, reused when recomputing with a different fidelity.</summary>
     private IReadOnlyList<DetectedFace>? _runFaces;
-
-    /// <summary>
-    /// Last committed AI step: result, image before it and the look rendered in, so that a new run starts again
-    /// before the AI instead of building on its result.
-    /// </summary>
-    private (MagickImage Result, MagickImage Base, MainViewModel.Look? Baked)? _lastAi;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CommitCommand), nameof(DiscardCommand))]
@@ -512,24 +510,32 @@ public partial class AiViewModel : ViewModelBase
     private Task Apply() => ComputeAsync(rerun: FidelityChangedSinceRun && _runModel == SelectedModel);
 
     /// <summary>
-    /// Chooses the start image and look for a new run, always from the state before the AI: if the image is the result
-    /// of the last AI step, the run works on the image before it, because AI on AI would make faces smoother and
-    /// smoother. The look never enters the image twice.
+    /// Chooses the start image and look for a new run, always from the state before the AI: if the image contains an AI
+    /// step, the run works on the image before it, because AI on AI would make faces smoother and smoother. The look
+    /// never enters the image twice. The previous step comes from the history, so that undo, image switches and other
+    /// steps cannot mix it up (No. 99); image steps after it are not contained in the new result (<see cref="AgainHint"/>).
     /// </summary>
-    private (MagickImage Base, MainViewModel.Look Apply, MainViewModel.Look? Restore) ChooseStart(MagickImage current)
+    private (MagickImage Base, MainViewModel.Look Apply, MainViewModel.Look? Restore, bool Replaces, int Discards) ChooseStart(MagickImage current)
     {
         var look = _main.CurrentLook();
-        if (_lastAi is { } last && ReferenceEquals(current, last.Result))
+        if (_main.LastStep(ImageStepKind.Ai) is { } last)
         {
+            var (replaces, discards) = (last.Later == 0, last.Later);
             // last step without a rendered-in look: the sliders apply as set
-            if (last.Baked is null) return (last.Base, look, null);
+            if (last.Step.Baked is null) return (last.Base, look, null, replaces, discards);
             // with a rendered-in look and sliders still at zero: the same look, starting from the image before
-            if (look.IsNone) return (last.Base, last.Baked, last.Baked);
+            if (look.IsNone) return (last.Base, last.Step.Baked, last.Step.Baked, replaces, discards);
         }
-        // Rotated or cropped after the AI: start from the image without AI (later steps applied again)
-        if (_main.CurrentWithoutAi is { } clean && !ReferenceEquals(clean, current)) return (clean, look, null);
-        return (current, look, null);   // new, or sliders changed since: start from the current image
+        return (current, look, null, false, 0);   // new, or sliders changed since a rendered-in look: from the current image
     }
+
+    /// <summary>What a new run starts from when the image already contains an AI step; null if it contains none.</summary>
+    public string? AgainHint => _main.LastStep(ImageStepKind.Ai) switch
+    {
+        null => null,
+        { Later: 0 } => Tr.T("Neu berechnen rechnet vom Bild vor der KI – nicht KI auf KI."),
+        { } last => Tr.T("Nach der KI kamen weitere Bildschritte ({0}). Neu berechnen rechnet vom Bild vor der KI, die späteren Schritte sind dann nicht enthalten (Strg+Z holt sie zurück).", last.Later),
+    };
 
     private async Task ComputeAsync(bool rerun)
     {
@@ -614,7 +620,8 @@ public partial class AiViewModel : ViewModelBase
                         looked.Dispose();
                         return turned;
                     }, cts.Token);
-                    setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false, current, runTurns, runFlip);
+                    setup = new RunSetup(start.Base, rendered, apply, apply.Neutral(), LookOnTop: false, current, runTurns, runFlip,
+                        start.Replaces, start.Discards);
                 }
                 else
                 {
@@ -622,7 +629,8 @@ public partial class AiViewModel : ViewModelBase
                     // The model gets the image rotated as displayed (a separate image owned by the run).
                     var from = start.Base;
                     rendered = await Task.Run(() => MainViewModel.Orient(from, runTurns, runFlip), cts.Token);
-                    setup = new RunSetup(start.Base, rendered ?? start.Base, null, start.Restore, LookOnTop: !lookFirst, current, runTurns, runFlip);
+                    setup = new RunSetup(start.Base, rendered ?? start.Base, null, start.Restore, LookOnTop: !lookFirst, current, runTurns, runFlip,
+                        start.Replaces, start.Discards);
                 }
                 image = setup.Input;
             }
@@ -881,15 +889,15 @@ public partial class AiViewModel : ViewModelBase
                 return back;
             }
             result = await _main.ApplyImageEditAsync(_ => (Upright(run.Compose(blend)), details ? Upright(run.Compose(plainBlend)) : null),
-                StepLabel(), StepDetail(blend), details ? SkinDetail(blend) : null, setup.LookAfter, setup.Current);
+                StepLabel(), StepDetail(blend), details ? SkinDetail(blend) : null, setup.LookAfter,
+                setup.Base, setup.Replaces, setup.Discards, setup.Baked, setup.Current);
         }
         finally
         {
             _committing = false;
         }
         var ok = result is not null;
-        // The produced image itself, not the one shown now: the user may have switched images meanwhile (No. 86)
-        if (result is not null) _lastAi = (result, setup.Base, setup.Baked);
+        OnPropertyChanged(nameof(AgainHint));
         ClearRun();
         Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
     }
@@ -899,7 +907,6 @@ public partial class AiViewModel : ViewModelBase
     private void ResetToStart()
     {
         if (HasPending) Discard();
-        _lastAi = null;
         Status = null;
         SelectedModel = Available.FirstOrDefault();
         SelectedOrder = OrderOptions[0];

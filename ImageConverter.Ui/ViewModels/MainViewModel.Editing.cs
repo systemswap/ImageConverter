@@ -443,20 +443,24 @@ public partial class MainViewModel
             }
 
             await StopPreviewAsync();   // redo images might be being read right now
-            // A new background attempt right after the previous one takes its place: undo leads to the state before that
-            // step and the previous result is released (otherwise every attempt stays in memory).
+            // A new attempt right after the previous one of the same kind (AI, removal, background) takes its place: undo
+            // leads to the state before that step and the previous result is released (otherwise every attempt stays in
+            // memory). One rule for all three (No. 99).
             MagickImage? replaced = null;
-            if (step is { Kind: ImageStepKind.Background, Replaces: true }
-                && _undo.TryPeek(out var top) && top.FilePath == path && top.Step?.Kind == ImageStepKind.Background && top.Image is { } earlier)
+            MagickImage? replacedPlain = null;
+            if (step.Replaces
+                && _undo.TryPeek(out var top) && top.FilePath == path && top.Step?.Kind == step.Kind && top.Image is { } earlier)
             {
                 _undo.Pop();
                 (replaced, source, before) = (source, earlier, top.Settings);
+                replacedPlain = top.Step.Plain;
                 step = step with { Replaces = false, Discards = top.Step.Discards };
             }
             _undo.Push(new Snapshot(path, source, before, Step: step, Recipe: recipeAfter is null ? null : h.Recipe));
             ClearRedo();
             h.Current = result;
             if (replaced is not null) ReleaseReplaced(replaced);
+            if (replacedPlain is not null) ReleaseReplaced(replacedPlain);
             if (recipeAfter is not null) h.Recipe = recipeAfter;
             if (settingsAfter is not null) ChangeSettings(path, settingsAfter);   // belongs to this step (the snapshot holds the state before)
             if (h == _history) await ShowCurrentAsync();
@@ -531,12 +535,20 @@ public partial class MainViewModel
     /// <param name="skinDetail">Short info for the "Skin &amp; details" row; null for none.</param>
     /// <param name="lookAfter">Look that applies afterwards (for example neutral, if it was baked into the image), in the same
     /// step, so that undo restores image and sliders together. null leaves the sliders unchanged.</param>
+    /// <param name="start">The image the result was computed from; a new attempt starts from it again.</param>
+    /// <param name="replaces">New attempt directly on the previous AI step: takes its place, the previous result is released.</param>
+    /// <param name="discards">Number of later image steps the result no longer contains (it started from before them).</param>
+    /// <param name="baked">Look rendered into the result ("Erst Einstellungen"); null if none.</param>
     /// <param name="expected">The pixel image the result was computed for; nothing is done if another one is shown by now.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
     internal async Task<MagickImage?> ApplyImageEditAsync(Func<MagickImage, (MagickImage Result, MagickImage? Plain)> operation,
-        string label, string? detail, string? skinDetail, Look? lookAfter, MagickImage expected)
+        string label, string? detail, string? skinDetail, Look? lookAfter, MagickImage start, bool replaces, int discards,
+        Look? baked, MagickImage expected)
     {
-        var step = new ImageStep(ImageStepKind.Ai, label, detail, null, skinDetail);
+        var step = new ImageStep(ImageStepKind.Ai, label, detail, null, skinDetail)
+        {
+            Base = start, Replaces = replaces, Discards = discards, Baked = baked,
+        };
         MagickImage? produced = null;
         var ok = await ApplyEditAsync(img =>
             {
@@ -555,11 +567,17 @@ public partial class MainViewModel
     /// </summary>
     /// <param name="operation">Computes the new image from the current one.</param>
     /// <param name="detail">Short info for the "Edits" list.</param>
-    /// <param name="replaces">New attempt from the image before the last removal; replaces that step in the "Edits" list.</param>
+    /// <param name="start">The image <paramref name="operation"/> computes from; a new attempt starts from it again.</param>
+    /// <param name="replaces">New attempt directly on the previous removal: takes its place, the previous result is released.</param>
+    /// <param name="strokes">The marking removed (in the displayed image).</param>
     /// <param name="expected">The pixel image shown when the step was prepared; nothing is done if it changed meanwhile.</param>
     /// <returns>The new image on success (also when another image is shown by now), otherwise null.</returns>
-    internal Task<MagickImage?> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, bool replaces, MagickImage expected) =>
-        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null) { Replaces = replaces }, expected);
+    internal Task<MagickImage?> ApplyRetouchAsync(Func<MagickImage, MagickImage> operation, string detail, MagickImage start,
+        bool replaces, IReadOnlyList<Core.Ai.BrushStroke> strokes, MagickImage expected) =>
+        ApplyProducingAsync(operation, new ImageStep(ImageStepKind.Retouch, Tr.T("Entfernt"), detail, null)
+        {
+            Base = start, Replaces = replaces, Strokes = strokes,
+        }, expected);
 
     /// <summary>
     /// Replaces or blurs the background ("Hintergrund" tab): an image step in the pixel image like a removal; undo returns

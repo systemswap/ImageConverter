@@ -67,6 +67,9 @@
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
                            IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
                            Text="{Binding Status}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0" FontWeight="SemiBold"
+                           IsVisible="{Binding AgainHint, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding AgainHint}" />
 
                 <!-- Was danach gilt: wirkt live auf das Ergebnis, ohne das Modell neu zu rechnen -->
                 <Border Height="1" Margin="0,10,0,6" Background="{DynamicResource BorderBrush2}" />
