@@ -2845,3 +2845,42 @@ Test oder Nachweis.
 - **Nicht tun:** Zylinder an einer festen relativen Abweichung erkennen.
 - **Wo im Code:** `FaceFinder.FitCylinder`, Ring-Prüfung in `FaceFinder.Find`.
 - **Test:** `FaceFinderTests.Sphere_IsFreeform`, `Cylinder_IsOneFace_WithItsRadius(12/48/360)`.
+
+## 112. 3D: Übereinanderliegende Dreiecke machten jeden Strahl langsam – Messen und Überfahren stockten (0.8.11-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.11-beta, Analyserunde (präparierte Datei: 2 Mio. deckungsgleiche Dreiecke): 39 ms je Strahl, beim
+  Messen bei jeder Mausbewegung. **Behoben:** 0.8.12-beta.
+- **Warum:** Deckungsgleiche Dreiecke lassen sich von keinem Hüllkörperbaum trennen – alle Knoten haben dieselbe Box, jeder Strahl
+  muss alle Dreiecke prüfen. Ebenso die Suche nach dem nächsten Punkt und nach dem kürzesten Abstand zweier Flächen.
+- **Lösung:** Obergrenzen je Strahl (`MaxTestsPerRay` = 32 768 Dreieckstests) und je Suche (`MaxTestsPerSearch` = 4 Mio.); danach
+  gilt der beste Treffer bis dahin. Echte Modelle brauchen je Strahl einige Dutzend Tests. Gemessen: 39 ms → 0,75 ms je Strahl.
+- **Nicht tun:** Annehmen, dass ein Baum die Laufzeit begrenzt – bei deckungsgleicher Geometrie hilft er nicht.
+- **Wo im Code:** `Bvh.TraceFrom`, `Bvh.Nearest` (beide).
+- **Test:** `ModelViewTests.StackedTriangles_KeepRaysFast` (mit dem alten Baum 2,7 s für 20 Strahlen).
+
+## 113. 3D: Bodenschatten großer übereinanderliegender Dreiecke rechnete über eine Minute (0.8.11-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.11-beta, Analyserunde (dieselbe präparierte Datei, Schritte einzeln gemessen). **Behoben:** 0.8.12-beta.
+- **Warum:** Der Schatten rasterisiert jedes Dreieck in die Zellen, die es überdeckt. Ein großes Dreieck prüft Hunderte Zellen; zwei
+  Millionen davon an derselben Stelle ergaben bei 64 × 64 Zellen 1,6 Mrd. Tests (7 s), bei den 256 × 256 Zellen der Anzeige sechzehnmal
+  so viele – Rechenlast im Hintergrund über eine Minute.
+- **Lösung:** Höchstens `ShadowBudget` = 2²⁶ Zellentests; die Dreiecke werden in gestreuter Reihenfolge besucht (Schritt teilerfremd zur
+  Anzahl), damit ein gekappter Schatten trotzdem das ganze Modell abdeckt. Gemessen: ganzer Ablauf 7 s (bei 64 Zellen) → 1,5 s (bei 256).
+- **Nicht tun:** Arbeit je Dreieck nach seiner Bildschirm- oder Gitterfläche unbegrenzt lassen.
+- **Wo im Code:** `SceneData.Shadow`, `SceneData.ScatterStep`.
+- **Test:** `ModelViewTests.Shadow_OfStackedLargeTriangles_StaysFast`.
+
+## 114. 3D: Große, echte Dateien hätten den Speicher sprengen können; Grafikspeicher-Mangel blieb unbemerkt (0.8.11-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.11-beta, Analyserunde (Speicher je Schritt gemessen). **Behoben:** 0.8.12-beta.
+- **Was:** Die feste Grenze von 20 Mio. Dreiecken passte nicht zu jedem Rechner: in der Spitze braucht der Betrachter rund 116–147 Byte
+  je Dreieck auf dem verwalteten Speicher (etwa 180 mit Laufzeit) – 20 Mio. Dreiecke also über 3 GB. Reichte der Grafikspeicher nicht,
+  meldete OpenGL `GL_OUT_OF_MEMORY`, ohne dass es jemand las.
+- **Lösung:** `StlReader.TriangleLimit` = so viele Dreiecke, wie in die Hälfte des verfügbaren Speichers passen (200 Byte je Dreieck),
+  höchstens 20 Mio. – sonst die Meldung „angezeigt werden höchstens …“ vor dem Anlegen. Nach dem Hochladen prüft der Zeichner auf
+  Speichermangel und zeigt „Die Grafikkarte hat nicht genug Speicher für dieses Modell.“. Dazu gibt der Betrachter nach der
+  Flächensuche die Nachbarschaft frei (16 Byte je Dreieck); das Drahtgitter berechnet seine Kanten bei Bedarf selbst. Gemessen bei
+  5 Mio. Dreiecken: dauerhaft 66 → 55 Byte je Dreieck auf dem verwalteten Speicher.
+- **Wo im Code:** `StlReader.TriangleLimit`, `ModelRenderer.Render`, `ModelViewModel.StartAnalysis`/`EnsureWireframe`,
+  `SceneData.AllEdges(Mesh)`, `MeshTopology.Summary`.
+- **Test:** `StlReaderTests.TooManyTriangles_IsRefusedBeforeReading`, `ModelViewTests.SharpEdges_…` (Kanten ohne Nachbarschaft).

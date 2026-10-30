@@ -179,7 +179,41 @@ Kein neues Paket und kein fremder Code → keine Telemetrie, keine neuen Einträ
 Möller–Trumbore (Strahl/Dreieck), Ericson (nächste Punkte), Kåsa (Kreisausgleich),
 Chapman bzw. Mittring (Umgebungsverdeckung im Bildraum).
 
-## 10. Später möglich
+## 10. Analyserunde (31.10.2026, 0.8.11 → 0.8.12-beta)
+
+Wunsch des Benutzers: Sicherheit zuerst (keine Speicherüberläufe, beschädigte Dateien dürfen das System nicht verlangsamen,
+keine Lücken), dann Speicher und Tempo. Prüfprogramme im lokalen Testordner (`stl-fuzz`, `stl-probe`, `stl-shot`).
+
+**Sicherheit**
+
+- Fuzzing des ganzen Ablaufs (Lesen, Nachbarschaft, Flächen, Suchbaum, Kanten, Schatten, Sortieren, 40 Strahlen, Messen):
+  860 000 zufällig beschädigte Dateien (Bytes, Abschneiden, NaN/∞/Subnormal/±10⁹, falsche Anzahl, Einfügungen, Blöcke
+  vertauscht) – kein Absturz, nur klare Meldungen, langsamster Fall 24 ms, Speicher höchstens 53 MB.
+- Präparierte Dateien: 2 Mio. Dreiecke auf einer Kante, Fächer um einen Punkt, 2 Mio. deckungsgleiche Dreiecke, subnormale
+  Koordinaten, riesiger Versatz, geometrische Reihe (Tiefe des Suchbaums), 2 Mio. getrennte Dreiecke, Nadeln, entartete
+  Dreiecke, „20 Mio. angekündigt, 1 Mio. vorhanden“, „4 Mrd. angekündigt“, Text: 60 MB Eckzeilen ohne Facetten, eine
+  100-MB-Zeile, nan/inf/1e999, 1000 Ecken je Facette, 50 MB Zufall. Gefunden und behoben: Strahlen und Bodenschatten bei
+  deckungsgleichen Dreiecken (Fehlergedächtnis #112, #113), keine Grenze nach Arbeitsspeicher, unbemerkter Grafikspeicher-
+  Mangel (#114). Danach dauert jede dieser Dateien höchstens 2,5 s im Hintergrund.
+- Durchgesehen: Ganzzahlen (Anzahlen ≤ 20 Mio., Indizes ≤ 60 Mio., Puffergrößen als `nint`/`long`), Indizes an die
+  Grafikkarte (vom `Mesh` geprüft, jeder < Eckpunktzahl), Kopfzeile nur druckbares ASCII, keine Rekursion, Hash mit
+  zufälligem Startwert, Einstellungsdatei höchstens 64 KB.
+
+**Speicher und Tempo** (Kugel mit 1 bzw. 5 Mio. Dreiecken, im echten Programm, AMD RX 6650 XT)
+
+| | 1 Mio. | 5 Mio. |
+|---|---|---|
+| Arbeitsspeicher (ohne Modell 531 MB) | 642 MB | 1 109 MB (Spitze 1 286 MB) |
+| verwalteter Speicher je Dreieck, dauerhaft | – | 55 Byte (vorher 66) |
+| Modell auf dem Bildschirm nach | sofort | 0,34 s |
+| Flächen und Messen bereit nach | 1,3 s | 4,0 s |
+| Drehen | 62 Bilder/s | 62 Bilder/s (Bildwiederholrate) |
+| Strahl unter der Maus | ~2 µs | ~3 µs |
+
+Verworfen: Flächen und Suchbaum nacheinander statt gleichzeitig zu rechnen (Spitze etwas niedriger, aber 0,45 s später
+messbereit bei 5 Mio.).
+
+## 11. Später möglich
 
 Vorschaubilder in der Dateiliste, Schnittebene, Wandstärke an beliebiger Stelle, Messwerte
 kopieren, freies Drehen (Trackball) als Umschalter.

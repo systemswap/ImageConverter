@@ -111,6 +111,20 @@ public class ModelViewTests
         }
     }
 
+    /// <summary>
+    /// Triangles lying on top of each other cannot be separated by the hierarchy; a crafted file with millions of them
+    /// made each ray take 39 ms (every mouse move while measuring). The test budget per ray bounds it.
+    /// </summary>
+    [Fact]
+    public void StackedTriangles_KeepRaysFast()
+    {
+        var mesh = new Mesh([0, 0, 0, 1, 0, 0, 0, 1, 0], Enumerable.Range(0, 3 * 1_000_000).Select(i => i % 3).ToArray());
+        var bvh = Bvh.Build(mesh);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 20; i++) Assert.True(bvh.Raycast(new Vector3(0.2f, 0.2f, 5), -Vector3.UnitZ, 100, out _));
+        Assert.True(watch.ElapsedMilliseconds < 1000, $"{watch.ElapsedMilliseconds} ms for 20 rays");   // before: 2.7 s (debug build)
+    }
+
     [Fact]
     public void SortedByFace_KeepsEveryTriangle_AndGroupsThem()
     {
@@ -131,7 +145,7 @@ public class ModelViewTests
         Assert.Equal(2 * 12, SceneData.SharpEdges(box.Mesh, box.Topology).Length);
         var cyl = Analyse(Extrude(Circle(Vector2.Zero, 5, 48), 10));
         Assert.Equal(2 * 2 * 48, SceneData.SharpEdges(cyl.Mesh, cyl.Topology).Length);   // only the two rims
-        Assert.Equal(cyl.Mesh.TriangleCount * 3 / 2 * 2, SceneData.AllEdges(cyl.Mesh, cyl.Topology).Length);
+        Assert.Equal(cyl.Mesh.TriangleCount * 3 / 2 * 2, SceneData.AllEdges(cyl.Mesh).Length);
     }
 
     [Fact]
@@ -143,6 +157,22 @@ public class ModelViewTests
         Assert.True(Cell(5, 5) > 200);
         Assert.Equal(0, s.Cells[0]);
         Assert.True(s.Z < 0);
+    }
+
+    /// <summary>
+    /// Large triangles on top of each other: the shadow used to test hundreds of cells per triangle (over a minute for
+    /// two million); with the work budget it stays fast and still shades the footprint.
+    /// </summary>
+    [Fact]
+    public void Shadow_OfStackedLargeTriangles_StaysFast()
+    {
+        var mesh = new Mesh([0, 0, 0, 10, 0, 0, 0, 10, 0], Enumerable.Range(0, 3 * 500_000).Select(i => i % 3).ToArray());
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var s = SceneData.Shadow(mesh);
+        Assert.True(watch.ElapsedMilliseconds < 3000, $"{watch.ElapsedMilliseconds} ms");
+        var cx = (int)((2 - s.Min.X) / (s.Max.X - s.Min.X) * s.Size);
+        var cy = (int)((2 - s.Min.Y) / (s.Max.Y - s.Min.Y) * s.Size);
+        Assert.True(s.Cells[cy * s.Size + cx] > 200);
     }
 
     [Fact]

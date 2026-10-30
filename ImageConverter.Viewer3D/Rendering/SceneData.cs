@@ -48,21 +48,35 @@ public static class SceneData
     }
 
     /// <summary>Vertex pairs of all edges, each once (wireframe).</summary>
-    public static int[] AllEdges(Mesh mesh, MeshTopology topology, CancellationToken ct = default)
+    /// <remarks>
+    /// Works from the triangles alone (all edges sorted, duplicates dropped), so that the neighbourhood need not be kept
+    /// for a view that is seldom chosen; O(T log T), computed when the wireframe is first shown.
+    /// </remarks>
+    public static int[] AllEdges(Mesh mesh, CancellationToken ct = default)
     {
         var idx = mesh.Indices;
-        var nbr = topology.Neighbours;
-        var lines = new List<int>(idx.Length);
+        var keys = new long[idx.Length];
         for (var h = 0; h < idx.Length; h++)
         {
-            if ((h & 0xFFFFF) == 0) ct.ThrowIfCancellationRequested();
-            var q = nbr[h];
-            if (q >= 0 && q < h / 3) continue;
-            if (q == MeshTopology.NonManifold && !FirstOfEdge(mesh, h)) continue;
-            lines.Add(idx[h]);
-            lines.Add(idx[h % 3 == 2 ? h - 2 : h + 1]);
+            var a = idx[h];
+            var b = idx[h % 3 == 2 ? h - 2 : h + 1];
+            keys[h] = a < b ? (long)a << 32 | (uint)b : (long)b << 32 | (uint)a;
         }
-        return lines.ToArray();
+        ct.ThrowIfCancellationRequested();
+        Array.Sort(keys);
+        ct.ThrowIfCancellationRequested();
+        var unique = 0;
+        for (var i = 0; i < keys.Length; i++)
+            if (i == 0 || keys[i] != keys[i - 1]) unique++;
+        var lines = new int[2 * unique];
+        var w = 0;
+        for (var i = 0; i < keys.Length; i++)
+        {
+            if (i > 0 && keys[i] == keys[i - 1]) continue;
+            lines[w++] = (int)(keys[i] >> 32);
+            lines[w++] = (int)keys[i];
+        }
+        return lines;
     }
 
     /// <summary>Non-manifold edges appear in several triangles; only the copy whose start vertex is the smaller one is drawn.</summary>
@@ -111,11 +125,19 @@ public static class SceneData
         return parts;
     }
 
+    /// <summary>Most cell tests for the shadow (about 0.2 s); see <see cref="Shadow"/>.</summary>
+    public const long ShadowBudget = 1L << 26;
+
     /// <summary>
     /// Soft shadow under the model as seen from straight above: each triangle darkens the cells it covers, the more the
     /// closer it is to the ground; then the map is blurred. Linear in the number of triangles (a small triangle touches
     /// one cell).
     /// </summary>
+    /// <remarks>
+    /// Large triangles lying on top of each other would each test hundreds of cells – a crafted file with millions of
+    /// them took over a minute. The work is capped at <see cref="ShadowBudget"/> cell tests; the triangles are visited in a
+    /// scattered order, so that a capped shadow still covers the whole model.
+    /// </remarks>
     public static GroundShadow Shadow(Mesh mesh, int size = 256, CancellationToken ct = default)
     {
         var box = mesh.Bounds;
@@ -129,10 +151,13 @@ public static class SceneData
         var cell = span / size;
         var grid = new float[size * size];
 
-        for (var t = 0; t < mesh.TriangleCount; t++)
+        var n = mesh.TriangleCount;
+        var step = ScatterStep(n);
+        long work = 0;
+        for (long k = 0, t = 0; k < n; k++, t = (t + step) % n)
         {
-            if ((t & 0xFFFFF) == 0) ct.ThrowIfCancellationRequested();
-            var (a, b, c) = mesh.Corners(t);
+            if ((k & 0xFFFFF) == 0) ct.ThrowIfCancellationRequested();
+            var (a, b, c) = mesh.Corners((int)t);
             var low = Math.Min(a.Z, Math.Min(b.Z, c.Z)) - box.Min.Z;
             var weight = MathF.Exp(-3.5f * low / height);
             if (weight < 0.02f) continue;
@@ -148,6 +173,7 @@ public static class SceneData
                 Mark(x0, y0);
                 continue;
             }
+            if ((work += (long)(x1 - x0 + 1) * (y1 - y0 + 1)) > ShadowBudget) break;
             var area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
             if (MathF.Abs(area) < 1e-12f) continue;   // seen edge-on from above: no footprint
             for (var y = y0; y <= y1; y++)
@@ -177,6 +203,21 @@ public static class SceneData
         var cells = new byte[grid.Length];
         for (var i = 0; i < grid.Length; i++) cells[i] = (byte)Math.Clamp(grid[i] * 255 + 0.5f, 0, 255);
         return new GroundShadow(min, max, box.Min.Z - 1e-4f * Math.Max(height, box.Diagonal), size, cells);
+    }
+
+    /// <summary>A step coprime to <paramref name="n"/> near the golden ratio of it: t → t + step (mod n) visits all, scattered.</summary>
+    private static long ScatterStep(int n)
+    {
+        if (n <= 2) return 1;
+        var step = (long)(n * 0.6180339887) | 1;
+        while (Gcd(step, n) != 1) step += 2;
+        return step;
+
+        static long Gcd(long a, long b)
+        {
+            while (b != 0) (a, b) = (b, a % b);
+            return a;
+        }
     }
 
     private static void BoxBlur(float[] src, float[] dst, int size, int r, bool horizontal)

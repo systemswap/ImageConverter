@@ -34,15 +34,29 @@ public sealed class StlFormatException(string message) : Exception(message);
 /// endloop endfacet … endsolid</c>. The stored normals are ignored: they are often missing or wrong, and the
 /// viewer derives its own from the corners.</para>
 /// <para>Files come from anywhere, so reading is defensive: the triangle count is checked against
-/// <see cref="MaxTriangles"/> and the file size before anything is allocated, text lines are limited to
+/// <see cref="TriangleLimit"/> and the file size before anything is allocated, text lines are limited to
 /// <see cref="MaxLineLength"/> bytes, coordinates must be finite and within ±<see cref="MaxCoordinate"/>, and the
 /// vertex table hashes with a random per-process seed, so that a crafted file cannot force long collision chains.
 /// Memory and time therefore grow linearly with the file, and reading can be cancelled at any point.</para>
 /// </remarks>
 public static class StlReader
 {
-    /// <summary>Most triangles accepted (about 1 GB as a binary file).</summary>
+    /// <summary>Most triangles accepted on any computer (about 1 GB as a binary file).</summary>
     public const int MaxTriangles = 20_000_000;
+
+    /// <summary>
+    /// Memory the viewer needs per triangle at its peak (reading, neighbourhood, faces and hierarchy at once), with
+    /// margin: measured 116–147 bytes on the managed heap for 1 and 5 million triangles, about 180 including the runtime.
+    /// </summary>
+    public const int PeakBytesPerTriangle = 200;
+
+    /// <summary>
+    /// Most triangles accepted on this computer: <see cref="MaxTriangles"/>, or fewer if half of the memory available to
+    /// the program would not hold the peak – a large but genuine file then gets a clear message instead of running the
+    /// program out of memory.
+    /// </summary>
+    public static int TriangleLimit { get; } =
+        (int)Math.Clamp(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 2 / PeakBytesPerTriangle, 100_000, MaxTriangles);
 
     /// <summary>Most distinct vertices accepted; bounds the memory of files whose triangles share no corners.</summary>
     public const int MaxVertices = 24_000_000;
@@ -106,7 +120,7 @@ public static class StlReader
     {
         var available = (length - BinaryHeader) / BinaryRecord;
         var count = Math.Min(announced, available);
-        if (count > MaxTriangles)
+        if (count > TriangleLimit)
             throw TooLarge(count);
         if (count == 0)
             throw new StlFormatException(Tr.T("Die STL-Datei ist beschädigt: Sie endet vor dem ersten Dreieck."));
@@ -170,7 +184,7 @@ public static class StlReader
     private static StlFile ReadAscii(Stream stream, long length, CancellationToken ct, IProgress<double>? progress)
     {
         // Text needs about 250 bytes per triangle; the size gives a fair first guess for the arrays.
-        var guess = (int)Math.Clamp(length / 250, 16, MaxTriangles);
+        var guess = (int)Math.Clamp(length / 250, 16, TriangleLimit);
         var welder = new VertexWelder(guess / 2 + 16);
         var indices = new int[3 * guess];
         var written = 0;
@@ -247,9 +261,9 @@ public static class StlReader
             {
                 for (var k = 1; k + 1 < count; k++)
                 {
-                    if (++triangles > MaxTriangles) throw TooLarge(triangles);
+                    if (++triangles > TriangleLimit) throw TooLarge(triangles);
                     if (written + 3 > indices.Length)
-                        Array.Resize(ref indices, (int)Math.Min(3L * MaxTriangles, Math.Max(indices.Length + 3, indices.Length * 3L / 2)));
+                        Array.Resize(ref indices, (int)Math.Min(3L * TriangleLimit, Math.Max(indices.Length + 3, indices.Length * 3L / 2)));
                     if (!AddTriangle(welder, indices, ref written,
                             (float)c[0], (float)c[1], (float)c[2],
                             (float)c[3 * k], (float)c[3 * k + 1], (float)c[3 * k + 2],
@@ -332,7 +346,7 @@ public static class StlReader
     }
 
     private static StlFormatException TooLarge(long triangles) =>
-        new(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", triangles, MaxTriangles));
+        new(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", triangles, TriangleLimit));
 
     /// <summary>Printable ASCII from the start up to the first other byte, trimmed.</summary>
     private static string PrintablePrefix(ReadOnlySpan<byte> s)

@@ -55,8 +55,8 @@ internal sealed class ModelScene
 
     public int SharpEdgesVersion { get; set; }
 
-    /// <summary>All edges, produced when the wireframe is first shown.</summary>
-    public Func<int[]>? AllEdges { get; set; }
+    /// <summary>All edges, computed in the background when the wireframe is first shown; null before.</summary>
+    public int[]? AllEdges { get; set; }
 
     public GroundShadow? Shadow { get; set; }
 
@@ -200,7 +200,15 @@ internal sealed class ModelRenderer
     {
         var gl = _gl;
         if (Failure is not null || width <= 0 || height <= 0) return;
+        while (gl.GetError() != 0) { }   // errors of others before us
         Upload(scene, frame.Mode == RenderMode.Wireframe);
+        if (gl.GetError() == Gl.OutOfMemory)
+        {
+            // A huge model on a graphics card with little memory: say so instead of drawing garbage
+            Failure = Tr.T("Die Grafikkarte hat nicht genug Speicher für dieses Modell.");
+            AppLog.Write("3D: out of graphics memory", $"{scene.TriangleCount} triangles");
+            return;
+        }
 
         var own = EnsureFramebuffer(width, height);
         gl.BindFramebuffer(Gl.Framebuffer, own ? _fbo : target);
@@ -303,9 +311,8 @@ internal sealed class ModelRenderer
             _uploadedEdges = scene.SharpEdgesVersion;
         }
 
-        if (wire && !_wireUploaded && scene.AllEdges is { } all)
+        if (wire && !_wireUploaded && scene.AllEdges is { } lines)
         {
-            var lines = all();
             gl.BindVertexArray(_wireVao);
             gl.BindBuffer(Gl.ElementArrayBuffer, _wireBuffer);
             gl.BufferData<int>(Gl.ElementArrayBuffer, lines, Gl.StaticDraw);

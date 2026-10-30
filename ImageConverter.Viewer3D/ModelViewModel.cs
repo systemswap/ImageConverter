@@ -112,7 +112,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     internal ModelScene Scene { get; }
 
-    public MeshTopology? Topology { get; private set; }
+    /// <summary>Closed? parts, area, volume – null until the neighbourhood is worked out.</summary>
+    public MeshSummary? Summary { get; private set; }
 
     public FaceSet? Faces { get; private set; }
 
@@ -132,6 +133,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     private void StartAnalysis()
     {
+        EnsureWireframe();
         var ct = _cts.Token;
         var mesh = Mesh;
         _ = Task.Run(async () =>
@@ -145,14 +147,13 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     if (ct.IsCancellationRequested) return;
-                    Topology = topology;
+                    Summary = topology.Summary;
                     Scene.SharpEdges = edges;
                     Scene.SharpEdgesVersion++;
                     Scene.Parts = parts;
                     Scene.ExtrasVersion++;
                     Scene.Shadow = shadow;
                     Scene.ShadowVersion++;
-                    Scene.AllEdges = () => SceneData.AllEdges(mesh, topology);
                     RefreshStatistics();
                     Redraw();
                 });
@@ -164,6 +165,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
                     if (!ct.IsCancellationRequested) Hierarchy = bvh;
                 });
                 var faces = await facesTask;
+                topology = null!;   // neighbours and parts (16 bytes per triangle) are not needed any more
                 var (sorted, start) = SceneData.SortedByFace(mesh, faces);
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -200,6 +202,25 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         }, ct);
     }
 
+    private bool _wireRequested;
+
+    /// <summary>All edges for the wireframe, computed once in the background when it is first shown.</summary>
+    private void EnsureWireframe()
+    {
+        if (Mode != RenderMode.Wireframe || _wireRequested) return;
+        _wireRequested = true;
+        var ct = _cts.Token;
+        var mesh = Mesh;
+        _ = Task.Run(() => SceneData.AllEdges(mesh, ct), ct).ContinueWith(t =>
+        {
+            if (t.IsCompletedSuccessfully && !ct.IsCancellationRequested)
+            {
+                Scene.AllEdges = t.Result;
+                Redraw();
+            }
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
     // ------------------------------------------------------------------ figures for the side column
 
     public string Format => File.Encoding == StlEncoding.Binary ? Tr.T("STL (binär)") : Tr.T("STL (Text)");
@@ -221,18 +242,18 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     public string Vertices => Mesh.VertexCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 
-    public string SurfaceArea => Topology is { } t ? MeasureText.Area(t.Area, Inches) : "…";
+    public string SurfaceArea => Summary is { } t ? MeasureText.Area(t.Area, Inches) : "…";
 
-    public string Volume => Topology is { } t
+    public string Volume => Summary is { } t
         ? t.IsClosed ? MeasureText.Volume(t.Volume, Inches) : "≈ " + MeasureText.Volume(t.Volume, Inches)
         : "…";
 
-    public string Closed => Topology is not { } t ? "…"
+    public string Closed => Summary is not { } t ? "…"
         : t.IsClosed ? Tr.T("ja")
         : t.NonManifoldEdges > 0 ? Tr.T("nein – {0:N0} offene, {1:N0} mehrfach genutzte Kanten", t.OpenEdges, t.NonManifoldEdges)
         : Tr.T("nein – {0:N0} offene Kanten", t.OpenEdges);
 
-    public string Parts => Topology is { } t ? t.ShellCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : "…";
+    public string Parts => Summary is { } t ? t.ShellCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture) : "…";
 
     public string FaceCount => Faces is { } f
         ? Tr.T("{0:N0} ({1:N0} Ebenen, {2:N0} Zylinder)", f.Faces.Length, f.Faces.Count(x => x.Kind == FaceKind.Plane), f.Faces.Count(x => x.Kind == FaceKind.Cylinder))
@@ -292,6 +313,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _modeIndex, Math.Clamp(value, 0, 2))) return;
             ViewerSettings.Update(s => s with { Mode = _modeIndex });
+            EnsureWireframe();
             Redraw();
         }
     }

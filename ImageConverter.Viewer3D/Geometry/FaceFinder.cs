@@ -140,24 +140,17 @@ public static class FaceFinder
         order = null!;
         ct.ThrowIfCancellationRequested();
 
-        // ---- 2. Region figures: area, normal, centre, border length, gentle border length
+        // ---- 2. Region figures: area, normal, border length, gentle border length
         var rArea = new double[regions];
         var rNormal = new float[3 * regions];
-        var rCentre = new double[3 * regions];
         for (var i = 0; i < t; i++)
         {
             var r = region[i];
             var an = mesh.AreaNormal(i);
-            var (a, b, c) = mesh.CornersD(i);
-            var m = (a + b + c) / 3;
-            var w = areas[i];
-            rArea[r] += w;
+            rArea[r] += areas[i];
             rNormal[3 * r] += (float)an.X;
             rNormal[3 * r + 1] += (float)an.Y;
             rNormal[3 * r + 2] += (float)an.Z;
-            rCentre[3 * r] += m.X * w;
-            rCentre[3 * r + 1] += m.Y * w;
-            rCentre[3 * r + 2] += m.Z * w;
         }
         for (var r = 0; r < regions; r++)
         {
@@ -165,12 +158,6 @@ public static class FaceFinder
             rNormal[3 * r] = (float)nr.X;
             rNormal[3 * r + 1] = (float)nr.Y;
             rNormal[3 * r + 2] = (float)nr.Z;
-            if (rArea[r] > 0)
-            {
-                rCentre[3 * r] /= rArea[r];
-                rCentre[3 * r + 1] /= rArea[r];
-                rCentre[3 * r + 2] /= rArea[r];
-            }
         }
         ct.ThrowIfCancellationRequested();
 

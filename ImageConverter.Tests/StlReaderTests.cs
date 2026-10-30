@@ -128,7 +128,7 @@ public class StlReaderTests
         using var stream = new HugeStlStream(count);
         var watch = Stopwatch.StartNew();
         var e = Assert.Throws<StlFormatException>(() => StlReader.Read(stream));
-        Assert.Contains("20", e.Message);
+        Assert.Contains(StlReader.TriangleLimit.ToString("N0"), e.Message);
         Assert.True(watch.ElapsedMilliseconds < 500);
         Assert.True(stream.BytesRead < 10_000);
     }

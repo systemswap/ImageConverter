@@ -1076,6 +1076,7 @@ public static class English
         ["Zweite Fläche anklicken – oder die erste noch einmal, um sie abzuwählen."] = "Click the second face – or the first one again to deselect it.",
         ["Zylinder · Ø {0}"] = "Cylinder · Ø {0}",
         ["Zylinder"] = "Cylinder",
+        ["Die Grafikkarte hat nicht genug Speicher für dieses Modell."] = "The graphics card does not have enough memory for this model.",
     };
 
     /// <summary>English texts keyed by the German text.</summary>

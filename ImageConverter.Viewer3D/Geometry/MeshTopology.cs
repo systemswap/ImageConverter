@@ -1,5 +1,12 @@
 namespace ImageConverter.Viewer3D.Geometry;
 
+/// <summary>The figures of <see cref="MeshTopology"/> without its arrays – what stays once faces and edges are found.</summary>
+public sealed record MeshSummary(int OpenEdges, int NonManifoldEdges, int ShellCount, double Area, double Volume)
+{
+    /// <summary>Every edge has exactly two triangles, so the volume is meaningful.</summary>
+    public bool IsClosed => OpenEdges == 0 && NonManifoldEdges == 0;
+}
+
 /// <summary>
 /// Neighbourhood of the triangles and the figures derived from it: open and non-manifold edges, connected parts
 /// (shells), surface area and volume.
@@ -53,6 +60,9 @@ public sealed class MeshTopology
 
     /// <summary>Enclosed volume in cubic file units (absolute value of the signed volume); only meaningful when closed.</summary>
     public double Volume { get; }
+
+    /// <summary>The figures alone; the arrays (16 bytes per triangle) can then be released.</summary>
+    public MeshSummary Summary => new(OpenEdges, NonManifoldEdges, ShellCount, Area, Volume);
 
     /// <summary>Computes the neighbourhood and the figures.</summary>
     /// <param name="mesh">The mesh.</param>

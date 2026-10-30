@@ -137,6 +137,9 @@ internal sealed class ModelGlView : OpenGlControlBase
         RequestNextFrameRendering();
     }
 
+    /// <summary>Frames drawn so far (for measuring the frame rate).</summary>
+    internal int FramesDrawn { get; private set; }
+
     protected override void OnOpenGlRender(GlInterface gl, int fb)
     {
         if (_gl is null || Failure is not null) return;
@@ -150,6 +153,13 @@ internal sealed class ModelGlView : OpenGlControlBase
             Camera.Eye, Camera.Forward, Camera.Right, Camera.Up, Camera.Orthographic,
             _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights());
         _renderer.Render(_model.Scene, frame, fb, size.Width, size.Height);
+        FramesDrawn++;
+        if (_renderer.Failure is { } failure && Failure is null)
+        {
+            Failure = failure;
+            Dispatcher.UIThread.Post(() => Failed?.Invoke());
+            return;
+        }
 
         if (_capture is { } capture)
         {

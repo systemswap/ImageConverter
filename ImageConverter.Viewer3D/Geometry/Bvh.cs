@@ -26,6 +26,16 @@ public sealed class Bvh
 
     private const int LeafSize = 4;
 
+    /// <summary>
+    /// Most triangle tests per ray. Triangles lying on top of each other cannot be told apart by any hierarchy, and a
+    /// crafted file with millions of them would make every ray (and every mouse move while measuring) test them all;
+    /// past this budget the nearest hit so far is taken. A ray in a real model needs a few dozen tests.
+    /// </summary>
+    public const int MaxTestsPerRay = 1 << 15;
+
+    /// <summary>Most triangle tests of a nearest-point search, and most triangle pairs of a shortest-distance search.</summary>
+    public const int MaxTestsPerSearch = 1 << 22;
+
     /// <summary>Tolerance of the ray test at triangle edges, in barycentric units.</summary>
     private const float EdgeSlack = 1e-4f;
     private const int Bins = 16;
@@ -440,6 +450,7 @@ public sealed class Bvh
         var inv = new Vector3(1 / direction.X, 1 / direction.Y, 1 / direction.Z);
         var best = maxDistance;
         var bestTri = -1;
+        var tests = 0;
         Span<int> stack = stackalloc int[MaxDepth + 4];
         var sp = 0;
         stack[sp++] = 0;
@@ -450,6 +461,7 @@ public sealed class Bvh
             var count = _count[node];
             if (count > 0)
             {
+                if ((tests += count) > MaxTestsPerRay) break;
                 var first = _first[node];
                 for (var i = first; i < first + count; i++)
                 {
@@ -555,6 +567,7 @@ public sealed class Bvh
         if (_tris.Length == 0) return (bestPoint, -1, best);
         var stack = new Stack<int>();
         stack.Push(0);
+        var tests = 0;
         while (stack.Count > 0)
         {
             var node = stack.Pop();
@@ -562,6 +575,7 @@ public sealed class Bvh
             var count = _count[node];
             if (count > 0)
             {
+                if ((tests += count) > MaxTestsPerSearch) break;
                 for (var i = _first[node]; i < _first[node] + count; i++)
                 {
                     var (a, b, c) = _mesh.CornersD(_tris[i]);
@@ -607,6 +621,7 @@ public sealed class Bvh
         var stack = new Stack<(int A, int B)>();
         stack.Push((0, 0));
         var steps = 0;
+        var pairs = 0L;
         while (stack.Count > 0)
         {
             if ((++steps & 0xFFF) == 0) ct.ThrowIfCancellationRequested();
@@ -618,6 +633,7 @@ public sealed class Bvh
             var leafB = b._count[nb] > 0;
             if (leafA && leafB)
             {
+                if ((pairs += (long)a._count[na] * b._count[nb]) > MaxTestsPerSearch) break;
                 for (var i = a._first[na]; i < a._first[na] + a._count[na]; i++)
                 for (var j = b._first[nb]; j < b._first[nb] + b._count[nb]; j++)
                 {
