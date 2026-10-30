@@ -598,6 +598,8 @@ public static class English
         ["Das Bild wurde inzwischen geändert — bitte neu berechnen."] = "The image has changed in the meantime — please compute again.",
         ["Das Bild wurde inzwischen gewechselt oder geändert – bitte noch einmal anwenden."] = "The image was switched or changed in the meantime – please apply again.",
         ["Neu berechnen rechnet vom Bild vor der KI – nicht KI auf KI."] = "Computing again starts from the image before the AI – not AI on AI.",
+        ["Die ausgeschaltete KI wurde dafür aus dem Bild genommen – gerechnet wird auf dem gezeigten Bild (Strg+Z holt sie zurück)."] = "The switched-off AI was taken out of the image for this – the step works on the image shown (Ctrl+Z brings it back).",
+        ["„Haut & Details“ waren ausgeschaltet und wurden dafür aus dem Bild genommen (Strg+Z holt sie zurück)."] = "“Skin & details” were switched off and were taken out of the image for this (Ctrl+Z brings them back).",
         ["Nach der KI kamen weitere Bildschritte ({0}). Neu berechnen rechnet vom Bild vor der KI, die späteren Schritte sind dann nicht enthalten (Strg+Z holt sie zurück)."] = "Further image steps came after the AI ({0}). Computing again starts from the image before the AI; the later steps are then not included (Ctrl+Z brings them back).",
         ["Das Bild wurde inzwischen gewechselt – KI begradigen bitte noch einmal starten."] = "The image was switched in the meantime – please start the AI straightening again.",
         ["Die Markierung passte nach Drehen, Spiegeln oder Zuschneiden nicht mehr und wurde entfernt."] = "The marking no longer fitted after rotating, flipping or cropping and was removed.",

@@ -281,6 +281,9 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
             return;
         }
+        // AI or Skin & details switched off: the step works on what is displayed (No. 100)
+        if (!await _main.TakeOverHiddenAiAsync()) return;
+        current = _main.CurrentImage ?? current;
 
         // A new attempt starts from the image before the last background step, not from its result
         var earlier = _main.LastBackground();

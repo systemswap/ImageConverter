@@ -162,6 +162,9 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
             Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
             return;
         }
+        // AI or Skin & details switched off: the step works on what is displayed (No. 100)
+        if (!await _main.TakeOverHiddenAiAsync()) return;
+        current = _main.CurrentImage ?? current;
 
         // A new attempt starts from the image before the last removal while nothing came after it and the marking still
         // begins with the strokes it removed (added to, not cleared): nothing accumulates. Otherwise it builds on the

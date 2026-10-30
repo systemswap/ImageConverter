@@ -553,6 +553,13 @@ public partial class AiViewModel : ViewModelBase
             return;
         }
 
+        if (!rerun)
+        {
+            // AI or Skin & details switched off: the step works on what is displayed (No. 100)
+            if (!await _main.TakeOverHiddenAiAsync()) return;
+            current = _main.CurrentImage ?? current;
+        }
+
         RunSetup? setup = rerun ? _setup : null;
         var start = setup is null ? ChooseStart(current) : default;
         var image = setup?.Input ?? start.Base;

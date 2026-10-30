@@ -2633,3 +2633,23 @@ Test oder Nachweis.
   `RetouchViewModel.Remove`.
 - **Test:** `kette-ui` Fälle 7–10 mit echten Modellen (MI-GAN, LaMa, Allround, BiRefNet lite), ganze Bilder per Fingerabdruck
   verglichen: neu alle richtig; alter Code 7–9 falsch, 10 richtig (bleibt so).
+
+## 100. Ausgeschaltete KI: Neue Bildschritte rechneten auf dem Bild mit KI, eine neue KI blieb unsichtbar (0.7.13 beta)
+
+- **Entdeckt:** 31.10.2026, 0.7.13-beta, dieselbe Prüfung wie #98 (Fälle 11–13 in `kette-ui`). **Behoben:** 0.7.14-beta.
+- **Was (mit dem alten Code nachgestellt):** KI übernommen, in „Bearbeitungen“ ausgeschaltet, dann
+  11. Hintergrund: gerechnet auf dem Bild *mit* KI, danach war die KI trotz ausgeschaltetem Auge wieder zu sehen;
+  12. neue KI: das Ergebnis blieb unsichtbar – gezeigt und gespeichert wurde das Bild ohne jede KI;
+  13. Entfernen: gerechnet auf dem Bild mit KI, obwohl die Markierung auf dem Bild ohne KI gemalt war.
+- **Warum:** Die Rubriken nahmen das Pixelbild (`CurrentImage`), das die KI enthält; gezeigt wird bei ausgeschalteter KI eine
+  nachgerechnete Variante ohne sie (`PixelsFor`). Nach einem nicht wiederholbaren Schritt lässt sich die KI nicht mehr abtrennen, das
+  Auge wirkt nicht mehr – die KI erschien wieder. Ein neuer KI-Schritt ließ das ausgeschaltete Auge stehen.
+- **Lösung (Wahl des Nutzers: „rechnen auf dem Gezeigten“):** Vor Entfernen, Hintergrund und einer neuen KI macht
+  `TakeOverHiddenAiAsync` das Gezeigte zum Pixelbild – wie „Neu anwenden“, aber nur für KI und „Haut & Details“ (`ApplyImageVariantAsync`),
+  ohne Geometrie und Regler; ein eigener Schritt, Strg+Z holt die KI zurück, die Statuszeile sagt es. Verworfen: die KI wieder
+  einschalten (rechnet auf etwas, das der Nutzer nicht sieht) und nur nachfragen.
+- **Nicht tun:** Einen Bildschritt auf `CurrentImage` rechnen, während eine Bild-Variante angezeigt wird.
+- **Wo im Code:** `MainViewModel.Edits.cs` (`TakeOverHiddenAiAsync`, `ApplyImageVariantAsync`), Aufrufe am Anfang von
+  `RetouchViewModel.Remove`, `BackgroundViewModel.Apply`, `AiViewModel.ComputeAsync`.
+- **Test:** `kette-ui` Fälle 11–13, ganze Bilder per Fingerabdruck gegen denselben Schritt auf dem Original: neu richtig, alter Code
+  alle falsch.

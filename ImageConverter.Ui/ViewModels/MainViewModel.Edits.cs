@@ -749,6 +749,24 @@ public partial class MainViewModel
         return await ApplyEditAsync(_ => copy, settingsAfter, step, recipeAfter);
     }
 
+    /// <summary>
+    /// Before a new image step (AI, removal, background): if the AI or its "Skin &amp; details" are switched off, what is
+    /// displayed becomes the pixel image first (one step, Ctrl+Z brings them back), so that the new step works on the image
+    /// the user sees and its result is not hidden behind a switched-off eye (No. 100).
+    /// </summary>
+    /// <returns>false if taking it over failed; the new step should not run then.</returns>
+    internal async Task<bool> TakeOverHiddenAiAsync()
+    {
+        var hidden = HiddenSteps & ImageVariants;
+        if (hidden == EditSteps.None) return true;
+        var done = await ApplyImageVariantAsync(hidden, s => s with { Hidden = s.Hidden & ~ImageVariants }, null);
+        if (done == true)
+            StatusMessage = (hidden & EditSteps.Ai) != 0
+                ? Tr.T("Die ausgeschaltete KI wurde dafür aus dem Bild genommen – gerechnet wird auf dem gezeigten Bild (Strg+Z holt sie zurück).")
+                : Tr.T("„Haut & Details“ waren ausgeschaltet und wurden dafür aus dem Bild genommen (Strg+Z holt sie zurück).");
+        return done is null or true;
+    }
+
     [RelayCommand(CanExecute = nameof(CanApplySelection))]
     private async Task ApplySelection()
     {
