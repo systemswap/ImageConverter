@@ -96,6 +96,9 @@ public static class BackgroundRemover
     private const double GuideSigma = 2.0;
     private const float GuideEps = 1e-3f;
 
+    // Below this the result counts as invisible (one 8-bit level at most): alpha 0, colour from the visible pixels
+    private const float Invisible = 1f / 255;
+
     /// <summary>Computes the subject mask of a region with the model.</summary>
     /// <param name="image">Pixel image; not modified.</param>
     /// <param name="region">Region of <paramref name="image"/> (the displayed crop, or a zoomed part of it).</param>
@@ -213,6 +216,7 @@ public static class BackgroundRemover
         var (fore, back) = ForegroundEstimate(mask.Guide, refined, w, h);
         ct.ThrowIfCancellationRequested();
         var blurred = mode == BackgroundMode.Blur ? BlurredBackground(mask.Guide, refined, w, h, blur) : null;
+        var fill = mode == BackgroundMode.Transparent ? FillFromVisible(fore, refined, w, h) : null;
 
         var result = ImageOps.CloneOf(image);
         ToRgb(result);
@@ -246,7 +250,15 @@ public static class BackgroundRemover
                     var inside = x >= region.X && x < region.X + region.Width && y >= region.Y && y < region.Y + region.Height;
                     if (!inside)
                     {
-                        if (mode == BackgroundMode.Transparent && ai >= 0) area[o + ai] = 0;   // outside the crop: background
+                        if (mode == BackgroundMode.Transparent && ai >= 0)
+                        {
+                            // outside the crop: background
+                            var nearest = new Bilinear(w, h, (x - region.X + 0.5) * scale - 0.5, (y - region.Y + 0.5) * scale - 0.5);
+                            area[o + ai] = 0;
+                            area[o + ri] = ToShort(nearest.Of(fill!, 0, 3));
+                            area[o + gi] = ToShort(nearest.Of(fill!, 1, 3));
+                            area[o + bi] = ToShort(nearest.Of(fill!, 2, 3));
+                        }
                         continue;
                     }
                     float r = area[o + ri] / 65535f, g = area[o + gi] / 65535f, b = area[o + bi] / 65535f;
@@ -263,8 +275,11 @@ public static class BackgroundRemover
                     float outR, outG, outB;
                     if (mode == BackgroundMode.Transparent)
                     {
-                        (outR, outG, outB) = al > 0 ? (f[0], f[1], f[2]) : (r, g, b);
-                        if (ai >= 0) area[o + ai] = ToShort(al * (area[o + ai] / 65535f));
+                        var visible = ai >= 0 ? al * (area[o + ai] / 65535f) : al;
+                        // Invisible pixels must not keep the old background: it would stay in the saved file and every
+                        // filter after this step would compute from it
+                        (outR, outG, outB) = visible >= Invisible ? (f[0], f[1], f[2]) : (cell.Of(fill!, 0, 3), cell.Of(fill!, 1, 3), cell.Of(fill!, 2, 3));
+                        if (ai >= 0) area[o + ai] = visible >= Invisible ? ToShort(visible) : (ushort)0;
                     }
                     else
                     {
@@ -339,6 +354,74 @@ public static class BackgroundRemover
             outB[i * 3 + c] = ba[i * 3 + c] / (oneMinus[i] + 1e-5f);
         }
         return (outF, outB);
+    }
+
+    /// <summary>
+    /// Colours for the invisible pixels, continued from the visible ones only (pull-push: averaged down to the coarsest
+    /// level weighted by alpha, then filled in from coarse to fine). Smooth, so that filters working on neighbours find no
+    /// artificial edge around the subject.
+    /// </summary>
+    /// <param name="colour">Foreground colours, interleaved R, G, B.</param>
+    /// <param name="alpha">Mask 0 … 1.</param>
+    /// <param name="w">Width.</param>
+    /// <param name="h">Height.</param>
+    /// <returns>Colours for every pixel, interleaved R, G, B; black if nothing is visible.</returns>
+    internal static float[] FillFromVisible(float[] colour, float[] alpha, int w, int h)
+    {
+        var colours = new List<float[]> { (float[])colour.Clone() };
+        var weights = new List<float[]> { alpha.Select(a => a >= Invisible ? a : 0).ToArray() };
+        var sizes = new List<(int W, int H)> { (w, h) };
+        while (sizes[^1] is not (1, 1))
+        {
+            var (fw, fh) = sizes[^1];
+            int cw = (fw + 1) / 2, ch = (fh + 1) / 2;
+            var (fineC, fineW) = (colours[^1], weights[^1]);
+            var coarseC = new float[cw * ch * 3];
+            var coarseW = new float[cw * ch];
+            Parallel.For(0, ch, y =>
+            {
+                for (var x = 0; x < cw; x++)
+                {
+                    float sum = 0, r = 0, g = 0, b = 0;
+                    for (var fy = y * 2; fy < Math.Min(fh, y * 2 + 2); fy++)
+                    for (var fx = x * 2; fx < Math.Min(fw, x * 2 + 2); fx++)
+                    {
+                        var i = fy * fw + fx;
+                        var a = fineW[i];
+                        sum += a;
+                        r += fineC[i * 3] * a;
+                        g += fineC[i * 3 + 1] * a;
+                        b += fineC[i * 3 + 2] * a;
+                    }
+                    if (sum <= 0) continue;
+                    var j = y * cw + x;
+                    (coarseC[j * 3], coarseC[j * 3 + 1], coarseC[j * 3 + 2]) = (r / sum, g / sum, b / sum);
+                    coarseW[j] = Math.Min(1, sum);
+                }
+            });
+            colours.Add(coarseC);
+            weights.Add(coarseW);
+            sizes.Add((cw, ch));
+        }
+        for (var level = colours.Count - 2; level >= 0; level--)
+        {
+            var (fw, fh) = sizes[level];
+            var (cw, ch) = sizes[level + 1];
+            var (fineC, fineW, coarseC) = (colours[level], weights[level], colours[level + 1]);
+            Parallel.For(0, fh, y =>
+            {
+                for (var x = 0; x < fw; x++)
+                {
+                    var i = y * fw + x;
+                    var a = fineW[i];
+                    if (a >= 1) continue;
+                    var cell = new Bilinear(cw, ch, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5);
+                    for (var c = 0; c < 3; c++)
+                        fineC[i * 3 + c] = fineC[i * 3 + c] * a + cell.Of(coarseC, c, 3) * (1 - a);
+                }
+            });
+        }
+        return colours[0];
     }
 
     /// <summary>

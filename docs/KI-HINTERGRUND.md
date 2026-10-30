@@ -77,11 +77,23 @@ durch. Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `~/.cache/
 - **Zeit je Stufe:** Rauschen 1,1–1,4 s, Dunst 1,9–2,4 s, Tiefen/Lichter 0,9–1,0 s, Licht und Farbe 0,1 s, Schärfen 0,1 s.
   Die reinen Pixel-Stufen, die man leicht überspringen könnte, machen also nur rund 2 % aus; die teuren brauchen Nachbarn
   oder schätzen über das ganze Bild.
-- **Verdeckter Hintergrund wirkt aufs Motiv:** Unter den unsichtbaren Pixeln (Alpha unter 1/255) liegen die alten Farben. Mit
-  Schwarz statt dieser Farben ändern sich die deckenden Pixel des Motivs nach dem Dunst im Mittel um 1,0–4,1 Stufen (15–60 %
-  der Pixel über 2 Stufen). Das zeigt die Empfindlichkeit, nicht welches Ergebnis besser ist; Schwarz übertreibt an Kanten.
-- **Fast nirgends Alpha genau 0:** 55–88 % der Pixel sind unsichtbar, aber nur 11–24 % haben Alpha genau 0, der Rest winzige Werte
-  aus dem Kantenfilter. Überspringen dürfte also nicht auf „genau 0“ prüfen.
+- **Nur aus sichtbaren Pixeln (seit 0.7.6 beta):** Pixel unter Alpha 1/255 bekommen Alpha 0 und Farben, die aus dem Sichtbaren
+  fortgesetzt sind (`FillFromVisible`, Pull-Push), nicht mehr die des alten Hintergrunds. So sehen ihn weder die Filter noch
+  steht er in der gespeicherten Datei (Fehlergedächtnis #93).
+
+| Bild | unsichtbar | alter Hintergrund darunter, alt → neu | Motiv hängt am Hintergrund (außerhalb 300 px geschwärzt), Mittel in Stufen, alt → neu | PNG, alt → neu |
+|---|---|---|---|---|
+| Gruppe | 87,5 % | 12,6 → 0 % | 1,97 → 0,06 | 6,8 → 2,3 MB |
+| Zuckerwatte | 54,9 % | 38,2 → 0 % | 0,56 → 0,16 | 6,7 → 3,9 MB |
+| Kleid | 83,0 % | 8,5 → 0 % | 0,20 → 0,18 | 6,4 → 2,8 MB |
+
+Ganz 0 wird die Abhängigkeit nicht: Kanten rechnen zu Recht mit dem Hintergrund in ihrer Nähe, und einzelne Pixel weichen weiter
+ab (max 27–33 Stufen). Die Füllung selbst sehen die Filter noch, sie zählt in ihren Schätzungen über das ganze Bild mit. Die
+Filterzeit bleibt gleich (im Wechsel gemessen, bester Lauf alt 5,59 s, neu 5,04 s).
+
+**Offen, Zuschnitt auf den sichtbaren Bereich:** Die Filter nur im Rechteck um das Sichtbare zu rechnen, sparte im Prüfstand rund 25–75 %
+Zeit (Rechteck 21–75 % der Fläche). Das Motiv fällt dabei um 0,6–3,1 Stufen anders aus, weil die Füllung nicht mehr mitzählt. Nicht
+eingebaut: Es beträfe Vorschau, Export und Größenschätzung, die gleich rechnen müssen.
 
 ## Rechnung (`ImageConverter.Core/Ai/BackgroundRemover.cs`)
 

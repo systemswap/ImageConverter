@@ -1,5 +1,6 @@
 using ImageConverter.Core.Ai;
 using ImageConverter.Core.Ai.Upscale;
+using ImageConverter.Core.Imaging;
 using ImageMagick;
 
 namespace ImageConverter.Tests;
@@ -165,6 +166,86 @@ public class BackgroundTests
         // The red of the subject does not bleed into the background next to it
         var near = (200 * W + 200 + 95) * 4;
         Assert.True(after[near] < 0.3 * 65535, $"Rot neben dem Motiv: {after[near]}");
+    }
+
+    /// <summary>The removed background must not stay under alpha 0: it would be in the saved file and every filter would compute from it.</summary>
+    [Fact]
+    public void InvisiblePixels_KeepNothingOfTheOldBackground()
+    {
+        using var img = Scene();
+        using var result = Remove(img, new ColourModel(), []);
+        var px = Rgba(result);
+        foreach (var (x, y) in new[] { (5, 5), (330, 30), (590, 390) })
+        {
+            var i = (y * W + x) * 4;
+            Assert.Equal(0, px[i + 3]);
+            Assert.True(px[i + 1] < 0.3 * 65535, $"Grün des alten Hintergrunds bei {x},{y}: {px[i + 1]}");
+        }
+
+        // Also outside the computed region
+        var model = new ColourModel();
+        var mask = BackgroundRemover.Detect(img, new SourceRect(100, 100, 220, 200), model, CancellationToken.None);
+        using var part = BackgroundRemover.Compose(img, mask, BackgroundRemover.Edit(mask, [], null), BackgroundMode.Transparent, 0, CancellationToken.None);
+        var outside = (20 * W + 20) * 4;
+        var inPart = Rgba(part);
+        Assert.Equal(0, inPart[outside + 3]);
+        Assert.True(inPart[outside + 1] < 0.3 * 65535, $"Grün außerhalb des Ausschnitts: {inPart[outside + 1]}");
+    }
+
+    /// <summary>Filters after the step see only the subject: a different background far from it must not change the subject.</summary>
+    [Fact]
+    public void Filters_DoNotSeeTheRemovedBackground()
+    {
+        float[] Filtered(MagickImage source)
+        {
+            var mask = BackgroundRemover.Detect(source, Whole, new FixedDiscs(), CancellationToken.None);
+            using var cut = BackgroundRemover.Compose(source, mask, BackgroundRemover.Edit(mask, [], null), BackgroundMode.Transparent, 0, CancellationToken.None);
+            var px = Pixels.FromMagick(cut);
+            return Adjust.Apply(px, W, H, new Adjustments(Brightness: 10, Shadows: 30, Dehaze: 40));
+        }
+
+        using var a = Scene();
+        using var b = Scene();
+        using (var pixels = b.GetPixelsUnsafe())
+        {
+            var data = pixels.ToShortArray(0, 0, W, H, "RGB")!;
+            for (var y = 0; y < H; y++)
+            for (var x = 0; x < W; x++)
+            {
+                var near = Math.Min(Math.Sqrt((x - 200.0) * (x - 200) + (y - 200.0) * (y - 200)) - 80, Math.Sqrt((x - 460.0) * (x - 460) + (y - 200.0) * (y - 200)) - 50);
+                if (near > 40) data[(y * W + x) * 3] = data[(y * W + x) * 3 + 1] = data[(y * W + x) * 3 + 2] = 65535;
+            }
+            pixels.SetArea(0, 0, W, H, data);
+        }
+
+        var (fa, fb) = (Filtered(a), Filtered(b));
+        var max = 0f;
+        foreach (var (cx, cy, r) in new[] { (200, 200, 70), (460, 200, 40) })
+        for (var y = cy - r; y <= cy + r; y++)
+        for (var x = cx - r; x <= cx + r; x++)
+        {
+            if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > r * r) continue;
+            for (var c = 0; c < 3; c++) max = Math.Max(max, Math.Abs(fa[(y * W + x) * 4 + c] - fb[(y * W + x) * 4 + c]));
+        }
+        Assert.True(max * 255 < 1, $"Motiv hängt vom entfernten Hintergrund ab: {max * 255:0.00} Stufen");
+    }
+
+    /// <summary>Always the same two discs, whatever the image shows.</summary>
+    private sealed class FixedDiscs : ISegmentModel
+    {
+        public int Size => 128;
+        public float[] Run(float[] rgb, CancellationToken ct)
+        {
+            var output = new float[Size * Size];
+            for (var y = 0; y < Size; y++)
+            for (var x = 0; x < Size; x++)
+            {
+                double px = (x + 0.5) * W / Size, py = (y + 0.5) * H / Size;
+                var inside = Math.Sqrt((px - 200) * (px - 200) + (py - 200) * (py - 200)) < 80 || Math.Sqrt((px - 460) * (px - 460) + (py - 200) * (py - 200)) < 50;
+                output[y * Size + x] = inside ? 1 : 0;
+            }
+            return output;
+        }
     }
 
     [Fact]

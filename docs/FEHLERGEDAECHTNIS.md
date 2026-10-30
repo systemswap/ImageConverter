@@ -2504,3 +2504,21 @@ Test oder Nachweis.
   App-Ablaufs (`hintergrund-speicher`) ist deshalb unbrauchbar, gültig sind die Einzelmessungen (`sitzung-speicher`).
 - **Wo im Code:** `BackgroundViewModel.Apply`.
 - **Test:** `~/.cache/imageconverter-build/sitzung-speicher` (je Modell und Weg), `hintergrund-speicher` (Ablauf in der App).
+
+## 93. Hintergrund: Der entfernte Hintergrund blieb in der gespeicherten Datei, die Filter rechneten aus ihm (0.7.5 beta)
+
+- **Entdeckt:** 30.10.2026, 0.7.5-beta, Messung auf freigestellten Bildern und Blick in eine exportierte PNG ohne Alphakanal: Die
+  entfernten Personen waren darin zu erkennen. **Behoben:** 0.7.6-beta.
+- **Was:** Transparent machte nur den Alphakanal. Unter Alpha 0 blieben die Originalfarben, unter winzigem Alpha Reste davon. Wer so ein
+  Bild weitergibt, gibt den Hintergrund mit, sobald jemand den Alphakanal ignoriert. Außerdem rechneten Dunst, Rauschen und Co. daraus:
+  Das Motiv änderte sich mit dem verdeckten Hintergrund.
+- **Warum:** `Compose` schrieb Alpha, ließ die Farben aber stehen (`al > 0 ? f : rgb`). Der Kantenfilter hinterlässt fast überall winzige
+  Alpha-Werte, genau 0 waren nur 11–24 % der Pixel.
+- **Lösung:** `FillFromVisible` setzt das Sichtbare per Pull-Push in die Fläche fort; unter Alpha 1/255 gilt ein Pixel als unsichtbar und
+  bekommt Alpha 0 und diese Farbe, auch außerhalb des gerechneten Ausschnitts. Schritt im Pixelbild, also für Vorschau, Export und
+  alle Filter gleich. „Unscharf“ ist nicht betroffen: Dort bleibt der Hintergrund sichtbar.
+- **Bleibt:** Bilder, die schon transparent geladen werden, behalten ihre Farben unter Alpha 0: Die hat diese App nicht erzeugt.
+- **Nicht tun:** „Transparent“ für „gelöscht“ halten.
+- **Wo im Code:** `BackgroundRemover.Compose`, `BackgroundRemover.FillFromVisible`.
+- **Test:** `BackgroundTests.InvisiblePixels_KeepNothingOfTheOldBackground`, `BackgroundTests.Filters_DoNotSeeTheRemovedBackground`; beide
+  scheitern am alten Stand. Echte Fotos: `~/.cache/imageconverter-build/transparent-probe` alt gegen neu (Zahlen in docs/KI-HINTERGRUND.md).
