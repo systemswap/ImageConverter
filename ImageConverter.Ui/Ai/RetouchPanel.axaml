@@ -67,6 +67,9 @@
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
                            IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
                            Text="{Binding Status}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding OrderHint, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding OrderHint}" />
 
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,8,0,0"
                            Text="{l:T 'Läuft lokal auf deinem Rechner. Nur bei eigenen Bildern oder mit Erlaubnis: Wasserzeichen aus fremden Bildern zu entfernen kann gegen das Urheberrecht verstoßen.'}" />

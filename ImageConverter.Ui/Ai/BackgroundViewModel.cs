@@ -53,7 +53,11 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         _ai.ModelsChanged += (_, _) => Rescan();
         _main.PropertyChanged += OnMainPropertyChanged;
         // Every image step, undo, redo and image switch rebuilds the "Edits" list: the shown image may have changed
-        _main.EditRows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(AgainHint));
+        _main.EditRows.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(AgainHint));
+            OnPropertyChanged(nameof(OrderHint));
+        };
         _main.FilesReplaced += (_, _) =>
         {
             ClearAll();
@@ -257,6 +261,15 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     /// After a background step: what the next run starts from. It always starts from the image before that step, never from
     /// the result, even with other image steps (AI, removal) in between; those are then not part of the new result.
     /// </summary>
+    /// <summary>
+    /// Recommended order of the image steps: background, removal, AI enhancement. Shown when removal or AI came first; the
+    /// order stays the user's choice (docs/KI-HINTERGRUND.md, "Reihenfolge in der Kette").
+    /// </summary>
+    public string? OrderHint =>
+        _main.LastBackground() is null && (_main.LastStep(ImageStepKind.Ai) is not null || _main.LastStep(ImageStepKind.Retouch) is not null)
+            ? Tr.T("Tipp: Den Hintergrund am besten zuerst – das Modell erkennt das Motiv am unbearbeiteten Foto am sichersten, und die Regler rechnen danach nur im sichtbaren Bereich.")
+            : null;
+
     public string? AgainHint => _main.LastBackground() switch
     {
         null => null,

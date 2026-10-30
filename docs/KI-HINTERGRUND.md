@@ -62,7 +62,12 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 
 ## Reihenfolge in der Kette
 
-1. **Pixelbild:** Original, dann KI, Entfernen und Hintergrund in der Reihenfolge der Klicks.
+1. **Pixelbild:** Original, dann KI, Entfernen und Hintergrund in der Reihenfolge der Klicks. **Empfohlen:** Hintergrund →
+   Entfernen → KI-Verbesserung – das Modell erkennt das Motiv am unbearbeiteten Foto am sichersten, die Verbesserung sieht schon den
+   fertigen Inhalt, und die Regler rechnen danach nur im sichtbaren Bereich. Die Rubriken Hintergrund und Entfernen sagen es, wenn ein
+   späterer Schritt zuerst kam; erzwungen wird es nicht (sonst müsste jede spätere Änderung alle folgenden KI-Schritte neu rechnen). Ein
+   neuer Versuch rechnet bei allen drei vom Bild vor ihrem letzten Schritt (`ImageStep.Base`, Fehlergedächtnis #99); Entfernen nur,
+   solange die Markierung ergänzt und nicht gelöscht wurde.
 2. **Geometrie** (`GeometryRecipe`): Begradigen, Entzerren, Gerade richten, Zuschnitt, Drehen/Spiegeln.
 3. **Größe** und Rauschen: beim Vergrößern erst Rauschen, sonst danach.
 4. **Regler:** Dunst, Tiefen/Lichter, Licht und Farbe, Schärfen, Körnung.

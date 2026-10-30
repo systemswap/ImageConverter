@@ -103,6 +103,9 @@
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0" FontWeight="SemiBold"
                            IsVisible="{Binding AgainHint, Converter={x:Static ObjectConverters.IsNotNull}}"
                            Text="{Binding AgainHint}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding OrderHint, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding OrderHint}" />
 
                 <!-- JPEG/BMP kennen keine Transparenz -->
                 <Border IsVisible="{Binding ShowFormatHint}" Margin="0,8,0,0" Padding="10,8"

@@ -36,8 +36,17 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
         _ai.ModelsChanged += (_, _) => Rescan();
         _main.PropertyChanged += OnMainPropertyChanged;
         _main.FilesReplaced += (_, _) => ClearAll();
+        _main.EditRows.CollectionChanged += (_, _) => OnPropertyChanged(nameof(OrderHint));   // the history changed
         Rescan();
     }
+
+    /// <summary>
+    /// Recommended order of the image steps: background, removal, AI enhancement. Shown when an AI step came first; the order
+    /// stays the user's choice (docs/KI-HINTERGRUND.md, "Reihenfolge in der Kette").
+    /// </summary>
+    public string? OrderHint => _main.LastStep(ImageStepKind.Ai) is not null
+        ? Tr.T("Tipp: Entfernen am besten vor der KI-Verbesserung – sie sieht dann schon das fertige Bild.")
+        : null;
 
     // ------------------------------------------------------------ Models
 
