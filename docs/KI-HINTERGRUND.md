@@ -20,7 +20,9 @@ Geometrie, Größe/Upscaling und allen Filtern.
   ganze Objekte über den Zoom-Lauf. In der Vorschau sind schwächere Striche blasser.
 - **Härte** (Rot und Grün, 0–100 %): 100 % harte Kante; weniger lässt die Wirkung vom inneren Teil des Pinsels (Härte × Radius) bis
   zum Rand weich auslaufen (Smoothstep). Bei Rot gilt das für das, was direkt unter dem Strich weggeht; berührte Objekte gehen
-  weiter ganz. Jeder Strich behält Stärke und Härte, mit denen er gemalt wurde.
+  weiter ganz. Jeder Strich behält Stärke und Härte, mit denen er gemalt wurde. Die Vorschau zeichnet weiche Striche mit demselben
+  Verlauf; der Pinsel-Kreis zeigt innen gestrichelt, bis wohin er voll wirkt. Die Pinselmitte darf bis einen Radius über den Bildrand,
+  damit sich auch ein weicher Pinsel bis in Ränder und Ecken führen lässt (gezeichnet wird nur über dem Bild).
 - **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild vor dem Hintergrund-Schritt und nimmt die
   gemerkte Maske — ohne neue Erkennung, 1–3 s. Der Regler rechnet erst beim Klick, nicht beim Ziehen.
 - **Anderes Modell:** dasselbe mit neuer Erkennung; das Ergebnis ist pixelgleich mit diesem Modell direkt auf dem Bild

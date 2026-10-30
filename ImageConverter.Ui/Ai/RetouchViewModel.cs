@@ -110,6 +110,11 @@ public partial class RetouchViewModel : ViewModelBase, IBrushTool
     /// <summary>Removal paints only red.</summary>
     public bool BrushKeep => false;
 
+    /// <summary>Removal strokes are hard: the model repaints the whole marked area.</summary>
+    public double StrokeHardness => 1;
+
+    public double StrokeStrength => 1;
+
     System.Windows.Input.ICommand IBrushTool.AddStrokeCommand => AddStrokeCommand;
 
     /// <summary>The mark: all strokes, oldest first (a new list on every change so that the preview updates).</summary>

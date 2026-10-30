@@ -201,6 +201,26 @@ public sealed class CropView : Control
         set => SetValue(BrushKeepProperty, value);
     }
 
+    /// <summary>Hardness of the stroke being painted, 0…1 (1 = hard edge); finished strokes carry their own.</summary>
+    public static readonly StyledProperty<double> BrushHardnessProperty =
+        AvaloniaProperty.Register<CropView, double>(nameof(BrushHardness), 1);
+
+    public double BrushHardness
+    {
+        get => GetValue(BrushHardnessProperty);
+        set => SetValue(BrushHardnessProperty, value);
+    }
+
+    /// <summary>Strength of the green stroke being painted, 0…1; finished strokes carry their own.</summary>
+    public static readonly StyledProperty<double> BrushStrengthProperty =
+        AvaloniaProperty.Register<CropView, double>(nameof(BrushStrength), 1);
+
+    public double BrushStrength
+    {
+        get => GetValue(BrushStrengthProperty);
+        set => SetValue(BrushStrengthProperty, value);
+    }
+
     /// <summary>The strokes have already been removed: hide them until a new stroke is added (then all are shown again).</summary>
     public static readonly StyledProperty<bool> BrushDimProperty =
         AvaloniaProperty.Register<CropView, bool>(nameof(BrushDim));
@@ -486,7 +506,7 @@ public sealed class CropView : Control
         AffectsRender<CropView>(SourceProperty, SelectionProperty, PlaceholderSizeProperty, SelectionRadiusProperty,
             CompareSourceProperty, BeforeLabelProperty, AfterLabelProperty, RotationAngleProperty, QuadProperty,
             PickActiveProperty, PickMarkersProperty, BrushActiveProperty, BrushStrokesProperty, BrushDimProperty, BrushSizeProperty,
-            BrushKeepProperty, WarpLinesProperty, RedrawTokenProperty);
+            BrushKeepProperty, BrushHardnessProperty, BrushStrengthProperty, WarpLinesProperty, RedrawTokenProperty);
         FocusableProperty.OverrideDefaultValue<CropView>(true);
         ClipToBoundsProperty.OverrideDefaultValue<CropView>(true);
     }
@@ -853,6 +873,24 @@ public sealed class CropView : Control
     private Point ClampToImage(Point p) =>
         new(Math.Clamp(p.X, 0, ImageSize.Width), Math.Clamp(p.Y, 0, ImageSize.Height));
 
+    /// <summary>
+    /// The brush centre may go up to one brush radius beyond the image: a soft brush acts fully only in its middle, so with its
+    /// centre held at the edge a wide band along the edge stayed half covered and could not be painted (No. 107).
+    /// </summary>
+    private Point ClampToBrushArea(Point p)
+    {
+        var r = BrushSize / 2 / _scale;
+        return new Point(Math.Clamp(p.X, -r, ImageSize.Width + r), Math.Clamp(p.Y, -r, ImageSize.Height + r));
+    }
+
+    /// <summary>Whether the brush at this screen position touches the image (a stroke may start just outside it).</summary>
+    private bool TouchesImage(Point screen)
+    {
+        var p = ToImage(screen);
+        var r = BrushSize / 2 / _scale;
+        return p.X >= -r && p.Y >= -r && p.X <= ImageSize.Width + r && p.Y <= ImageSize.Height + r;
+    }
+
     private static Rect Round(Rect r)
     {
         var x = Math.Round(r.X);
@@ -938,10 +976,10 @@ public sealed class CropView : Control
         // Brush: paint instead of drawing a frame
         if (BrushActive && !IsRotated)
         {
-            if (OnImage(p))
+            if (TouchesImage(p))
             {
                 _mode = DragMode.Brush;
-                _brushPoints = [ClampToImage(ToImage(p))];
+                _brushPoints = [ClampToBrushArea(ToImage(p))];
                 e.Pointer.Capture(this);
                 InvalidateVisual();
             }
@@ -1169,7 +1207,7 @@ public sealed class CropView : Control
             case DragMode.Brush when _brushPoints is { } points:
             {
                 // Add a point only at a distance of about 1.5 screen pixels; otherwise the stroke grows without benefit.
-                var ip = ClampToImage(ToImage(p));
+                var ip = ClampToBrushArea(ToImage(p));
                 if (Point.Distance(ip, points[^1]) * _scale >= 1.5) points.Add(ip);
                 _brushHover = p;
                 InvalidateVisual();
@@ -2092,35 +2130,51 @@ public sealed class CropView : Control
     private static readonly IBrush BrushKeepFill = new ImmutableSolidColorBrush(Color.FromRgb(0x30, 0xD0, 0x50));
     private static readonly IPen BrushRingPen = new ImmutablePen(Brushes.White, 1.5);
 
-    /// <summary>Draws the mark: strokes in semi-transparent red, green for "keep" (overlaps not darker), plus the brush circle.</summary>
+    /// <summary>
+    /// Draws the mark: strokes in semi-transparent red, green for "keep" (overlaps not darker; weaker green paler), soft strokes
+    /// with the same falloff from the middle of the brush to its edge as the computation, plus the brush circle with the
+    /// radius up to which a soft brush acts fully.
+    /// </summary>
     private void RenderBrush(DrawingContext context)
     {
-        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius, s.Keep, s.Strength)).ToList() ?? [];
-        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale, BrushKeep, 1.0));
+        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius, s.Keep,
+            s.Strength, s.Hardness)).ToList() ?? [];
+        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale, BrushKeep, BrushKeep ? BrushStrength : 1, BrushHardness));
         if (strokes.Count > 0)
         {
+            // Only over the image: the brush centre may go beyond the edge, but what lies outside is not part of the picture
+            var corner = ToScreenPoint(new Point(ImageSize.Width, ImageSize.Height));
+            using (context.PushClip(new Rect(ToScreenPoint(new Point(0, 0)), corner)))
             using (context.PushOpacity(0.5))
             {
-                foreach (var (points, radius, keep, strength) in strokes)
+                foreach (var (points, radius, keep, strength, hardness) in strokes)
                 {
                     var r = radius * _scale;
-                    // weaker green strokes paler, so that they can be told apart
-                    var fill = !keep ? BrushFill : strength >= 1 ? BrushKeepFill
-                        : new ImmutableSolidColorBrush(Color.FromRgb(0x30, 0xD0, 0x50), 0.3 + 0.7 * Math.Clamp(strength, 0, 1));
-                    if (points.Count == 1)
+                    var color = keep ? KeepColor : RemoveColor;
+                    var top = keep ? 0.3 + 0.7 * Math.Clamp(strength, 0, 1) : 1;
+                    if (hardness >= 1)
                     {
-                        context.DrawEllipse(fill, null, ToScreenPoint(points[0]), r, r);
+                        DrawStroke(context, points, r, top >= 1 ? keep ? BrushKeepFill : BrushFill : new ImmutableSolidColorBrush(color, top));
                         continue;
                     }
-                    var pen = new Pen(fill, 2 * r, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
-                    var line = new StreamGeometry();
-                    using (var g = line.Open())
+                    // Soft: nested strokes from the edge inwards; each layer adds so much that the coverage follows the falloff of
+                    // the computation (full up to hardness × radius, smoothstep down to 0 at the radius)
+                    const int layers = 12;
+                    var inner = r * Math.Clamp(hardness, 0, 1);
+                    var before = 0.0;
+                    for (var j = 0; j < layers; j++)
                     {
-                        g.BeginFigure(ToScreenPoint(points[0]), false);
-                        foreach (var q in points.Skip(1)) g.LineTo(ToScreenPoint(q));
-                        g.EndFigure(false);
+                        var outer = r * (layers - j) / layers;
+                        var d = outer - r / layers / 2;
+                        var v = d <= inner ? 1 : Math.Clamp(1 - (d - inner) / Math.Max(1e-6, r - inner), 0, 1);
+                        var target = top * v * v * (3 - 2 * v);
+                        if (target > before)
+                        {
+                            DrawStroke(context, points, outer, new ImmutableSolidColorBrush(color, 1 - (1 - target) / (1 - before)));
+                            before = target;
+                        }
+                        if (outer <= inner) break;   // everything inside is covered fully
                     }
-                    context.DrawGeometry(null, pen, line);
                 }
             }
         }
@@ -2130,7 +2184,33 @@ public sealed class CropView : Control
             var r = BrushSize / 2;
             context.DrawEllipse(null, QuadShadowPen, hover, r, r);
             context.DrawEllipse(null, BrushRingPen, hover, r, r);
+            if (BrushHardness < 1 && r * BrushHardness >= 2)
+                context.DrawEllipse(null, BrushInnerRingPen, hover, r * BrushHardness, r * BrushHardness);
         }
+    }
+
+    private static readonly Color RemoveColor = Color.FromRgb(0xFF, 0x30, 0x30);
+    private static readonly Color KeepColor = Color.FromRgb(0x30, 0xD0, 0x50);
+    private static readonly IPen BrushInnerRingPen = new ImmutablePen(new ImmutableSolidColorBrush(Colors.White, 0.8), 1,
+        new ImmutableDashStyle([3, 3], 0));
+
+    /// <summary>One stroke with round ends (a single point as a disc).</summary>
+    private void DrawStroke(DrawingContext context, IReadOnlyList<Point> points, double r, IBrush fill)
+    {
+        if (points.Count == 1)
+        {
+            context.DrawEllipse(fill, null, ToScreenPoint(points[0]), r, r);
+            return;
+        }
+        var pen = new Pen(fill, 2 * r, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+        var line = new StreamGeometry();
+        using (var g = line.Open())
+        {
+            g.BeginFigure(ToScreenPoint(points[0]), false);
+            foreach (var q in points.Skip(1)) g.LineTo(ToScreenPoint(q));
+            g.EndFigure(false);
+        }
+        context.DrawGeometry(null, pen, line);
     }
 
     // ------------------------------------------------------------ Keyboard

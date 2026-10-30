@@ -112,7 +112,7 @@ public partial class MainViewModel
         if (scale >= 1) return;   // small enough: use the image itself
 
         var target = new PixelSize(Math.Max(1, (int)Math.Round(size.Width * scale)), Math.Max(1, (int)Math.Round(size.Height * scale)));
-        var small = await Task.Run(() => full.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality));
+        var small = await Task.Run(() => BitmapOps.Shrink(full, target));   // CreateScaledBitmap rejects WriteableBitmap (No. 106)
         if (ReferenceEquals(_fullPreviewOf, full) && ReferenceEquals(FullBitmap, full)) FullPreviewBitmap = small;
         else small.Dispose();
     }

@@ -1220,6 +1220,8 @@
                                     BrushStrokes="{Binding ActiveBrush.Strokes}"
                                     BrushDim="{Binding ActiveBrush.StrokesApplied}"
                                     BrushKeep="{Binding ActiveBrush.BrushKeep}"
+                                    BrushHardness="{Binding ActiveBrush.StrokeHardness}"
+                                    BrushStrength="{Binding ActiveBrush.StrokeStrength}"
                                     BrushCommand="{Binding ActiveBrush.AddStrokeCommand}"
                                     CropCommand="{Binding CropToSelectionCommand}"
                                     GestureCompletedCommand="{Binding CommitSettingsStepCommand}"

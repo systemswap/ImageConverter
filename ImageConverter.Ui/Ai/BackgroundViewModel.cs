@@ -130,7 +130,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
     /// <summary>Automatic, red or green brush.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBrushing), nameof(BrushKeep), nameof(IsAuto), nameof(IsRemoveBrush), nameof(IsKeepBrush), nameof(ToolHint))]
+    [NotifyPropertyChangedFor(nameof(IsBrushing), nameof(BrushKeep), nameof(IsAuto), nameof(IsRemoveBrush), nameof(IsKeepBrush), nameof(ToolHint), nameof(StrokeStrength))]
     public partial BackgroundTool Tool { get; set; }
 
     public bool IsAuto
@@ -180,7 +180,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     /// blur mode, 40 % visible in the transparent mode). Strokes already painted keep theirs (docs/KI-HINTERGRUND.md, „Bedienung“).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(KeepStrengthLabel))]
+    [NotifyPropertyChangedFor(nameof(KeepStrengthLabel), nameof(StrokeStrength))]
     public partial double KeepStrength { get; set; } = 100;
 
     public string KeepStrengthLabel => $"{KeepStrength:0} %";
@@ -190,10 +190,16 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     /// inner part of the brush to its edge (docs/KI-HINTERGRUND.md, „Bedienung“).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BrushHardnessLabel))]
+    [NotifyPropertyChangedFor(nameof(BrushHardnessLabel), nameof(StrokeHardness))]
     public partial double BrushHardness { get; set; } = 100;
 
     public string BrushHardnessLabel => $"{BrushHardness:0} %";
+
+    /// <inheritdoc />
+    public double StrokeHardness => BrushHardness / 100;
+
+    /// <inheritdoc />
+    public double StrokeStrength => BrushKeep ? KeepStrength / 100 : 1;
 
     /// <summary>All strokes, oldest first, in the displayed image (a new list on every change so that the preview updates).</summary>
     [ObservableProperty]

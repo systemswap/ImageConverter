@@ -26,6 +26,12 @@ public interface IBrushTool : INotifyPropertyChanged
     /// <summary>Gets whether new strokes keep (green) instead of remove (red).</summary>
     bool BrushKeep { get; }
 
+    /// <summary>Gets the hardness of new strokes, 0…1 (1 = hard edge), for drawing the stroke being painted.</summary>
+    double StrokeHardness { get; }
+
+    /// <summary>Gets the strength of new green strokes, 0…1, for drawing the stroke being painted.</summary>
+    double StrokeStrength { get; }
+
     /// <summary>Gets the command that receives a finished stroke.</summary>
     ICommand AddStrokeCommand { get; }
 }

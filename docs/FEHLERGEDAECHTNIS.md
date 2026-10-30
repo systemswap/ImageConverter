@@ -2755,3 +2755,34 @@ Test oder Nachweis.
 - **Wo im Code:** `BackgroundRemover.Edit`; Hinweistext in `BackgroundViewModel.ToolHint`.
 - **Test:** `BackgroundTests.GreenStroke_KeepsWhatItCovers_EvenIfTheModelSeesNothingThere` (transparent und unscharf, beide scheitern
   am alten Kern: Blau am Scheibenrand 58981 → 38272, ins Grün gemischt).
+
+## 106. Vorher/Nachher: Die verkleinerte Vorher-Seite wurde nie erzeugt („Invalid source bitmap type“) (seit der Vorher-Ansicht)
+
+- **Entdeckt:** 30.10.2026, 0.8.0, im Programm-Log des Nutzers: „Fehler in einer Hintergrundaufgabe (nicht abgefangen) … Invalid source
+  bitmap type … CreateScaledBitmap … PrepareFullPreviewAsync“ (20:24, zuvor 19:08). **Behoben:** 0.8.1-beta.
+- **Was:** Für den Vergleich wird das große Anzeigebild auf Vorschaugröße verkleinert, damit das Ziehen der Trennlinie nicht jedes Mal
+  das Bild in voller Größe zeichnet. Das schlug bei jedem Bild über der Vorschaugröße fehl; der Vergleich lief dann mit dem vollen Bild
+  (bei Panoramen zäh). Im Log stand es nur selten, weil unbeobachtete Fehler erst beim Aufräumen des Speichers gemeldet werden.
+- **Warum:** `Bitmap.CreateScaledBitmap` nimmt unter Skia nur unveränderliche Bitmaps; die Anzeige verwendet `WriteableBitmap`
+  (`BitmapOps.FromBgra`). Nachgestellt: wirft immer, im Oberflächen-Faden wie im Hintergrund.
+- **Lösung:** `BitmapOps.Shrink` verkleinert selbst – Pixel kopieren (`CopyPixels`), je Zielpixel mitteln, mit Alpha gewichtet (transparente
+  Ränder werden nicht dunkel). Geprüft: Muster aus deckend rot / durchsichtig ergibt Rot 200 bei Alpha 128; 6 MP in 15 ms.
+- **Nicht tun:** `CreateScaledBitmap` auf Bitmaps aus `FromBgra` anwenden; Fehler aus `Task.Run` ohne `await` liegen lassen.
+- **Wo im Code:** `BitmapOps.Shrink`, `MainViewModel.PrepareFullPreviewAsync`.
+- **Test:** Prüfprogramm `~/.cache/imageconverter-build/bitmaptest` (Fenster-Umgebung nötig, im Testprojekt nicht möglich).
+
+## 107. Pinsel: Ein weicher Pinsel ließ sich nicht bis in Ränder und Ecken führen (0.7.18 beta)
+
+- **Entdeckt:** 30.10.2026, 0.8.0, vom Nutzer: „Ich kann den Pinsel nicht komplett bis zum Rand führen, bei einem großen Pinsel bleibt eine
+  Menge im Bild … wenn ich etwas Richtung einer Ecke markieren will“; dazu „die Härte sieht man an der grünen Maske gar nicht“. **Behoben:**
+  0.8.1-beta.
+- **Was:** Die Pinselmitte war auf das Bild begrenzt, ein Strich begann nur im Bild. Mit der Härte (0.7.18) wirkt ein weicher Pinsel nur in
+  seiner Mitte voll; am Rand festgehalten, blieb ein breiter Streifen halb erfasst. Die Vorschau zeichnete weiche Striche hart.
+- **Lösung:** Die Pinselmitte darf bis einen Pinsel-Radius über den Rand (`ClampToBrushArea`), ein Strich darf dort beginnen, solange der
+  Pinsel das Bild berührt (`TouchesImage`). Gezeichnet wird nur über dem Bild (Ausschnitt), weiche Striche in Schichten mit demselben
+  Verlauf wie die Rechnung, der Pinsel-Kreis zeigt innen gestrichelt, bis wohin er voll wirkt. Rechnung (Raster, Teilstücke, Umrechnung
+  über das Gitter) verträgt Punkte außerhalb.
+- **Wo im Code:** `CropView` (`ClampToBrushArea`, `TouchesImage`, `RenderBrush`, `DrawStroke`, `BrushHardness`, `BrushStrength`),
+  `IBrushTool.StrokeHardness`/`StrokeStrength`.
+- **Test:** Aufnahme im unsichtbaren Fenster (`kette-ui`, Modus `haerte`): Härte 100/50/0 % sichtbar verschieden, Strich über die Ecke
+  am Bildrand abgeschnitten.
