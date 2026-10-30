@@ -18,9 +18,13 @@ Geometrie, Größe/Upscaling und allen Filtern.
 - **Stärke** (nur Grün, 10–100 %): wie viel von dem, was ein neuer grüner Strich überdeckt, bleibt – ein Geländer mit 40 % ist im
   Unscharf-Modus zu 40 % scharf, beim Entfernen zu 40 % sichtbar (Maske halb durchsichtig). Nur Striche mit voller Stärke ergänzen
   ganze Objekte über den Zoom-Lauf. In der Vorschau sind schwächere Striche blasser.
+- **Ebenen:** Striche gehören zu einer Pinsel-Ebene mit Farbe, Stärke und Härte. Eine Ebene in der Liste wählen setzt sie fort (die
+  Regler springen auf ihre Werte); Stärke und Härte ändern die ganze gewählte Ebene, auch schon gemalte Striche. „Neue Ebene“ beginnt eine
+  mit den aktuellen Werten; wer ohne Ebene malt oder die Farbe wechselt, bekommt automatisch eine. Innerhalb einer Ebene addieren sich
+  überlappende Striche nicht (eine Maske), grüne Ebenen addieren sich (zwei mit 30 % ergeben 60 %, höchstens 100 %), rote verbinden sich.
 - **Härte** (Rot und Grün, 0–100 %): 100 % harte Kante; weniger lässt die Wirkung radial von der Mitte des Pinsels zum Rand auslaufen
   – voll bis Härte × Radius, dann weich (Smoothstep) bis 0 am Rand; bei 0 % schon ab der Mitte. Bei Rot gilt das für das, was direkt unter dem Strich weggeht; berührte Objekte gehen
-  weiter ganz. Jeder Strich behält Stärke und Härte, mit denen er gemalt wurde. Die Vorschau zeichnet weiche Striche mit demselben
+  weiter ganz. Die Werte gehören zur Ebene des Strichs. Die Vorschau zeichnet weiche Striche mit demselben
   Verlauf; der Pinsel-Kreis ist bei weichem Pinsel radial gefüllt (Mitte deckend, zum Rand auslaufend). Die Pinselmitte darf bis einen Radius über den Bildrand,
   damit sich auch ein weicher Pinsel bis in Ränder und Ecken führen lässt (gezeichnet wird nur über dem Bild).
 - **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild vor dem Hintergrund-Schritt und nimmt die

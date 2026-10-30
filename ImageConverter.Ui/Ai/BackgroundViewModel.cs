@@ -177,21 +177,130 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
     /// <summary>
     /// Strength of new green strokes in percent: how much of what they cover stays (a railing at 40 %: 40 % sharp in the
-    /// blur mode, 40 % visible in the transparent mode). Strokes already painted keep theirs (docs/KI-HINTERGRUND.md, „Bedienung“).
+    /// blur mode, 40 % visible in the transparent mode). It belongs to the selected brush layer: changing it changes all strokes
+    /// of that layer (docs/KI-HINTERGRUND.md, „Bedienung“).
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(KeepStrengthLabel), nameof(StrokeStrength))]
     public partial double KeepStrength { get; set; } = 100;
 
+    partial void OnKeepStrengthChanged(double value)
+    {
+        if (_syncing || _layer is not { Keep: true } layer) return;
+        layer.Strength = value;
+        RestyleLayer(layer);
+    }
+
     public string KeepStrengthLabel => $"{KeepStrength:0} %";
 
     /// <summary>
-    /// Hardness of new strokes in percent (red and green): 100 % a hard edge; less lets the effect fall off softly from the
-    /// inner part of the brush to its edge (docs/KI-HINTERGRUND.md, „Bedienung“).
+    /// Hardness in percent (red and green): 100 % a hard edge; less lets the effect fall off radially from the middle of the
+    /// brush to its edge. It belongs to the selected brush layer (docs/KI-HINTERGRUND.md, „Bedienung“).
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BrushHardnessLabel), nameof(StrokeHardness))]
     public partial double BrushHardness { get; set; } = 100;
+
+    partial void OnBrushHardnessChanged(double value)
+    {
+        if (_syncing || _layer is not { } layer) return;
+        layer.Hardness = value;
+        RestyleLayer(layer);
+    }
+
+    // ------------------------------------------------------------ Brush layers
+
+    /// <summary>
+    /// Brush layers: strokes of one layer share colour, strength and hardness and form one mask; green layers add up (two at
+    /// 30 % keep 60 %), red ones combine. Selecting a layer continues it with its values (docs/KI-HINTERGRUND.md, „Bedienung“).
+    /// </summary>
+    public ObservableCollection<BrushLayer> Layers { get; } = [];
+
+    public bool HasLayers => Layers.Count > 0;
+
+    private BrushLayer? _layer;   // the layer new strokes go into
+    private int _nextLayer = 1;
+    private bool _syncing;        // the sliders follow a selected layer, not the other way round
+
+    /// <summary>Starts a new layer with the current colour, strength and hardness; the next strokes go into it.</summary>
+    [RelayCommand]
+    private void NewLayer()
+    {
+        if (Tool == BackgroundTool.Auto) return;
+        Select(AddLayer(Tool == BackgroundTool.Keep));
+    }
+
+    private BrushLayer AddLayer(bool keep)
+    {
+        var layer = new BrushLayer(this, _nextLayer++, keep, keep ? KeepStrength : 100, BrushHardness);
+        Layers.Add(layer);
+        OnPropertyChanged(nameof(HasLayers));
+        return layer;
+    }
+
+    /// <summary>Continues a layer: colour, strength and hardness follow it, new strokes go into it.</summary>
+    internal void Select(BrushLayer layer)
+    {
+        _layer = layer;
+        _syncing = true;
+        try
+        {
+            Tool = layer.Keep ? BackgroundTool.Keep : BackgroundTool.Remove;
+            BrushHardness = layer.Hardness;
+            if (layer.Keep) KeepStrength = layer.Strength;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+        foreach (var l in Layers) l.IsSelected = ReferenceEquals(l, layer);
+        DropEmptyLayers();
+    }
+
+    /// <summary>Removes a layer with its strokes.</summary>
+    internal void Remove(BrushLayer layer)
+    {
+        Strokes = Strokes.Where(s => s.Layer != layer.Id).ToArray();
+        Layers.Remove(layer);
+        if (ReferenceEquals(_layer, layer)) _layer = null;
+        StrokesApplied = false;
+        OnPropertyChanged(nameof(HasLayers));
+    }
+
+    /// <summary>Layers without strokes that are not being painted go away.</summary>
+    private void DropEmptyLayers()
+    {
+        foreach (var empty in Layers.Where(l => l.Count == 0 && !ReferenceEquals(l, _layer)).ToList()) Layers.Remove(empty);
+        OnPropertyChanged(nameof(HasLayers));
+    }
+
+    /// <summary>A layer's strength or hardness changed: all its strokes take it (shown again until applied).</summary>
+    private void RestyleLayer(BrushLayer layer)
+    {
+        Strokes = Strokes.Select(s => s.Layer == layer.Id ? s with { Strength = layer.Keep ? layer.Strength / 100 : 1, Hardness = layer.Hardness / 100 } : s).ToArray();
+        if (layer.Count > 0) StrokesApplied = false;
+    }
+
+    private void ResetLayers()
+    {
+        Layers.Clear();
+        _layer = null;
+        _nextLayer = 1;
+        OnPropertyChanged(nameof(HasLayers));
+    }
+
+    partial void OnToolChanged(BackgroundTool value)
+    {
+        // Other colour: continue its last layer, or start one with the first stroke
+        if (_syncing || value == BackgroundTool.Auto || _layer is { } l && l.Keep == (value == BackgroundTool.Keep)) return;
+        if (Layers.LastOrDefault(x => x.Keep == (value == BackgroundTool.Keep)) is { } last) Select(last);
+        else
+        {
+            _layer = null;
+            foreach (var x in Layers) x.IsSelected = false;
+            DropEmptyLayers();
+        }
+    }
 
     public string BrushHardnessLabel => $"{BrushHardness:0} %";
 
@@ -218,8 +327,11 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     private void AddStroke(BrushStroke stroke)
     {
         if (Strokes.Count == 0) _paintedOn = _main.ShownGeometry;
-        // Each stroke keeps the strength (green) and hardness it was painted with
-        stroke = stroke with { Hardness = BrushHardness / 100, Strength = stroke.Keep ? KeepStrength / 100 : 1 };
+        // Into the selected layer of this colour, or a new one with the current values
+        if (_layer is null || _layer.Keep != stroke.Keep) Select(AddLayer(stroke.Keep));
+        var layer = _layer!;
+        stroke = stroke with { Layer = layer.Id, Hardness = layer.Hardness / 100, Strength = layer.Keep ? layer.Strength / 100 : 1 };
+        layer.Count++;
         Strokes = [.. Strokes, stroke];
         StrokesApplied = false;
         Status = null;
@@ -230,7 +342,13 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     [RelayCommand(CanExecute = nameof(CanEditStrokes))]
     private void UndoStroke()
     {
+        var last = Strokes[^1];
         Strokes = Strokes.Take(Strokes.Count - 1).ToArray();
+        if (Layers.FirstOrDefault(l => l.Id == last.Layer) is { } layer)
+        {
+            layer.Count--;
+            if (layer.Count == 0 && !ReferenceEquals(layer, _layer)) DropEmptyLayers();
+        }
         StrokesApplied = false;
     }
 
@@ -238,6 +356,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     private void ClearStrokes()
     {
         Strokes = [];
+        ResetLayers();
         StrokesApplied = false;
         Status = null;
     }
@@ -508,6 +627,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     private void ClearAll()
     {
         Strokes = [];
+        ResetLayers();
         StrokesApplied = false;
         Status = null;
     }
@@ -536,6 +656,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                 if (_size is { } size && size != now)
                 {
                     Strokes = [];
+                    ResetLayers();
                     StrokesApplied = false;
                 }
                 _size = now;
@@ -546,6 +667,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                 if (Strokes.Count > 0 && _paintedOn is { } painted && painted != _main.ShownGeometry)
                 {
                     Strokes = [];
+                    ResetLayers();
                     StrokesApplied = false;
                     Status = Tr.T("Die Markierung passte nach Drehen, Spiegeln oder Zuschneiden nicht mehr und wurde entfernt.");
                 }
@@ -557,4 +679,67 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     private (GeometryRecipe Recipe, GeometryStages Stages)? _paintedOn;
 
     private (int W, int H)? _size;
+}
+
+/// <summary>A brush layer of the "Hintergrund" tab: its strokes share colour, strength and hardness and form one mask.</summary>
+public sealed partial class BrushLayer : ObservableObject
+{
+    private readonly BackgroundViewModel _owner;
+
+    internal BrushLayer(BackgroundViewModel owner, int id, bool keep, double strength, double hardness)
+    {
+        _owner = owner;
+        (Id, Keep, Strength, Hardness) = (id, keep, strength, hardness);
+    }
+
+    /// <summary>Number of the layer, also stored in its strokes.</summary>
+    public int Id { get; }
+
+    /// <summary>Green (stays) instead of red (goes).</summary>
+    public bool Keep { get; }
+
+    /// <summary>Strength in percent (green only).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Detail))]
+    public partial double Strength { get; set; }
+
+    /// <summary>Hardness in percent.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Detail))]
+    public partial double Hardness { get; set; }
+
+    /// <summary>Number of strokes.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Detail))]
+    public partial int Count { get; set; }
+
+    /// <summary>New strokes go into this layer.</summary>
+    [ObservableProperty] public partial bool IsSelected { get; set; }
+
+    public string Name => Tr.T("Ebene {0}", Id);
+
+    /// <summary>Colour of the name: green or red like the brush.</summary>
+    public Avalonia.Media.IBrush Swatch => Keep ? GreenText : RedText;
+
+    private static readonly Avalonia.Media.IBrush GreenText = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Avalonia.Media.Color.FromRgb(0x2F, 0xA8, 0x4F));
+    private static readonly Avalonia.Media.IBrush RedText = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Avalonia.Media.Color.FromRgb(0xE0, 0x40, 0x40));
+
+    public string Detail
+    {
+        get
+        {
+            var strokes = Count == 1 ? Tr.T("1 Strich") : Tr.T("{0} Striche", Count);
+            return Keep
+                ? Tr.T("Grün · {0:0} % · Härte {1:0} % · {2}", Strength, Hardness, strokes)
+                : Tr.T("Rot · Härte {0:0} % · {1}", Hardness, strokes);
+        }
+    }
+
+    /// <summary>Continue this layer.</summary>
+    [RelayCommand]
+    private void Choose() => _owner.Select(this);
+
+    /// <summary>Remove this layer with its strokes.</summary>
+    [RelayCommand]
+    private void Delete() => _owner.Remove(this);
 }

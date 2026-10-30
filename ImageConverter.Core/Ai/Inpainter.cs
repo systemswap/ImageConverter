@@ -11,8 +11,10 @@ namespace ImageConverter.Core.Ai;
 /// blur mode 40 % sharp, 60 % blurred, in the transparent mode 40 % visible).</param>
 /// <param name="Hardness">Background removal: how hard the edge of the stroke is, 0…1; full effect up to this fraction of the
 /// radius, then falling off smoothly to the radius (1 = hard edge).</param>
+/// <param name="Layer">Background removal: the brush layer of the stroke. Strokes of one layer form one mask (overlaps do not add up);
+/// green layers add up, red ones combine.</param>
 public sealed record BrushStroke(IReadOnlyList<(double X, double Y)> Points, double Radius, bool Keep = false, double Strength = 1,
-    double Hardness = 1);
+    double Hardness = 1, int Layer = 0);
 
 /// <summary>
 /// An inpainting model (LaMa, MI-GAN): receives a square crop and a mask and repaints the marked area to match

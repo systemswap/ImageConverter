@@ -189,7 +189,18 @@ public static class BackgroundRemover
         var redStrokes = strokes.Where(st => !st.Keep).Select(ToWork).ToArray();
         var red = Inpainter.Rasterize(redStrokes, w, h, 0);
         // Soft red strokes: what lies under them fades out towards their edge instead of ending hard (whole objects still go)
-        var redSoft = redStrokes.Any(st => st.Hardness < 1) ? Coverage(redStrokes, w, h, strength: false) : null;
+        float[]? redSoft = null;
+        if (redStrokes.Any(st => st.Hardness < 1))
+        {
+            // Layers combine: what one layer leaves, the next takes its share of
+            var leave = Enumerable.Repeat(1f, alpha.Length).ToArray();
+            foreach (var layer in redStrokes.GroupBy(st => st.Layer))
+            {
+                var own = LayerCoverage(layer.ToArray(), w, h, strength: false, null);
+                for (var i = 0; i < leave.Length; i++) leave[i] *= 1 - own[i];
+            }
+            redSoft = leave.Select(v => 1 - v).ToArray();
+        }
 
         // Green first: objects found by a zoomed run around the green strokes (the first run missed them)
         if (zoomDetect is not null && Bounds(whole, w, h) is { } box)
@@ -204,21 +215,18 @@ public static class BackgroundRemover
         // What green covers stays in any case, even where the model sees no subject, not even zoomed in: otherwise the marked
         // part was blurred or removed anyway (No. 104). A weaker stroke keeps it at its strength (a railing 40 % sharp). The
         // edges still come from the photo (guided filter in Compose).
-        var level = keepStrokes.Length > 0 ? new float[alpha.Length] : null;
-        var hard = keepStrokes.Where(st => st.Hardness >= 1).ToArray();
-        foreach (var group in hard.GroupBy(st => Math.Clamp(st.Strength, 0, 1)))
+        // Green layers: within a layer the strongest stroke counts (one mask at the layer's strength), the layers add up – two
+        // layers at 30 % keep 60 % (docs/KI-HINTERGRUND.md, „Bedienung“)
+        float[]? level = null;
+        foreach (var layer in keepStrokes.GroupBy(st => st.Layer))
         {
-            var strength = (float)group.Key;
-            var covered = group.Count() == keepStrokes.Length ? green : Inpainter.Rasterize(group.ToArray(), w, h, 0);
-            for (var i = 0; i < alpha.Length; i++)
-                if (covered[i] != 0 && level![i] < strength) level[i] = strength;
-        }
-        // Soft strokes: the strength falls off towards their edge (docs/KI-HINTERGRUND.md, „Bedienung“)
-        if (hard.Length < keepStrokes.Length)
-        {
-            var soft = Coverage(keepStrokes.Where(st => st.Hardness < 1).ToArray(), w, h, strength: true);
-            for (var i = 0; i < alpha.Length; i++)
-                if (level![i] < soft[i]) level[i] = soft[i];
+            var own = LayerCoverage(layer.ToArray(), w, h, strength: true, layer.Count() == keepStrokes.Length ? green : null);
+            if (level is null)
+            {
+                level = own;
+                continue;
+            }
+            for (var i = 0; i < level.Length; i++) level[i] = Math.Min(1, level[i] + own[i]);
         }
         if (level is not null)
             for (var i = 0; i < alpha.Length; i++)
@@ -508,6 +516,35 @@ public static class BackgroundRemover
         for (var c = 0; c < 3; c++)
             color[i * 3 + c] = weight[i] > 1e-4f ? color[i * 3 + c] / weight[i] : image[i * 3 + c];
         return color;
+    }
+
+    /// <summary>
+    /// The mask of one brush layer: the strongest of its strokes per pixel – hard strokes at their strength, soft ones falling off.
+    /// </summary>
+    /// <param name="strokes">Strokes of the layer at working resolution.</param>
+    /// <param name="w">Width of the grid.</param>
+    /// <param name="h">Height of the grid.</param>
+    /// <param name="strength">Multiply by <see cref="BrushStroke.Strength"/> (green); false = 1 (red).</param>
+    /// <param name="raster">The raster of exactly these strokes if already computed; null = compute.</param>
+    /// <returns>Coverage 0…1 per pixel (a new array).</returns>
+    private static float[] LayerCoverage(BrushStroke[] strokes, int w, int h, bool strength, byte[]? raster)
+    {
+        var own = new float[w * h];
+        var hard = strokes.Where(st => st.Hardness >= 1).ToArray();
+        foreach (var group in hard.GroupBy(st => strength ? Math.Clamp(st.Strength, 0, 1) : 1))
+        {
+            var value = (float)group.Key;
+            var covered = raster is not null && group.Count() == strokes.Length ? raster : Inpainter.Rasterize(group.ToArray(), w, h, 0);
+            for (var i = 0; i < own.Length; i++)
+                if (covered[i] != 0 && own[i] < value) own[i] = value;
+        }
+        if (hard.Length < strokes.Length)
+        {
+            var soft = Coverage(strokes.Where(st => st.Hardness < 1).ToArray(), w, h, strength);
+            for (var i = 0; i < own.Length; i++)
+                if (own[i] < soft[i]) own[i] = soft[i];
+        }
+        return own;
     }
 
     /// <summary>

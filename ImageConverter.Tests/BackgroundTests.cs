@@ -506,4 +506,25 @@ public class BackgroundTests
         Assert.True(AlphaWith(0, 200) > 0.75f, $"Mitte fast voll: {AlphaWith(0, 200)}");
         Assert.True(AlphaWith(0, 209) < AlphaWith(1, 209) - 0.3f, $"Rand weich: {AlphaWith(0, 209)} gegen hart {AlphaWith(1, 209)}");
     }
+
+    [Fact]
+    public void GreenLayers_AddUp_StrokesWithinALayerDoNot()
+    {
+        // Two layers at 30 % keep 60 %; two overlapping strokes of one layer stay at 30 % (docs/KI-HINTERGRUND.md, „Bedienung“)
+        using var img = Scene();
+        var blind = new ColourModel(seeBlue: false);
+        var mask = BackgroundRemover.Detect(img, Whole, blind, CancellationToken.None);
+        float AlphaWith(params BrushStroke[] strokes)
+        {
+            var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(img, r, blind, CancellationToken.None));
+            using var result = BackgroundRemover.Compose(img, mask, alpha, BackgroundMode.Transparent, 0, CancellationToken.None);
+            return AlphaAt(Rgba(result), 460, 200);
+        }
+        BrushStroke Stroke(int layer) => new([(420, 200), (500, 200)], 12, Keep: true, Strength: 0.3, Layer: layer);
+
+        var oneLayer = AlphaWith(Stroke(1), Stroke(1));
+        var twoLayers = AlphaWith(Stroke(1), Stroke(2));
+        Assert.InRange(oneLayer, 0.2f, 0.4f);
+        Assert.InRange(twoLayers, 0.5f, 0.7f);
+    }
 }
