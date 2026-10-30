@@ -2786,3 +2786,5 @@ Test oder Nachweis.
   `IBrushTool.StrokeHardness`/`StrokeStrength`.
 - **Test:** Aufnahme im unsichtbaren Fenster (`kette-ui`, Modus `haerte`): Härte 100/50/0 % sichtbar verschieden, Strich über die Ecke
   am Bildrand abgeschnitten.
+- **Nachgebessert in 0.8.3-beta:** Vom Nutzer: „Das Auslaufen sieht im Grünen sehr treppenmäßig aus.“ Zwölf feste Schichten waren bei
+  großen Pinseln je mehrere Bildschirmpixel breit; jetzt etwa eine Schicht je 1,5 Bildschirmpixel des Auslaufens (8–64).

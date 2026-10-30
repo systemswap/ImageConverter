@@ -2158,8 +2158,9 @@ public sealed class CropView : Control
                         continue;
                     }
                     // Soft: nested strokes from the edge inwards; each layer adds so much that the coverage follows the falloff of
-                    // the computation (full up to hardness × radius, smoothstep down to 0 at the radius)
-                    const int layers = 12;
+                    // the computation (full up to hardness × radius, smoothstep down to 0 at the radius). About one layer per
+                    // 1.5 screen pixels of the falloff: with a fixed number, large brushes showed visible steps.
+                    var layers = Math.Clamp((int)Math.Ceiling(r * (1 - Math.Clamp(hardness, 0, 1)) / 1.5), 8, 64);
                     var inner = r * Math.Clamp(hardness, 0, 1);
                     var before = 0.0;
                     for (var j = 0; j < layers; j++)
