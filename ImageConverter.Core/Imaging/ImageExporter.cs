@@ -381,6 +381,7 @@ public static class ImageExporter
             img.BackgroundColor = MagickColors.White;
             img.Alpha(AlphaOption.Remove);
         }
+        Pixels.ClearInvisible(img);
 
         // Bit depth: 16 bits where the format supports it and it is requested or the source already had more than
         // 8 bits; otherwise dithered to 8 bits once (Magick would round without dithering, and soft gradients would

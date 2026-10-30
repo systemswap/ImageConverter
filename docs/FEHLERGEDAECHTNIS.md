@@ -2542,3 +2542,14 @@ Test oder Nachweis.
 - **Bemerkt:** Erst beim Ansehen des Bildes, die Zahlen allein sahen nach einem alten Fehler der App aus.
 - **Nicht tun:** Reglerwerte im Prüfstand raten: Bereiche aus der Oberfläche nehmen und das Ergebnis mindestens einmal ansehen. Eine
   Messreihe mit falschen Werten ganz verwerfen, auch ihre Zeiten.
+
+## 96. Export: Transparente Bilder als PNG 2–3-mal so langsam wie nötig (0.7.8 beta)
+
+- **Entdeckt:** 30.10.2026, 0.7.8-beta, Messung Filter gegen Schreiben. **Behoben:** 0.7.9-beta.
+- **Was:** Die Zeit lag nicht in den Filtern, sondern im Schreiben: 12,7–14,5 s statt 3,6–4,2 s (8 Bit, 5,5 MP) und 5,8 statt 4,3 MB.
+- **Warum:** Unter Alpha 0 lag die glatte Füllung aus #93. Fein gerastert wird sie zu Rauschen, an dem zlib auf Stufe 9 sich abarbeitet.
+- **Lösung:** `Pixels.ClearInvisible` setzt vor dem Rastern die Farbe voll transparenter Pixel auf Schwarz. Gilt für alle Bilder mit Alphakanal,
+  auch geladene: Farben unter Alpha 0 aus der Quelldatei gehen beim Speichern verloren. Sichtbares unverändert (0 von 2,5 Mio. Pixeln).
+- **Nicht tun:** Eine langsame Stufe vermuten statt messen: Der Verdacht lag zuerst bei den Filtern.
+- **Wo im Code:** `Pixels.ClearInvisible`, `ImageExporter.Encode`.
+- **Test:** `BackgroundTests.SavedFile_HoldsNothingUnderFullyTransparentPixels`, `ClearInvisible_LeavesOpaqueImagesAlone`; `sichtbar-probe` alt gegen neu.

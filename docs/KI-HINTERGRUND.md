@@ -104,6 +104,10 @@ Grafik:
 | Kleid | 30 % | 5,0–5,5 → 2,6–3,1 s | 3,1–3,4 → 1,0–1,1 s | 44–45 → 11–13 s | 1,8 Stufen (2,5 % über 8) |
 | Zuckerwatte | 75 % | 5,5–6,4 → 4,6–5,7 s | 3,5–3,8 → 2,4–2,8 s | 34–35 → 25–26 s | 0,8 Stufen (0,1 % über 8) |
 
+Unter voll transparenten Pixeln steht in der Datei Schwarz statt der Füllung (`Pixels.ClearInvisible`, seit 0.7.9 beta): Die Füllung brauchen
+nur die Filter, gerastert ist sie Rauschen, das PNG langsam packt. In der App, alt gegen neu im Wechsel: Export Gruppe 8–11 → 4–6 s, Kleid
+11 → 5–7 s, Zuckerwatte 25–27 → 14–19 s; PNG 7,7 → 5,3, 10,9 → 7,0, 19,1 → 12,5 MB; Sichtbares unverändert, opake Bilder pixelgleich.
+
 Die Radien der Filter hängen an der langen Kante des gerechneten Bildes, also jetzt an der des Rechtecks: daher die Änderung am Motiv.
 Vorschau gegen Export (Blöcke 16 × 16, Mittel) wurde dadurch nicht schlechter: 1,74 → 1,60, 2,18 → 1,83, 3,25 → 2,94 Stufen.
 

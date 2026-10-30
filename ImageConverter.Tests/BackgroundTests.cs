@@ -256,6 +256,46 @@ public class BackgroundTests
     private static ExportOptions Look(int width, int height) => new(OutputFormat.Png, 90, true, width, height, ResampleFilter.Lanczos3, false,
         0.3, 0.5, 1, 96, MetadataMode.KeepAll, ColorMode.KeepProfile, new Adjustments(Brightness: 10, Shadows: 20, Highlights: 20, Dehaze: 30), HighBitDepth: true, ColorDenoise: 0.3);
 
+    /// <summary>What lies under fully transparent pixels does not go into the file; what is visible stays exactly as it is.</summary>
+    [Theory]
+    [InlineData(OutputFormat.Png)]
+    [InlineData(OutputFormat.Tiff)]
+    public void SavedFile_HoldsNothingUnderFullyTransparentPixels(OutputFormat format)
+    {
+        using var img = VisibleBlock(320, 240, 100, 60, 120, 90);
+        var before = Rgba(img);
+        var options = Look(320, 240) with { Format = format, Lossless = true, Adjustments = null, Denoise = 0, ColorDenoise = 0, SharpenAmount = 0 };
+        using var ms = new MemoryStream();
+        ImageExporter.Encode(img, options, ms);
+        ms.Position = 0;
+        using var saved = new MagickImage(ms);
+        var after = Rgba(saved);
+        for (var i = 0; i < after.Length; i += 4)
+        {
+            if (before[i + 3] == 0)
+            {
+                Assert.Equal(0, after[i + 3]);
+                Assert.Equal(0, after[i]);
+                Assert.Equal(0, after[i + 1]);
+                Assert.Equal(0, after[i + 2]);
+            }
+            else
+            {
+                for (var c = 0; c < 4; c++) Assert.Equal(before[i + c], after[i + c]);
+            }
+        }
+    }
+
+    [Fact]
+    public void ClearInvisible_LeavesOpaqueImagesAlone()
+    {
+        using var opaque = Scene();
+        var before = Rgba(opaque);
+        Pixels.ClearInvisible(opaque);
+        Assert.Equal(before, Rgba(opaque));
+        Assert.False(opaque.HasAlpha);
+    }
+
     /// <summary>The rule: the filters behave as if the image had been cropped to its visible pixels.</summary>
     [Theory]
     [InlineData(false)]

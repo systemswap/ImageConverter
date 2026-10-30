@@ -158,6 +158,33 @@ public static class Pixels
         image.Depth = 8;
     }
 
+    /// <summary>
+    /// Sets the colour of fully transparent pixels to black. They show nothing, but what lies under them goes into the file:
+    /// a removed background would stay readable there, and a smooth fill, once dithered, is noise that PNG compresses slowly
+    /// and badly (3–4 times the time).
+    /// </summary>
+    /// <param name="image">Image to change; nothing happens without an alpha channel or without fully transparent pixels.</param>
+    public static void ClearInvisible(MagickImage image)
+    {
+        if (!image.HasAlpha) return;
+        using var pixels = image.GetPixelsUnsafe();
+        var channels = (int)pixels.Channels;
+        if (pixels.GetChannelIndex(PixelChannel.Alpha) is not uint alpha || alpha >= channels) return;
+        var colour = new[] { PixelChannel.Red, PixelChannel.Green, PixelChannel.Blue }
+            .Select(c => pixels.GetChannelIndex(c)).OfType<uint>().Select(i => (int)i).ToArray();
+        var data = pixels.GetValues() ?? throw new InvalidOperationException("Pixel konnten nicht gelesen werden.");
+        var a = (int)alpha;
+        var found = 0;
+        Parallel.For(0, data.Length / channels, ComputeLimits.Options, p =>
+        {
+            var i = p * channels;
+            if (data[i + a] != 0) return;
+            foreach (var c in colour) data[i + c] = 0;
+            Volatile.Write(ref found, 1);
+        });
+        if (found != 0) pixels.SetPixels(data);
+    }
+
     private static byte ToByte(float v) => (byte)(v <= 0 ? 0 : v >= 255 ? 255 : v + 0.5f);
 
     /// <summary>

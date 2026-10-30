@@ -89,8 +89,9 @@ Fehlergedächtnis eintragen.
   1,6, einzelne Stellen bis 44 Stufen; Bild, das in die Vorschau passt: 0,3). Nicht durch den Zuschnitt entstanden, Ursache nicht
   untersucht. Verdacht: Die Schätzkopie des Dunstes hat je nach Bildgröße eine andere Kante (`Dehaze.Apply`).
 
-- **Export transparenter Bilder langsam:** Freigestelltes Bild mit 75 % Rechteck 25 s, das opake Original 7 s, obwohl die Filter gleich lang
-  brauchen. Ursache nicht untersucht. Verdacht: PNG-Kodierung der fein gerasterten Füllung unter Alpha 0.
+- **PNG mit niedrigerer zlib-Stufe schreiben (Entscheidung offen):** `Encode` schreibt mit Quality 95 (Stufe 9). Gemessen an zwei Bildern
+  (5,5 MP), Quality 95 gegen 55: 16 Bit transparent 8,5 → 1,5 s, 8 Bit opak 7,3–8,4 → 1,4 s, 16 Bit opak 2,3–2,8 → 2,0 s; Größe 12,7 → 12,7,
+  7,2 → 7,3, 25,3 → 25,3 MB. Verlustfrei, beträfe aber alle PNG-Exporte; an mehr Bildern prüfen.
 
 - **Speicher-Pool der ONNX Runtime bei anderen Modellen messen:** Für die Hintergrund-Modelle ist er aus
   (Fehlergedächtnis #88); ob Verbessern (GFPGAN, CodeFormer …) und Entfernen (LaMa, MI-GAN) ebenfalls Speicher
