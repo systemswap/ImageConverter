@@ -86,3 +86,17 @@ Gemessen auf dem Debian-Rechner (16 Kerne) mit der fertigen AppImage bzw. im uns
   zugeschnittenen Bild anders).
 - **Lange Sitzung:** 20 Fotos mit 12 MP zweimal durchgeblättert, je Bild Regler verstellt: 1,9 GB, ohne Wachstum
   (vorher 4,4 GB, Fehlergedächtnis #79).
+
+## PNG schreiben: zlib-Stufe 5 statt 9 (0.7.10 beta, 30.10.2026)
+
+Notebook mit integrierter Grafik, 8 Testfotos und 3 freigestellte Bilder (bis 3000 px), je mit 8 und 16 Bit, also 22 Fälle, Quality 95 gegen 55
+im Wechsel, bester von 2 Läufen (`~/.cache/imageconverter-build/export-probe`):
+
+| | Quality 95 (Stufe 9) | Quality 55 (Stufe 5) |
+|---|---|---|
+| Schreiben, Summe | 55,8 s | 25,2 s (2,2-mal schneller) |
+| Größe, Summe | 313,7 MB | 314,4 MB (+0,2 %, schlimmster Fall +2,2 %) |
+| Abweichende Pixelwerte | | 0 in allen 22 Fällen |
+
+Am meisten gewinnen 8-Bit-Bilder mit viel feinem Inhalt (7,0 → 1,3 s) und freigestellte mit 16 Bit (8,4 → 1,5 s). 16-Bit-Fotos ohne
+Transparenz packt zlib ohnehin kaum (2,2 → 1,9 s).

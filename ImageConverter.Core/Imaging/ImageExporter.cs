@@ -420,7 +420,9 @@ public static class ImageExporter
 
             case OutputFormat.Png:
                 img.Format = MagickFormat.Png;
-                img.Quality = 95;   // zlib level 9, adaptive filtering
+                // zlib level 5, adaptive filtering. Lossless at every level; level 9 took 2.2 times as long for 0.2 % less
+                // (at worst 2.2 %), see docs/TEMPO.md
+                img.Quality = 55;
                 break;
 
             case OutputFormat.Tiff:
