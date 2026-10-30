@@ -113,16 +113,22 @@ public partial class MainViewModel
         var hasLook = look is { IsNone: false };
         if (!hasLook && grain is null) return Pixels.ToBytes(bgra, dither: true);
 
-        var pixels = bgra;
-        if (hasLook && (look!.Noise > 0 || look.ColorNoise > 0))
-            pixels = Denoiser.Apply(pixels, width, height, look.Noise, look.ColorNoise, (double)width / Math.Max(1, look.TargetWidth), plan);
-        if (hasLook && !look!.Adjust.IsNone) pixels = Adjust.Apply(pixels, width, height, look.Adjust, plan);
-        if (hasLook && look!.SharpenAmount > 0)
+        // A transparent image: only the rectangle around its visible pixels, as in the export (VisibleArea). The radii
+        // scale with the preview as a whole, so they keep referring to its full width.
+        var pixels = VisibleArea.Apply(bgra, width, height, (input, w, h) =>
         {
-            plan?.Next();
-            pixels = Sharpen.UnsharpMask(pixels, width, height, look.SharpenAmount, look.SharpenSigma(width));
-        }
-        if (grain is not null) pixels = Grain.Apply(pixels, width, height, grain, Math.Min(1, grainScale));
+            var work = input;
+            if (hasLook && (look!.Noise > 0 || look.ColorNoise > 0))
+                work = Denoiser.Apply(work, w, h, look.Noise, look.ColorNoise, (double)width / Math.Max(1, look.TargetWidth), plan);
+            if (hasLook && !look!.Adjust.IsNone) work = Adjust.Apply(work, w, h, look.Adjust, plan);
+            if (hasLook && look!.SharpenAmount > 0)
+            {
+                plan?.Next();
+                work = Sharpen.UnsharpMask(work, w, h, look.SharpenAmount, look.SharpenSigma(width));
+            }
+            if (grain is not null) work = Grain.Apply(work, w, h, grain, Math.Min(1, grainScale));
+            return work;
+        });
 
         var result = Pixels.ToBytes(pixels, dither: true);
         PixelPool.Trim();

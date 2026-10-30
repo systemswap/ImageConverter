@@ -85,6 +85,13 @@ Fehlergedächtnis eintragen.
 
 ## Als Nächstes
 
+- **Vorschau gegen Export bei verkleinerter Vorschau:** Mit Dunst 45 weichen auch opake Bilder sichtbar ab (6-MP-Bild, Blöcke 16 × 16: Mittel
+  1,6, einzelne Stellen bis 44 Stufen; Bild, das in die Vorschau passt: 0,3). Nicht durch den Zuschnitt entstanden, Ursache nicht
+  untersucht. Verdacht: Die Schätzkopie des Dunstes hat je nach Bildgröße eine andere Kante (`Dehaze.Apply`).
+
+- **Export transparenter Bilder langsam:** Freigestelltes Bild mit 75 % Rechteck 25 s, das opake Original 7 s, obwohl die Filter gleich lang
+  brauchen. Ursache nicht untersucht. Verdacht: PNG-Kodierung der fein gerasterten Füllung unter Alpha 0.
+
 - **Speicher-Pool der ONNX Runtime bei anderen Modellen messen:** Für die Hintergrund-Modelle ist er aus
   (Fehlergedächtnis #88); ob Verbessern (GFPGAN, CodeFormer …) und Entfernen (LaMa, MI-GAN) ebenfalls Speicher
   festhalten, ist nicht gemessen.

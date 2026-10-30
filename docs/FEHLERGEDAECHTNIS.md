@@ -2522,3 +2522,23 @@ Test oder Nachweis.
 - **Wo im Code:** `BackgroundRemover.Compose`, `BackgroundRemover.FillFromVisible`.
 - **Test:** `BackgroundTests.InvisiblePixels_KeepNothingOfTheOldBackground`, `BackgroundTests.Filters_DoNotSeeTheRemovedBackground`; beide
   scheitern am alten Stand. Echte Fotos: `~/.cache/imageconverter-build/transparent-probe` alt gegen neu (Zahlen in docs/KI-HINTERGRUND.md).
+
+## 94. Vorschau: Beim Vergrößern mit Rauschfilter wurden transparente Bilder deckend (seit dem Rauschfilter vor dem Vergrößern)
+
+- **Entdeckt:** 30.10.2026, 0.7.7-beta, beim Lesen von `MainViewModel.Render`; nachgestellt im unsichtbaren Fenster. **Behoben:** 0.7.8-beta.
+- **Was:** Ein freigestelltes Bild, vergrößert über die Bildgröße hinaus und mit Rauschfilter: In der Vorschau war es ganz deckend
+  (gemessen 0 % transparent statt 95,4 %), also mit den Farben unter den unsichtbaren Pixeln. Der Export stimmte.
+- **Warum:** Der Zweig „erst entrauschen, dann vergrößern“ schrieb sein Zwischenbild fest mit `alpha: false`.
+- **Lösung:** Alpha wie im Bild; auch dieser Zweig rechnet nur im sichtbaren Rechteck (`VisibleArea.Apply`).
+- **Nicht tun:** Alpha fest abschalten: Das Bild kann seit „Hintergrund“ auch aus der App selbst transparent sein.
+- **Wo im Code:** `MainViewModel.Preview.cs` (`Render`).
+- **Test:** `~/.cache/imageconverter-build/sichtbar-probe`, Modus `wege`, mit einem Bild, das wirklich vergrößert wird: Mit einem großen Bild
+  trifft die Vorschau (höchstens 2048 px) diesen Zweig nicht, das zeigte der erste Versuch.
+
+## 95. Prüfstand: Regler außerhalb ihres Bereichs ließen einen Fehler vermuten, den es nicht gab (30.10.2026)
+
+- **Was:** Der Prüfstand setzte Schärfen und Rauschen auf 40; die Bereiche sind 0–3 und 0–1. Das Motiv sah geätzt aus, Vorschau und Export
+  wichen im Mittel um 16,9 Stufen ab, und ein Bild schien sich durch den Umbau um 34 Stufen zu ändern. Mit echten Werten: 1,6 und 4,4.
+- **Bemerkt:** Erst beim Ansehen des Bildes, die Zahlen allein sahen nach einem alten Fehler der App aus.
+- **Nicht tun:** Reglerwerte im Prüfstand raten: Bereiche aus der Oberfläche nehmen und das Ergebnis mindestens einmal ansehen. Eine
+  Messreihe mit falschen Werten ganz verwerfen, auch ihre Zeiten.

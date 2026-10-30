@@ -398,7 +398,7 @@ public partial class MainViewModel
     private const int PixelCacheSize = 2;
     private const int PreparedCacheSize = 3;
     private readonly List<(ResizeKey Key, MagickImage Image)> _resizedCache = [];
-    private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, float[] Pixels)> _denoisedCache = [];
+    private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, VisibleArea? Area, float[] Pixels)> _denoisedCache = [];
     // White balance + dehaze separately: the most expensive part, depends only on DehazeKey; shadows/highlights and
     // the region maps come afterwards and do not recompute it.
     private readonly List<(ResizeKey Key, (double Luma, double Chroma) Noise, Adjustments DehazeKey, float[] Pixels)> _dehazedCache = [];
@@ -590,19 +590,23 @@ public partial class MainViewModel
         }
 
         // 2) Denoise: medium cost, recomputed only when its slider changes
-        var denoised = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise)?.Pixels;
+        // A transparent image: only the rectangle around its visible pixels, as in the export (VisibleArea)
+        var stored = Cached(_denoisedCache, e => e.Key == key && e.Noise == job.Noise);
+        var denoised = stored?.Pixels;
+        var area = stored?.Area;
         if (denoised is null)
         {
             int docW, docH;
-            lock (job.Doc) (docW, docH) = ((int)job.Doc.Width, (int)job.Doc.Height);
+            bool docAlpha;
+            lock (job.Doc) (docW, docH, docAlpha) = ((int)job.Doc.Width, (int)job.Doc.Height, job.Doc.HasAlpha);
             if (job.Noise != (0, 0) && job.Upscaled is null && (long)job.Width * job.Height > (long)docW * docH)
             {
                 // Enlarging: denoise first, then enlarge, as in the export (ImageExporter.NoiseFirst)
                 plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * docW * docH / 1e6);
                 var source = ImageOps.ToDisplayPixels(job.Doc);
-                var clean = Denoiser.Apply(source, docW, docH, job.Noise.Luma, job.Noise.Chroma, 1, plan);
+                var clean = VisibleArea.Apply(source, docW, docH, (px, w, h) => Denoiser.Apply(px, w, h, job.Noise.Luma, job.Noise.Chroma, 1, plan));
                 PixelPool.Return(source);
-                using var cleanImage = Pixels.ToMagick16(clean, docW, docH, alpha: false);
+                using var cleanImage = Pixels.ToMagick16(clean, docW, docH, docAlpha);
                 PixelPool.Return(clean);
                 using var enlarged = ImageOps.Resize(cleanImage, job.Width, job.Height, job.Filter, job.Gamma);
                 denoised = ImageOps.ToDisplayPixels(enlarged);
@@ -611,16 +615,25 @@ public partial class MainViewModel
             {
                 denoised = ImageOps.ToDisplayPixels(resized);
             }
+            area = VisibleArea.Of(denoised, job.Width, job.Height);
+            if (area is { } found)
+            {
+                var cut = found.Cut(denoised, job.Width);
+                PixelPool.Return(denoised);
+                denoised = cut;
+            }
             if (job.Noise != (0, 0) && (job.Upscaled is not null || (long)job.Width * job.Height <= (long)docW * docH))
             {
                 // Luminance and colour separately; radii scaled to the preview as in the export
-                plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * job.Width * job.Height / 1e6);
-                var clean = Denoiser.Apply(denoised, job.Width, job.Height, job.Noise.Luma, job.Noise.Chroma, job.Scale, plan);
+                var (nw, nh) = area is { } a ? (a.Width, a.Height) : (job.Width, job.Height);
+                plan.Add(Tr.T("Rauschen entfernen"), WorkPlan.DenoiseCost * nw * nh / 1e6);
+                var clean = Denoiser.Apply(denoised, nw, nh, job.Noise.Luma, job.Noise.Chroma, job.Scale, plan);
                 PixelPool.Return(denoised);
                 denoised = clean;
             }
-            AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Pixels: denoised), null, PixelCacheSize);
+            AddCached(_denoisedCache, (Key: key, Noise: job.Noise, Area: area, Pixels: denoised), null, PixelCacheSize);
         }
+        var (cw, ch) = area is { } rect ? (rect.Width, rect.Height) : (job.Width, job.Height);
 
         // 3) Adjustments (light, colour, dehaze): recomputed only when their sliders change
         var adjusted = denoised;
@@ -637,42 +650,51 @@ public partial class MainViewModel
                     var dehazeKey = j.DehazeKey;
                     var dehazed = Cached(_dehazedCache, e => e.Key == key && e.Noise == job.Noise && e.DehazeKey == dehazeKey)?.Pixels;
                     // Dehaze per pass (only if not computed already) … shadows/highlights … light and colour
-                    Adjust.PlanSteps(j, plan, (double)job.Width * job.Height / 1e6, withDehaze: dehazed is null);
+                    Adjust.PlanSteps(j, plan, (double)cw * ch / 1e6, withDehaze: dehazed is null);
                     if (dehazed is null)
                     {
                         // While dragging, dehaze estimates on a smaller version (a quarter of the work); otherwise as usual
-                        dehazed = Adjust.Dehazed(denoised, job.Width, job.Height, j, plan, job.Coarse ? CoarseDehazeEdge : 0);
+                        dehazed = Adjust.Dehazed(denoised, cw, ch, j, plan, job.Coarse ? CoarseDehazeEdge : 0);
                         AddCached(_dehazedCache, (key, job.Noise, dehazeKey, dehazed), null, PixelCacheSize);
                     }
-                    prepared = Adjust.Finish(dehazed, job.Width, job.Height, j, plan);
+                    prepared = Adjust.Finish(dehazed, cw, ch, j, plan);
                     AddCached(_tonedCache, (key, job.Noise, prepareKey, prepared), null, PreparedCacheSize);
                 }
                 else
                 {
                     plan.Add(Tr.T("Licht und Farbe"), 1);
                 }
-                adjusted = Adjust.Apply(prepared, job.Width, job.Height, j, plan);
+                adjusted = Adjust.Apply(prepared, cw, ch, j, plan);
                 AddCached(_adjustedCache, (Key: key, Noise: job.Noise, Adjust: job.Adjust, Pixels: adjusted), null, PixelCacheSize);
             }
         }
 
         // 4) Sharpen: fast, on every slider movement
         var final = job.SharpenAmount > 0
-            ? Sharpen.UnsharpMask(adjusted, job.Width, job.Height, job.SharpenAmount, job.SharpenSigma)
+            ? Sharpen.UnsharpMask(adjusted, cw, ch, job.SharpenAmount, job.SharpenSigma)
             : adjusted;
 
         // 5) Grain: always last; in the reduced preview as it would look in a reduced export
         if (job.Grain is { } grain)
         {
-            plan.Add(Tr.T("Körnung"), WorkPlan.GrainCost * job.Width * job.Height / 1e6);
+            plan.Add(Tr.T("Körnung"), WorkPlan.GrainCost * cw * ch / 1e6);
             plan.Next();
-            var grainy = Grain.Apply(final, job.Width, job.Height, grain, job.Scale);
+            var grainy = Grain.Apply(final, cw, ch, grain, job.Scale);
             if (!ReferenceEquals(final, adjusted)) PixelPool.Return(final);
             final = grainy;
         }
 
         // Round once, with dithering: only here does the 32-bit data become the 8-bit display
-        var bgra = Pixels.ToBytes(final, dither: true);
+        var shown = final;
+        if (area is { } visible)
+        {
+            // Nothing is visible around the rectangle
+            shown = PixelPool.Rent(job.Width * job.Height * 4);
+            Array.Clear(shown);
+            visible.Paste(final, shown, job.Width);
+        }
+        var bgra = Pixels.ToBytes(shown, dither: true);
+        if (!ReferenceEquals(shown, final)) PixelPool.Return(shown);
         if (job.Grain is not null) PixelPool.Return(final);
         // The intermediate buffers of this computation (dehaze passes …) must not stay allocated.
         PixelPool.Trim();

@@ -71,12 +71,12 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 Das Modell sieht das Bild also ohne Regler (Stufe 4); sie bleiben beim neuen Versuch stehen und wirken danach auf das
 Ergebnis. Es sieht aber KI- und Entfernen-Schritte, die vor dem Hintergrund-Schritt liegen.
 
-Transparente Pixel sparen in den Stufen 3–4 heute keine Rechenzeit: Die Filter rechnen alle Pixel und kopieren Alpha nur
-durch. Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `~/.cache/imageconverter-build/transparent-probe`):
+Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `~/.cache/imageconverter-build/transparent-probe`,
+`sichtbar-probe`):
 
-- **Zeit je Stufe:** Rauschen 1,1–1,4 s, Dunst 1,9–2,4 s, Tiefen/Lichter 0,9–1,0 s, Licht und Farbe 0,1 s, Schärfen 0,1 s.
-  Die reinen Pixel-Stufen, die man leicht überspringen könnte, machen also nur rund 2 % aus; die teuren brauchen Nachbarn
-  oder schätzen über das ganze Bild.
+- **Zeit je Stufe (ohne Zuschnitt):** Rauschen 1,1–1,4 s, Dunst 1,9–2,4 s, Tiefen/Lichter 0,9–1,0 s, Licht und Farbe 0,1 s, Schärfen 0,1 s.
+  Einzelne Pixel zu überspringen brächte also nur rund 2 %; die teuren Stufen brauchen Nachbarn oder schätzen über das ganze Bild.
+  Deshalb ein Rechteck statt einer Pixelmaske.
 - **Nur aus sichtbaren Pixeln (seit 0.7.6 beta):** Pixel unter Alpha 1/255 bekommen Alpha 0 und Farben, die aus dem Sichtbaren
   fortgesetzt sind (`FillFromVisible`, Pull-Push), nicht mehr die des alten Hintergrunds. So sehen ihn weder die Filter noch
   steht er in der gespeicherten Datei (Fehlergedächtnis #93).
@@ -88,12 +88,24 @@ durch. Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `~/.cache/
 | Kleid | 83,0 % | 8,5 → 0 % | 0,20 → 0,18 | 6,4 → 2,8 MB |
 
 Ganz 0 wird die Abhängigkeit nicht: Kanten rechnen zu Recht mit dem Hintergrund in ihrer Nähe, und einzelne Pixel weichen weiter
-ab (max 27–33 Stufen). Die Füllung selbst sehen die Filter noch, sie zählt in ihren Schätzungen über das ganze Bild mit. Die
-Filterzeit bleibt gleich (im Wechsel gemessen, bester Lauf alt 5,59 s, neu 5,04 s).
+ab (max 27–33 Stufen). Die Füllung sehen die Filter nur noch innerhalb des Rechtecks (siehe unten).
 
-**Offen, Zuschnitt auf den sichtbaren Bereich:** Die Filter nur im Rechteck um das Sichtbare zu rechnen, sparte im Prüfstand rund 25–75 %
-Zeit (Rechteck 21–75 % der Fläche). Das Motiv fällt dabei um 0,6–3,1 Stufen anders aus, weil die Füllung nicht mehr mitzählt. Nicht
-eingebaut: Es beträfe Vorschau, Export und Größenschätzung, die gleich rechnen müssen.
+**Zuschnitt auf das Sichtbare (seit 0.7.8 beta, `VisibleArea`):** Die Filter rechnen bei jedem transparenten Bild nur im Rechteck um die
+sichtbaren Pixel, als wäre es darauf zugeschnitten; das Ergebnis ist pixelgleich mit einem echten Zuschnitt (Test). Das gilt für Export,
+Größenschätzung und Vorschau, auch beim Ziehen. Opake Bilder sind unverändert: Export alt gegen neu 0 abweichende Werte, Vorschau gleiche
+Prüfsumme.
+
+Gemessen im Wechsel, je 3 Läufe, Rauschen 0,3, Dunst 40–45, Tiefen/Lichter 20, Helligkeit 10, Schärfen 0,5, Notebook mit integrierter
+Grafik:
+
+| Bild | Rechteck | Vorschau, erste | Vorschau, nur Dunst geändert | Export als PNG | Motiv alt gegen neu, Mittel |
+|---|---|---|---|---|---|
+| Gruppe | 21 % | 4,7–5,1 → 2,5–2,6 s | 3,0–3,3 → 1,3–1,5 s | 45–48 → 8–9 s | 4,4 Stufen (10,9 % der Pixel über 8) |
+| Kleid | 30 % | 5,0–5,5 → 2,6–3,1 s | 3,1–3,4 → 1,0–1,1 s | 44–45 → 11–13 s | 1,8 Stufen (2,5 % über 8) |
+| Zuckerwatte | 75 % | 5,5–6,4 → 4,6–5,7 s | 3,5–3,8 → 2,4–2,8 s | 34–35 → 25–26 s | 0,8 Stufen (0,1 % über 8) |
+
+Die Radien der Filter hängen an der langen Kante des gerechneten Bildes, also jetzt an der des Rechtecks: daher die Änderung am Motiv.
+Vorschau gegen Export (Blöcke 16 × 16, Mittel) wurde dadurch nicht schlechter: 1,74 → 1,60, 2,18 → 1,83, 3,25 → 2,94 Stufen.
 
 ## Rechnung (`ImageConverter.Core/Ai/BackgroundRemover.cs`)
 
