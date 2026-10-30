@@ -61,11 +61,14 @@ public static class ImageLoader
             var image = new MagickImage();
             try
             {
-                await image.ReadAsync(path, ct).ConfigureAwait(false);
+                var vector = VectorSettings(path);
+                if (vector is null) await image.ReadAsync(path, ct).ConfigureAwait(false);
+                else await image.ReadAsync(path, vector, ct).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
 
-                var formatName = image.Format.ToString().ToUpperInvariant();
-                var dpi = ReadDpi(image);
+                var formatName = vector is null ? image.Format.ToString().ToUpperInvariant() : "SVG";
+                var dpi = vector is null ? ReadDpi(image) : DefaultDpi;
+                if (vector is not null) image.Density = new Density(DefaultDpi, DefaultDpi, DensityUnit.PixelsPerInch);
 
                 // Phone photos: apply the EXIF orientation to the pixels so that nothing is shown sideways.
                 image.AutoOrient();
@@ -105,6 +108,11 @@ public static class ImageLoader
         {
             try
             {
+                if (VectorSettings(path) is { } vector)
+                {
+                    var scaled = new MagickImageInfo(path, vector);
+                    return scaled.Width == 0 ? null : ((int)scaled.Width, (int)scaled.Height, DefaultDpi);
+                }
                 var info = new MagickImageInfo(path);
                 if (info.Width == 0 || info.Height == 0) return null;
                 var turned = info.Orientation is OrientationType.LeftTop or OrientationType.RightTop
@@ -132,7 +140,7 @@ public static class ImageLoader
         Task.Run(() =>
         {
             CheckSize(path);
-            var settings = new MagickReadSettings();
+            var settings = VectorSettings(path) ?? new MagickReadSettings();
             settings.SetDefine(MagickFormat.Jpeg, "size", $"{edge * 2}x{edge * 2}");
             var image = new MagickImage(path, settings);
             try
@@ -178,7 +186,7 @@ public static class ImageLoader
         MagickImageInfo info;
         try
         {
-            info = new MagickImageInfo(path);
+            info = VectorSettings(path) is { } vector ? new MagickImageInfo(path, vector) : new MagickImageInfo(path);
         }
         catch (MagickException)
         {
@@ -188,6 +196,40 @@ public static class ImageLoader
         if (pixels > MaxPixels || info.Width > Platform.ImageMagickPolicy.MaxEdge || info.Height > Platform.ImageMagickPolicy.MaxEdge)
             throw new ImageTooLargeException(Tr.T("Das Bild ist zu groß für diesen Rechner ({0} × {1} Pixel, {2:0} Megapixel; höchstens {3:0} Megapixel).",
                 info.Width, info.Height, pixels / 1e6, MaxPixels / 1e6));
+    }
+
+    /// <summary>Long edge a vector graphic is drawn at least, so that small icons are sharp on screen.</summary>
+    internal const int VectorEdge = 2048;
+
+    /// <summary>SVG measures in CSS pixels: 96 per inch.</summary>
+    private const double SvgDpi = 96;
+
+    /// <summary>
+    /// Read settings for SVG: always ImageMagick's built-in renderer (librsvg). Otherwise ImageMagick tries the external
+    /// program Inkscape, which the security policy forbids – no other programs are started – and the file did not open. Small
+    /// drawings are rendered at a higher density, so that the long edge has at least <see cref="VectorEdge"/> pixels.
+    /// </summary>
+    /// <param name="path">Path of the file.</param>
+    /// <returns>The settings for an SVG file; null for every other format.</returns>
+    internal static MagickReadSettings? VectorSettings(string path)
+    {
+        if (Path.GetExtension(path).ToLowerInvariant() is not (".svg" or ".svgz")) return null;
+        var settings = new MagickReadSettings { Format = MagickFormat.Rsvg };
+        try
+        {
+            var info = new MagickImageInfo(path, settings);
+            var edge = Math.Max(info.Width, info.Height);
+            if (edge is > 0 and < VectorEdge)
+            {
+                var dpi = SvgDpi * VectorEdge / edge;
+                settings.Density = new Density(dpi, dpi, DensityUnit.PixelsPerInch);
+            }
+        }
+        catch (MagickException)
+        {
+            // drawn at its own size; reading reports a real problem
+        }
+        return settings;
     }
 
     private static double ReadDpi(MagickImage image) => ReadDpi(image.Density);

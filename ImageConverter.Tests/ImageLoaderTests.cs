@@ -116,4 +116,27 @@ public sealed class ImageLoaderTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ImageLoader.LoadAsync(path, cts.Token));
     }
+
+    [Fact]
+    public async Task Svg_Opens_WithTheBuiltInRenderer_AndSharp()
+    {
+        // Without the format ImageMagick called the external program Inkscape, which the security policy forbids (No. 108)
+        var path = Path.Combine(Path.GetTempPath(), "ic-svg-" + Guid.NewGuid().ToString("N") + ".svg");
+        await File.WriteAllTextAsync(path,
+            "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='12'><rect width='24' height='12' fill='#2f6feb'/></svg>");
+        try
+        {
+            var loaded = await ImageLoader.LoadAsync(path);
+            using var image = loaded.Image;
+            Assert.Equal((2048u, 1024u), (image.Width, image.Height));   // small drawings drawn sharp for the screen
+            Assert.Equal("SVG", loaded.FormatName);
+            using var pixels = image.GetPixelsUnsafe();
+            var blue = pixels.GetPixel(1000, 500).ToArray();
+            Assert.True(blue[2] > blue[0], "blau gefüllt");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

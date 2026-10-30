@@ -2788,3 +2788,20 @@ Test oder Nachweis.
   am Bildrand abgeschnitten.
 - **Nachgebessert in 0.8.3-beta:** Vom Nutzer: „Das Auslaufen sieht im Grünen sehr treppenmäßig aus.“ Zwölf feste Schichten waren bei
   großen Pinseln je mehrere Bildschirmpixel breit; jetzt etwa eine Schicht je 1,5 Bildschirmpixel des Auslaufens (8–64).
+
+## 108. SVG ließ sich nicht öffnen (seit SVG in der Liste der lesbaren Formate steht)
+
+- **Entdeckt:** 31.10.2026, 0.8.7-beta, auf die Frage des Nutzers „Kann ich bereits SVG damit anschauen?“ nachgeprüft. **Behoben:** 0.8.8-beta.
+- **Was:** SVG wurde angenommen (Liste der Formate), Öffnen scheiterte aber mit „attempt to perform an operation not authorized by the
+  security policy `inkscape'“.
+- **Warum:** Ohne ausdrückliches Format ruft ImageMagick für SVG das externe Programm Inkscape auf; die Sicherheitsregel des Programms
+  verbietet fremde Programme (gewollt). Magick.NET bringt mit librsvg einen eigenen Zeichner mit (MSVG/MVG ist ebenfalls gesperrt).
+- **Lösung:** `ImageLoader.VectorSettings` liest SVG/SVGZ immer mit dem Format `Rsvg` (Laden, Kopf, Vorschaubild, Größenprüfung). Kleine
+  Zeichnungen werden zum Anschauen scharf gerechnet: lange Kante mindestens 2048 Pixel (Dichte auf Basis der 96 CSS-Pixel je Zoll), die
+  DPI-Angabe bleibt 72.
+- **Bleibt:** Text in SVGs erscheint in einer Ersatzschrift (Serifen): Die in Magick.NET eingebaute Schrift-Suche (fontconfig) findet ihre
+  Konfiguration nicht; auch mit `FONTCONFIG_FILE=/etc/fonts/fonts.conf` blieb es so (Warnung „using without calling FcInit()“) – verworfen.
+- **Nicht tun:** Die Sperre für externe Programme lockern, um SVG zu öffnen.
+- **Wo im Code:** `ImageLoader` (`VectorSettings`, `LoadAsync`, `ProbeAsync`, `LoadThumbnailAsync`, `CheckSize`).
+- **Test:** Prüfprogramm `~/.cache/imageconverter-build/probezeit` mit einem Testbild (Verlauf, Transparenz, Text) und einem 24-Pixel-Symbol:
+  beide auf 2048 Pixel gerechnet, Formen und Verlauf richtig.
