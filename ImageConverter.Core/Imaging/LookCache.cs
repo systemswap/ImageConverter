@@ -37,7 +37,7 @@ public sealed class LookCache : IDisposable
 
     /// <summary>Everything the scaled and denoised image depends on.</summary>
     internal readonly record struct InputKey(SourceRef Source, int Width, int Height, ResampleFilter Filter, bool Gamma,
-        double Denoise, double ColorDenoise);
+        double Denoise, double ColorDenoise, bool SrgbFirst);
 
     /// <summary>
     /// Scaled image (for profiles, alpha, density) and its pixels after denoising: with <paramref name="Area"/> only the

@@ -85,9 +85,10 @@ Fehlergedächtnis eintragen.
 
 ## Als Nächstes
 
-- **Vorschau gegen Export bei verkleinerter Vorschau:** Mit Dunst 45 weichen auch opake Bilder sichtbar ab (6-MP-Bild, Blöcke 16 × 16: Mittel
-  1,6, einzelne Stellen bis 44 Stufen; Bild, das in die Vorschau passt: 0,3). Nicht durch den Zuschnitt entstanden, Ursache nicht
-  untersucht. Verdacht: Die Schätzkopie des Dunstes hat je nach Bildgröße eine andere Kante (`Dehaze.Apply`).
+- **Vorschau gegen Export, Rest:** Seit Fehlergedächtnis #97 bleibt bei verkleinerter Vorschau ein kleiner Abstand (Blöcke 16 × 16, Rauschen 0,3,
+  Dunst 45, Tiefen/Lichter 20, Schärfen 0,5: Mittel 0,6–1,6, einzelne Stellen bis 15 Stufen; passt das Bild in die Vorschau: 0,3). Er kommt
+  vom Rechnen in anderer Größe, kein Fehler. Nicht gleich sind außerdem „Profil behalten“ bei breitem Farbraum (der Export rechnet dort im
+  Quellraum) und „Profil verwerfen“ (die Datei zeigt die Rohwerte). Die Vorschau im Quellraum zu rechnen kostete je Reglerzug rund 0,45 s.
 
 - **Speicher-Pool der ONNX Runtime bei anderen Modellen messen:** Für die Hintergrund-Modelle ist er aus
   (Fehlergedächtnis #88); ob Verbessern (GFPGAN, CodeFormer …) und Entfernen (LaMa, MI-GAN) ebenfalls Speicher

@@ -137,11 +137,12 @@ public static class ImageExporter
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
         var basis = ResizeBasis(source, o);
+        var srgbFirst = FiltersInSrgb(source, o);
 
         // When enlarging, denoise first and enlarge afterwards; otherwise enlarging blows the grain up into blotches
         // before the denoiser sees it. When downscaling, denoise afterwards: faster, and downscaling averages anyway.
         var noiseFirst = NoiseFirst(source, o);
-        var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : basis;
+        var start = noiseFirst ? DenoiseFirst(source, o, srgbFirst, plan) : basis;
         plan?.Next();
         // Same size and the look computes a new image anyway: continue without a copy, because RenderLook only reads the
         // image. This saves a whole copy (panorama: 225 MB) for the duration of the image chain. Without a look the copy
@@ -154,6 +155,12 @@ public static class ImageExporter
             ? start
             : ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
         if (!ReferenceEquals(start, basis) && !ReferenceEquals(resized, start)) start.Dispose();
+        if (srgbFirst && !noiseFirst)
+        {
+            var converted = InSrgb(resized);
+            if (!ReferenceEquals(resized, basis)) resized.Dispose();
+            resized = converted;
+        }
         var result = RenderLook(resized, lookDenoise, lookColorDenoise, o.Adjustments, o.SharpenAmount, o.SharpenSigma, plan,
             o.Grain, o.GrainScale);
         if (!ReferenceEquals(result, resized) && !ReferenceEquals(resized, basis)) resized.Dispose();
@@ -178,15 +185,22 @@ public static class ImageExporter
         uint sourceDepth;
         lock (source) sourceDepth = source.Depth;
         var basis = ResizeBasis(source, o);
+        var srgbFirst = FiltersInSrgb(source, o);
         var key = new LookCache.InputKey(new LookCache.SourceRef(basis), o.Width, o.Height, o.Filter, o.GammaCorrect,
-            o.Denoise, o.ColorDenoise);
+            o.Denoise, o.ColorDenoise, srgbFirst);
         var input = cache.GetInput(key, () =>
         {
             var noiseFirst = NoiseFirst(source, o);
-            var start = noiseFirst ? RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan) : basis;
+            var start = noiseFirst ? DenoiseFirst(source, o, srgbFirst, plan) : basis;
             plan?.Next();
             var resized = ImageOps.Resize(start, o.Width, o.Height, o.Filter, o.GammaCorrect);
             if (!ReferenceEquals(start, basis)) start.Dispose();
+            if (srgbFirst && !noiseFirst)
+            {
+                var converted = InSrgb(resized);
+                resized.Dispose();
+                resized = converted;
+            }
             try
             {
                 var px = Pixels.FromMagick(resized);
@@ -265,6 +279,37 @@ public static class ImageExporter
         result.Density = new Density(o.Dpi, o.Dpi, DensityUnit.PixelsPerInch);
         result.SetArtifact(SourceDepthArtifact, sourceDepth.ToString(System.Globalization.CultureInfo.InvariantCulture));
         return result;
+    }
+
+    /// <summary>
+    /// Whether the filters compute in sRGB: when the result is converted to it anyway, as the preview does. Otherwise the same
+    /// sliders would work on other numbers in a wide-gamut photo (Display P3) and the file would differ from what was set on
+    /// screen, by up to 44 levels in saturated colours (docs/FEHLERGEDAECHTNIS.md, No. 97).
+    /// </summary>
+    /// <param name="source">Source image; its profile is read under a lock on it.</param>
+    /// <param name="o">Export settings.</param>
+    /// <returns><see langword="true"/> with filters, "convert to sRGB" and a profile other than sRGB.</returns>
+    private static bool FiltersInSrgb(MagickImage source, ExportOptions o)
+    {
+        if (o.Color != ColorMode.ConvertToSrgb || !LookProcesses(o.Denoise, o.ColorDenoise, o.Adjustments, o.SharpenAmount, o.Grain))
+            return false;
+        lock (source) return source.GetColorProfile() is { } profile && !IsSrgb(profile);
+    }
+
+    /// <summary>Returns a copy of an image converted to sRGB; the image itself stays unchanged.</summary>
+    private static MagickImage InSrgb(MagickImage image)
+    {
+        var copy = ImageOps.CloneOf(image);
+        copy.TransformColorSpace(ColorProfiles.SRGB);
+        return copy;
+    }
+
+    /// <summary>Noise reduction before enlarging, in the colour space the filters compute in.</summary>
+    private static MagickImage DenoiseFirst(MagickImage source, ExportOptions o, bool srgbFirst, WorkPlan? plan)
+    {
+        if (!srgbFirst) return RenderLook(source, o.Denoise, o.ColorDenoise, null, 0, 0, plan);
+        using var converted = InSrgb(source);
+        return RenderLook(converted, o.Denoise, o.ColorDenoise, null, 0, 0, plan);
     }
 
     /// <summary>

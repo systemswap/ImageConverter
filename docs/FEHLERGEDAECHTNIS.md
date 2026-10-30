@@ -2553,3 +2553,20 @@ Test oder Nachweis.
 - **Nicht tun:** Eine langsame Stufe vermuten statt messen: Der Verdacht lag zuerst bei den Filtern.
 - **Wo im Code:** `Pixels.ClearInvisible`, `ImageExporter.Encode`.
 - **Test:** `BackgroundTests.SavedFile_HoldsNothingUnderFullyTransparentPixels`, `ClearInvisible_LeavesOpaqueImagesAlone`; `sichtbar-probe` alt gegen neu.
+
+## 97. Export: Fotos mit breitem Farbraum sahen mit Filtern anders aus als in der Vorschau (seit den Filtern im Export)
+
+- **Entdeckt:** 30.10.2026, 0.7.10-beta, Vergleich Vorschau gegen Export. **Behoben:** 0.7.11-beta.
+- **Was:** Mit Display P3 (Handyfotos) und Reglern wich die Datei sichtbar von der Vorschau ab: gemessen in Blöcken 16 × 16 im Mittel 1,64, an satten
+  Stellen bis 43,7 Stufen; Hand rosiger, Türkis heller.
+- **Warum:** Andere Reihenfolge. Die Vorschau wandelt zuerst nach sRGB und filtert dann; der Export filterte im Raum der Quelle und wandelte zuletzt.
+  Dieselben Regler rechneten auf anderen Zahlen.
+- **Lösung:** Bei „Nach sRGB wandeln“ (Standard) mit Filtern und einem anderen Profil rechnet auch der Export zuerst nach sRGB (`FiltersInSrgb`), die
+  Größenschätzung ebenso. Danach 0,60, max 6,8 Stufen; freigestellt 2,94 → 1,28, max 39,4 → 13,1. Bilder ohne Profil oder sRGB und Exporte ohne Filter sind
+  pixelgleich. **Dateien aus P3-Fotos mit Reglern fallen also anders aus als vor 0.7.11 beta**, nämlich wie auf dem Bildschirm eingestellt.
+- **Verworfen:** Die Vorschau im Quellraum rechnen: gleich genau, aber rund 0,45 s mehr je Reglerzug.
+- **Falsche Spuren, zur Warnung:** Gamma beim Verkleinern (kein Unterschied), fehlendes Profil in der Datei (PNG trägt sRGB als eigenen Eintrag, PIL zeigt
+  dann kein Profil). Der zuerst vermutete Dunst macht nur einen kleinen Teil aus.
+- **Nicht tun:** Farbraum und Filter in Vorschau und Export in verschiedener Reihenfolge rechnen. Beim Vergleich zweier Wege jede Stufe einzeln prüfen.
+- **Wo im Code:** `ImageExporter.FiltersInSrgb`, `Render`, `RenderCached`.
+- **Test:** `ColorOrderTests` (auch: die andere Reihenfolge ergibt wirklich etwas anderes); `~/.cache/imageconverter-build/sichtbar-probe`, `stufen-probe`.
