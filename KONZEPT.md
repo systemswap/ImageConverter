@@ -135,6 +135,11 @@ seinen Namen in allen Sprachen.
 
 ### I. Desktop-Integration
 
+- **Als Bildbetrachter** (seit 0.8.6): Darstellung Hell · Dunkel · wie das System (Einstellungen › Allgemein, Knopf ☾/☀ oben rechts,
+  gemerkt). Dunkel ist ein gedämpftes, neutrales Grau ohne Farbstich mit gebrochenem Weiß als Schrift. Pfeile links/rechts blättern
+  (außer ein Regler, Eingabefeld oder Zuschnittrahmen braucht sie), Bild auf/ab immer, Pos1/Ende erstes/letztes Bild; F11 Vollbild mit nur
+  Bild und unterer Leiste, Esc zurück.
+
 - **Linux**: `.desktop`-Datei mit `MimeType=image/jpeg;image/png;…` ⇒ erscheint unter
   „Öffnen mit" im Nautilus/Dolphin/Thunar-Rechtsklick. Dateien als Argumente annehmen
   (`%F`), mehrere Dateien ⇒ Batch-Liste. Icon nach Freedesktop-Spec.

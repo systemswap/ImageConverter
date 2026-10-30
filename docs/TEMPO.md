@@ -100,3 +100,13 @@ im Wechsel, bester von 2 Läufen (`~/.cache/imageconverter-build/export-probe`):
 
 Am meisten gewinnen 8-Bit-Bilder mit viel feinem Inhalt (7,0 → 1,3 s) und freigestellte mit 16 Bit (8,4 → 1,5 s). 16-Bit-Fotos ohne
 Transparenz packt zlib ohnehin kaum (2,2 → 1,9 s).
+
+## Bildwechsel als Bildbetrachter (31.10.2026)
+
+Gemessen mit einem 24-MP-JPEG (Desktop, 32 Threads): Laden mit Farbprofil 0,13 s, fürs Fenster aufbereiten 0,065 s, ganzer Wechsel
+im Programm ≈ 0,27 s. Ein verkleinertes Aufbereiten (2048 px) wäre langsamer (0,15 s) als das volle.
+
+**Schnellvorschau für JPEG verworfen:** Der Decoder liefert mit Größenhinweis zwar ein verkleinertes Bild (96 MP → 3000 × 2000), braucht dafür
+aber 0,26 s statt 0,41 s – das Entpacken der komprimierten Daten läuft auch für ein kleines Bild ganz durch. Parallel zum vollen Laden kam
+die Vorschau nie zuerst an und nähme langsamen Rechnern Rechenzeit weg. Wirklich schneller blättern ginge nur mit Vorladen des nächsten
+Bildes (kostet Speicher für ein bis zwei Bilder) – vom Nutzer vorerst nicht gewünscht.

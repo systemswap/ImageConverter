@@ -21,20 +21,22 @@
             <Color x:Key="RecommendColor">#C2610C</Color>
         </ResourceDictionary>
 
+        <!-- Dark: a muted, neutral grey instead of black – easier on the eyes – and without a colour cast, so that photos
+             look right; off-white text glares less than pure white; accent and signal colours a little less saturated -->
         <ResourceDictionary x:Key="Dark">
-            <Color x:Key="AppBackgroundColor">#1A1C20</Color>
-            <Color x:Key="SurfaceColor">#24272C</Color>
-            <Color x:Key="SurfaceAltColor">#2A2D33</Color>
-            <Color x:Key="CanvasColor">#131518</Color>
-            <Color x:Key="BorderColor">#34383F</Color>
-            <Color x:Key="BorderStrongColor">#464B54</Color>
-            <Color x:Key="TextColor">#ECEDEF</Color>
-            <Color x:Key="TextMutedColor">#9AA1AC</Color>
-            <Color x:Key="AccentColor">#4C8DFF</Color>
-            <Color x:Key="AccentHoverColor">#5F99FF</Color>
-            <Color x:Key="AccentSoftColor">#1E2A3F</Color>
-            <Color x:Key="GoodColor">#49C17C</Color>
-            <Color x:Key="RecommendColor">#F59E42</Color>
+            <Color x:Key="AppBackgroundColor">#2B2D30</Color>
+            <Color x:Key="SurfaceColor">#33363A</Color>
+            <Color x:Key="SurfaceAltColor">#393C41</Color>
+            <Color x:Key="CanvasColor">#252629</Color>
+            <Color x:Key="BorderColor">#44474C</Color>
+            <Color x:Key="BorderStrongColor">#575B61</Color>
+            <Color x:Key="TextColor">#DCDDDE</Color>
+            <Color x:Key="TextMutedColor">#A2A6AC</Color>
+            <Color x:Key="AccentColor">#5B8DEF</Color>
+            <Color x:Key="AccentHoverColor">#6E9BF1</Color>
+            <Color x:Key="AccentSoftColor">#2E3848</Color>
+            <Color x:Key="GoodColor">#5FBF83</Color>
+            <Color x:Key="RecommendColor">#E8A15C</Color>
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>

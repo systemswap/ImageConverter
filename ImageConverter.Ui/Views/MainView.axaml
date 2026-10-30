@@ -22,7 +22,7 @@
         <!-- ============================================================ -->
         <!-- Kopfleiste: Dateien                                          -->
         <!-- ============================================================ -->
-        <Border DockPanel.Dock="Top" Classes="bar" BorderThickness="0,0,0,1" IsEnabled="{Binding IsIdle}">
+        <Border DockPanel.Dock="Top" Classes="bar" BorderThickness="0,0,0,1" IsEnabled="{Binding IsIdle}" IsVisible="{Binding !IsFullScreen}">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
                 <Button Grid.Column="0" Classes="subtle" Content="{l:T '＋  Bilder'}"
                         Click="OnOpenFilesClick"
@@ -52,6 +52,8 @@
                 </Border>
 
                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4">
+                    <Button Classes="icon" Content="{Binding ThemeIcon}" ToolTip.Tip="{Binding ThemeTip}"
+                            Command="{Binding ToggleThemeCommand}" />
                     <Button Classes="icon" Content="☰" ToolTip.Tip="{l:T 'Einstellungen (KI-Modelle, Sprache)'}"
                             Command="{Binding OpenSettingsCommand}" />
                     <Button Classes="icon" Content="?" ToolTip.Tip="{l:T 'Hilfe'}" />
@@ -62,7 +64,8 @@
         <!-- ============================================================ -->
         <!-- Fußleiste: Ziel, Export                                      -->
         <!-- ============================================================ -->
-        <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="12,10" IsEnabled="{Binding IsIdle}">
+        <Border DockPanel.Dock="Bottom" Classes="bar" BorderThickness="0,1,0,0" Padding="12,10" IsEnabled="{Binding IsIdle}"
+                IsVisible="{Binding !IsFullScreen}">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                 <!-- Meldung (Ergebnis des letzten Exports, Vorschläge …): bricht um, statt unter „Ziel“ und die Knöpfe zu
                      laufen — höchstens drei Zeilen, der ganze Text als Tooltip -->
@@ -123,11 +126,12 @@
         <!-- ============================================================ -->
         <!-- Hauptbereich: Einstellungen links, Bild rechts               -->
         <!-- ============================================================ -->
-        <Grid ColumnDefinitions="Auto,352,Auto,*">
+        <!-- Full screen (F11): only the picture and its bar; the settings column has a fixed width and collapses with it -->
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*">
 
             <!-- Kachelleiste ganz links: wählt die Rubrik. Zugeklappt nur Icons, aufgeklappt
                  mit Name und Inhalt. Icons nach Lucide (ISC-Lizenz), 24er-Raster. -->
-            <Border Grid.Column="0" Classes="rail">
+            <Border Grid.Column="0" Classes="rail" IsVisible="{Binding !IsFullScreen}">
                 <DockPanel>
                     <ToggleButton x:Name="RailExpand" DockPanel.Dock="Bottom" Classes="railToggle"
                                   ToolTip.Tip="{l:T 'Leiste aufklappen: zeigt, was in jeder Rubrik steckt'}">
@@ -236,7 +240,7 @@
 
             <!-- Einstellungen der gewählten Rubrik -->
             <!-- Während des Upscalings gesperrt: das Ergebnis gehört zu genau diesem Stand -->
-            <ScrollViewer Grid.Column="1" IsEnabled="{Binding IsIdle}"
+            <ScrollViewer Grid.Column="1" Width="352" IsEnabled="{Binding IsIdle}" IsVisible="{Binding !IsFullScreen}"
                           HorizontalScrollBarVisibility="Disabled"
                           Padding="12,12,8,12"
                           Classes="settings">
@@ -1140,7 +1144,7 @@
             </ScrollViewer>
 
             <!-- Trennlinie -->
-            <Rectangle Grid.Column="2" Width="1" Fill="{DynamicResource BorderBrush2}" />
+            <Rectangle Grid.Column="2" Width="1" Fill="{DynamicResource BorderBrush2}" IsVisible="{Binding !IsFullScreen}" />
 
             <!-- Bildfläche rechts -->
             <DockPanel Grid.Column="3" LastChildFill="True">

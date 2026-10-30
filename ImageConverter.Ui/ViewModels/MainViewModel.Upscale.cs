@@ -67,7 +67,7 @@ public partial class MainViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UpscaleCommand), nameof(CancelUpscaleCommand), nameof(UndoCommand), nameof(RedoCommand),
         nameof(ExportCommand), nameof(PrintCommand), nameof(RotateLeftCommand), nameof(RotateRightCommand),
-        nameof(FlipHorizontalCommand), nameof(CropToSelectionCommand), nameof(PreviousFileCommand), nameof(NextFileCommand), nameof(StraightenWithAiCommand))]
+        nameof(FlipHorizontalCommand), nameof(CropToSelectionCommand), nameof(PreviousFileCommand), nameof(NextFileCommand), nameof(FirstFileCommand), nameof(LastFileCommand), nameof(StraightenWithAiCommand))]
     [NotifyPropertyChangedFor(nameof(CanUndo), nameof(CanRedo), nameof(CanTransform), nameof(CanCropToSelection), nameof(IsIdle), nameof(SelectionActive))]
     public partial bool IsUpscaling { get; set; }
 

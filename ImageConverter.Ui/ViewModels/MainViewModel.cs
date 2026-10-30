@@ -350,6 +350,8 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasMultipleFiles));
         OnPropertyChanged(nameof(FilePosition));
         PreviousFileCommand.NotifyCanExecuteChanged();
+        FirstFileCommand.NotifyCanExecuteChanged();
+        LastFileCommand.NotifyCanExecuteChanged();
         NextFileCommand.NotifyCanExecuteChanged();
     }
 

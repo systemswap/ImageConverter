@@ -26,7 +26,7 @@ public sealed record UpscaleTimes(string Machine, Dictionary<string, double> Sec
 /// <param name="LowPriority">Whether the program lowers its process priority.</param>
 public sealed record AppSettings(string? Language = null, bool AiRemoveShadows = true,
     SpeedMeasure? FilterSpeed = null, SpeedMeasure? AiSpeed = null, UpscaleTimes? UpscaleWork = null,
-    int CpuPercent = 100, bool LowPriority = true)
+    int CpuPercent = 100, bool LowPriority = true, string Theme = "System")
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

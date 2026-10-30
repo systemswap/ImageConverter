@@ -90,6 +90,7 @@ public partial class App : Application
         {
             // Language before the first window: the saved choice, otherwise the system language.
             LanguageViewModel.ApplyAtStartup();
+            AppTheme.Apply(Core.Platform.AppSettings.Load().Theme);   // light, dark or as the system, before the first window
 
             var vm = new MainViewModel { CoarseWhileDragging = true };   // coarse preview while dragging, full quality after release
             desktop.MainWindow = new MainWindow { DataContext = vm };
