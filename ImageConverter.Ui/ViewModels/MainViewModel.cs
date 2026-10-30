@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using ImageConverter.Ai;
 using ImageConverter.Core.Imaging;
 using ImageConverter.Core.Localization;
+using ImageConverter.Documents;
 using ImageConverter.Models;
 
 namespace ImageConverter.ViewModels;
@@ -94,7 +95,7 @@ public partial class MainViewModel : ViewModelBase
     private void RefreshTexts()
     {
         OnPropertyChanged(string.Empty);
-        if (_history is null)
+        if (_history is null && OpenDocument is null)
         {
             CurrentFileName = Tr.T("Kein Bild geladen");
             FileDetails = Tr.T("Bild hierher ziehen oder „Bilder“ wählen");
@@ -159,9 +160,9 @@ public partial class MainViewModel : ViewModelBase
                 ("JPEG", ".jpg"), ("PNG", ".png"), ("WebP", ".webp"), ("AVIF", ".avif"),
                 ("HEIC", ".heic"), ("JPEG XL", ".jxl"), ("TIFF", ".tif"), ("GIF", ".gif"), ("RAW", ".dng"),
             ];
-            return string.Join(" · ", headline
-                .Where(h => ImageFormats.ReadableExtensions.Contains(h.Ext))
-                .Select(h => h.Label)) + " …";
+            var images = headline.Where(h => ImageFormats.ReadableExtensions.Contains(h.Ext)).Select(h => h.Label);
+            var documents = DocumentViewers.All.SelectMany(v => v.Extensions).Select(x => x.TrimStart('.').ToUpperInvariant());
+            return string.Join(" · ", images.Concat(documents)) + " …";
         }
     }
 
@@ -217,12 +218,12 @@ public partial class MainViewModel : ViewModelBase
             if (Directory.Exists(path))
             {
                 found.AddRange(Directory.EnumerateFiles(path)
-                    .Where(ImageFormats.CanRead)
+                    .Where(DocumentViewers.CanOpen)
                     .Order(StringComparer.CurrentCultureIgnoreCase));
             }
             else if (File.Exists(path))
             {
-                if (ImageFormats.CanRead(path)) found.Add(path);
+                if (DocumentViewers.CanOpen(path)) found.Add(path);
                 else skipped.Add(Path.GetFileName(path));
             }
         }
@@ -250,6 +251,7 @@ public partial class MainViewModel : ViewModelBase
         // first, because it may still be reading an image that is about to be released.
         await StopPreviewAsync();
         ClearDisplay();
+        CloseDocument();
         DisposeAllHistories();
         ResetToStart();   // new images start as after program start
         _fileIndex = -1;
@@ -276,7 +278,7 @@ public partial class MainViewModel : ViewModelBase
         {
             var full = Path.GetFullPath(file);
             if (Path.GetDirectoryName(full) is not { } folder) return null;
-            var all = Directory.EnumerateFiles(folder).Where(ImageFormats.CanRead).Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+            var all = Directory.EnumerateFiles(folder).Where(DocumentViewers.CanOpen).Order(StringComparer.CurrentCultureIgnoreCase).ToList();
             // The opened file under the same spelling as in the list
             var i = all.FindIndex(p => string.Equals(p, full, StringComparison.Ordinal));
             if (i < 0) return null;
@@ -307,12 +309,17 @@ public partial class MainViewModel : ViewModelBase
     private async Task ShowFileAsync(int index)
     {
         var path = _files[index];
+        if (DocumentViewers.For(path) is { } viewer)
+        {
+            await ShowDocumentFileAsync(index, viewer);
+            return;
+        }
         CommitPendingSettings();   // pending slider movements still belong to the previous image
 
-        // State of the image being left. In per-image mode it is remembered;
+        // State of the image being left (or of the last image before a document). In per-image mode it is remembered;
         // in shared mode it is the template for the next image.
-        var outgoing = _history is not null ? CaptureSettings() : null;
-        var outgoingFileDpi = _history?.Dpi;
+        var outgoing = _history is not null ? CaptureSettings() : _beforeDocument?.Settings;
+        var outgoingFileDpi = _history is not null ? _history.Dpi : _beforeDocument?.FileDpi;
         if (!ApplyToAll && CurrentPath is { } leaving && outgoing is not null)
             _fileSettings[leaving] = outgoing;
 
@@ -343,6 +350,8 @@ public partial class MainViewModel : ViewModelBase
 
             _fileIndex = index;
             _history = history;
+            _beforeDocument = null;
+            CloseDocument();
             CurrentFileName = Path.GetFileName(path);
             OnPropertyChanged(nameof(FilePosition));
 

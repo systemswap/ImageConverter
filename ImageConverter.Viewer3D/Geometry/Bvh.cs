@@ -25,6 +25,9 @@ public sealed class Bvh
     public const int MaxDepth = 180;
 
     private const int LeafSize = 4;
+
+    /// <summary>Tolerance of the ray test at triangle edges, in barycentric units.</summary>
+    private const float EdgeSlack = 1e-4f;
     private const int Bins = 16;
 
     private readonly Mesh _mesh;
@@ -419,6 +422,22 @@ public sealed class Bvh
         hit = default;
         if (_tris.Length == 0) return false;
         var inv = new Vector3(1 / direction.X, 1 / direction.Y, 1 / direction.Z);
+
+        // Start the ray where it enters the model's box: a start far away (orthographic camera) would make the
+        // triangle test lose so many digits that a ray along a shared edge slips between both triangles
+        if (!RayBox(0, origin, inv, maxDistance, out var enter)) return false;
+        var size = Math.Max(_box[3] - _box[0], Math.Max(_box[4] - _box[1], _box[5] - _box[2]));
+        var skip = Math.Max(0, enter - 1e-3f * size * direction.Length());
+        if (skip <= 0) return TraceFrom(origin, direction, maxDistance, anyHit, out hit);
+        var found = TraceFrom(origin + direction * skip, direction, maxDistance - skip, anyHit, out var near);
+        hit = found ? near with { Distance = near.Distance + skip } : default;
+        return found;
+    }
+
+    private bool TraceFrom(Vector3 origin, Vector3 direction, float maxDistance, bool anyHit, out RayHit hit)
+    {
+        hit = default;
+        var inv = new Vector3(1 / direction.X, 1 / direction.Y, 1 / direction.Z);
         var best = maxDistance;
         var bestTri = -1;
         Span<int> stack = stackalloc int[MaxDepth + 4];
@@ -498,7 +517,11 @@ public sealed class Bvh
     }
 
     /// <summary>Möller–Trumbore ray/triangle test, both sides.</summary>
-    /// <remarks>T. Möller, B. Trumbore: Fast, Minimum Storage Ray/Triangle Intersection. Journal of Graphics Tools 2(1), 1997.</remarks>
+    /// <remarks>
+    /// T. Möller, B. Trumbore: Fast, Minimum Storage Ray/Triangle Intersection. Journal of Graphics Tools 2(1), 1997.
+    /// The barycentric limits are widened by <see cref="EdgeSlack"/>: a ray exactly along the shared edge of two
+    /// triangles could otherwise miss both through rounding and hit whatever lies behind.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool RayTriangle(Vector3 o, Vector3 d, Vector3 a, Vector3 b, Vector3 c, out float t)
     {
@@ -511,10 +534,10 @@ public sealed class Bvh
         var invDet = 1 / det;
         var s = o - a;
         var u = Vector3.Dot(s, p) * invDet;
-        if (u < 0 || u > 1) return false;
+        if (u < -EdgeSlack || u > 1 + EdgeSlack) return false;
         var q = Vector3.Cross(s, e1);
         var v = Vector3.Dot(d, q) * invDet;
-        if (v < 0 || u + v > 1) return false;
+        if (v < -EdgeSlack || u + v > 1 + EdgeSlack) return false;
         t = Vector3.Dot(e2, q) * invDet;
         return t > 0;
     }

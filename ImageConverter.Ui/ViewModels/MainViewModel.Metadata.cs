@@ -51,7 +51,10 @@ public partial class MainViewModel
     /// <summary>Asks the view to put text on the clipboard (the view model has no access to it).</summary>
     public event Func<string, Task>? CopyTextRequested;
 
-    partial void OnCurrentFileNameChanged(string value) => _ = LoadMetadataAsync(CurrentPath);
+    partial void OnCurrentFileNameChanged(string value) => _ = LoadMetadataAsync(ImagePath);
+
+    /// <summary>The current file if it is an image (documents have no image metadata).</summary>
+    private string? ImagePath => Documents.DocumentViewers.For(CurrentPath) is null ? CurrentPath : null;
 
     partial void OnSelectedMetadataModeChanged(string value) => ShowMetadata();
 
@@ -87,7 +90,7 @@ public partial class MainViewModel
     private void RefreshMetadataTexts()
     {
         _metadataCache.Clear();
-        _ = LoadMetadataAsync(CurrentPath);
+        _ = LoadMetadataAsync(ImagePath);
     }
 
     /// <summary>Puts the current result on display, marking what the EXIF setting removes when saving.</summary>

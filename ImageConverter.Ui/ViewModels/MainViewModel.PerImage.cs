@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -185,7 +186,8 @@ public partial class MainViewModel
 
     // ------------------------------------------------- for the export window
 
-    internal IReadOnlyList<string> OpenFiles => _files;
+    /// <summary>The open images, without documents (3D models …) – for the export and print windows.</summary>
+    internal IReadOnlyList<string> OpenFiles => _files.Where(p => Documents.DocumentViewers.For(p) is null).ToList();
 
     /// <summary>
     /// The image of a file in its current state: the edited image from the history,

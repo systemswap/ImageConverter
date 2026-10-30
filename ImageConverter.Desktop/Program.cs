@@ -1,6 +1,8 @@
 ﻿using System;
 using Avalonia;
 using ImageConverter.Core.Platform;
+using ImageConverter.Documents;
+using ImageConverter.Viewer3D;
 
 namespace ImageConverter.Desktop;
 
@@ -16,6 +18,8 @@ sealed class Program
         NativeLibraries.Configure();
         // Own log file next to the program; also records crashes of the previous run.
         AppLog.Start();
+        // Files that are not images: STL models open in the 3D viewer
+        DocumentViewers.Register(new StlViewer());
         try
         {
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

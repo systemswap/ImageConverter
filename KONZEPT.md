@@ -427,14 +427,17 @@ der Vorschau), Druckgröße. Weggefallen: Gruppen „Upscaling“ und „Auflös
 Gesichtsmodell? Gewicht der PiSA-Regler (λpix/λsem kosten einen zweiten UNet-Lauf) statt
 „Details“ als Mischung?
 
-### O. STL-Betrachter mit Messen (Wunsch vom 30.10.2026, Konzept — noch nicht umgesetzt, siehe `docs/STL-BETRACHTER.md`)
+### O. STL-Betrachter mit Messen (Wunsch vom 30.10.2026, umgesetzt in 0.8.10/0.8.11 beta, siehe `docs/STL-BETRACHTER.md`)
 
 - `.stl` öffnet sich wie ein Bild und lässt sich im Ordner mitblättern; solange ein Modell
   gezeigt wird, sind die Bildfunktionen gesperrt. Nur STL, kein STEP.
 - Fest eingebautes, getrenntes Plugin `ImageConverter.Viewer3D` hinter einer schmalen
   Schnittstelle; OpenGL aus Avalonia ohne neues Paket.
 - Messen: Fläche A, Fläche B → Maß bleibt stehen, weitere Paare möglich; Klick auf eine
-  gewählte Fläche hebt die Wahl auf. Zylinder zeigen Ø, Umschalt+Klick misst Punkt zu Punkt.
+  gewählte Fläche hebt die Wahl auf, Klick auf die Beschriftung entfernt ein Maß. Zylinder
+  zeigen Ø, Umschalt+Klick misst Punkt zu Punkt.
+- Drehen um die Klickstelle oder um die Mittelachse des Modells (umschaltbar), Drehscheibe
+  um Z; Darstellung mit Umgebungsverdeckung im Bildraum, Bodenschatten, Kantenlinien.
 
 ---
 

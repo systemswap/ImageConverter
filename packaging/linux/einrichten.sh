@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Trägt ImageConverter für den angemeldeten Benutzer ins Anwendungsmenü ein und
-# meldet es im Dateimanager unter „Öffnen mit …“ für Bilder an – ohne
+# meldet es im Dateimanager unter „Öffnen mit …“ für Bilder und STL-Modelle an – ohne
 # Root-Rechte. Kopiert werden nur Menüeintrag und Symbol; der Eintrag zeigt auf
 # die AppImage in diesem Ordner (bei der Paketform „einzeln“ auf das Programm
 # im Ordner). Zum Standardprogramm wird ImageConverter nicht – das legt man im
@@ -36,7 +36,7 @@ rm -f "$DATA/applications/imageconverter.desktop"
 ENTRY="$DATA/applications/ImageConverter.desktop"
 NEW="$(mktemp)"
 trap 'rm -f "$NEW"' EXIT
-# %F: mehrere markierte Bilder kommen zusammen in ein Fenster.
+# %F: mehrere markierte Dateien kommen zusammen in ein Fenster.
 EXEC_LINE="Exec=\"$escaped\" %F" awk '/^Exec=/ { print ENVIRON["EXEC_LINE"]; next } { print }' \
   "$HERE/share/applications/ImageConverter.desktop" > "$NEW"
 
@@ -49,5 +49,5 @@ install -m 644 "$NEW" "$ENTRY"
 command -v update-desktop-database > /dev/null 2>&1 && update-desktop-database "$DATA/applications" || true
 command -v gtk-update-icon-cache > /dev/null 2>&1 && gtk-update-icon-cache -f -t "$DATA/icons/hicolor" > /dev/null 2>&1 || true
 
-echo "Eingetragen: ImageConverter steht jetzt im Anwendungsmenü und bei Bildern unter „Öffnen mit …“."
+echo "Eingetragen: ImageConverter steht jetzt im Anwendungsmenü und bei Bildern und STL-Modellen unter „Öffnen mit …“."
 echo "Rückgängig: ./entfernen.sh"

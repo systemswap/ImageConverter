@@ -232,7 +232,7 @@ public partial class MainViewModel
         CommitPendingSettings();
 
         // Several images: export window with a list, opened by the view
-        if (_files.Count > 1 && MultiExportRequested is { } openDialog)
+        if (OpenFiles.Count > 1 && MultiExportRequested is { } openDialog)
         {
             if (!ApplyToAll && CurrentPath is { } current)
                 _fileSettings[current] = CaptureSettings();

@@ -131,7 +131,7 @@
 
             <!-- Kachelleiste ganz links: wählt die Rubrik. Zugeklappt nur Icons, aufgeklappt
                  mit Name und Inhalt. Icons nach Lucide (ISC-Lizenz), 24er-Raster. -->
-            <Border Grid.Column="0" Classes="rail" IsVisible="{Binding !IsFullScreen}">
+            <Border Grid.Column="0" Classes="rail" IsVisible="{Binding ShowsImageSettings}">
                 <DockPanel>
                     <ToggleButton x:Name="RailExpand" DockPanel.Dock="Bottom" Classes="railToggle"
                                   ToolTip.Tip="{l:T 'Leiste aufklappen: zeigt, was in jeder Rubrik steckt'}">
@@ -240,7 +240,7 @@
 
             <!-- Einstellungen der gewählten Rubrik -->
             <!-- Während des Upscalings gesperrt: das Ergebnis gehört zu genau diesem Stand -->
-            <ScrollViewer Grid.Column="1" Width="352" IsEnabled="{Binding IsIdle}" IsVisible="{Binding !IsFullScreen}"
+            <ScrollViewer Grid.Column="1" Width="352" IsEnabled="{Binding IsIdle}" IsVisible="{Binding ShowsImageSettings}"
                           HorizontalScrollBarVisibility="Disabled"
                           Padding="12,12,8,12"
                           Classes="settings">
@@ -1144,13 +1144,17 @@
             </ScrollViewer>
 
             <!-- Trennlinie -->
+            <!-- Ein Dokument (3D-Modell …) bringt statt der Einstellungen seine eigene Spalte mit -->
+            <ContentControl Grid.Column="0" Grid.ColumnSpan="2" Width="352" Content="{Binding OpenDocument.Panel}"
+                            IsVisible="{Binding ShowsDocumentPanel}" />
+
             <Rectangle Grid.Column="2" Width="1" Fill="{DynamicResource BorderBrush2}" IsVisible="{Binding !IsFullScreen}" />
 
             <!-- Bildfläche rechts -->
             <DockPanel Grid.Column="3" LastChildFill="True">
 
-                <!-- Werkzeugleiste unter dem Bild -->
-                <Border DockPanel.Dock="Bottom"
+                <!-- Werkzeugleiste unter dem Bild (ein Dokument hat seine eigene) -->
+                <Border DockPanel.Dock="Bottom" IsVisible="{Binding !ShowsDocument}"
                         Background="{DynamicResource SurfaceBrush}"
                         BorderBrush="{DynamicResource BorderBrush2}"
                         BorderThickness="0,1,0,0"
@@ -1232,7 +1236,7 @@
                                     SelectionEnabled="{Binding SelectionActive}" />
 
                         <!-- Leerer Zustand: große Drop-Zone -->
-                        <Grid IsVisible="{Binding !HasImage}"
+                        <Grid IsVisible="{Binding ShowsEmptyState}"
                               Margin="40" MaxWidth="560" MaxHeight="360">
                             <Rectangle RadiusX="16" RadiusY="16"
                                        Fill="{DynamicResource SurfaceBrush}"
@@ -1432,10 +1436,6 @@
                             </Panel>
                         </Border>
 
-                        <!-- Ladeanzeige -->
-                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
-                                     VerticalAlignment="Top" Height="3" MinHeight="3"
-                                     CornerRadius="0" />
 
                         <!-- Liste „Bearbeitungen“: je Bearbeitung eine Zeile in Rechen-Reihenfolge, das Auge blendet sie
                              aus „Nachher“ und dem Export aus. Symbol nach Lucide layers (ISC-Lizenz). -->
@@ -1519,6 +1519,14 @@
                                         Command="{Binding ActivityCancel}" IsVisible="{Binding OverlayCanCancel}" />
                             </StackPanel>
                         </Border>
+
+                        <!-- Dokument (3D-Modell …) statt des Bildes: deckt die Bildwerkzeuge ganz zu -->
+                        <ContentControl Content="{Binding OpenDocument.View}" IsVisible="{Binding ShowsDocument}" />
+
+                        <!-- Ladeanzeige -->
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}"
+                                     VerticalAlignment="Top" Height="3" MinHeight="3"
+                                     CornerRadius="0" />
 
                         <!-- Wird beim Hineinziehen von Dateien eingeblendet -->
                         <Grid x:Name="DropOverlay" IsVisible="False" IsHitTestVisible="False"

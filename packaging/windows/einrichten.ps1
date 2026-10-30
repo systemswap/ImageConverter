@@ -27,7 +27,8 @@ $exePath = Join-Path $PSScriptRoot $exeName
 $extensions = @(
     '.jpg', '.jpeg', '.jpe', '.png', '.bmp', '.gif', '.tif', '.tiff',
     '.webp', '.avif', '.jxl', '.heic', '.heif', '.ico',
-    '.cr2', '.nef', '.arw', '.dng'
+    '.cr2', '.nef', '.arw', '.dng',
+    '.stl'
 )
 
 $appsKey = "HKCU:\Software\Classes\Applications\$exeName"

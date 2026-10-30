@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ImageConverter.Core.Imaging;
+using ImageConverter.Documents;
 using ImageConverter.ViewModels;
 
 namespace ImageConverter.Views;
@@ -184,22 +186,23 @@ public partial class MainView : UserControl
     {
         if (_vm is null || TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
 
+        // Linux dialogs are case-sensitive (cameras write .JPG).
+        static List<string> Patterns(IEnumerable<string> extensions) =>
+            extensions.SelectMany(x => new[] { "*" + x, "*" + x.ToUpperInvariant() }).ToList();
+        var documents = DocumentViewers.All.SelectMany(v => v.Extensions).ToList();
+        var types = new List<FilePickerFileType>();
+        if (documents.Count > 0)
+            types.Add(new FilePickerFileType(Tr.T("Bilder und Modelle")) { Patterns = Patterns(ImageFormats.ReadableExtensions.Concat(documents)) });
+        types.Add(new FilePickerFileType(Tr.T("Bilder")) { Patterns = Patterns(ImageFormats.ReadableExtensions), MimeTypes = ["image/*"] });
+        foreach (var viewer in DocumentViewers.All)
+            types.Add(new FilePickerFileType(viewer.FileTypeName) { Patterns = Patterns(viewer.Extensions) });
+        types.Add(FilePickerFileTypes.All);
+
         var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = Tr.T("Bilder öffnen"),
             AllowMultiple = true,
-            FileTypeFilter =
-            [
-                new FilePickerFileType(Tr.T("Bilder"))
-                {
-                    // Linux dialogs are case-sensitive (cameras write .JPG).
-                    Patterns = ImageFormats.ReadableExtensions
-                        .SelectMany(x => new[] { "*" + x, "*" + x.ToUpperInvariant() })
-                        .ToList(),
-                    MimeTypes = ["image/*"],
-                },
-                FilePickerFileTypes.All,
-            ],
+            FileTypeFilter = types,
         });
 
         var paths = files.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();

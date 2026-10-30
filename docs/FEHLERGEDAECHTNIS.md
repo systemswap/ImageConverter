@@ -2805,3 +2805,43 @@ Test oder Nachweis.
 - **Wo im Code:** `ImageLoader` (`VectorSettings`, `LoadAsync`, `ProbeAsync`, `LoadThumbnailAsync`, `CheckSize`).
 - **Test:** Prüfprogramm `~/.cache/imageconverter-build/probezeit` mit einem Testbild (Verlauf, Transparenz, Text) und einem 24-Pixel-Symbol:
   beide auf 2048 Pixel gerechnet, Formen und Verlauf richtig.
+
+## 109. 3D: Ein Klick genau auf die Kante zweier Facetten traf, was dahinter lag (während der Entwicklung des STL-Betrachters)
+
+- **Entdeckt:** 31.10.2026, nach 0.8.10-beta, im Prüfprogramm (Messklicks auf berechnete Punkte eines Zylinders): Der Klick auf die
+  Mantelfläche ergab „Ebene ↔ Zylinder“ statt „Zylinder ↔ Zylinder“. **Behoben:** 0.8.11-beta (erste Fassung mit Anzeige).
+- **Was:** Der Strahl unter der Maus lief genau entlang der gemeinsamen Kante zweier schmaler Streifen (0,8 mm breit, 22 mm hoch),
+  schlüpfte zwischen beiden Dreiecken hindurch und traf die Platte dahinter.
+- **Warum:** Die orthografische Kamera setzt den Strahl weit vor dem Modell an (etwa 600 Einheiten). In einfacher Genauigkeit verliert
+  der Dreieckstest dabei so viele Stellen, dass die baryzentrischen Koordinaten an der Kante um ~10⁻⁴ falsch liegen – für beide
+  Nachbarn knapp außerhalb. Mit einem nahen Startpunkt traf derselbe Strahl (Probeprogramm nachgestellt).
+- **Lösung:** `Bvh.Trace` setzt den Strahl vor dem Test an den Eintritt in die Hülle des Modells (Abstand wird wieder addiert), die
+  Toleranz an den Kanten ist 10⁻⁴ (`EdgeSlack`, bei 0,8 mm Breite unter 0,1 µm). Verworfen: nur die Toleranz zu vergrößern – bei weit
+  entfernten Kameras wächst der Fehler mit.
+- **Nicht tun:** Strahlen in einfacher Genauigkeit von weit außerhalb testen; Rechnungen fürs Messen in `float`.
+- **Wo im Code:** `Bvh.Trace`/`TraceFrom`/`RayTriangle`, `OrbitCamera.Ray`.
+- **Test:** `ModelViewTests.RayAlongASharedEdge_FromFarAway_HitsTheSurface` (Abstand 50/600/5000; mit dem alten Test bei 600 daneben).
+
+## 110. 3D: Mittelpunkt einer Fläche nur auf Float-Genauigkeit – Abstand 4,9999998 statt 5 (während der Entwicklung)
+
+- **Entdeckt:** 31.10.2026, nach 0.8.10-beta, Test `MeasurerTests.ParallelPlanes_GiveThePerpendicularDistance` (9 Nachkommastellen).
+  **Behoben:** in 0.8.10-beta, vor dem Commit.
+- **Warum:** Beim Mittelpunkt einer Fläche wurde das Gewicht `w / 3` mit `w` als `float` gerechnet – C# rechnet `float / int` in
+  `float`, obwohl das Ergebnis in eine `double`-Summe geht.
+- **Lösung:** Gewicht als `double` (`double w = areas[tri]`).
+- **Nicht tun:** Flächen- oder Längengewichte als `float` in Summen fürs Messen mischen.
+- **Wo im Code:** `FaceFinder.Find` (Abschnitt 4, Flächen).
+- **Test:** wie oben.
+
+## 111. 3D: Streifen einer Kugel wurden als Zylinder erkannt (während der Entwicklung)
+
+- **Entdeckt:** 31.10.2026, nach 0.8.10-beta, Test `FaceFinderTests.Sphere_IsFreeform`. **Behoben:** in 0.8.10-beta, vor dem Commit.
+- **Was:** Eine Spalte von Facetten entlang eines Längenkreises hat Normalen, die alle senkrecht zu einer waagerechten Achse stehen, und
+  ihre Ecken liegen bis auf etwa 0,2 % auf einem Kreis – mit der ersten Grenze (1 % des Radius) wurde jede Spalte ein „Zylinder“.
+- **Warum:** Doppelt gekrümmte Flächen weichen um etwa α²/8 des Radius vom Kreis ab (α = Winkel zwischen den Facetten); bei feiner
+  Teilung wird das beliebig klein, eine feste Grenze trennt also nicht.
+- **Lösung:** Die Grenze hängt an α: ein Fünfzigstel von α²/8 plus Float-Auflösung – CAD-Zylinder haben ihre Ecken exakt auf dem Kreis.
+  Dazu wird „geschlossen“ an einem Ring aus Facetten erkannt statt am Winkel (ein 12-eckiger Zylinder hat 330° zwischen seinen Ecken).
+- **Nicht tun:** Zylinder an einer festen relativen Abweichung erkennen.
+- **Wo im Code:** `FaceFinder.FitCylinder`, Ring-Prüfung in `FaceFinder.Find`.
+- **Test:** `FaceFinderTests.Sphere_IsFreeform`, `Cylinder_IsOneFace_WithItsRadius(12/48/360)`.

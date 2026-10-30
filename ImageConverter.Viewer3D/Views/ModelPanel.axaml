@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:v="using:ImageConverter.Viewer3D"
+             x:Class="ImageConverter.Viewer3D.Views.ModelPanel"
+             x:DataType="v:ModelViewModel">
+
+    <!-- Spalte links, solange ein Modell gezeigt wird: Kennzahlen, Darstellung, Messungen -->
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="12,12,8,12" Classes="settings">
+        <StackPanel Spacing="10">
+
+            <!-- ============================== Modell -->
+            <HeaderedContentControl Header="{l:T 'MODELL'}">
+                <StackPanel Spacing="2">
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Format'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Format}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Größe'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Size}" TextWrapping="Wrap"
+                                   ToolTip.Tip="{l:T 'Breite × Tiefe × Höhe des umschließenden Quaders (X × Y × Z). STL kennt keine Einheit – angenommen werden Millimeter.'}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Dreiecke'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Triangles}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Eckpunkte'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Vertices}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Oberfläche'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding SurfaceArea}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Volumen'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Volume}"
+                                   ToolTip.Tip="{l:T 'Nur bei einem geschlossenen Modell genau; sonst mit ≈ als Näherung.'}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Geschlossen'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Closed}" TextWrapping="Wrap"
+                                   ToolTip.Tip="{l:T 'Geschlossen (dicht) heißt: jede Kante gehört zu genau zwei Dreiecken. Nur dann ist das Modell druckbar und das Volumen eindeutig.'}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Teile'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Parts}"
+                                   ToolTip.Tip="{l:T 'Zusammenhängende Teile (Körper) im Modell. „Teile färben“ zeigt sie in eigenen Farben.'}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Flächen'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding FaceCount}" TextWrapping="Wrap" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*" IsVisible="{Binding HasHeader}">
+                        <TextBlock Classes="label" Text="{l:T 'Kopfzeile'}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Header}" TextWrapping="Wrap" />
+                    </Grid>
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,6,0,0" Text="{Binding Warning}"
+                               IsVisible="{Binding Warning, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <!-- ============================== Ansicht -->
+            <HeaderedContentControl Header="{l:T 'ANSICHT'}">
+                <StackPanel>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Darstellung'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding ModeIndex}">
+                            <ComboBoxItem Content="{l:T 'Fläche'}" />
+                            <ComboBoxItem Content="{l:T 'Drahtgitter'}" />
+                            <ComboBoxItem Content="{l:T 'Bauplan'}" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Projektion'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding ProjectionIndex}"
+                                  ToolTip.Tip="{l:T 'Orthografisch: Größen hängen nicht von der Entfernung ab – gut zum Messen. Perspektive: natürlicher Eindruck.'}">
+                            <ComboBoxItem Content="{l:T 'Orthografisch'}" />
+                            <ComboBoxItem Content="{l:T 'Perspektive'}" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Drehen um'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding PivotIndex}"
+                                  ToolTip.Tip="{l:T 'Klickstelle: gedreht wird um die Stelle unter der Maus, sie bleibt im Blick. Modellmitte: um die senkrechte Mittelachse des Modells, wie auf einem Drehteller.'}">
+                            <ComboBoxItem Content="{l:T 'Klickstelle'}" />
+                            <ComboBoxItem Content="{l:T 'Modellmitte'}" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Einheit'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding UnitIndex}">
+                            <ComboBoxItem Content="{l:T 'Millimeter'}" />
+                            <ComboBoxItem Content="{l:T 'Zoll'}" />
+                        </ComboBox>
+                    </Grid>
+                    <CheckBox IsChecked="{Binding ShowEdges}" Content="{l:T 'Kanten zeigen'}"
+                              ToolTip.Tip="{l:T 'Feine Linien an scharfen Kanten (in der Ansicht „Fläche“).'}" />
+                    <CheckBox IsChecked="{Binding ShowParts}" Content="{l:T 'Teile färben'}"
+                              ToolTip.Tip="{l:T 'Jedes zusammenhängende Teil in einer eigenen Farbe.'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="{l:T 'Linke Maustaste ziehen: drehen · rechte oder mittlere (oder Strg + links): verschieben · Mausrad: zoomen · Doppelklick: einpassen.'}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <!-- ============================== Messen -->
+            <HeaderedContentControl Header="{l:T 'MESSEN'}">
+                <StackPanel Spacing="8">
+                    <ToggleButton Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                  Padding="12,6" IsChecked="{Binding MeasureTool}" Content="{l:T '📏  Messen'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding MeasureHint}" />
+                    <Border IsVisible="{Binding HasPending}" Padding="8,4" CornerRadius="6"
+                            Background="{DynamicResource SurfaceAltBrush}">
+                        <TextBlock Text="{Binding PendingText}" TextWrapping="Wrap" />
+                    </Border>
+
+                    <ItemsControl ItemsSource="{Binding Measurements}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="v:MeasurementItem">
+                                <Border Margin="0,0,0,6" Padding="8,6" CornerRadius="8"
+                                        Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Border Grid.Column="0" Width="10" Height="10" CornerRadius="5" Margin="0,4,8,0"
+                                                VerticalAlignment="Top" Background="{Binding Brush}" />
+                                        <StackPanel Grid.Column="1" Spacing="2">
+                                            <TextBlock FontWeight="SemiBold" FontSize="12" Text="{Binding Title}" />
+                                            <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding Lines}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Classes="icon" Width="24" Height="24" FontSize="11" VerticalAlignment="Top"
+                                                Content="✕" Command="{Binding DeleteCommand}"
+                                                ToolTip.Tip="{l:T 'Dieses Maß entfernen'}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            IsVisible="{Binding HasMeasurements}"
+                            Content="{l:T 'Alle Maße löschen'}" Command="{Binding ClearMeasurementsCommand}" />
+                </StackPanel>
+            </HeaderedContentControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

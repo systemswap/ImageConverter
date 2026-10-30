@@ -45,7 +45,7 @@ public partial class MainViewModel
 
     /// <summary>The displayed image state in full resolution, without the settings chain (size, denoise, adjustments, sharpening).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage), nameof(CompareBitmap))]
+    [NotifyPropertyChangedFor(nameof(DisplayBitmap), nameof(HasImage), nameof(CompareBitmap), nameof(ShowsEmptyState))]
     [NotifyCanExecuteChangedFor(nameof(RotateLeftCommand), nameof(RotateRightCommand), nameof(FlipHorizontalCommand), nameof(ExportCommand), nameof(PrintCommand))]
     public partial Bitmap? FullBitmap { get; set; }
 

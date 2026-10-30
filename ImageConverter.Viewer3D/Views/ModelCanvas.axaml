@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:v="using:ImageConverter.Viewer3D"
+             xmlns:r="using:ImageConverter.Viewer3D.Rendering"
+             x:Class="ImageConverter.Viewer3D.Views.ModelCanvas"
+             x:DataType="v:ModelViewModel">
+
+    <DockPanel LastChildFill="True">
+
+        <!-- Werkzeugleiste unter dem Modell: einpassen, feste Ansichten, Messen -->
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush2}"
+                BorderThickness="0,1,0,0"
+                Padding="10,6">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                <Button Grid.Column="0" Classes="tool" Content="{l:T '⤢  Einpassen'}" Command="{Binding FitCommand}"
+                        ToolTip.Tip="{l:T 'Ganzes Modell zeigen (F oder Doppelklick ins Bild).'}" />
+
+                <Rectangle Grid.Column="1" Width="1" Margin="10,4" Fill="{DynamicResource BorderBrush2}" />
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                    <Button Classes="tool" Content="{l:T 'Iso'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Iso}"
+                            ToolTip.Tip="{l:T 'Schräg von vorn rechts oben'}" />
+                    <Button Classes="tool" Content="{l:T 'Vorne'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Front}" />
+                    <Button Classes="tool" Content="{l:T 'Hinten'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Back}" />
+                    <Button Classes="tool" Content="{l:T 'Links'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Left}" />
+                    <Button Classes="tool" Content="{l:T 'Rechts'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Right}" />
+                    <Button Classes="tool" Content="{l:T 'Oben'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Top}" />
+                    <Button Classes="tool" Content="{l:T 'Unten'}" Command="{Binding ShowViewCommand}" CommandParameter="{x:Static r:StandardView.Bottom}" />
+                </StackPanel>
+
+                <!-- Was unter der Maus liegt, oder wie es beim Messen weitergeht -->
+                <TextBlock Grid.Column="3" Classes="hint" Margin="14,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" x:Name="Status" />
+
+                <ToggleButton Grid.Column="4" Classes="chain" Width="NaN" Padding="12,5" FontSize="12"
+                              IsChecked="{Binding MeasureTool}"
+                              Content="{l:T '📏  Messen'}">
+                    <ToolTip.Tip>
+                        <StackPanel MaxWidth="320" Spacing="4">
+                            <TextBlock FontWeight="SemiBold" Text="{l:T 'Messen'}" />
+                            <TextBlock TextWrapping="Wrap" Text="{l:T 'Zwei Flächen nacheinander anklicken – das Maß erscheint und bleibt stehen. Der nächste Klick beginnt ein neues Maß.'}" />
+                            <TextBlock TextWrapping="Wrap" Text="{l:T 'Ein Klick auf eine gewählte Fläche hebt die Wahl auf. Klick auf die Beschriftung eines Maßes entfernt es.'}" />
+                            <TextBlock TextWrapping="Wrap" Text="{l:T 'Umschalt + Klick misst zwischen Punkten. Ein Zylinder zeigt sofort seinen Durchmesser.'}" />
+                        </StackPanel>
+                    </ToolTip.Tip>
+                </ToggleButton>
+            </Grid>
+        </Border>
+
+        <Panel x:Name="Stage">
+            <!-- 3D-Ansicht und Maßlinien kommen aus dem Code (sie brauchen das Modell beim Erzeugen) -->
+
+            <!-- Fortschritt der Flächenerkennung -->
+            <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="12" Padding="12,6" CornerRadius="10"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                    IsHitTestVisible="False"
+                    IsVisible="{Binding Progress, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <TextBlock Classes="hint" Text="{Binding Progress}" />
+            </Border>
+
+            <!-- Ohne passendes OpenGL: Hinweis statt Bild -->
+            <Border x:Name="NoGl" IsVisible="False" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460"
+                    Padding="18,14" CornerRadius="12"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="{l:T '3D-Anzeige nicht möglich'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Die Grafik dieses Rechners bietet kein OpenGL 3 (oder OpenGL ES 3). Maße und Kennzahlen des Modells stehen trotzdem links.'}" />
+                    <TextBlock x:Name="NoGlDetail" Classes="hint" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Panel>
+    </DockPanel>
+</UserControl>
