@@ -457,3 +457,4 @@ published/
 # Local backup of the downloaded AI models (several GB; some licences forbid passing them on).
 # publish.sh / publish.ps1 put them next to the built program, never into the packages.
 tools/KI-Models/
+extern/RMBG-2.0/

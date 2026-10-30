@@ -408,8 +408,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     private double Expected(AiModel model) =>
         (model.Id, _ai.Sessions.OnGpu && model.Gpu) switch
         {
-            ("birefnet-lite", false) => 11,
-            ("birefnet-lite", true) => 8,
+            ("birefnet-lite", _) => 11,
             ("ben2", _) => 17,
             ("rmbg-2.0", true) => 14,
             ("birefnet-general-gpu", true) => 12,

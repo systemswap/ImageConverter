@@ -118,7 +118,8 @@ Je Modell (Notebook mit integrierter Grafik, je eigener Prozess, 1024², MB priv
 | RMBG-2.0 | CPU | 10,7 s | 27,7 s | 6 096–7 154 | 1 075 | 33 |
 | RMBG-2.0 | Grafikkarte | 9,0 s | 16,0 s | 13 505 | 13 490 | 323 |
 
-Die Spitze auf der Grafikkarte bleibt: Sie ist der Preis des Rechenwegs, bei lite für 3 s Gewinn rund 10 GB mehr.
+Die Spitze auf der Grafikkarte bleibt: Sie ist der Preis des Rechenwegs. BiRefNet lite rechnet deshalb seit 0.7.5 beta nur
+noch auf der CPU (3 s langsamer, rund 10 GB weniger); BiRefNet general nur mit dem optionalen Zusatz auf der Grafikkarte.
 Prüfung: `BackgroundTests` (Ersatzmodell: Kanten, Rot, Grün mit Zoom, Farbsaum, Unscharf, Ausschnitt);
 `~/.cache/imageconverter-build/hintergrund-probe` (Kern an den Testbildern), `hintergrund-ui` (Rubrik im unsichtbaren
 Fenster: Automatik, Rot, Grün, Unscharf, Export PNG, Rückgängig).

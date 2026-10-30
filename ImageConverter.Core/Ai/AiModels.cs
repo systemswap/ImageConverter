@@ -432,7 +432,10 @@ public static class AiModelCatalog
         Gpu: true,
         GpuWithoutOptimization: true);
 
-    /// <summary>Gets BiRefNet lite (Swin tiny, 1024 px): about twice as fast, leaves more remnants.</summary>
+    /// <summary>
+    /// Gets BiRefNet lite (Swin tiny, 1024 px): about twice as fast, leaves more remnants. CPU only: the graphics card saved
+    /// 3 s but needed 15.6 instead of 6 GB (docs/KI-HINTERGRUND.md).
+    /// </summary>
     public static AiModel BiRefNetLite { get; } = new(
         "birefnet-lite",
         "BiRefNet lite",
@@ -447,9 +450,7 @@ public static class AiModelCatalog
         License: "MIT",
         NonCommercial: false,
         Origin: "Peng Zheng u. a. (BiRefNet lite), ONNX vom Autor",
-        TileSize: 1024,
-        Gpu: true,
-        GpuWithoutOptimization: true);
+        TileSize: 1024);
 
     /// <summary>Gets BEN2 base: finest hair, but keeps people in the background more often. CPU only (differs on DirectML).</summary>
     public static AiModel Ben2 { get; } = new(
