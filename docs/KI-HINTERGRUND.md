@@ -72,7 +72,16 @@ Das Modell sieht das Bild also ohne Regler (Stufe 4); sie bleiben beim neuen Ver
 Ergebnis. Es sieht aber KI- und Entfernen-Schritte, die vor dem Hintergrund-Schritt liegen.
 
 Transparente Pixel sparen in den Stufen 3–4 heute keine Rechenzeit: Die Filter rechnen alle Pixel und kopieren Alpha nur
-durch. Unter voll transparenten Pixeln liegen die alten Farben, die Filter sehen sie also (Wirkung nicht gemessen).
+durch. Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `~/.cache/imageconverter-build/transparent-probe`):
+
+- **Zeit je Stufe:** Rauschen 1,1–1,4 s, Dunst 1,9–2,4 s, Tiefen/Lichter 0,9–1,0 s, Licht und Farbe 0,1 s, Schärfen 0,1 s.
+  Die reinen Pixel-Stufen, die man leicht überspringen könnte, machen also nur rund 2 % aus; die teuren brauchen Nachbarn
+  oder schätzen über das ganze Bild.
+- **Verdeckter Hintergrund wirkt aufs Motiv:** Unter den unsichtbaren Pixeln (Alpha unter 1/255) liegen die alten Farben. Mit
+  Schwarz statt dieser Farben ändern sich die deckenden Pixel des Motivs nach dem Dunst im Mittel um 1,0–4,1 Stufen (15–60 %
+  der Pixel über 2 Stufen). Das zeigt die Empfindlichkeit, nicht welches Ergebnis besser ist; Schwarz übertreibt an Kanten.
+- **Fast nirgends Alpha genau 0:** 55–88 % der Pixel sind unsichtbar, aber nur 11–24 % haben Alpha genau 0, der Rest winzige Werte
+  aus dem Kantenfilter. Überspringen dürfte also nicht auf „genau 0“ prüfen.
 
 ## Rechnung (`ImageConverter.Core/Ai/BackgroundRemover.cs`)
 
