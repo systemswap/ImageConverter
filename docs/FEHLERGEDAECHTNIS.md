@@ -2473,3 +2473,16 @@ Test oder Nachweis.
 - **Test:** unsichtbares Fenster `~/.cache/imageconverter-build/hintergrund-ui`, echte Modelle, ganzes Bild verglichen: lite →
   BEN2, auch mit Regler und mit Zwischenschritt, gleich BEN2 direkt (0 Werte verschieden); Gegenprobe BEN2 auf dem
   freigestellten Bild: 3,5 Mio. Werte verschieden. Im Testprojekt fehlt die Fensterumgebung (siehe offene Punkte).
+
+## 91. Hintergrund: Zweiter Versuch hing bei Bildern ab 1 Megapixel (0.7.1 beta)
+
+- **Entdeckt:** 30.10.2026, 0.7.1-beta, bei der Speichermessung mit einem Bild 3000 × 2250: Der Lauf endete erst am
+  Zeitlimit, ohne Meldung. **Behoben:** 0.7.2-beta. Nur 0.7.1-beta betroffen.
+- **Was:** Der neue Versuch kam nie an: Die Anzeige blieb bei „Rechnet …“, auch Abbrechen half nicht.
+- **Warum:** `ShowOriginalAsync` hielt `lock (start)` um das Verkleinern. `ImageOps.Resize` sperrt das Bild selbst und rechnet
+  ab 1 MP parallel; die Arbeitsfäden warteten auf die Sperre des Aufrufers, der auf sie wartete.
+- **Warum nicht vorher gesehen:** Das Testbild des Prüfstands hatte 0,88 MP und lag knapp unter der Grenze.
+- **Lösung:** Keine Sperre um `Resize`, wie an den anderen Aufrufstellen.
+- **Nicht tun:** Eine Sperre halten, während eine Methode läuft, die intern parallel arbeitet. Prüfstände nur mit kleinen
+  Bildern fahren: Immer auch eines über den Parallel-Grenzen nehmen.
+- **Test:** `hintergrund-ui` mit dem Bild 3000 × 2250, alle Schritte; `hintergrund-speicher` läuft durch.

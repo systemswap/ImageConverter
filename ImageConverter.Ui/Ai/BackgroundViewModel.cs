@@ -388,9 +388,8 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         {
             var shown = await Task.Run(() =>
             {
-                AiPreviewFrame frame;
-                lock (start) frame = AiViewModel.Original(start, size);
-                return MainViewModel.ShowWithGeometry(frame, 0, false, geometry.Recipe, geometry.Stages);
+                // No lock around it: Resize locks the image itself and works in parallel from 1 MP on (No. 91)
+                return MainViewModel.ShowWithGeometry(AiViewModel.Original(start, size), 0, false, geometry.Recipe, geometry.Stages);
             });
             var bitmap = ImageConverter.Imaging.BitmapOps.FromBgra(shown.Bgra, shown.Width, shown.Height);
             _main.OverrideBitmap = bitmap;
