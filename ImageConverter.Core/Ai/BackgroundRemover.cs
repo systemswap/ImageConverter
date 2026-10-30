@@ -158,8 +158,21 @@ public static class BackgroundRemover
     /// <param name="strokes">Strokes in pixel-image coordinates; <see cref="BrushStroke.Keep"/> = green.</param>
     /// <param name="zoomDetect">Runs the model on a part of the image (pixel-image rectangle); null = no zoomed run.</param>
     /// <returns>The edited mask (a new array).</returns>
-    public static float[] Edit(BackgroundMask mask, IReadOnlyList<BrushStroke> strokes, Func<SourceRect, BackgroundMask>? zoomDetect)
+    public static float[] Edit(BackgroundMask mask, IReadOnlyList<BrushStroke> strokes, Func<SourceRect, BackgroundMask>? zoomDetect) =>
+        Edit(mask, strokes, zoomDetect, out _);
+
+    /// <summary>Like <see cref="Edit(BackgroundMask, IReadOnlyList{BrushStroke}, Func{SourceRect, BackgroundMask}?)"/>, and reports
+    /// how much green keeps of each pixel.</summary>
+    /// <param name="mask">Detected mask.</param>
+    /// <param name="strokes">Strokes in pixel-image coordinates.</param>
+    /// <param name="zoomDetect">Runs the model on a part of the image; null = no zoomed run.</param>
+    /// <param name="kept">Strength of the green strokes per pixel of the mask (0 … 1); null without green. <see cref="Compose"/>
+    /// takes the original colours there, so that a stroke at 40 % keeps 40 % of the photo itself.</param>
+    /// <returns>The edited mask (a new array).</returns>
+    public static float[] Edit(BackgroundMask mask, IReadOnlyList<BrushStroke> strokes, Func<SourceRect, BackgroundMask>? zoomDetect,
+        out float[]? kept)
     {
+        kept = null;
         var alpha = (float[])mask.Alpha.Clone();
         if (strokes.Count == 0) return alpha;
         int w = mask.Width, h = mask.Height;
@@ -169,19 +182,48 @@ public static class BackgroundRemover
             Points = st.Points.Select(p => ((p.X - mask.Region.X) * scale, (p.Y - mask.Region.Y) * scale)).ToArray(),
             Radius = Math.Max(1, st.Radius * scale),
         };
-        var green = Inpainter.Rasterize(strokes.Where(st => st.Keep).Select(ToWork).ToArray(), w, h, 0);
-        var red = Inpainter.Rasterize(strokes.Where(st => !st.Keep).Select(ToWork).ToArray(), w, h, 0);
+        var keepStrokes = strokes.Where(st => st.Keep).Select(ToWork).ToArray();
+        var green = Inpainter.Rasterize(keepStrokes, w, h, 0);
+        // Only strokes at full strength add whole objects: a weak stroke over a railing should not keep the whole object hard
+        var whole = keepStrokes.All(st => st.Strength >= 1) ? green : Inpainter.Rasterize(keepStrokes.Where(st => st.Strength >= 1).ToArray(), w, h, 0);
+        var redStrokes = strokes.Where(st => !st.Keep).Select(ToWork).ToArray();
+        var red = Inpainter.Rasterize(redStrokes, w, h, 0);
+        // Soft red strokes: what lies under them fades out towards their edge instead of ending hard (whole objects still go)
+        var redSoft = redStrokes.Any(st => st.Hardness < 1) ? Coverage(redStrokes, w, h, strength: false) : null;
 
         // Green first: objects found by a zoomed run around the green strokes (the first run missed them)
-        if (zoomDetect is not null && Bounds(green, w, h) is { } box)
+        if (zoomDetect is not null && Bounds(whole, w, h) is { } box)
         {
             var zoom = zoomDetect(ToPixels(Grow(box, w, h), mask, scale));
             var zoomAlpha = SampleInto(zoom, mask);
             var zoomLabels = Components(zoomAlpha, w, h);
-            var picked = Touched(zoomLabels, green);
+            var picked = Touched(zoomLabels, whole);
             for (var i = 0; i < alpha.Length; i++)
                 if (zoomLabels[i] > 0 && picked.Contains(zoomLabels[i])) alpha[i] = Math.Max(alpha[i], zoomAlpha[i]);
         }
+        // What green covers stays in any case, even where the model sees no subject, not even zoomed in: otherwise the marked
+        // part was blurred or removed anyway (No. 104). A weaker stroke keeps it at its strength (a railing 40 % sharp). The
+        // edges still come from the photo (guided filter in Compose).
+        var level = keepStrokes.Length > 0 ? new float[alpha.Length] : null;
+        var hard = keepStrokes.Where(st => st.Hardness >= 1).ToArray();
+        foreach (var group in hard.GroupBy(st => Math.Clamp(st.Strength, 0, 1)))
+        {
+            var strength = (float)group.Key;
+            var covered = group.Count() == keepStrokes.Length ? green : Inpainter.Rasterize(group.ToArray(), w, h, 0);
+            for (var i = 0; i < alpha.Length; i++)
+                if (covered[i] != 0 && level![i] < strength) level[i] = strength;
+        }
+        // Soft strokes: the strength falls off towards their edge (docs/KI-HINTERGRUND.md, „Bedienung“)
+        if (hard.Length < keepStrokes.Length)
+        {
+            var soft = Coverage(keepStrokes.Where(st => st.Hardness < 1).ToArray(), w, h, strength: true);
+            for (var i = 0; i < alpha.Length; i++)
+                if (level![i] < soft[i]) level[i] = soft[i];
+        }
+        if (level is not null)
+            for (var i = 0; i < alpha.Length; i++)
+                if (alpha[i] < level[i]) alpha[i] = level[i];
+        kept = level;
 
         // Then red: whole objects it touches, unless green touches them too, and leftovers under the stroke
         var labels = Components(alpha, w, h);
@@ -192,7 +234,7 @@ public static class BackgroundRemover
         {
             var label = labels[i];
             if (label > 0 && drop.Contains(label)) alpha[i] = 0;
-            else if (red[i] != 0 && (label == 0 || !keep.Contains(label))) alpha[i] = 0;
+            else if (red[i] != 0 && (label == 0 || !keep.Contains(label))) alpha[i] = redSoft is null ? 0 : alpha[i] * (1 - redSoft[i]);
         }
         return alpha;
     }
@@ -207,9 +249,12 @@ public static class BackgroundRemover
     /// <param name="mode">Transparent or blurred background.</param>
     /// <param name="blur">Blur of the background, 0 … 1 (fraction of the long edge × 0.02 as Gaussian sigma).</param>
     /// <param name="ct">Cancels the computation.</param>
+    /// <param name="kept">Strength of green strokes per pixel of the mask (from <see cref="Edit(BackgroundMask, IReadOnlyList{BrushStroke}, Func{SourceRect, BackgroundMask}?, out float[])"/>);
+    /// there the original colours are taken instead of the estimated foreground colours: the mix is the user's, not a
+    /// soft edge such as hair, and a stroke at 40 % should keep 40 % of the photo. null = none.</param>
     /// <returns>A new image (with alpha channel when transparent); full bit depth, profiles kept.</returns>
     public static MagickImage Compose(MagickImage image, BackgroundMask mask, float[] alpha, BackgroundMode mode, double blur,
-        CancellationToken ct)
+        CancellationToken ct, float[]? kept = null)
     {
         int w = mask.Width, h = mask.Height, n = w * h;
         var (coeffA, coeffB) = GuidedColor.Coefficients(mask.Guide, alpha, w, h, GuideSigma, GuideEps);
@@ -281,6 +326,13 @@ public static class BackgroundRemover
                         var i = c == 0 ? r : c == 1 ? g : b;
                         float bf = cell.Of(fore, c, 3), bb = cell.Of(back, c, 3);
                         f[c] = Math.Clamp(bf + al * (i - al * bf - (1 - al) * bb), 0, 1);
+                    }
+                    if (kept is not null && cell.Of(kept, 0, 1) is var keptHere and > 0)
+                    {
+                        var own = Math.Clamp(keptHere / Math.Max(al, 1e-3f), 0, 1);   // share of the mask that green set
+                        f[0] += own * (r - f[0]);
+                        f[1] += own * (g - f[1]);
+                        f[2] += own * (b - f[2]);
                     }
                     float outR, outG, outB;
                     if (mode == BackgroundMode.Transparent)
@@ -456,6 +508,53 @@ public static class BackgroundRemover
         for (var c = 0; c < 3; c++)
             color[i * 3 + c] = weight[i] > 1e-4f ? color[i * 3 + c] / weight[i] : image[i * 3 + c];
         return color;
+    }
+
+    /// <summary>
+    /// How much strokes cover each pixel, with soft edges: full up to <see cref="BrushStroke.Hardness"/> × radius, then falling
+    /// off smoothly (smoothstep) to 0 at the radius; overlapping strokes take the maximum.
+    /// </summary>
+    /// <param name="strokes">Strokes at working resolution.</param>
+    /// <param name="w">Width of the grid.</param>
+    /// <param name="h">Height of the grid.</param>
+    /// <param name="strength">Multiply by <see cref="BrushStroke.Strength"/> (green); false = 1 (red).</param>
+    /// <returns>Coverage 0…1 per pixel.</returns>
+    internal static float[] Coverage(IReadOnlyList<BrushStroke> strokes, int w, int h, bool strength)
+    {
+        var cover = new float[w * h];
+        foreach (var st in strokes)
+        {
+            if (st.Points.Count == 0) continue;
+            var r = Math.Max(0.5, st.Radius);
+            var inner = r * Math.Clamp(st.Hardness, 0, 1);
+            var top = strength ? (float)Math.Clamp(st.Strength, 0, 1) : 1f;
+            var pts = st.Points;
+            int x0 = Math.Max(0, (int)Math.Floor(pts.Min(p => p.X) - r)), x1 = Math.Min(w - 1, (int)Math.Ceiling(pts.Max(p => p.X) + r));
+            int y0 = Math.Max(0, (int)Math.Floor(pts.Min(p => p.Y) - r)), y1 = Math.Min(h - 1, (int)Math.Ceiling(pts.Max(p => p.Y) + r));
+            Parallel.For(y0, y1 + 1, y =>
+            {
+                for (var x = x0; x <= x1; x++)
+                {
+                    double px = x + 0.5, py = y + 0.5, best = double.MaxValue;
+                    for (var k = 0; k < pts.Count; k++)
+                    {
+                        var (ax, ay) = pts[k];
+                        var (bx, by) = k + 1 < pts.Count ? pts[k + 1] : pts[k];
+                        double dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+                        var t = len > 0 ? Math.Clamp(((px - ax) * dx + (py - ay) * dy) / len, 0, 1) : 0;
+                        double ex = px - (ax + t * dx), ey = py - (ay + t * dy);
+                        best = Math.Min(best, ex * ex + ey * ey);
+                    }
+                    var d = Math.Sqrt(best);
+                    if (d >= r) continue;
+                    var v = d <= inner ? 1.0 : 1 - (d - inner) / (r - inner);
+                    var value = top * (float)(v * v * (3 - 2 * v));   // smoothstep: no visible ring at the inner radius
+                    var i = y * w + x;
+                    if (cover[i] < value) cover[i] = value;
+                }
+            });
+        }
+        return cover;
     }
 
     // ------------------------------------------------------------ Objects

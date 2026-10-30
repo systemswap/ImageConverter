@@ -62,7 +62,7 @@
                 <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         Margin="0,4,0,0" Content="{l:T 'KI berechnen'}"
                         Command="{Binding ApplyCommand}"
-                        ToolTip.Tip="{l:T 'Rechnet das Modell und zeigt das Ergebnis. Danach wirken die Regler live; ins Bild kommt es erst mit „Übernehmen“. Gerechnet wird immer auf dem Stand vor der letzten KI — nichts häuft sich an.'}" />
+                        ToolTip.Tip="{l:T 'Rechnet das Modell und schreibt das Ergebnis ins Bild. Stärke, Haut, Falten und Körnung wirken danach weiter. Gerechnet wird immer auf dem Stand vor der letzten KI — nichts häuft sich an.'}" />
 
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
                            IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -120,15 +120,7 @@
                           IsChecked="{Binding ShowMap}" Content="{l:T 'Karte zeigen'}"
                           ToolTip.Tip="{l:T 'Nur Gesichtsmodelle, sobald ein Ergebnis da ist: zeigt, was wohin kommt — rot, wo Falten aus dem Original zurückkommen (je kräftiger, desto mehr), blau, was vom Modell bleibt (Augen, Brauen, Lippen, Zähne).'}" />
 
-                <!-- Offenes Ergebnis: übernehmen oder verwerfen -->
-                <Grid ColumnDefinitions="*,6,*" Margin="0,6,0,0" IsVisible="{Binding HasPending}">
-                    <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                            Content="{l:T 'Übernehmen'}" Command="{Binding CommitCommand}"
-                            ToolTip.Tip="{l:T 'Schreibt das Ergebnis mit den aktuellen Reglern ins Bild. Rückgängig mit Strg+Z.'}" />
-                    <Button Grid.Column="2" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                            Content="{l:T 'Verwerfen'}" Command="{Binding DiscardCommand}"
-                            ToolTip.Tip="{l:T 'Ergebnis verwerfen — das Bild bleibt, wie es war.'}" />
-                </Grid>
+                <!-- The result is in the image right away; the blend sliders keep working on it -->
 
                 <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,6,0,0"
                            Text="{l:T 'Läuft lokal auf deinem Rechner. Kann je nach Bild einige Minuten dauern.'}" />

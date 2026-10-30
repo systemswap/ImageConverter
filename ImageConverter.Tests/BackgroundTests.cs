@@ -448,4 +448,62 @@ public class BackgroundTests
         Assert.False(background.EnableCpuMemArena);
         Assert.True(other.EnableCpuMemArena);
     }
+    [Theory]
+    [InlineData(BackgroundMode.Transparent)]
+    [InlineData(BackgroundMode.Blur)]
+    public void GreenStroke_KeepsWhatItCovers_EvenIfTheModelSeesNothingThere(BackgroundMode mode)
+    {
+        // Green over something the model does not take for the subject, not even zoomed in: it was ignored, the marked part
+        // was blurred anyway (No. 104)
+        using var img = Scene();
+        var blind = new ColourModel(seeBlue: false);
+        var mask = BackgroundRemover.Detect(img, Whole, blind, CancellationToken.None);
+        var alpha = BackgroundRemover.Edit(mask, [new BrushStroke([(420, 200), (500, 200)], 12, Keep: true)],
+            r => BackgroundRemover.Detect(img, r, blind, CancellationToken.None));
+        using var result = BackgroundRemover.Compose(img, mask, alpha, mode, 1, CancellationToken.None);
+        var before = Rgba(AddAlpha((MagickImage)img.Clone()));
+        var after = Rgba(result);
+
+        // Near the edge of the blue disc, under the green stroke: blurring would mix in the green next to it
+        var edge = (200 * W + 505) * 4;
+        if (mode == BackgroundMode.Transparent)
+            Assert.True(AlphaAt(after, 505, 200) > 0.9f, $"bleibt sichtbar: {AlphaAt(after, 505, 200)}");
+        else
+            Assert.True(Math.Abs(after[edge + 2] - before[edge + 2]) < 1500 && Math.Abs(after[edge + 1] - before[edge + 1]) < 1500,
+                $"bleibt scharf: Blau {before[edge + 2]} → {after[edge + 2]}, Grün {before[edge + 1]} → {after[edge + 1]}");
+    }
+
+    [Fact]
+    public void WeakGreenStroke_KeepsOnlyItsShare()
+    {
+        // A railing painted green at 40 %: in the blur mode 40 % of it stays sharp (mask transparency, docs/KI-HINTERGRUND.md)
+        using var img = Scene();
+        var blind = new ColourModel(seeBlue: false);
+        var mask = BackgroundRemover.Detect(img, Whole, blind, CancellationToken.None);
+        var alpha = BackgroundRemover.Edit(mask, [new BrushStroke([(420, 200), (500, 200)], 12, Keep: true, Strength: 0.4)],
+            r => BackgroundRemover.Detect(img, r, blind, CancellationToken.None));
+        using var result = BackgroundRemover.Compose(img, mask, alpha, BackgroundMode.Transparent, 0, CancellationToken.None);
+
+        var a = AlphaAt(Rgba(result), 460, 200);
+        Assert.InRange(a, 0.3f, 0.5f);
+    }
+
+    [Fact]
+    public void SoftGreenStroke_FallsOffTowardsItsEdge()
+    {
+        // Hardness 0: full in the middle of the stroke, falling off softly to its edge (docs/KI-HINTERGRUND.md, „Bedienung“)
+        using var img = Scene();
+        var blind = new ColourModel(seeBlue: false);
+        var mask = BackgroundRemover.Detect(img, Whole, blind, CancellationToken.None);
+        float AlphaWith(double hardness, int y)
+        {
+            var alpha = BackgroundRemover.Edit(mask, [new BrushStroke([(420, 200), (500, 200)], 12, Keep: true, Hardness: hardness)],
+                r => BackgroundRemover.Detect(img, r, blind, CancellationToken.None));
+            using var result = BackgroundRemover.Compose(img, mask, alpha, BackgroundMode.Transparent, 0, CancellationToken.None);
+            return AlphaAt(Rgba(result), 460, y);
+        }
+
+        Assert.True(AlphaWith(0, 200) > 0.75f, $"Mitte fast voll: {AlphaWith(0, 200)}");
+        Assert.True(AlphaWith(0, 209) < AlphaWith(1, 209) - 0.3f, $"Rand weich: {AlphaWith(0, 209)} gegen hart {AlphaWith(1, 209)}");
+    }
 }

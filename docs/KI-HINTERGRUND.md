@@ -11,9 +11,16 @@ Geometrie, Größe/Upscaling und allen Filtern.
   (Vorher/Nachher-Strich, Zuschnitt).
 - **Rot: weg** — grob über etwas malen, das nicht zum Motiv gehört: jedes Objekt, das der Strich berührt, verschwindet
   ganz (dazu alles direkt unter dem Strich).
-- **Grün: bleibt** — grob über etwas malen, das bleiben soll: berührte Objekte sind vor Rot geschützt. Fehlt ein Teil des
-  Motivs, rechnet das Modell den Bereich um die grünen Striche (Rahmen + 50 %) vergrößert noch einmal und ergänzt die
-  Objekte, die Grün dort berührt.
+- **Grün: bleibt** — über etwas malen, das bleiben soll: Was grün übermalt ist, bleibt in jedem Fall (beim Unscharf-Modus
+  scharf), auch wo das Modell kein Motiv sieht; die Kanten kommen weiter aus dem Foto (Fehlergedächtnis #104). Berührte
+  Objekte sind vor Rot geschützt. Fehlt ein Teil des Motivs, rechnet das Modell den Bereich um die grünen Striche (Rahmen
+  + 50 %) vergrößert noch einmal und ergänzt die Objekte, die Grün dort berührt.
+- **Stärke** (nur Grün, 10–100 %): wie viel von dem, was ein neuer grüner Strich überdeckt, bleibt – ein Geländer mit 40 % ist im
+  Unscharf-Modus zu 40 % scharf, beim Entfernen zu 40 % sichtbar (Maske halb durchsichtig). Nur Striche mit voller Stärke ergänzen
+  ganze Objekte über den Zoom-Lauf. In der Vorschau sind schwächere Striche blasser.
+- **Härte** (Rot und Grün, 0–100 %): 100 % harte Kante; weniger lässt die Wirkung vom inneren Teil des Pinsels (Härte × Radius) bis
+  zum Rand weich auslaufen (Smoothstep). Bei Rot gilt das für das, was direkt unter dem Strich weggeht; berührte Objekte gehen
+  weiter ganz. Jeder Strich behält Stärke und Härte, mit denen er gemalt wurde.
 - **Noch einmal anwenden** (Striche, Modus oder Stärke geändert) rechnet vom Bild vor dem Hintergrund-Schritt und nimmt die
   gemerkte Maske — ohne neue Erkennung, 1–3 s. Der Regler rechnet erst beim Klick, nicht beim Ziehen.
 - **Anderes Modell:** dasselbe mit neuer Erkennung; das Ergebnis ist pixelgleich mit diesem Modell direkt auf dem Bild

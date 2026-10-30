@@ -81,6 +81,18 @@
                                 ToolTip.Tip="{l:T 'Größe des Pinsels auf dem Bildschirm. Zum genauen Malen mit Strg + Mausrad hineinzoomen — der Pinsel bleibt gleich groß.'}" />
                         <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrushSizeLabel}" />
                     </Grid>
+                    <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding !IsAuto}">
+                        <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Härte'}" />
+                        <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding BrushHardness}"
+                                ToolTip.Tip="{l:T 'Wie weich ein neuer Strich zum Rand ausläuft: 100 % harte Kante, weniger läuft vom inneren Teil des Pinsels weich aus. Schon gemalte Striche behalten ihre Härte.'}" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrushHardnessLabel}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="76,*,Auto" IsVisible="{Binding IsKeepBrush}">
+                        <TextBlock Grid.Column="0" Classes="label" Text="{l:T 'Stärke'}" />
+                        <Slider Grid.Column="1" Minimum="10" Maximum="100" Value="{Binding KeepStrength}"
+                                ToolTip.Tip="{l:T 'Wie viel von dem, was ein neuer grüner Strich überdeckt, bleibt: 100 % ganz, 40 % zum Beispiel für ein Geländer – beim Unscharf-Modus zu 40 % scharf, beim Entfernen zu 40 % sichtbar. Schon gemalte Striche behalten ihre Stärke.'}" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding KeepStrengthLabel}" />
+                    </Grid>
                 </StackPanel>
 
                 <Grid ColumnDefinitions="*,6,*" IsVisible="{Binding HasStrokes}">

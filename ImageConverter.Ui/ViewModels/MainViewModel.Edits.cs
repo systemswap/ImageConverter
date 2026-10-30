@@ -689,25 +689,30 @@ public partial class MainViewModel
         var rows = new List<EditRow>();
         if (_history is { } h && CurrentPath is { } path)
         {
-            // AI as one row (later runs replace earlier ones), Skin & details of the last AI as a separate row
+            // Image steps in the order they act (the order of the clicks): AI as one row (later runs replace earlier ones)
+            // with Skin & details of the last AI below it, removal as one row for all spots, background (the last one
+            // counts). Steps before the last "Apply selection" are part of the image for good.
             var steps = LiveStepsOf(path);
-            if (FirstLiveAi(steps) >= 0)
+            var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
+            var live = steps.Skip(applied + 1).Select(s => s.Step!).ToList();
+            var imageRows = new List<(int At, List<EditRow> Rows)>();
+
+            if (live.FindIndex(s => s.Kind == ImageStepKind.Ai) is var firstAi and >= 0)
             {
-                var last = steps.Last(s => s.Step!.Kind == ImageStepKind.Ai).Step!;
+                var last = live.Last(s => s.Kind == ImageStepKind.Ai);
                 var canHideAi = CanHideAi(path, h, out var aiReason);
-                rows.Add(new EditRow(this, EditSteps.Ai, last.Label, last.Detail ?? "", canHideAi, aiReason));
+                var aiRows = new List<EditRow> { new(this, EditSteps.Ai, last.Label, last.Detail ?? "", canHideAi, aiReason) };
                 if (last.SkinDetail is { } skin)
                 {
                     var canHideSkin = CanHideSkin(path, h);
-                    rows.Add(new EditRow(this, EditSteps.SkinDetails, Tr.T("Haut & Details"), skin, canHideSkin,
+                    aiRows.Add(new EditRow(this, EditSteps.SkinDetails, Tr.T("Haut & Details"), skin, canHideSkin,
                         canHideSkin ? null : Tr.T("Lässt sich nicht ausschalten — nur mit Rückgängig zurücknehmen.")));
                 }
+                imageRows.Add((firstAi, aiRows));
             }
 
-            // Removal: one row for all spots since the last "Apply selection"
-            var applied = steps.FindLastIndex(s => s.Step!.Kind == ImageStepKind.Applied);
             var retouch = new List<ImageStep>();
-            foreach (var s in steps.Skip(applied + 1).Select(s => s.Step!).Where(s => s.Kind == ImageStepKind.Retouch))
+            foreach (var s in live.Where(s => s.Kind == ImageStepKind.Retouch))
             {
                 if (s.Replaces && retouch.Count > 0) retouch.RemoveAt(retouch.Count - 1);
                 retouch.Add(s);
@@ -715,17 +720,19 @@ public partial class MainViewModel
             if (retouch.Count > 0)
             {
                 var canHide = CanHideKind(path, h, ImageStepKind.Retouch, out var reason);
-                rows.Add(new EditRow(this, EditSteps.Retouch, Tr.T("Entfernt"),
+                imageRows.Add((live.FindIndex(s => s.Kind == ImageStepKind.Retouch), [new EditRow(this, EditSteps.Retouch, Tr.T("Entfernt"),
                     retouch.Count == 1 ? retouch[0].Detail ?? "" : Tr.T("{0}× · zuletzt {1}", retouch.Count, retouch[^1].Detail ?? ""),
-                    canHide, reason));
+                    canHide, reason)]));
             }
-            // Background: the last one counts (a new attempt replaces the one before)
-            var background = steps.Skip(applied + 1).Select(s => s.Step!).LastOrDefault(s => s.Kind == ImageStepKind.Background);
-            if (background is not null)
+
+            if (live.LastOrDefault(s => s.Kind == ImageStepKind.Background) is { } background)
             {
                 var canHide = CanHideKind(path, h, ImageStepKind.Background, out var reason);
-                rows.Add(new EditRow(this, EditSteps.Background, background.Label, background.Detail ?? "", canHide, reason));
+                imageRows.Add((live.FindIndex(s => s.Kind == ImageStepKind.Background),
+                    [new EditRow(this, EditSteps.Background, background.Label, background.Detail ?? "", canHide, reason)]));
             }
+            foreach (var (_, group) in imageRows.OrderBy(g => g.At)) rows.AddRange(group);
+
             // Geometry: one row per stage, in the fixed order of the recipe (always computed from the pixel image)
             var recipe = h.Recipe;
             var (pw, ph) = PixelSize();

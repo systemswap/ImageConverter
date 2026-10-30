@@ -2712,6 +2712,8 @@ Test oder Nachweis.
   aus rechnet, alles ab diesem Bild.
 - **Nicht tun:** Im Oberflächen-Faden Modelle laufen lassen; einen Schritt für „abtrennbar“ halten, nur weil das Bild davor gemerkt ist –
   die späteren Schritte gehören nachgerechnet.
+- **Ergänzt in 0.7.18-beta:** Die Zeilen der Bildschritte stehen in der Reihenfolge, in der sie wirken (Klick-Reihenfolge), statt nach Art
+  sortiert; so zeigt die Liste die echte Kette.
 - **Wo im Code:** `MainViewModel.Edits.cs` (`StepReplay`, `LiveSteps`, `StepsSinceApplied`, `CanHideKind`, `VariantOf`, `PixelsFor`,
   `EnsureVariantAsync`, `ApplyImageVariantAsync`, `TakeOverHiddenStepsAsync`, `RefreshEditRows`), `MainViewModel.Editing.cs`
   (Schnittstellen der drei Schritte, `ShowCurrentAsync`), `AiViewModel.ReplayAi`, `RetouchViewModel.Remove`, `BackgroundViewModel.Apply`,
@@ -2720,3 +2722,36 @@ Test oder Nachweis.
   einzeln aus und wieder an; Hintergrund aus = Stand nach Entfernen (bitgleich), Entfernen aus = Stelle wie nach der KI (Abstand 1 von
   65535, mit Entfernen 5064), KI aus = Motiv wie im Original (1 gegen 851), alles an = aktuelles Bild. Gesichter-Modelle nicht nachgestellt
   (kein Testbild mit Gesicht).
+
+## 103. KI-Verbesserung: Ergebnis fehlte in „Bearbeitungen“, weil „Übernehmen“ übersehen wurde (0.7.17 beta)
+
+- **Entdeckt:** 30.10.2026, 0.7.17-beta, vom Nutzer: „Gesichter wird immer noch nicht rechts in der Bearbeiten-Liste angezeigt“, dann
+  „Übernehmen hatte ich nicht gesehen“. Im unsichtbaren Fenster erschien die Zeile nach „Übernehmen“ (Gesichter mit einem gemeinfreien
+  Testfoto nachgestellt) – der Code war richtig, der Ablauf missverständlich. **Geändert:** 0.7.18-beta (Vorschlag des Nutzers: „wie bei den
+  anderen – wenn es fertig ist, ist es übernommen; neu machen nimmt wieder das Original“).
+- **Was:** Die KI zeigte ihr Ergebnis zuerst nur als Vorschau mit live wirkenden Reglern; ins Bild und in die Liste kam es erst mit
+  „Übernehmen“ unter den Reglern. Entfernen und Hintergrund schreiben dagegen sofort ins Bild.
+- **Lösung:** Fertig gerechnet heißt im Bild (`ComputeAsync` → `Commit`), wie bei den anderen Schritten; „Übernehmen“ und „Verwerfen“
+  entfallen. Stärke, Haut, Falten und Körnung wirken weiter: Die Vorschau zeigt die neue Mischung sofort, ruht der Regler 0,7 s, ersetzt
+  der Schritt sich selbst (`ReblendLater` → `Commit` mit `Replaces`, aus demselben Ausgangsbild, ohne Modell-Lauf, ohne zusätzlichen
+  Rückgängig-Schritt). Nach dem Übernehmen bleibt der Lauf für die Regler (`_inImageBlend`); der Look ist ab da normal oben drauf
+  (`LookOnTop`, keine Regler mehr zurückgesetzt). Ein neues „KI berechnen“ rechnet wieder vom Bild vor der KI (#99). Ändert sich das Bild
+  anders (Strg+Z, anderer Schritt, Bildwechsel), wirken die Regler nicht mehr darauf. Verworfen: den Knopf nur orange machen – der Ablauf
+  bliebe anders als bei Entfernen und Hintergrund.
+- **Nicht tun:** Ein Ergebnis zeigen, das noch nicht im Bild ist, ohne dass es auffällt.
+- **Wo im Code:** `AiViewModel` (`ComputeAsync`, `Commit`, `RequestPreview`, `ReblendLater`, `OnMainPropertyChanged`), `AiPanel.axaml`.
+- **Test:** `kette-ui` Fälle 19–21 (sofort in der Liste, Stärke ersetzt den Schritt und ein Strg+Z führt zum Original, Gesichter-Zeile
+  ohne Klick) und der Gesamtlauf aller Fälle.
+
+## 104. Hintergrund: Grün markierte Stelle wurde trotzdem unscharf bzw. entfernt (0.7.17 beta)
+
+- **Entdeckt:** 30.10.2026, 0.7.17-beta, vom Nutzer: „bei Hintergrund unscharf hatte ich etwas selektiert, was nicht unscharf werden soll,
+  aber das wird ignoriert“. **Behoben:** 0.7.18-beta.
+- **Was:** Grün schützte nur Objekte, die das Modell als Motiv erkannt hatte, und ergänzte, was ein vergrößerter Lauf um den Strich fand.
+  Hielt das Modell die Stelle auch dann nicht für Motiv, blieb der Strich ohne Wirkung.
+- **Lösung:** Was grün übermalt ist, bleibt in jedem Fall (Alpha 1 unter dem Strich); die Kanten kommen weiter aus dem Foto (Kantenfilter
+  in `Compose`). Berührte Objekte bleiben ganz, das Ergänzen per Zoom-Lauf bleibt.
+- **Nicht tun:** Eine Markierung des Nutzers nur als Hinweis ans Modell behandeln.
+- **Wo im Code:** `BackgroundRemover.Edit`; Hinweistext in `BackgroundViewModel.ToolHint`.
+- **Test:** `BackgroundTests.GreenStroke_KeepsWhatItCovers_EvenIfTheModelSeesNothingThere` (transparent und unscharf, beide scheitern
+  am alten Kern: Blau am Scheibenrand 58981 → 38272, ins Grün gemischt).

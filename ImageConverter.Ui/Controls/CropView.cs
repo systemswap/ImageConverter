@@ -2095,16 +2095,18 @@ public sealed class CropView : Control
     /// <summary>Draws the mark: strokes in semi-transparent red, green for "keep" (overlaps not darker), plus the brush circle.</summary>
     private void RenderBrush(DrawingContext context)
     {
-        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius, s.Keep)).ToList() ?? [];
-        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale, BrushKeep));
+        var strokes = BrushDim ? [] : BrushStrokes?.Select(s => (Points: s.Points.Select(q => new Point(q.X, q.Y)).ToList(), s.Radius, s.Keep, s.Strength)).ToList() ?? [];
+        if (_brushPoints is { } live) strokes.Add((live, BrushSize / 2 / _scale, BrushKeep, 1.0));
         if (strokes.Count > 0)
         {
             using (context.PushOpacity(0.5))
             {
-                foreach (var (points, radius, keep) in strokes)
+                foreach (var (points, radius, keep, strength) in strokes)
                 {
                     var r = radius * _scale;
-                    var fill = keep ? BrushKeepFill : BrushFill;
+                    // weaker green strokes paler, so that they can be told apart
+                    var fill = !keep ? BrushFill : strength >= 1 ? BrushKeepFill
+                        : new ImmutableSolidColorBrush(Color.FromRgb(0x30, 0xD0, 0x50), 0.3 + 0.7 * Math.Clamp(strength, 0, 1));
                     if (points.Count == 1)
                     {
                         context.DrawEllipse(fill, null, ToScreenPoint(points[0]), r, r);

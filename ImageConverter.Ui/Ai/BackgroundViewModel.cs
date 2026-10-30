@@ -154,7 +154,7 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     public string ToolHint => Tool switch
     {
         BackgroundTool.Remove => Tr.T("Rot: grob über etwas malen, das weg soll – das ganze Objekt, das der Strich berührt, verschwindet."),
-        BackgroundTool.Keep => Tr.T("Grün: grob über etwas malen, das bleiben soll – fehlt ein Teil des Motivs, wird um den Strich genauer nachgerechnet."),
+        BackgroundTool.Keep => Tr.T("Grün: über etwas malen, das bleiben soll – was grün übermalt ist, bleibt in jedem Fall (scharf bzw. sichtbar). Berührt der Strich ein Objekt, bleibt es ganz; fehlt ein Teil des Motivs, wird um den Strich genauer nachgerechnet."),
         _ => Tr.T("Das Motiv wird ohne Markierung erkannt. Passt etwas nicht: mit Rot oder Grün grob nachbessern und noch einmal anwenden."),
     };
 
@@ -175,6 +175,26 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
 
     public string BrushSizeLabel => $"{BrushSize:0} px";
 
+    /// <summary>
+    /// Strength of new green strokes in percent: how much of what they cover stays (a railing at 40 %: 40 % sharp in the
+    /// blur mode, 40 % visible in the transparent mode). Strokes already painted keep theirs (docs/KI-HINTERGRUND.md, „Bedienung“).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(KeepStrengthLabel))]
+    public partial double KeepStrength { get; set; } = 100;
+
+    public string KeepStrengthLabel => $"{KeepStrength:0} %";
+
+    /// <summary>
+    /// Hardness of new strokes in percent (red and green): 100 % a hard edge; less lets the effect fall off softly from the
+    /// inner part of the brush to its edge (docs/KI-HINTERGRUND.md, „Bedienung“).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BrushHardnessLabel))]
+    public partial double BrushHardness { get; set; } = 100;
+
+    public string BrushHardnessLabel => $"{BrushHardness:0} %";
+
     /// <summary>All strokes, oldest first, in the displayed image (a new list on every change so that the preview updates).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStrokes))]
@@ -192,6 +212,8 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
     private void AddStroke(BrushStroke stroke)
     {
         if (Strokes.Count == 0) _paintedOn = _main.ShownGeometry;
+        // Each stroke keeps the strength (green) and hardness it was painted with
+        stroke = stroke with { Hardness = BrushHardness / 100, Strength = stroke.Keep ? KeepStrength / 100 : 1 };
         Strokes = [.. Strokes, stroke];
         StrokesApplied = false;
         Status = null;
@@ -341,9 +363,9 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
             BackgroundMask? mask = cached;
             // The same background step on another image (an earlier step switched off): the remembered mask with the
             // strokes applied, the edges and colours from the new image; no model run (No. 102)
-            (BackgroundMask Mask, float[] Alpha)? used = null;
-            MainViewModel.StepReplay replay = (input, _, ct) => used is var (m, a)
-                ? BackgroundRemover.Compose(input, BackgroundRemover.Rebase(m, input), a, mode, blur, ct)
+            (BackgroundMask Mask, float[] Alpha, float[]? Kept)? used = null;
+            MainViewModel.StepReplay replay = (input, _, ct) => used is var (m, a, k)
+                ? BackgroundRemover.Compose(input, BackgroundRemover.Rebase(m, input), a, mode, blur, ct, k)
                 : throw new InvalidOperationException(Tr.T("Hintergrund-Schritt ohne Maske."));
             var result = await _main.ApplyBackgroundAsync(_ =>
             {
@@ -356,9 +378,9 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
                     _seconds[model.Id] = t.Elapsed.TotalSeconds;
                 }
                 Dispatcher.UIThread.Post(() => phase = Tr.T("Hintergrund · Kanten …"));
-                var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, Segment(), cts.Token));
-                used = (mask with { Guide = [] }, alpha);   // the guide comes from the image a replay works on
-                return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token);
+                var alpha = BackgroundRemover.Edit(mask, strokes, r => BackgroundRemover.Detect(start, r, Segment(), cts.Token), out var kept);
+                used = (mask with { Guide = [] }, alpha, kept);   // the guide comes from the image a replay works on
+                return BackgroundRemover.Compose(start, mask, alpha, mode, blur, cts.Token, kept);
             }, mode == BackgroundMode.Blur ? Tr.T("Hintergrund unscharf") : Tr.T("Hintergrund entfernt"),
                mode == BackgroundMode.Blur ? $"{Tr.T(chosen.Name)} · {BlurStrength:0} %" : Tr.T(chosen.Name), start, earlier is { Later: 0 }, discards, replay, current);
 

@@ -542,6 +542,7 @@ public partial class AiViewModel : ViewModelBase
     private async Task ComputeAsync(bool rerun)
     {
         if (SelectedModel is not { } model || _main.CurrentImage is not { } current) return;
+        TimeSpan? computed = null;   // set when a result is ready; it then goes into the image right away
         if (Store.PathOf(model) is not { } modelPath)
         {
             Status = Tr.T("Modell fehlt — bitte in den Einstellungen herunterladen.");
@@ -704,10 +705,7 @@ public partial class AiViewModel : ViewModelBase
             (_run, _setup, _runFaces, _runModel, _runFidelity) = (run, setup, faces, model, fidelityUsed);
             rendered = null;   // now owned by _setup
             HasPending = true;
-            Status = Tr.T("Fertig nach {0} — die Regler wirken jetzt live, „Übernehmen“ schreibt es ins Bild.",
-                FormatDuration(clock.Elapsed));
-            if (model.Kind == AiModelKind.Face && !Store.IsInstalled(AiModelCatalog.FaceParser))
-                Status += " " + Tr.T("Tipp: „Gesichtsbereiche“ in den Einstellungen laden — dann wirken Falten genauer.");
+            computed = clock.Elapsed;
         }
         catch (OperationCanceledException)
         {
@@ -724,8 +722,21 @@ public partial class AiViewModel : ViewModelBase
             IsRunning = false;
             EndActivity();
             AppLog.Activity(null);
-            if (HasPending) RequestPreview();   // show the finished result (or, after cancelling, the previous one) with the sliders
-            else _main.OverrideBitmap = null;
+            if (HasPending && computed is null) RequestPreview();   // after cancelling: the previous result with the sliders
+            else if (!HasPending) _main.OverrideBitmap = null;
+        }
+
+        // Finished: into the image right away, like removal and background (one step, Ctrl+Z); the blend sliders keep
+        // working on it, and a new run starts from the image before the AI again (No. 103)
+        if (computed is { } took)
+        {
+            await Commit();
+            if (_inImageBlend is not null)
+            {
+                Status = Tr.T("Fertig nach {0} — im Bild. Stärke, Haut, Falten und Körnung wirken weiter; rückgängig mit Strg+Z.", FormatDuration(took));
+                if (model.Kind == AiModelKind.Face && !Store.IsInstalled(AiModelCatalog.FaceParser))
+                    Status += " " + Tr.T("Tipp: „Gesichtsbereiche“ in den Einstellungen laden — dann wirken Falten genauer.");
+            }
         }
     }
 
@@ -743,6 +754,17 @@ public partial class AiViewModel : ViewModelBase
     private void RequestPreview()
     {
         if (!HasPending || IsRunning) return;
+        if (_inImageBlend is { } inImage)
+        {
+            // In the image: the normal display shows it; only a changed blend (or the map) is drawn over it until replaced
+            if (CurrentBlend == inImage && !ShowMap)
+            {
+                _main.OverrideBitmap = null;
+                _main.OverrideBeforeBitmap = null;
+                return;
+            }
+            if (CurrentBlend != inImage) ReblendLater();
+        }
         if (_previewRunning)
         {
             _previewDirty = true;
@@ -918,10 +940,50 @@ public partial class AiViewModel : ViewModelBase
         {
             _committing = false;
         }
-        var ok = result is not null;
         OnPropertyChanged(nameof(AgainHint));
-        ClearRun();
-        Status = ok ? Tr.T("Übernommen — rückgängig mit Strg+Z.") : Tr.T("Fehlgeschlagen — siehe Meldung oben.");
+        if (result is null)
+        {
+            ClearRun();
+            Status = Tr.T("Fehlgeschlagen — siehe Meldung oben.");
+            return;
+        }
+        // In the image: the run stays for the blend sliders. A new blend replaces this step from the same start image
+        // (no model run, no extra undo step); the sliders of the look stay as they are now (No. 103).
+        _setup = setup with { Current = result, Replaces = true, Discards = 0, LookAfter = null, LookAtStart = null, LookOnTop = true };
+        _inImageBlend = blend;
+        _main.OverrideBitmap = null;
+        _main.OverrideBeforeBitmap = null;
+        Status = Tr.T("Im Bild — Stärke, Haut, Falten und Körnung wirken weiter; rückgängig mit Strg+Z.");
+    }
+
+    /// <summary>The blend that is in the image; null while no AI result is in the image for the sliders (No. 103).</summary>
+    private AiBlend? _inImageBlend;
+
+    private DispatcherTimer? _reblendTimer;
+
+    /// <summary>
+    /// A blend slider moved after the result went into the image: the preview shows the new blend at once, and once the
+    /// slider rests the step in the image is replaced (composed at full size, no model run).
+    /// </summary>
+    private void ReblendLater()
+    {
+        _reblendTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+        _reblendTimer.Stop();
+        _reblendTimer.Tick -= OnReblendTick;
+        _reblendTimer.Tick += OnReblendTick;
+        _reblendTimer.Start();
+    }
+
+    private async void OnReblendTick(object? sender, EventArgs e)
+    {
+        _reblendTimer?.Stop();
+        if (_inImageBlend is not { } inImage || CurrentBlend == inImage) return;
+        if (!CanCommit)
+        {
+            ReblendLater();   // another step computes right now: try again afterwards
+            return;
+        }
+        await Commit();
     }
 
 
@@ -1019,6 +1081,8 @@ public partial class AiViewModel : ViewModelBase
         else DisposeInput(_setup);
         _previewCts?.Cancel();
         (_run, _setup, _runFaces, _beforeOf, _runModel) = (null, null, null, null, null);
+        _inImageBlend = null;
+        _reblendTimer?.Stop();
         HasPending = false;
         ShowMap = false;
         _main.OverrideBitmap = null;
@@ -1070,8 +1134,10 @@ public partial class AiViewModel : ViewModelBase
         if (e.PropertyName == nameof(MainViewModel.FullBitmap) && HasPending && !_committing
             && _setup is { } open && !ReferenceEquals(_main.CurrentImage, open.Current))
         {
+            // In the image already: only the sliders stop acting on it (undo, another step …)
+            var inImage = _inImageBlend is not null;
             ClearRun();
-            Status = Tr.T("Das Bild wurde geändert — offenes Ergebnis verworfen, bitte neu berechnen.");
+            Status = inImage ? null : Tr.T("Das Bild wurde geändert — offenes Ergebnis verworfen, bitte neu berechnen.");
             return;
         }
 
