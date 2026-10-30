@@ -987,6 +987,15 @@ public static class English
         ["KI wird gemessen …"] = "Measuring the AI …",
         ["Test fehlgeschlagen: {0}"] = "Test failed: {0}",
         ["Geschwindigkeit testen"] = "Test speed",
+
+        // ------------------------------------------------------------ 3D viewer (STL)
+        ["Das ist keine STL-Datei (zu kurz)."] = "This is not an STL file (too short).",
+        ["Die STL-Datei enthält keine Dreiecke."] = "The STL file contains no triangles.",
+        ["Die STL-Datei ist beschädigt: Sie endet vor dem ersten Dreieck."] = "The STL file is damaged: it ends before the first triangle.",
+        ["Die STL-Datei enthält keine gültigen Dreiecke."] = "The STL file contains no valid triangles.",
+        ["Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}."] = "The model has {0:N0} triangles – at most {1:N0} can be shown.",
+        ["Das ist keine gültige STL-Datei: Eine Zeile ist länger als {0} Zeichen."] = "This is not a valid STL file: a line is longer than {0} characters.",
+        ["Das Modell hat mehr als {0:N0} einzelne Eckpunkte – das lässt sich nicht anzeigen."] = "The model has more than {0:N0} separate corners – it cannot be shown.",
     };
 
     /// <summary>English texts keyed by the German text.</summary>

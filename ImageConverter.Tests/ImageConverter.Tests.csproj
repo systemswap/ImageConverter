@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ImageConverter.Core\ImageConverter.Core.csproj" />
     <ProjectReference Include="..\ImageConverter.Ui\ImageConverter.Ui.csproj" />
+    <ProjectReference Include="..\ImageConverter.Viewer3D\ImageConverter.Viewer3D.csproj" />
   </ItemGroup>
 
   <ItemGroup>

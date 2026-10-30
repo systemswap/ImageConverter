@@ -58,8 +58,18 @@ IDocumentViewer
   Optional feine Linien an Knicken.
 - Bedienung: links ziehen = drehen, rechts/mitte ziehen = verschieben, Mausrad = zoomen
   zur Maus, Doppelklick = einpassen. Ein Klick ohne Ziehen wählt (siehe Messen).
+- **Drehpunkt:** gedreht wird um die Stelle des Modells, auf die man beim Ziehen klickt
+  (daneben: um den bisherigen Drehpunkt) – die angeschaute Stelle bleibt im Bild.
+- **Drehscheibe:** die Hochachse (Z, wie beim 3D-Druck) bleibt immer senkrecht; waagerecht
+  ziehen dreht um sie, senkrecht ziehen kippt höchstens bis zur Drauf- bzw. Untersicht.
+  Das Modell kann so nicht unkontrolliert wegkippen.
 - Knöpfe: Vorne, Oben, Seite, Iso, Einpassen; Orthografisch/Perspektive (zum Messen
   orthografisch voreingestellt). Hintergrund folgt Hell/Dunkel.
+- Gestaltung: ruhiger Verlauf als Hintergrund (folgt Hell/Dunkel), mattes, weiches
+  Material, Licht von oben vorn mit Aufhellung von der Seite, weicher Schatten unter dem
+  Modell, feine Linien an scharfen Kanten, Kantenglättung. Ansichten „Fläche“,
+  „Drahtgitter“ und „Bauplan“ (blau mit weißen Kanten); „Teile färben“ zeigt die
+  zusammenhängenden Teile in eigenen Farben.
 - Maßlinien und Beschriftungen als 2D-Ebene über der 3D-Ansicht, aus den 3D-Punkten
   projiziert – sie drehen mit.
 

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- 3D viewer for STL models. Plugs into the main window through ImageConverter.Ui's IDocumentViewer and is
+         registered by the desktop project; the rest of the program does not know it. Geometry/ is free of Avalonia
+         (reading, faces, measuring – tested on its own), Rendering/ and Views/ show the model with OpenGL. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <RootNamespace>ImageConverter.Viewer3D</RootNamespace>
+        <!-- OpenGL is called through function pointers (Rendering/Gl.cs) -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ImageConverter.Ui\ImageConverter.Ui.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="ImageConverter.Tests" />
+    </ItemGroup>
+</Project>

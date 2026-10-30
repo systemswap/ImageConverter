@@ -44,14 +44,15 @@ public sealed partial class LocalizationTests : IDisposable
         var texts = new SortedSet<string>(StringComparer.Ordinal);
         var root = RepoRoot();
 
-        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "ImageConverter.Ui"), "*.axaml", SearchOption.AllDirectories))
+        foreach (var file in new[] { "ImageConverter.Ui", "ImageConverter.Viewer3D" }
+                     .SelectMany(project => Directory.EnumerateFiles(Path.Combine(root, project), "*.axaml", SearchOption.AllDirectories)))
         {
             var xaml = File.ReadAllText(file);
             foreach (Match m in XamlAttribute().Matches(xaml)) texts.Add(WebUtility.HtmlDecode(m.Groups[1].Value));
             foreach (Match m in XamlElement().Matches(xaml)) texts.Add(WebUtility.HtmlDecode(m.Groups[1].Value));
         }
 
-        foreach (var project in new[] { "ImageConverter.Ui", "ImageConverter.Core" })
+        foreach (var project in new[] { "ImageConverter.Ui", "ImageConverter.Core", "ImageConverter.Viewer3D" })
         foreach (var file in Directory.EnumerateFiles(Path.Combine(root, project), "*.cs", SearchOption.AllDirectories))
         {
             if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")) continue;
