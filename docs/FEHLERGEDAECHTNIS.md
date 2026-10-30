@@ -2884,3 +2884,18 @@ Test oder Nachweis.
 - **Wo im Code:** `StlReader.TriangleLimit`, `ModelRenderer.Render`, `ModelViewModel.StartAnalysis`/`EnsureWireframe`,
   `SceneData.AllEdges(Mesh)`, `MeshTopology.Summary`.
 - **Test:** `StlReaderTests.TooManyTriangles_IsRefusedBeforeReading`, `ModelViewTests.SharpEdges_…` (Kanten ohne Nachbarschaft).
+
+## 115. 3D: Modell ließ sich nicht drehen – Maus kam nicht bei der Ansicht an (0.8.11-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.12-beta, vom Nutzer: „Anzeige funktioniert, aber ich kann es nicht drehen.“ **Behoben:** 0.8.13-beta.
+- **Was:** Ziehen, Mausrad, Doppelklick und Messklicks über der 3D-Ansicht taten nichts.
+- **Warum:** Avalonia zählt ein Steuerelement nur dort als getroffen, wo es selbst etwas zeichnet. Die OpenGL-Ansicht zeichnet ihr Bild an
+  Avalonias Zeichnung vorbei (eigene Fläche), also ging jede Maus-Eingabe an den Rahmen dahinter (`InputHitTest` in der Mitte der Ansicht:
+  `Border`). Das Prüfprogramm hatte Klicks direkt im Modell ausgelöst und den Weg über die Maus nicht geprüft.
+- **Lösung:** `ModelGlView` implementiert `ICustomHitTest` (jeder Punkt innerhalb gilt als Treffer). Geprüft im echten Fenster: Treffertest
+  ergibt `ModelGlView`; Drücken – Ziehen um 120 px – Loslassen über den Ereignisweg dreht (Drehung −0,79 → 0,00, Neigung 0,62 → 0,93),
+  das Mausrad zoomt (Abstand 211 → 160).
+- **Nicht tun:** Eigene Zeichenflächen (OpenGL, Composition) ohne eigenen Treffertest; Eingaben im Prüfprogramm nur über das Modell statt
+  über Treffertest und Ereignisweg prüfen.
+- **Wo im Code:** `ModelGlView.HitTest`.
+- **Test:** `ModelViewTests.View_TakesTheMouseEverywhere`; Prüfprogramm `stl-shot` mit `hitonly` (Treffertest, Ziehen, Mausrad).

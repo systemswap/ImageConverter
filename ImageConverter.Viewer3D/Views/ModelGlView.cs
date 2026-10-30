@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
+using Avalonia.Rendering;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ImageConverter.Viewer3D.Geometry;
@@ -21,9 +22,12 @@ namespace ImageConverter.Viewer3D.Views;
 /// click fits the model.</item>
 /// <item>A click without dragging (less than <see cref="DragThreshold"/> pixels) is a measuring click.</item>
 /// <item>Frames are drawn only when something changed.</item>
+/// <item>The whole area takes the mouse (<see cref="ICustomHitTest"/>): Avalonia counts a control as hit only where it
+/// draws itself, and the OpenGL picture is drawn past it – without this, every click and drag went to the frame behind
+/// (Fehlergedächtnis #115).</item>
 /// </list>
 /// </remarks>
-internal sealed class ModelGlView : OpenGlControlBase
+internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
 {
     private const double DragThreshold = 4;
     private const float TurnPerPixel = 0.0065f;
@@ -64,6 +68,9 @@ internal sealed class ModelGlView : OpenGlControlBase
     }
 
     public OrbitCamera Camera { get; } = new();
+
+    /// <summary>Every point inside the control counts as a hit.</summary>
+    public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
 
     /// <summary>Why the model cannot be drawn, or null.</summary>
     public string? Failure { get; private set; }

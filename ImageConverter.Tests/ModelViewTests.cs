@@ -195,6 +195,14 @@ public class ModelViewTests
         }
     }
 
+    /// <summary>
+    /// The 3D view takes the mouse over its whole area: Avalonia counts a control as hit only where it draws, and the
+    /// OpenGL picture is drawn past it – without its own hit test, turning and zooming did nothing (No. 115).
+    /// </summary>
+    [Fact]
+    public void View_TakesTheMouseEverywhere() =>
+        Assert.True(typeof(Avalonia.Rendering.ICustomHitTest).IsAssignableFrom(typeof(ImageConverter.Viewer3D.Views.ModelGlView)));
+
     [Fact]
     public void Registry_FindsTheViewerByExtension_AnyCase()
     {
