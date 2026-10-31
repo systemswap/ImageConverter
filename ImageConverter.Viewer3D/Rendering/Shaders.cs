@@ -54,6 +54,7 @@ internal static class Shaders
         uniform vec4 uClips[6];
         uniform int uClipCount;
         uniform int uInner;
+        uniform float uExposure;
         out vec4 fragColor;
 
         vec3 linear(vec3 c) { return pow(c, vec3(2.2)); }
@@ -74,7 +75,9 @@ internal static class Shaders
             vec3 base = linear(uParts == 1 ? partColour(vPart) : uBase);
             // Inner side (back of a face: inside the material or a cut wall) in a warm grey
             if (uInner == 1 && !gl_FrontFacing) base = mix(base, linear(vec3(0.80, 0.60, 0.50)), 0.75);
-            float ao = mix(1.0, pow(texture(uSsao, gl_FragCoord.xy / uScreen).r, 1.8), uAo);
+            // Occlusion fades out on faces seen nearly edge-on: there the screen-space estimate has no reliable depth
+            // neighbours left, and a face turning away must not darken abruptly
+            float ao = mix(1.0, pow(texture(uSsao, gl_FragCoord.xy / uScreen).r, 1.8), uAo * smoothstep(0.02, 0.15, dot(n, v)));
             float up = n.z * 0.5 + 0.5;
             vec3 ambient = mix(vec3(0.13, 0.12, 0.12), vec3(0.42, 0.45, 0.51), up) * ao;
             float key = max(dot(n, uKey), 0.0);
@@ -86,35 +89,48 @@ internal static class Shaders
                        + vec3(spec + rim) * ao;
             // Blueprint: nearly flat colour, the edges carry the shape
             lit = mix(lit, base * (0.85 + 0.15 * up), uFlat);
+            // Brighter lifts the mid tones along a curve, so that lit faces do not burn out to white; darker scales down
+            lit = uExposure >= 1.0 ? pow(clamp(lit, 0.0, 1.0), vec3(1.0 / uExposure)) : lit * uExposure;
             lit = mix(lit, linear(uTint.rgb), uTint.a);
             fragColor = vec4(pow(clamp(lit, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
         }
         """;
 
-    /// <summary>Depth pass for the ambient occlusion: only the depth counts (cut away parts excluded).</summary>
+    /// <summary>
+    /// Depth pass for the ambient occlusion (cut away parts excluded): the depth, and the exact face normal in view
+    /// space (right, up, towards the eye) packed into 0..1.
+    /// </summary>
     public const string DepthFragment = """
         in vec3 vWorld;
         in float vPart;
         uniform vec4 uClips[6];
         uniform int uClipCount;
+        uniform vec3 uRight;
+        uniform vec3 uUp;
+        uniform vec3 uBack;
         out vec4 fragColor;
         void main()
         {
             for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
-            fragColor = vec4(1.0);
+            vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+            fragColor = vec4(vec3(dot(n, uRight), dot(n, uUp), dot(n, uBack)) * 0.5 + 0.5, 1.0);
         }
         """;
 
     /// <summary>
-    /// Screen-space ambient occlusion: for each pixel, 16 points in the hemisphere above the surface (normal from the
-    /// neighbouring depths, taking the side with the smaller step so that silhouettes stay clean) are projected back;
+    /// Screen-space ambient occlusion: for each pixel, 16 points in the hemisphere above the surface are projected back;
     /// those behind the stored depth count as occluded, weighted down when the occluder is far in front (range
-    /// check). The pattern is turned per pixel and smoothed by the blur pass. After J. Chapman, "SSAO Tutorial"
+    /// check). Surfaces seen at a flat angle need two things, otherwise a wall in perspective occludes itself and turns
+    /// blotchy dark as soon as the view gets flat enough (error memory #119): the exact face normal from the depth
+    /// pass (one estimated from the neighbouring depths tilts into the surface where those neighbours lie far apart),
+    /// and a bias that grows with the slope, because the stored depth is sampled at texel centres and differs from the
+    /// depth under a sample point by up to half a texel times the slope. The pattern is turned per pixel and smoothed by the blur pass. After J. Chapman, "SSAO Tutorial"
     /// (2013), and the hemisphere variant of Crytek's method (M. Mittring, SIGGRAPH 2007).
     /// </summary>
     public const string SsaoFragment = """
         in vec2 vUv;
         uniform sampler2D uDepth;
+        uniform sampler2D uNormal;
         uniform mat4 uProj;
         uniform mat4 uInvProj;
         uniform vec2 uTexel;
@@ -133,14 +149,15 @@ internal static class Shaders
             float d = texture(uDepth, vUv).r;
             if (d >= 1.0) { fragColor = vec4(1.0); return; }
             vec3 p = viewPos(vUv);
-            vec3 r = viewPos(vUv + vec2(uTexel.x, 0.0));
-            vec3 l = viewPos(vUv - vec2(uTexel.x, 0.0));
-            vec3 t = viewPos(vUv + vec2(0.0, uTexel.y));
-            vec3 b = viewPos(vUv - vec2(0.0, uTexel.y));
-            vec3 dx = abs(r.z - p.z) < abs(p.z - l.z) ? r - p : p - l;
-            vec3 dy = abs(t.z - p.z) < abs(p.z - b.z) ? t - p : p - b;
-            vec3 n = normalize(cross(dx, dy));
-            if (n.z < 0.0) n = -n;
+            vec3 toEye = uProj[3][3] == 1.0 ? vec3(0.0, 0.0, 1.0) : normalize(-p);
+            vec3 n = normalize(texture(uNormal, vUv).xyz * 2.0 - 1.0);
+            if (dot(n, toEye) < 0.0) n = -n;
+
+            // Size of one depth texel at this depth (w = 1 orthographic, −z perspective) and the slope of the surface
+            float w = uProj[2][3] * p.z + uProj[3][3];
+            float texel = 2.0 * w * uTexel.y / uProj[1][1];
+            float facing = max(dot(n, toEye), 0.05);
+            float bias = uRadius * 0.02 + texel * 0.75 * sqrt(1.0 - facing * facing) / facing;
 
             float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
             vec3 rnd = vec3(cos(a), sin(a), 0.0);
@@ -161,26 +178,45 @@ internal static class Shaders
                 if (suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0) continue;
                 float sz = viewPos(suv).z;
                 float range = smoothstep(0.0, 1.0, uRadius / max(abs(p.z - sz), 1e-6));
-                occlusion += (sz >= s.z + uRadius * 0.02 ? 1.0 : 0.0) * range;
+                occlusion += (sz >= s.z + bias ? 1.0 : 0.0) * range;
             }
             fragColor = vec4(1.0 - occlusion / 16.0, 0.0, 0.0, 1.0);
         }
         """;
 
-    /// <summary>4 × 4 box blur: removes the per-pixel turn of the occlusion pattern.</summary>
+    /// <summary>4 × 4 box blur over the same surface: removes the per-pixel turn of the occlusion pattern.</summary>
     public const string BlurFragment = """
         in vec2 vUv;
         uniform sampler2D uInput;
+        uniform sampler2D uDepth;
+        uniform mat4 uInvProj;
+        uniform float uRadius;
         out vec4 fragColor;
+
+        float viewZ(float d)
+        {
+            vec4 p = uInvProj * vec4(0.0, 0.0, d * 2.0 - 1.0, 1.0);
+            return p.z / p.w;
+        }
+
         void main()
         {
             ivec2 size = textureSize(uInput, 0);
             ivec2 at = ivec2(vUv * vec2(size));
+            float z = viewZ(texelFetch(uDepth, at, 0).r);
             float sum = 0.0;
+            float count = 0.0;
             for (int y = -2; y < 2; y++)
                 for (int x = -2; x < 2; x++)
-                    sum += texelFetch(uInput, clamp(at + ivec2(x, y), ivec2(0), size - 1), 0).r;
-            fragColor = vec4(sum / 16.0, 0.0, 0.0, 1.0);
+                {
+                    ivec2 q = clamp(at + ivec2(x, y), ivec2(0), size - 1);
+                    // Only neighbours on the same surface: no darkening carried across silhouettes onto what lies
+                    // behind, or onto the background
+                    if (abs(viewZ(texelFetch(uDepth, q, 0).r) - z) > uRadius * 0.25) continue;
+                    sum += texelFetch(uInput, q, 0).r;
+                    count += 1.0;
+                }
+            fragColor = vec4(count > 0.0 ? sum / count : 1.0, 0.0, 0.0, 1.0);
         }
         """;
 

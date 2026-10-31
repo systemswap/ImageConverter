@@ -1035,6 +1035,7 @@ public static class English
         ["ja"] = "yes",
         ["Jedes zusammenhängende Teil in einer eigenen Farbe."] = "Each connected part in its own colour.",
         ["Kanten zeigen"] = "Show edges",
+        ["Wie hell das Modell beleuchtet wird. Doppelklick auf den Wert: zurück auf 100 %."] = "How brightly the model is lit. Double-click the value: back to 100 %.",
         ["Klickstelle: gedreht wird um die Stelle unter der Maus, sie bleibt im Blick. Modellmitte: um die senkrechte Mittelachse des Modells, wie auf einem Drehteller."] = "Clicked spot: turns around the point under the mouse, which stays in view. Model centre: around the vertical centre axis of the model, like on a turntable.",
         ["Klickstelle"] = "Clicked spot",
         ["Kopfzeile"] = "Header",

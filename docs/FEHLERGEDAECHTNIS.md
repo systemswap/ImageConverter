@@ -2964,3 +2964,54 @@ Test oder Nachweis.
   `MoveSection`/`PeelTo`, `Box3.Extent`.
 - **Test:** `ModelViewTests.Walls_ExitPoints_GoWallByWall`, `Zoom_InOrthographic_StopsAtTheSmallestView`, `BoxExtent_CoversAllCorners`;
   Prüfprogramm `stl-shot <stl> peel`.
+
+## 119. 3D: Flächen wurden ab einem bestimmten Blickwinkel schlagartig fleckig dunkel (0.9.0)
+
+- **Entdeckt:** 31.10.2026, 0.9.0, vom Nutzer: „Wenn ein bestimmter Winkel erreicht ist, wird eine Fläche abrupt dunkel.“
+  **Behoben:** 0.9.1-beta.
+- **Wie bemerkt und geprüft:** Messlauf im Prüfprogramm (`stl-shot <stl> sweep`): Kamera in 2°-Schritten einmal herum und von −80° bis
+  +80° gekippt, beide Projektionen, mit und ohne Umgebungsverdeckung; Helligkeit an den 14 größten Flächen (3 × 3 Pixel, nur wo die Fläche
+  wirklich sichtbar ist). Dazu Bilder an den auffälligen Winkeln (`angles`).
+- **Was und wo:** nur in der Perspektive und nur mit Umgebungsverdeckung: Innenseiten von Wänden, die man flach (unter etwa 10–20°) sieht,
+  sprangen um bis zu 51 Helligkeitsstufen je 2° (114 → 62) und wurden fleckig dunkel. Ohne Umgebungsverdeckung an denselben Stellen 2–9 Stufen;
+  orthografisch sauber. Die Lichtberechnung selbst (Haupt-, Aufhell-, Himmel-/Bodenlicht, Glanz, Rand, Bodenschatten) ist überall stetig.
+- **Warum:** Die Umgebungsverdeckung schätzte die Flächennormale aus den Nachbarpixeln des Tiefenbilds (halbe Auflösung). Bei flachem Blick
+  liegen diese Nachbarn in der Tiefe weit auseinander, die geschätzte Normale kippt in die Fläche, die Proben landen im Material – die Wand
+  verdeckt sich selbst. Dazu kam ein fester Mindestabstand der Proben, der bei geneigten Flächen kleiner war als der Fehler durch das
+  Abtasten des Tiefenbilds an Pixelmitten.
+- **Lösung:** Der Tiefendurchgang schreibt die genaue Flächennormale (aus den Ableitungen der Position) in eine zweite Textur; der
+  Mindestabstand wächst mit der Neigung (halbe Texelgröße × Steigung); die Verdeckung blendet bei fast streifendem Blick aus
+  (`smoothstep(0.02, 0.15, dot(n, v))`); das Glätten mischt nur Nachbarn ähnlicher Tiefe. Ergebnis: die beiden großen Sprünge 51 → 2 und
+  41 → 8 Stufen, die übrigen gleich wie ohne Verdeckung (Flächen, die hochkant zur Kamera stehen und nur noch ein Pixel breit sind).
+- **Verworfen:** nur der wachsende Mindestabstand – die Flecken blieben (die Fläche wird unter 10° gesehen, die Schätzung der Normale war die
+  Hauptursache); die Verdeckung breit ausblenden – dann fehlen die dunklen Ecken an allen schräg gesehenen Wänden.
+- **Nicht tun:** Normalen für Bildraum-Effekte aus dem Tiefenbild schätzen, wenn sie sich genau mitschreiben lassen; feste Abstände in
+  Bildraum-Verfahren, die von der Neigung abhängen.
+- **Wo im Code:** `Shaders.DepthFragment`/`SsaoFragment`/`BlurFragment`/`ModelFragment`, `ModelRenderer.Occlusion` (Normalentextur
+  `_aoNormalTex`).
+- **Test:** Prüfprogramm `stl-shot <stl> sweep` und `angles` (Bildvergleich, GPU nötig); kein Unittest, weil das Ergebnis nur auf der
+  Grafikkarte entsteht.
+
+## 120. 3D: Nach dem Durchzoomen kam man nicht mehr ganz zurück, der Zoom blieb hängen (0.9.0)
+
+- **Entdeckt:** 31.10.2026, 0.9.0, vom Nutzer: „Es hängt sich immer noch der Zoom auf, wenn man durch eine Fläche zoomt und dann wieder
+  raus will; nach zwei, drei Mal kommt man nicht mehr ganz zurück.“ **Behoben:** 0.9.1-beta.
+- **Wie geprüft:** Prüfprogramm `stl-shot <stl> cycle`: dreimal 70 Rasten hinein und wieder heraus bis das ganze Modell im Bild ist, mit
+  echten Mausrad-Ereignissen, Maus in der Mitte und seitlich, beide Projektionen.
+- **Was und warum:** In der Perspektive skalierte der Zoom Auge und Drehpunkt um den Punkt unter der Maus. Nach dem Durchfliegen liegt die
+  nächste Fläche oft dicht vor dem Auge – Herauszoomen vervielfachte nur diesen winzigen Abstand: das Auge bewegte sich kaum, der Drehpunkt
+  lief davon, bis der Höchstabstand erreicht war und gar nichts mehr ging (nach 400 Rasten Auge 53 mm vor der Mitte, Drehpunkt 15 m entfernt).
+  Der nächste Durchgang begann in diesem verschobenen Zustand. Hinein gab es eine Mindestschrittweite, heraus nicht. Dazu: hinter dem Anker
+  wuchs der Schritt hinein mit jedem Schritt (Anteil am Weg zu einem Punkt hinter dem Auge).
+- **Lösung:** `OrbitCamera.ZoomPerspective`: das Auge fährt entlang des Strahls unter der Maus, hinein und heraus mindestens die
+  Mindestschrittweite; hinter dem Anker geradeaus mit der Mindestschrittweite. Der Drehpunkt behält seine Tiefe (seitlich geht er mit, der
+  Abstand nimmt den Rest auf), wird beim Durchfliegen mindestens 8 Mindestschritte vor dem Auge mitgeschoben (sonst stünden Verschieben und
+  Schnittschritte still) und beim Herauszoomen auf die Tiefe der Modellmitte zurückgeholt. Orthografisch behält der Drehpunkt ebenfalls seine
+  Tiefe. Ergebnis: Perspektive nach 47–58 Rasten wieder die Gesamtansicht, kein Schritt ohne Bewegung, Drehpunkt 0,4–4 mm an der Mitte;
+  orthografisch jedes Mal nach 27 Rasten zurück.
+- **Verworfen:** nur die Mindestschrittweite heraus – das Auge kam zurück, aber der Abstand zum Drehpunkt wuchs weiter exponentiell, der
+  Drehpunkt lief bei seitlicher Maus nach drei Durchgängen 8 m weit weg.
+- **Nicht tun:** in der Perspektive den Drehpunkt mit um den Anker skalieren; Zoomschritte nur hinein begrenzen.
+- **Wo im Code:** `OrbitCamera.Zoom`/`ZoomPerspective`, Aufruf in `ModelGlView.OnPointerWheelChanged`.
+- **Test:** `ModelViewTests.Zoom_InPerspective_ThroughAndBackOut` (schlägt mit dem alten Zoom fehl: „the eye hardly moved back“),
+  `Zoom_KeepsThePointUnderTheMouse`, `Zoom_InPerspective_GoesThroughTheSurface`; Prüfprogramm `stl-shot <stl> cycle`.

@@ -71,6 +71,17 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
 
     public OrbitCamera Camera { get; } = new();
 
+    /// <summary>Ambient occlusion on (for comparisons of the shading).</summary>
+    internal bool OcclusionEnabled
+    {
+        get => _renderer.OcclusionEnabled;
+        set
+        {
+            _renderer.OcclusionEnabled = value;
+            Invalidate();
+        }
+    }
+
     /// <summary>Every point inside the control counts as a hit.</summary>
     public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
 
@@ -161,7 +172,8 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         var frame = new FrameState(Camera.ViewProjection, Camera.Projection, 0.06f * _model.Mesh.Bounds.Diagonal,
             Camera.Eye, Camera.Forward, Camera.Right, Camera.Up, Camera.Orthographic,
             _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights(), _model.SectionPlanes,
-            _model.Sections.Select(x => (SectionGeometry.Quad(_model.Mesh.Bounds, x.Plane), x.IsSelected)).ToArray(), _model.MoveSectionTool);
+            _model.Sections.Select(x => (SectionGeometry.Quad(_model.Mesh.Bounds, x.Plane), x.IsSelected)).ToArray(), _model.MoveSectionTool,
+            _model.Brightness / 100f);
         _renderer.Render(_model.Scene, frame, fb, size.Width, size.Height);
         FramesDrawn++;
         if (_renderer.Failure is { } failure && Failure is null)

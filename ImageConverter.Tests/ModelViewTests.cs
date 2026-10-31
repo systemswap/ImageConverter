@@ -84,6 +84,47 @@ public class ModelViewTests
         Assert.True(Vector3.Dot(anchor - cam.Eye, cam.Forward) < 0, "the eye should be past the surface");
     }
 
+    /// <summary>
+    /// Through a surface and back: as many steps out as in bring the eye back, and the target stays near the model
+    /// (error memory #120 – it used to run off while the eye stayed put, until zooming out did nothing at all).
+    /// </summary>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(0.3f)]
+    public void Zoom_InPerspective_ThroughAndBackOut(float aside)
+    {
+        var cam = Camera(false);
+        var startDistance = cam.Distance;
+        var anchor = cam.Target + cam.Right * aside * startDistance * 0.2f;
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            for (var i = 0; i < 60; i++) cam.Zoom(0.87f, anchor, 0.2f);
+            Assert.True(Vector3.Dot(anchor - cam.Eye, cam.Forward) < 0, "the eye should be past the surface");
+            // Right after flying through, the surface under the mouse lies just in front of the eye: still a full step back,
+            // and the target keeps its depth
+            var distance = cam.Distance;
+            for (var i = 0; i < 5; i++)
+            {
+                var before = cam.Eye;
+                Assert.True(cam.Zoom(1 / 0.87f, cam.Eye + cam.Forward * 1e-3f, 0.2f));
+                Assert.True(Vector3.Distance(cam.Eye, before) >= 0.199f, $"cycle {cycle}: the eye hardly moved back");
+            }
+            Assert.True(cam.Distance <= distance + 5 * 0.2f + 1e-3f, $"cycle {cycle}: target ran off ({cam.Distance})");
+            var steps = 0;
+            while (Vector3.Dot(anchor - cam.Eye, cam.Forward) < startDistance && steps < 200) { cam.Zoom(1 / 0.87f, anchor, 0.2f); steps++; }
+            Assert.True(steps < 100, $"cycle {cycle}: {steps} steps to get back out");
+            Assert.True(cam.Distance < startDistance * 1.5f, $"cycle {cycle}: target ran off ({cam.Distance})");
+            var side = anchor - cam.Eye - cam.Forward * Vector3.Dot(anchor - cam.Eye, cam.Forward);
+            Assert.True(side.Length() < startDistance * 0.5f, $"cycle {cycle}: drifted sideways ({side.Length()})");
+        }
+    }
+
+    [Theory]
+    [InlineData(100, 100)]
+    [InlineData(10, 50)]
+    [InlineData(400, 150)]
+    public void Brightness_StaysInRange(int stored, int used) => Assert.Equal(used, ViewerSettings.ClampBrightness(stored));
+
     [Fact]
     public void Zoom_InOrthographic_NeverPassesTheAnchor()
     {

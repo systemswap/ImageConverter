@@ -170,6 +170,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         _orthographic = settings.Orthographic;
         _pivotAtCentre = settings.PivotAtCentre;
         _inches = settings.Inches;
+        _brightness = settings.Brightness;
         Tr.Instance.PropertyChanged += OnLanguageChanged;
     }
 
@@ -427,6 +428,28 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     }
 
     private bool _showParts;
+
+    /// <summary>Brightness of the lighting in percent; the background stays as it is.</summary>
+    public int Brightness
+    {
+        get => _brightness;
+        set
+        {
+            value = ViewerSettings.ClampBrightness(value);
+            if (!SetProperty(ref _brightness, value)) return;
+            OnPropertyChanged(nameof(BrightnessLabel));
+            ViewerSettings.Update(s => s with { Brightness = value });
+            Redraw();
+        }
+    }
+
+    private int _brightness = 100;
+
+    public string BrightnessLabel => $"{_brightness} %";
+
+    /// <summary>Puts the brightness back to 100 %.</summary>
+    [RelayCommand]
+    private void ResetBrightness() => Brightness = 100;
 
     public bool Orthographic
     {

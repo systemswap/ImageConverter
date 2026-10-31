@@ -84,7 +84,15 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
   **Umgebungsverdeckung im Bildraum** (SSAO, halbe Auflösung, 16 Proben, geglättet):
   Ecken, Bohrungen und der Fuß eines Zapfens werden weich dunkler – unabhängig von der
   Modellgröße und ohne Rechenzeit auf dem Prozessor. Eine Verdeckung je Eckpunkt wurde
-  verworfen: große ebene Flächen haben zu wenige Eckpunkte, um sie zu zeigen.
+  verworfen: große ebene Flächen haben zu wenige Eckpunkte, um sie zu zeigen. Damit Flächen
+  bei flachem Blick nicht schlagartig fleckig dunkel werden: Der Tiefendurchgang schreibt die
+  genaue Flächennormale mit (statt sie aus den Nachbartiefen zu schätzen), der Mindestabstand
+  der Proben wächst mit der Neigung der Fläche, die Verdeckung blendet bei fast streifendem
+  Blick aus, und das Glätten mischt nur Nachbarn derselben Fläche (keine dunklen Säume über
+  Umrisse hinweg).
+- **Helligkeit** (Spalte › Ansicht, 50–150 %, gespeichert; Doppelklick auf den Wert = 100 %):
+  heller hebt die Mitteltöne entlang einer Kurve an, so dass beleuchtete Flächen nicht weiß
+  ausbrennen; dunkler skaliert das Licht herunter. Der Hintergrund bleibt.
   Weicher **Bodenschatten** aus der Draufsicht (256 × 256, geglättet), blendet beim Blick
   von unten aus. Feine Linien an scharfen Kanten (> 40°), Kantenglättung (4× MSAA).
 - Ansichten „Fläche“, „Drahtgitter“ (alle Kanten, auch verdeckte) und „Bauplan“ (blau,
@@ -120,8 +128,11 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
     jede weitere Raste nimmt die nächste Wand unter der Maus weg – der Schnitt springt knapp hinter die Stelle, an der der
     Strahl die Wand verlässt (Fläche von innen gesehen). Herauszoomen lässt die Wand weg, so dass man sieht, was dahinter
     liegt (z. B. die Fläche eines Stegs, die zur Außenwand zeigt); Esc oder ✕ holt alle Wände zurück.
-  - *Durchfliegen* (Perspektive): nah an einer Fläche bewegt sich das Auge mindestens 0,5 % der Modellgröße je Raste
-    weiter, hinter der Fläche auf die nächste zu (oder geradeaus); die nahe Schnittebene schneidet weg, was davor liegt.
+  - *Durchfliegen* (Perspektive): das Auge fährt entlang des Strahls unter der Maus; nah an einer Fläche mindestens
+    0,5 % der Modellgröße je Raste, hinter der Fläche auf die nächste zu (oder geradeaus); die nahe Schnittebene schneidet
+    weg, was davor liegt. Herauszoomen geht denselben Weg zurück, ebenfalls mit dieser Mindestschrittweite. Der Drehpunkt
+    behält dabei seine Tiefe, wird beim Durchfliegen mitgeschoben und beim Herauszoomen auf die Tiefe der Modellmitte
+    zurückgeholt.
   - *Umschalt + Mausrad* schiebt den Schnitt fein (2 % des sichtbaren Ausschnitts je Raste), Anzeige oben links in mm.
   - Der Schnitt wird parallel zum Bildschirm gesetzt und bleibt dann im Modell stehen – man kann um das Aufgeschnittene
     herumdrehen. Klicks und Überfahren treffen erst hinter dem Schnitt, der Bodenschatten ist dann aus.

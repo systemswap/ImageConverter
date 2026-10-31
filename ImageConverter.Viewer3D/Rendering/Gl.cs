@@ -25,7 +25,7 @@ internal sealed unsafe class Gl
     public const int DepthTest = 0x0B71, Blend = 0x0BE2, PolygonOffsetFill = 0x8037, CullFace = 0x0B44, ScissorTest = 0x0C11;
     public const int Less = 0x0201, LessEqual = 0x0203, Always = 0x0207;
     public const int SrcAlpha = 0x0302, OneMinusSrcAlpha = 0x0303, One = 1;
-    public const int Texture2D = 0x0DE1, Texture0 = 0x84C0, TextureMinFilter = 0x2801, TextureMagFilter = 0x2800;
+    public const int Texture2D = 0x0DE1, Texture0 = 0x84C0, Texture1 = 0x84C1, TextureMinFilter = 0x2801, TextureMagFilter = 0x2800;
     public const int TextureWrapS = 0x2802, TextureWrapT = 0x2803, Linear = 0x2601, ClampToEdge = 0x812F;
     public const int Red = 0x1903, R8 = 0x8229, Rgba = 0x1908, Rgba8 = 0x8058, UnpackAlignment = 0x0CF5, PackAlignment = 0x0D05;
     public const int Framebuffer = 0x8D40, ReadFramebuffer = 0x8CA8, DrawFramebuffer = 0x8CA9, Renderbuffer = 0x8D41;
@@ -368,6 +368,10 @@ internal sealed unsafe class Gl
     {
         fixed (byte* p = data) _texImage2D(Texture2D, 0, R8, width, height, 0, Red, UnsignedByte, p);
     }
+
+    /// <summary>Empty four-channel 8-bit texture (surface normals for the occlusion pass).</summary>
+    public void TexImageRgba8(int width, int height) =>
+        _texImage2D(Texture2D, 0, Rgba8, width, height, 0, Rgba, UnsignedByte, null);
 
     public int GenFramebuffer()
     {

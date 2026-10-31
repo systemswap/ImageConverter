@@ -27,7 +27,7 @@ internal sealed record FrameState(
     Vector3 Eye, Vector3 Forward, Vector3 Right, Vector3 Up, bool Orthographic,
     RenderMode Mode, bool Edges, bool Parts, bool Dark,
     IReadOnlyList<Highlight> Highlights, IReadOnlyList<Vector4>? Clips = null,
-    IReadOnlyList<(Vector3[] Quad, bool Selected)>? SectionQuads = null, bool SectionActive = false);
+    IReadOnlyList<(Vector3[] Quad, bool Selected)>? SectionQuads = null, bool SectionActive = false, float Exposure = 1);
 
 /// <summary>
 /// CPU side of what is drawn: owned by the UI thread, filled by the background steps. Each part carries a version, so
@@ -86,15 +86,18 @@ internal sealed class ModelRenderer
     private int _fbo, _colourRb, _depthRb, _fboWidth, _fboHeight, _samples;
 
     // Ambient occlusion at half resolution: depth (+ an unused colour target), raw result, blurred result
-    private int _aoDepthFbo, _aoDepthTex, _aoDummyTex, _aoRawFbo, _aoRawTex, _aoFbo, _aoTex, _whiteTex, _aoWidth, _aoHeight;
+    private int _aoDepthFbo, _aoDepthTex, _aoNormalTex, _aoRawFbo, _aoRawTex, _aoFbo, _aoTex, _whiteTex, _aoWidth, _aoHeight;
     private bool _aoBroken;
 
     // Uniform locations
     private int _mViewProj, _mEye, _mForward, _mOrtho, _mKey, _mFill, _mBase, _mParts, _mTint, _mAo, _mFlat, _mSsao, _mScreen;
-    private int _dViewProj, _sDepth, _sProj, _sInvProj, _sTexel, _sRadius, _blInput;
+    private int _dViewProj, _dRight, _dUp, _dBack, _sNormal, _sDepth, _sProj, _sInvProj, _sTexel, _sRadius, _blInput, _blDepth, _blInvProj, _blRadius, _mExposure;
     private int _mInner, _mClipCount, _dClipCount, _lClipCount;
     private readonly int[] _mClips = new int[6], _dClips = new int[6], _lClips = new int[6];
     private int _lViewProj, _lColour, _bTop, _bBottom, _gViewProj, _gShadow, _gColour;
+
+    /// <summary>Ambient occlusion on (for comparisons of the shading).</summary>
+    internal bool OcclusionEnabled { get; set; } = true;
 
     /// <summary>Why drawing is not possible (missing OpenGL features), or null.</summary>
     public string? Failure { get; private set; }
@@ -131,9 +134,13 @@ internal sealed class ModelRenderer
         _mTint = gl.Uniform(_modelProgram, "uTint");
         _mAo = gl.Uniform(_modelProgram, "uAo");
         _mFlat = gl.Uniform(_modelProgram, "uFlat");
+        _mExposure = gl.Uniform(_modelProgram, "uExposure");
         _mSsao = gl.Uniform(_modelProgram, "uSsao");
         _mScreen = gl.Uniform(_modelProgram, "uScreen");
         _dViewProj = gl.Uniform(_depthProgram, "uViewProj");
+        _dRight = gl.Uniform(_depthProgram, "uRight");
+        _dUp = gl.Uniform(_depthProgram, "uUp");
+        _dBack = gl.Uniform(_depthProgram, "uBack");
         _mInner = gl.Uniform(_modelProgram, "uInner");
         _mClipCount = gl.Uniform(_modelProgram, "uClipCount");
         _dClipCount = gl.Uniform(_depthProgram, "uClipCount");
@@ -145,11 +152,15 @@ internal sealed class ModelRenderer
             _lClips[i] = gl.Uniform(_lineProgram, $"uClips[{i}]");
         }
         _sDepth = gl.Uniform(_ssaoProgram, "uDepth");
+        _sNormal = gl.Uniform(_ssaoProgram, "uNormal");
         _sProj = gl.Uniform(_ssaoProgram, "uProj");
         _sInvProj = gl.Uniform(_ssaoProgram, "uInvProj");
         _sTexel = gl.Uniform(_ssaoProgram, "uTexel");
         _sRadius = gl.Uniform(_ssaoProgram, "uRadius");
         _blInput = gl.Uniform(_blurProgram, "uInput");
+        _blDepth = gl.Uniform(_blurProgram, "uDepth");
+        _blInvProj = gl.Uniform(_blurProgram, "uInvProj");
+        _blRadius = gl.Uniform(_blurProgram, "uRadius");
         _lViewProj = gl.Uniform(_lineProgram, "uViewProj");
         _lColour = gl.Uniform(_lineProgram, "uColour");
         _bTop = gl.Uniform(_backgroundProgram, "uTop");
@@ -235,7 +246,7 @@ internal sealed class ModelRenderer
         gl.ClearDepth();
         gl.Clear(Gl.ColorBufferBit | Gl.DepthBufferBit);
 
-        var occlusion = frame.Mode == RenderMode.Solid && Occlusion(scene, frame, width, height);
+        var occlusion = frame.Mode == RenderMode.Solid && OcclusionEnabled && Occlusion(scene, frame, width, height);
         gl.BindFramebuffer(Gl.Framebuffer, own ? _fbo : target);
         gl.Viewport(0, 0, width, height);
 
@@ -440,6 +451,7 @@ internal sealed class ModelRenderer
         gl.Uniform1(_mSsao, 0);
         gl.Uniform2(_mScreen, width, height);
         gl.Uniform1(_mFlat, blueprint ? 1f : 0f);
+        gl.Uniform1(_mExposure, Math.Clamp(f.Exposure, 0.25f, 4f));
         gl.Uniform1(_mInner, blueprint ? 0 : 1);
         SetClip(_mClips, _mClipCount, f);
         gl.Uniform4(_mTint, Vector4.Zero);
@@ -542,6 +554,9 @@ internal sealed class ModelRenderer
         gl.DepthFunc(Gl.LessEqual);
         gl.UseProgram(_depthProgram);
         gl.UniformMatrix(_dViewProj, f.ViewProjection);
+        gl.Uniform3(_dRight, f.Right);
+        gl.Uniform3(_dUp, f.Up);
+        gl.Uniform3(_dBack, -f.Forward);
         SetClip(_dClips, _dClipCount, f);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
@@ -554,6 +569,10 @@ internal sealed class ModelRenderer
         gl.ActiveTexture(Gl.Texture0);
         gl.BindTexture(Gl.Texture2D, _aoDepthTex);
         gl.Uniform1(_sDepth, 0);
+        gl.ActiveTexture(Gl.Texture1);
+        gl.BindTexture(Gl.Texture2D, _aoNormalTex);
+        gl.Uniform1(_sNormal, 1);
+        gl.ActiveTexture(Gl.Texture0);
         gl.UniformMatrix(_sProj, f.Projection);
         Matrix4x4.Invert(f.Projection, out var inverse);
         gl.UniformMatrix(_sInvProj, inverse);
@@ -565,6 +584,12 @@ internal sealed class ModelRenderer
         gl.UseProgram(_blurProgram);
         gl.BindTexture(Gl.Texture2D, _aoRawTex);
         gl.Uniform1(_blInput, 0);
+        gl.ActiveTexture(Gl.Texture1);
+        gl.BindTexture(Gl.Texture2D, _aoDepthTex);
+        gl.Uniform1(_blDepth, 1);
+        gl.ActiveTexture(Gl.Texture0);
+        gl.UniformMatrix(_blInvProj, inverse);
+        gl.Uniform1(_blRadius, f.OcclusionRadius);
         gl.DrawArrays(Gl.Triangles, 0, 3);
         gl.DepthMask(true);
         return true;
@@ -576,10 +601,13 @@ internal sealed class ModelRenderer
         var gl = _gl;
         DeleteOcclusionTargets();
         _aoDepthTex = Texture(depth: true);
-        _aoDummyTex = Texture(depth: false);
+        _aoNormalTex = gl.GenTexture();
+        gl.BindTexture(Gl.Texture2D, _aoNormalTex);
+        gl.TexImageRgba8(w, h);
+        SetFiltering(Gl.Nearest);
         _aoRawTex = Texture(depth: false);
         _aoTex = Texture(depth: false);
-        _aoDepthFbo = Target(_aoDummyTex, _aoDepthTex);
+        _aoDepthFbo = Target(_aoNormalTex, _aoDepthTex);
         _aoRawFbo = Target(_aoRawTex, 0);
         _aoFbo = Target(_aoTex, 0);
         if (_aoDepthFbo == 0 || _aoRawFbo == 0 || _aoFbo == 0)
@@ -619,8 +647,8 @@ internal sealed class ModelRenderer
     {
         var gl = _gl;
         foreach (var f in new[] { _aoDepthFbo, _aoRawFbo, _aoFbo }) gl.DeleteFramebuffer(f);
-        foreach (var t in new[] { _aoDepthTex, _aoDummyTex, _aoRawTex, _aoTex }) gl.DeleteTexture(t);
-        _aoDepthFbo = _aoRawFbo = _aoFbo = _aoDepthTex = _aoDummyTex = _aoRawTex = _aoTex = 0;
+        foreach (var t in new[] { _aoDepthTex, _aoNormalTex, _aoRawTex, _aoTex }) gl.DeleteTexture(t);
+        _aoDepthFbo = _aoRawFbo = _aoFbo = _aoDepthTex = _aoNormalTex = _aoRawTex = _aoTex = 0;
         _aoWidth = _aoHeight = 0;
     }
 

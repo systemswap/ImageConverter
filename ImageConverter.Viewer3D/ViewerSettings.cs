@@ -13,10 +13,16 @@ namespace ImageConverter.Viewer3D;
 /// <param name="Orthographic">Orthographic rather than perspective projection.</param>
 /// <param name="PivotAtCentre">Turn around the vertical centre axis of the model instead of the point under the mouse.</param>
 /// <param name="Inches">Show lengths in inches instead of millimetres.</param>
+/// <param name="Brightness">Brightness of the lighting in percent (<see cref="MinBrightness"/> to <see cref="MaxBrightness"/>).</param>
 public sealed record ViewerSettings(
     int Version = 1, int Mode = 0, bool Edges = true, bool Parts = false, bool Orthographic = true,
-    bool PivotAtCentre = false, bool Inches = false)
+    bool PivotAtCentre = false, bool Inches = false, int Brightness = 100)
 {
+    public const int MinBrightness = 50, MaxBrightness = 150;
+
+    /// <summary>A brightness in the allowed range (a hand-edited file or a slider beyond its ends).</summary>
+    public static int ClampBrightness(int percent) => Math.Clamp(percent, MinBrightness, MaxBrightness);
+
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private static readonly Lock Gate = new();
 
@@ -30,7 +36,7 @@ public sealed record ViewerSettings(
             var info = new FileInfo(File);
             if (!info.Exists || info.Length > 64 * 1024) return new();   // a settings file is tiny; anything else is not ours
             var s = JsonSerializer.Deserialize<ViewerSettings>(System.IO.File.ReadAllText(File), Json) ?? new();
-            return s with { Mode = Math.Clamp(s.Mode, 0, 2) };
+            return s with { Mode = Math.Clamp(s.Mode, 0, 2), Brightness = ClampBrightness(s.Brightness) };
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {

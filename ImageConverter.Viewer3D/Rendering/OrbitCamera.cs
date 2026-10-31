@@ -164,37 +164,79 @@ public sealed class OrbitCamera
     /// <param name="factor">Below 1 closer, above 1 farther.</param>
     /// <param name="anchor">Point under the mouse (on the surface or on the plane through the centre).</param>
     /// <param name="minStep">
-    /// Perspective only: the eye moves at least this far towards the anchor per step, so that it goes through the surface
-    /// instead of only creeping up to it; 0 = never through.
+    /// Perspective only: the eye moves at least this far towards or away from the anchor per step, so that it goes through
+    /// the surface instead of only creeping up to it, and back out the same way; 0 = never through.
     /// </param>
     /// <remarks>
     /// Scaling the eye and the target around a point on the ray under the mouse keeps that ray – and so the point under
     /// the mouse – where it is, in both projections. Close to a surface in the perspective view the eye moves on along
     /// the ray by <paramref name="minStep"/> instead: through the wall, and what lies behind it comes into view (the near
-    /// clip plane cuts away what is in front of the eye).
+    /// clip plane cuts away what is in front of the eye). Zooming out mirrors this. In both projections the target keeps
+    /// its depth: after flying through, the surface under the mouse is often right in front of the eye, and scaling the
+    /// target around it would barely move the eye while the target ran off until the distance limit stopped everything
+    /// (error memory #120); orthographic, anchors behind cut-away walls would push it out of the model.
     /// </remarks>
     /// <param name="minViewHeight">Orthographic only: the view never shows less than this height.</param>
     /// <returns>False if the orthographic view is already at <paramref name="minViewHeight"/> and could not zoom in further.</returns>
     public bool Zoom(float factor, Vector3 anchor, float minStep = 0, float minViewHeight = 0)
     {
-        if (!Orthographic && factor < 1 && minStep > 0)
-        {
-            var toAnchor = anchor - Eye;
-            var length = toAnchor.Length();
-            if (length * (1 - factor) < minStep)
-            {
-                // Towards the point under the mouse; once past it (or right on it), straight on
-                var dir = length > 0 && Vector3.Dot(toAnchor, Forward) > 0 ? toAnchor / length : Forward;
-                Target += dir * minStep;   // eye moves along with the target, the distance stays
-                return true;
-            }
-        }
-        var floor = Math.Max(SceneRadius * 1e-3f, Orthographic ? minViewHeight / (2 * TanHalf) : 0);
+        if (!Orthographic) return ZoomPerspective(factor, anchor, minStep);
+        var floor = Math.Max(SceneRadius * 1e-3f, minViewHeight / (2 * TanHalf));
         var newDistance = Math.Clamp(Distance * factor, floor, SceneRadius * 200);
         if (factor < 1 && newDistance >= Distance * 0.9999f) return false;
         factor = newDistance / Distance;
         Distance = newDistance;
-        Target = anchor + (Target - anchor) * factor;
+        var target = anchor + (Target - anchor) * factor;
+        Target = target + Forward * Vector3.Dot(Target - target, Forward);
+        return true;
+    }
+
+    /// <summary>
+    /// Perspective zoom: the eye moves along the ray to the anchor by the share 1 − <paramref name="factor"/> of the way,
+    /// at least <paramref name="minStep"/>. The target keeps its depth – sideways it moves with the eye, the distance takes
+    /// up the rest – and is pushed ahead once the eye comes close to it; zooming out brings it back to the depth of the
+    /// scene centre.
+    /// </summary>
+    private bool ZoomPerspective(float factor, Vector3 anchor, float minStep)
+    {
+        var toAnchor = anchor - Eye;
+        var length = toAnchor.Length();
+        // Along the ray to the point under the mouse; once past it (or right on it), straight on by the smallest step –
+        // a share of the way to a point behind the eye would grow with every step
+        var ahead = length > 1e-9f && Vector3.Dot(toAnchor, Forward) > 0;
+        var dir = ahead ? toAnchor / length : Forward;
+        if (!ahead) length = minStep > 0 ? 0 : Distance;
+        var step = length * (1 - factor);   // positive towards the anchor
+        if (minStep > 0 && factor != 1 && Math.Abs(step) < minStep) step = factor < 1 ? minStep : -minStep;
+        var move = dir * step;
+        var depth = Vector3.Dot(move, Forward);
+        var max = SceneRadius * 200;
+        if (Distance - depth > max)
+        {
+            if (depth >= 0 || Distance >= max) return false;
+            move *= (Distance - max) / depth;
+            depth = Vector3.Dot(move, Forward);
+        }
+        if (move.LengthSquared() == 0) return false;
+        var target = Target + move - Forward * depth;
+        var distance = Distance - depth;
+        // Pushed ahead, the target stays a few steps in front of the eye: panning and the section steps scale with its
+        // distance and would come to a standstill right at the eye
+        var floor = Math.Max(SceneRadius * 1e-3f, 8 * minStep);
+        if (distance < floor)
+        {
+            target += Forward * (floor - distance);
+            distance = floor;
+        }
+        // Zooming out, a target pushed beyond the model comes back to the depth of its centre (the view stays the same)
+        var centreDepth = Vector3.Dot(SceneCentre - (target - Forward * distance), Forward);
+        if (step < 0 && distance > centreDepth && centreDepth > floor)
+        {
+            target -= Forward * (distance - centreDepth);
+            distance = centreDepth;
+        }
+        Target = target;
+        Distance = distance;
         return true;
     }
 

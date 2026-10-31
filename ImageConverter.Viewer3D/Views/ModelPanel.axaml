@@ -95,6 +95,14 @@
                             <ComboBoxItem Content="{l:T 'Zoll'}" />
                         </ComboBox>
                     </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                        <TextBlock Classes="label" Text="{l:T 'Helligkeit'}" />
+                        <Slider Grid.Column="1" Minimum="50" Maximum="150" TickFrequency="5" IsSnapToTickEnabled="True"
+                                Value="{Binding Brightness}"
+                                ToolTip.Tip="{l:T 'Wie hell das Modell beleuchtet wird. Doppelklick auf den Wert: zurück auf 100 %.'}" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding BrightnessLabel}" Background="Transparent"
+                                   DoubleTapped="OnBrightnessReset" />
+                    </Grid>
                     <CheckBox IsChecked="{Binding ShowEdges}" Content="{l:T 'Kanten zeigen'}"
                               ToolTip.Tip="{l:T 'Feine Linien an scharfen Kanten (in der Ansicht „Fläche“).'}" />
                     <CheckBox IsChecked="{Binding ShowParts}" Content="{l:T 'Teile färben'}"

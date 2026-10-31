@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 
 namespace ImageConverter.Viewer3D.Views;
@@ -7,4 +8,7 @@ namespace ImageConverter.Viewer3D.Views;
 public partial class ModelPanel : UserControl
 {
     public ModelPanel() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>Double click on the brightness value: back to 100 %.</summary>
+    private void OnBrightnessReset(object? sender, TappedEventArgs e) => (DataContext as ModelViewModel)?.ResetBrightnessCommand.Execute(null);
 }
