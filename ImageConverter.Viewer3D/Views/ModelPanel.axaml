@@ -127,11 +127,11 @@
             <HeaderedContentControl Header="{l:T 'SCHNITT'}">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,6,*">
-                        <ToggleButton Grid.Column="0" Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                      Padding="8,6" FontSize="12" IsChecked="{Binding PlaceSectionTool}" IsEnabled="{Binding CanAddSection}" Content="{l:T 'Anlegen'}"
+                        <ToggleButton Grid.Column="0" Classes="chain" Width="NaN" Height="NaN" MinHeight="30" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                      Padding="8,5" FontSize="12" IsChecked="{Binding PlaceSectionTool}" IsEnabled="{Binding CanAddSection}" Content="{l:T 'Anlegen'}"
                                       ToolTip.Tip="{l:T 'Dann auf eine Fläche klicken, z. B. eine Wand: die Schnittfläche legt sich darauf und lässt sich ins Objekt verschieben.'}" />
-                        <ToggleButton Grid.Column="2" Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                      Padding="8,6" FontSize="12" IsChecked="{Binding MoveSectionTool}" IsEnabled="{Binding HasSection}"
+                        <ToggleButton Grid.Column="2" Classes="chain" Width="NaN" Height="NaN" MinHeight="30" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                      Padding="8,5" FontSize="12" IsChecked="{Binding MoveSectionTool}" IsEnabled="{Binding HasSection}"
                                       Content="{l:T 'Verschieben'}"
                                       ToolTip.Tip="{l:T 'Schnittfläche mit der Maus ziehen oder das Mausrad über ihr drehen; ein Klick daneben beendet das Verschieben.'}" />
                     </Grid>
@@ -149,8 +149,9 @@
             <!-- ============================== Messen -->
             <HeaderedContentControl Header="{l:T 'MESSEN'}">
                 <StackPanel Spacing="8">
-                    <ToggleButton Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                  Padding="12,6" IsChecked="{Binding MeasureTool}" Content="{l:T '📏  Messen'}" />
+                    <!-- The chain style gives a fixed small height (26 px in the column); text and symbol need their own -->
+                    <ToggleButton Classes="chain" Width="NaN" Height="NaN" MinHeight="32" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                  Padding="12,5" IsChecked="{Binding MeasureTool}" Content="{l:T '📏  Messen'}" />
                     <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding MeasureHint}" />
                     <Border IsVisible="{Binding HasPending}" Padding="8,4" CornerRadius="6"
                             Background="{DynamicResource SurfaceAltBrush}">

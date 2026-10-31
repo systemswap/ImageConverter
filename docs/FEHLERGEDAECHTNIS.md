@@ -3064,3 +3064,14 @@ Test oder Nachweis.
   und ein neuer Test mit einem anderen Dispatcher-Zugriff stieße wieder darauf); `Post` im Modell absichern (das Programm hat das Problem nicht).
 - **Nicht tun:** den Dispatcher in Tests erst nebenbei aus mehreren Threads entstehen lassen; einen einzelnen grünen Testlauf als Beweis nehmen.
 - **Wo im Code:** `ImageConverter.Tests/DispatcherSetup.cs`. **Test:** 10 bzw. 20 vollständige Läufe im Release-Modus (`tools/tests-wiederholen.sh`).
+
+## 123. 3D: Knopf „Messen“ in der Spalte in der Höhe abgeschnitten (0.11.0)
+
+- **Entdeckt:** 31.10.2026, 0.11.0, vom Nutzer („der Messen-Button links ist in der Höhe abgeschnitten“). **Behoben:** 0.11.1-beta.
+- **Wie geprüft:** Im Prüfprogramm (`stl-shot <stl> panel`) Höhe des Knopfs und Platzbedarf des Inhalts im echten Fenster ausgelesen.
+- **Was und warum:** Die Werkzeugknöpfe der Spalte nutzen den Stil der Kettenschaltfläche (`ToggleButton.chain`); der setzt eine feste Höhe,
+  in der Einstellungsspalte (`.settings`) 26 px. Mit 6 px Innenabstand oben und unten und dem Rand blieben 12 px – das Lineal-Symbol mit Text
+  braucht 18,5 px. „Anlegen“/„Verschieben“ beim Schnitt saßen ebenso knapp.
+- **Lösung:** Diese Knöpfe heben die feste Höhe auf (`Height="NaN"`, Mindesthöhe 30 bzw. 32 px, Innenabstand 5 px); jetzt 20 px Platz für
+  18,5 px Inhalt. **Nicht tun:** den Kettenstil für Knöpfe mit Text übernehmen, ohne die Höhe freizugeben.
+- **Wo im Code:** `ImageConverter.Viewer3D/Views/ModelPanel.axaml` (Gruppen SCHNITT und MESSEN). **Test:** Prüfprogramm `panel` (Maße im Fenster).
