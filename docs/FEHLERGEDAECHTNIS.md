@@ -3045,3 +3045,22 @@ Test oder Nachweis.
   Dithering), `ModelRenderer` (`RenderQuality`, `Pass`, `HardwareClip`, `UploadSmoothLines`), `ModelViewModel.QualityIndex`/`EnsureSmooth`.
 - **Test:** `SmoothShadingTests` (Quader und flache 3°-Kante bleiben flach, feines Rohr radial, grobes Rohr facettiert, Kugel, Stufen);
   Bildvergleich im Prüfprogramm (GPU nötig).
+
+## 122. Tests: seltene NullReferenceException im Avalonia-Dispatcher beim Bau des Hauptfensters (0.10.1-beta)
+
+- **Entdeckt:** 31.10.2026, 0.10.1-beta, bei den 10 Testläufen vor einem Meilenstein (`tools/tests-wiederholen.sh`): Lauf 4 von 10 schlug fehl,
+  `PerImageSettingsTests.ChainClosed_WidthTyped_PortraitGetsSameWidth_OwnAspect` – `NullReferenceException` in
+  `Dispatcher.RequestForegroundProcessing`, aus `MainViewModel.RequestEditRows` (`Dispatcher.UIThread.Post`) im Konstruktor. **Behoben:** 0.10.2-beta.
+- **Wie untersucht:** Die Tests mit `MainViewModel` allein 30-mal: kein Fehler. Belastungsprogramm (16 Threads, je 20 000 Aufträge; dann 300
+  frische Prozesse, 16 Threads greifen über eine Schranke gleichzeitig zum ersten Mal zu): kein Fehler – das Fenster ist zu klein, um es so
+  zu treffen. Ursache aus dem Quelltext von Avalonia (`Dispatcher.cs`, Konstruktor): `s_uiThread ??= this` steht **vor**
+  `ReplaceImplementation(impl)`; bis dahin ist `_impl` null, und `RequestForegroundProcessing` ruft `_impl.Signal()` ohne Prüfung.
+- **Was und warum:** Bauen zwei Tests im selben Augenblick ihr erstes Hauptfenster-Modell, legt der eine den Dispatcher an, der andere sieht
+  ihn schon als UI-Dispatcher und stellt einen Auftrag hinein, bevor er fertig ist. Nur beim allerersten Zugriff je Testlauf, daher selten
+  (etwa einmal in einem Dutzend Läufen); welche Tests sich treffen, hängt von der Reihenfolge ab (neue Testklassen verschieben sie).
+  Im Programm tritt es nicht auf: Der Oberflächen-Thread legt den Dispatcher beim Start an, bevor andere Threads laufen.
+- **Lösung:** `ImageConverter.Tests/DispatcherSetup.cs` legt den Dispatcher per `[ModuleInitializer]` einmal an, bevor ein Test läuft –
+  danach gibt es keinen halb fertigen Dispatcher mehr. **Verworfen:** alle Tests mit Hauptfenster-Modell nacheinander laufen lassen (langsamer,
+  und ein neuer Test mit einem anderen Dispatcher-Zugriff stieße wieder darauf); `Post` im Modell absichern (das Programm hat das Problem nicht).
+- **Nicht tun:** den Dispatcher in Tests erst nebenbei aus mehreren Threads entstehen lassen; einen einzelnen grünen Testlauf als Beweis nehmen.
+- **Wo im Code:** `ImageConverter.Tests/DispatcherSetup.cs`. **Test:** 10 bzw. 20 vollständige Läufe im Release-Modus (`tools/tests-wiederholen.sh`).
