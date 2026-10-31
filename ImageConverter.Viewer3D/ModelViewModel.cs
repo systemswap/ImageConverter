@@ -425,6 +425,12 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Fit() => ViewRequested?.Invoke(null);
 
+    /// <summary>The view should bring the model into the middle, keeping zoom and direction.</summary>
+    public event Action? CentreRequested;
+
+    [RelayCommand]
+    private void Centre() => CentreRequested?.Invoke();
+
     // ------------------------------------------------------------------ measuring
 
     [ObservableProperty]
@@ -641,5 +647,6 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         _measureCts.Cancel();
         Changed = null;
         ViewRequested = null;
+        CentreRequested = null;
     }
 }

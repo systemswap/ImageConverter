@@ -1077,6 +1077,8 @@ public static class English
         ["Zylinder · Ø {0}"] = "Cylinder · Ø {0}",
         ["Zylinder"] = "Cylinder",
         ["Die Grafikkarte hat nicht genug Speicher für dieses Modell."] = "The graphics card does not have enough memory for this model.",
+        ["⌖  Zentrieren"] = "⌖  Centre",
+        ["Modell in die Bildmitte holen – Zoom und Blickrichtung bleiben (C)."] = "Bring the model into the middle – zoom and direction stay (C).",
     };
 
     /// <summary>English texts keyed by the German text.</summary>

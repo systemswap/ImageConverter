@@ -103,7 +103,8 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
 - **Drehscheibe:** die Hochachse (Z, wie beim 3D-Druck) bleibt immer senkrecht;
   waagerecht ziehen dreht um sie, senkrecht ziehen kippt höchstens bis zur Drauf- bzw.
   Untersicht.
-- Knöpfe: Einpassen, Iso, Vorne, Hinten, Links, Rechts, Oben, Unten (mit kurzem Übergang);
+- Knöpfe: Einpassen (F), Zentrieren (C: Modellmitte in die Bildmitte, Zoom und Blickrichtung bleiben), Iso, Vorne,
+  Hinten, Links, Rechts, Oben, Unten (mit kurzem Übergang);
   Orthografisch/Perspektive (zum Messen orthografisch voreingestellt).
 
 ## 6. Flächen (`FaceFinder`)

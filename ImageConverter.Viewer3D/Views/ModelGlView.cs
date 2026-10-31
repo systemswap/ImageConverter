@@ -59,6 +59,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         Camera.SceneRadius = Math.Max(box.Diagonal * 0.5f * 1.8f, 1e-3f);   // model and the ground around it
         model.Changed += OnModelChanged;
         model.ViewRequested += OnViewRequested;
+        model.CentreRequested += OnCentreRequested;
         ActualThemeVariantChanged += (_, _) => Invalidate();
         model.PropertyChanged += (_, e) =>
         {
@@ -210,6 +211,14 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         AnimateTo(probe.State);
     }
 
+    /// <summary>Moves the centre of the model into the middle of the view; zoom and direction stay.</summary>
+    private void OnCentreRequested()
+    {
+        var end = Camera.State;
+        end.Target = _model.Mesh.Bounds.Center;
+        AnimateTo(end);
+    }
+
     private void AnimateTo((Vector3 Target, float Yaw, float Pitch, float Distance) end)
     {
         _animation?.Stop();
@@ -328,6 +337,11 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         else if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.None)
         {
             OnViewRequested(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.C && e.KeyModifiers == KeyModifiers.None)
+        {
+            OnCentreRequested();
             e.Handled = true;
         }
     }

@@ -15,8 +15,12 @@
                 BorderThickness="0,1,0,0"
                 Padding="10,6">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                <Button Grid.Column="0" Classes="tool" Content="{l:T '⤢  Einpassen'}" Command="{Binding FitCommand}"
-                        ToolTip.Tip="{l:T 'Ganzes Modell zeigen (F oder Doppelklick ins Bild).'}" />
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                    <Button Classes="tool" Content="{l:T '⤢  Einpassen'}" Command="{Binding FitCommand}"
+                            ToolTip.Tip="{l:T 'Ganzes Modell zeigen (F oder Doppelklick ins Bild).'}" />
+                    <Button Classes="tool" Content="{l:T '⌖  Zentrieren'}" Command="{Binding CentreCommand}"
+                            ToolTip.Tip="{l:T 'Modell in die Bildmitte holen – Zoom und Blickrichtung bleiben (C).'}" />
+                </StackPanel>
 
                 <Rectangle Grid.Column="1" Width="1" Margin="10,4" Fill="{DynamicResource BorderBrush2}" />
 
