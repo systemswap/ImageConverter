@@ -68,18 +68,63 @@
         <Panel x:Name="Stage">
             <!-- 3D-Ansicht und Maßlinien kommen aus dem Code (sie brauchen das Modell beim Erzeugen) -->
 
-            <!-- Schnitt parallel zum Bildschirm (Umschalt + Mausrad): wie tief, und weg damit -->
-            <Border VerticalAlignment="Top" HorizontalAlignment="Left" Margin="12" Padding="10,4,4,4" CornerRadius="10"
+            <!-- Schnittflächen: kleine Karte oben rechts – Liste zum Auswählen, rechts daneben Richtung und Tiefe -->
+            <Border VerticalAlignment="Top" HorizontalAlignment="Right" Margin="12" Width="320" Padding="12,10,12,10" CornerRadius="12"
                     Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                    BoxShadow="0 6 20 0 #2A000000"
                     IsVisible="{Binding HasSection}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding SectionLabel}" />
-                    <NumericUpDown Width="104" VerticalAlignment="Center" Minimum="0" Increment="0.1" FormatString="0.00"
-                                   Value="{Binding SectionDepthInUnit}"
-                                   ToolTip.Tip="{l:T 'Tiefe des Schnitts hinter der Vorderseite des Modells; Pfeile ändern sie um 0,1.'}" />
-                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding UnitLabel}" />
-                    <Button Classes="icon" Width="22" Height="22" FontSize="11" Content="✕" Command="{Binding RemoveSelectedSectionCommand}"
-                            ToolTip.Tip="{l:T 'Diese Schnittfläche entfernen (Esc entfernt alle)'}" />
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="label" FontWeight="SemiBold" VerticalAlignment="Center" Text="{l:T 'SCHNITTFLÄCHEN'}" />
+                        <Border Grid.Column="1" CornerRadius="9" Padding="7,1" Background="{DynamicResource AccentSoftBrush}">
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" Text="{Binding Sections.Count}" />
+                        </Border>
+                    </Grid>
+
+                    <ListBox ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" MaxHeight="260"
+                             ToolTip.Tip="{l:T 'Auswählen: Verschieben, Mausrad und Zahlenfeld wirken auf diese Schnittfläche.'}">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="8,4" />
+                                <Setter Property="Margin" Value="0,1" />
+                                <Setter Property="CornerRadius" Value="8" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="v:SectionItem">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                                    <Border Grid.Column="0" Width="4" Height="18" CornerRadius="2" Margin="0,0,8,0" VerticalAlignment="Center"
+                                            Background="{DynamicResource AccentBrush}" IsVisible="{Binding IsSelected}" />
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="12" Text="{Binding Name}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Classes="hint" FontSize="11" Margin="8,0" VerticalAlignment="Center"
+                                               Text="{Binding Direction}" />
+                                    <NumericUpDown Grid.Column="3" Width="92" Minimum="0" Increment="0.1" FormatString="0.00" FontSize="12"
+                                                   Value="{Binding DepthInUnit}"
+                                                   ToolTip.Tip="{l:T 'Tiefe des Schnitts hinter der Vorderseite des Modells; Pfeile ändern sie um 0,1.'}" />
+                                    <TextBlock Grid.Column="4" Classes="hint" FontSize="11" Margin="4,0,2,0" VerticalAlignment="Center"
+                                               Text="{Binding UnitLabel}" />
+                                    <Button Grid.Column="5" Classes="icon" Width="22" Height="22" FontSize="10" Content="✕"
+                                            Command="{Binding DeleteCommand}" ToolTip.Tip="{l:T 'Diese Schnittfläche entfernen'}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Grid ColumnDefinitions="*,6,*,6,Auto">
+                        <ToggleButton Grid.Column="0" Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                      Padding="6,4" FontSize="12" IsChecked="{Binding PlaceSectionTool}" IsEnabled="{Binding CanAddSection}"
+                                      Content="{l:T '▱  Neu'}"
+                                      ToolTip.Tip="{l:T 'Dann auf eine Fläche klicken, z. B. eine Wand: die Schnittfläche legt sich darauf und lässt sich ins Objekt verschieben.'}" />
+                        <ToggleButton Grid.Column="2" Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                      Padding="6,4" FontSize="12" IsChecked="{Binding MoveSectionTool}" Content="{l:T '⇕  Verschieben'}"
+                                      ToolTip.Tip="{l:T 'Schnittfläche mit der Maus ziehen oder das Mausrad über ihr drehen; ein Klick daneben beendet das Verschieben.'}" />
+                        <Button Grid.Column="4" Classes="subtle" Padding="8,4" FontSize="12" Content="{l:T 'Alle ✕'}"
+                                Command="{Binding ClearSectionCommand}" ToolTip.Tip="{l:T 'Alle Schnitte aufheben (Esc)'}" />
+                    </Grid>
+                    <TextBlock Classes="hint" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding !CanAddSection}"
+                               Text="{l:T 'Höchstens sechs Schnittflächen gleichzeitig.'}" />
                 </StackPanel>
             </Border>
 

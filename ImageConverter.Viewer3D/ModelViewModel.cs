@@ -108,11 +108,29 @@ public sealed partial class SectionItem : ObservableObject
 
     [ObservableProperty] public partial bool IsSelected { get; set; }
 
+    /// <summary>Which way it faces: „⊥ X“, „⊥ Y“, „⊥ Z“ when it lies perpendicular to an axis (within 1°), otherwise „schräg“.</summary>
+    public string Direction
+    {
+        get
+        {
+            var n = Normal;
+            const float aligned = 0.99985f;   // cos 1°
+            return Math.Abs(n.X) >= aligned ? "⊥ X" : Math.Abs(n.Y) >= aligned ? "⊥ Y" : Math.Abs(n.Z) >= aligned ? "⊥ Z" : Tr.T("schräg");
+        }
+    }
+
+    /// <summary>Unit of the depth: mm or in.</summary>
+    public string UnitLabel => _owner.UnitLabel;
+
     public IRelayCommand SelectCommand { get; }
 
     public IRelayCommand DeleteCommand { get; }
 
-    internal void UnitChanged() => OnPropertyChanged(nameof(DepthInUnit));
+    internal void UnitChanged()
+    {
+        OnPropertyChanged(nameof(DepthInUnit));
+        OnPropertyChanged(nameof(UnitLabel));
+    }
 }
 
 /// <summary>
@@ -463,8 +481,6 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
             foreach (var m in Measurements) m.Inches = value;
             RefreshStatistics();
             OnPropertyChanged(nameof(PendingText));
-            OnPropertyChanged(nameof(SectionText));
-            OnPropertyChanged(nameof(SectionDepthInUnit));
             OnPropertyChanged(nameof(UnitLabel));
             foreach (var x in Sections) x.UnitChanged();
             Redraw();
@@ -599,7 +615,6 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     /// <summary>The section moved by the tools and shown in the number field; null if there is none.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SectionText), nameof(SectionDepth), nameof(SectionDepthInUnit), nameof(SectionLabel))]
     public partial SectionItem? SelectedSection { get; set; }
 
     partial void OnSelectedSectionChanged(SectionItem? oldValue, SectionItem? newValue)
@@ -668,24 +683,6 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     /// <summary>Unit of the number fields: mm or in.</summary>
     public string UnitLabel => Inches ? "in" : "mm";
 
-    /// <summary>„Schnitt 2“ – which section the number field shows.</summary>
-    public string SectionLabel => SelectedSection is { } s ? s.Name : Tr.T("Schnitt");
-
-    /// <summary>How far behind the front of the model (along its normal) the selected section cuts, in model units.</summary>
-    public float SectionDepth => SelectedSection?.Depth ?? 0;
-
-    public string SectionText => Tr.T("Schnitt {0} tief", MeasureText.Length(SectionDepth, Inches));
-
-    /// <summary>Depth of the selected section in the chosen unit, for the number field (0.1 steps).</summary>
-    public double SectionDepthInUnit
-    {
-        get => SelectedSection?.DepthInUnit ?? 0;
-        set
-        {
-            if (SelectedSection is { } s) s.DepthInUnit = value;
-        }
-    }
-
     internal float UnitFactor => Inches ? (float)MeasureText.MillimetresPerInch : 1;
 
     /// <summary>Puts a new section plane onto a clicked face (normal into the material) and selects it.</summary>
@@ -748,17 +745,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         SectionsChanged();
     }
 
-    /// <summary>A section moved: texts and picture follow.</summary>
-    internal void SectionMoved(SectionItem item)
-    {
-        if (item == SelectedSection)
-        {
-            OnPropertyChanged(nameof(SectionDepth));
-            OnPropertyChanged(nameof(SectionDepthInUnit));
-            OnPropertyChanged(nameof(SectionText));
-        }
-        Redraw();
-    }
+    /// <summary>A section moved: the picture follows.</summary>
+    internal void SectionMoved(SectionItem item) => Redraw();
 
     private void SectionsChanged()
     {
@@ -773,13 +761,6 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     {
         if (Hierarchy is not { } bvh || SectionGeometry.VisibleInterval(SectionPlanes, origin, direction) is not { } visible) return null;
         return Walls.ExitOfNextWall(Mesh, bvh, origin + direction * visible.Min, direction);
-    }
-
-    /// <summary>Removes the selected section (✕ beside the number field).</summary>
-    [RelayCommand]
-    private void RemoveSelectedSection()
-    {
-        if (SelectedSection is { } s) RemoveSection(s);
     }
 
     /// <summary>Removes all sections (Esc, „Alle Schnitte aufheben“).</summary>

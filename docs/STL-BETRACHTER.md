@@ -110,8 +110,9 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
   „Schnittfläche verschieben“ schaltet den Schiebemodus ein (nur über diesen Knopf): eine Fläche anfassen und ziehen (sie
   wird dabei ausgewählt und folgt der Maus entlang ihrer Richtung; blickt man senkrecht darauf, schiebt Ziehen nach oben
   tiefer), Mausrad über ihr fein (1 % des sichtbaren Ausschnitts). Ein Klick neben alle Flächen beendet den Schiebemodus,
-  damit Klicks wieder auf Flächen gehen (Messen). Die Spalte listet jede Schnittfläche mit Auswahlknopf, Tiefe in mm
-  (Pfeile ± 0,1) und ✕; oben links Tiefe der ausgewählten und ✕ für sie; „Alle Schnitte aufheben“. Esc beendet zuerst die
+  damit Klicks wieder auf Flächen gehen (Messen). Eine kleine Karte oben rechts im Bild („SCHNITTFLÄCHEN“ mit Anzahl)
+  listet jede Schnittfläche: Klick auf die Zeile wählt sie aus (hinterlegt, Markierung links), rechts daneben Richtung
+  (⊥ X/Y/Z oder schräg) und Tiefe in mm (Pfeile ± 0,1), ✕ entfernt sie; unten Neu, Verschieben, Alle ✕. Esc beendet zuerst die
   Werkzeuge, dann entfernt es alle Schnitte. Durchzoomen und Umschalt + Mausrad wirken auf die ausgewählte Schnittfläche
   (ohne eine legen sie eine neue parallel zum Bildschirm an).
 - **Hineinsehen:**
