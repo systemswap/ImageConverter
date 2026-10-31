@@ -95,6 +95,15 @@
                             <ComboBoxItem Content="{l:T 'Zoll'}" />
                         </ComboBox>
                     </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Qualität'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding QualityIndex}"
+                                  ToolTip.Tip="{l:T 'Schnell: einfache Darstellung für langsame Rechner. Mittel: Rundungen glatt, Kanten und Schnitte ohne Treppen. Hoch: zusätzlich doppelt so feine Kantenglättung.'}">
+                            <ComboBoxItem Content="{l:T 'Schnell'}" />
+                            <ComboBoxItem Content="{l:T 'Mittel'}" />
+                            <ComboBoxItem Content="{l:T 'Hoch'}" />
+                        </ComboBox>
+                    </Grid>
                     <Grid Classes="row" ColumnDefinitions="96,*,Auto">
                         <TextBlock Classes="label" Text="{l:T 'Helligkeit'}" />
                         <Slider Grid.Column="1" Minimum="50" Maximum="150" TickFrequency="5" IsSnapToTickEnabled="True"

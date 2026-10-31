@@ -3015,3 +3015,33 @@ Test oder Nachweis.
 - **Wo im Code:** `OrbitCamera.Zoom`/`ZoomPerspective`, Aufruf in `ModelGlView.OnPointerWheelChanged`.
 - **Test:** `ModelViewTests.Zoom_InPerspective_ThroughAndBackOut` (schlägt mit dem alten Zoom fehl: „the eye hardly moved back“),
   `Zoom_KeepsThePointUnderTheMouse`, `Zoom_InPerspective_GoesThroughTheSurface`; Prüfprogramm `stl-shot <stl> cycle`.
+
+## 121. 3D: Treppen an Rundungen, Schnittkanten und Kantenlinien (0.10.0)
+
+- **Entdeckt:** 31.10.2026, 0.10.0, vom Nutzer: „An den Kanten sind manchmal Treppen zu sehen“ und „Rundungen haben auch wie Treppen“.
+  **Behoben:** 0.10.1-beta (Qualitätsstufen Mittel und Hoch; Schnell zeichnet bewusst wie vorher).
+- **Wie geprüft:** Nahaufnahmen im Prüfprogramm (`stl-shot <stl> edges`), Helligkeit quer über eine Rundung gemessen, Facetten der Zylinder
+  gezählt; danach eine Probe mit Vorher/Nachher-Schieber in derselben Ansicht, die der Nutzer abgenommen hat, dazu Differenzbilder.
+- **Was und warum:**
+  1. *Rundungen:* Jede Facette wurde flach schattiert (Normale aus den Ableitungen der Position). Am Gehäuse alle 2,8–2,9° eine neue Facette –
+     je Facette 1 Helligkeitsstufe, im Glanz und bei schrägem Licht 3–5; das Auge verstärkt solche Kanten (Streifen statt Verlauf). Die Form
+     selbst war genau (Abweichung vom Kreis 0,3–2,5 µm).
+  2. *Schnittkanten:* Der Schnitt verwarf Bildpunkte im Fragment-Shader (`discard`); das wirkt je Bildpunkt, die Kantenglättung (MSAA) greift
+     dort nicht – harte Pixeltreppe. Mit geometrischem Abschneiden blieb trotzdem eine Zwei-Pixel-Treppe: die Umgebungsverdeckung (halbe
+     Auflösung, bilinear vergrößert) mischte an der Kante die Werte der Fläche dahinter ein.
+  3. *Kantenlinien:* 1 px breit bei 4× MSAA – nur vier Abstufungen, fast waagerechte oder senkrechte Linien stufig.
+  4. *Verläufe:* 8 Bit je Farbe zeigen in langen Verläufen Stufen von je einem Wert (im Differenzbild als Ringe im Hintergrund sichtbar).
+- **Lösung:** `SmoothShading` (Normalen nur für erkannte Zylinder/Freiform mit feinen Facetten, Zylinder exakt radial, Ebenen und Kanten
+  zwischen Flächen unverändert), `gl_ClipDistance` statt `discard` (Desktop-OpenGL), Verdeckung an Tiefensprüngen aus dem Texel derselben
+  Fläche, Linien als weich auslaufende Bänder, Dithering, wahlweise 8× MSAA. Als Auswahl Schnell/Mittel/Hoch, damit langsame Rechner die
+  einfache Darstellung behalten. Ergebnis: Rundung als glatter Verlauf, Schnittkante und Linien glatt; Ebenen ändern sich höchstens um einen
+  Helligkeitswert.
+- **Verworfen:** fester Knickwinkel über alle Dreiecke (25°) – hätte ein bewusst eckiges Teil (z. B. 16 Seiten) rund und eine flache Fase von
+  wenigen Grad weich gezeigt; der Nutzer verlangt eine absolut präzise Anzeige. Normalen je Dreiecksecke ohne gemeinsame Eckpunkte – 72 Byte
+  je Dreieck statt 18, bei großen Modellen zu viel Grafikspeicher.
+- **Nicht tun:** Bildraum-Effekte (Schnitt, Verdeckung) je Bildpunkt entscheiden, wo es geometrisch geht; Rundungen über Flächengrenzen oder
+  über grobe Facetten hinweg glätten.
+- **Wo im Code:** `Rendering/SmoothShading.cs`, `Shaders` (`ModelVertex`/`ModelFragment`/`DepthFragment`, `SmoothLine*`, `occlusionHere`,
+  Dithering), `ModelRenderer` (`RenderQuality`, `Pass`, `HardwareClip`, `UploadSmoothLines`), `ModelViewModel.QualityIndex`/`EnsureSmooth`.
+- **Test:** `SmoothShadingTests` (Quader und flache 3°-Kante bleiben flach, feines Rohr radial, grobes Rohr facettiert, Kugel, Stufen);
+  Bildvergleich im Prüfprogramm (GPU nötig).

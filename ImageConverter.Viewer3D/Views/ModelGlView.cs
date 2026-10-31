@@ -173,7 +173,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             Camera.Eye, Camera.Forward, Camera.Right, Camera.Up, Camera.Orthographic,
             _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights(), _model.SectionPlanes,
             _model.Sections.Select(x => (SectionGeometry.Quad(_model.Mesh.Bounds, x.Plane), x.IsSelected)).ToArray(), _model.MoveSectionTool,
-            _model.Brightness / 100f);
+            _model.Brightness / 100f, _model.Quality);
         _renderer.Render(_model.Scene, frame, fb, size.Width, size.Height);
         FramesDrawn++;
         if (_renderer.Failure is { } failure && Failure is null)

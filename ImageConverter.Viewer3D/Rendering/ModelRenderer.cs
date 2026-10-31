@@ -21,13 +21,36 @@ public enum RenderMode
 /// <param name="Colour">sRGB colour; alpha = how strongly it covers the shading.</param>
 public readonly record struct Highlight(int FirstTriangle, int Triangles, Vector4 Colour);
 
+/// <summary>How carefully the model is drawn: the refinements against staircases at edges and on curved faces.</summary>
+/// <param name="Smooth">Finely divided curved faces shaded smoothly.</param>
+/// <param name="HardwareClip">Sections cut by the rasteriser (smoothed cut edges) instead of per pixel.</param>
+/// <param name="SmoothLines">Edge lines as smoothed bands.</param>
+/// <param name="Dither">Half a step of noise against steps in gradients.</param>
+/// <param name="Samples">Multisampling (4 or 8; less if the graphics card cannot).</param>
+/// <param name="SharpOcclusion">Ambient occlusion taken from the same surface at depth steps (no staircase at edges).</param>
+internal readonly record struct RenderQuality(bool Smooth, bool HardwareClip, bool SmoothLines, bool Dither, int Samples, bool SharpOcclusion)
+{
+    /// <summary>Fast: plain flat facets, cut per pixel, 4× multisampling – the least work for slow graphics cards.</summary>
+    public static readonly RenderQuality Fast = new(false, false, false, false, 4, false);
+
+    /// <summary>Medium: all refinements, 4× multisampling; hardly more work than <see cref="Fast"/>.</summary>
+    public static readonly RenderQuality Medium = new(true, true, true, true, 4, true);
+
+    /// <summary>High: all refinements and 8× multisampling (twice the work for the edges of the drawing).</summary>
+    public static readonly RenderQuality High = Medium with { Samples = 8 };
+
+    /// <summary>The level for a setting: 0 fast, 1 medium, 2 high.</summary>
+    public static RenderQuality ForLevel(int level) => level switch { 0 => Fast, 1 => Medium, _ => High };
+}
+
 /// <summary>Everything one frame needs besides the buffers.</summary>
 internal sealed record FrameState(
     Matrix4x4 ViewProjection, Matrix4x4 Projection, float OcclusionRadius,
     Vector3 Eye, Vector3 Forward, Vector3 Right, Vector3 Up, bool Orthographic,
     RenderMode Mode, bool Edges, bool Parts, bool Dark,
     IReadOnlyList<Highlight> Highlights, IReadOnlyList<Vector4>? Clips = null,
-    IReadOnlyList<(Vector3[] Quad, bool Selected)>? SectionQuads = null, bool SectionActive = false, float Exposure = 1);
+    IReadOnlyList<(Vector3[] Quad, bool Selected)>? SectionQuads = null, bool SectionActive = false, float Exposure = 1,
+    RenderQuality? Quality = null);
 
 /// <summary>
 /// CPU side of what is drawn: owned by the UI thread, filled by the background steps. Each part carries a version, so
@@ -61,6 +84,11 @@ internal sealed class ModelScene
 
     public GroundShadow? Shadow { get; set; }
 
+    /// <summary>Smooth normals of the curved faces; null until the faces are known.</summary>
+    public SmoothShading? Smooth { get; set; }
+
+    public int SmoothVersion { get; set; }
+
     public int ShadowVersion { get; set; }
 }
 
@@ -79,11 +107,19 @@ internal sealed class ModelRenderer
     private Gl _gl = null!;
     private int _modelProgram, _lineProgram, _backgroundProgram, _groundProgram, _depthProgram, _ssaoProgram, _blurProgram;
     private int _modelVao, _lineVao, _wireVao, _groundVao, _emptyVao, _quadVao, _quadBuffer;
+    private int _smoothLineProgram, _smoothLineVao, _smoothLineBuffer, _smoothLineIndexBuffer, _smoothLineCount, _normalBuffer;
+    private int _uploadedSmooth = -1, _vertexCount;
+    private int _slViewProj, _slViewport, _slHalfWidth, _slColour, _slClipCount;
+    private readonly int[] _slClips = new int[6];
+    private int _mSmooth, _mHwClip, _mDither, _dSmooth, _dHwClip, _lHwClip, _bDither, _mAoSharp, _mAoDepth, _mInvProj, _mAoTolerance;
+    private RenderQuality _q = RenderQuality.Fast;
+    private bool _desktop;
+    private readonly MsaaTarget _msaa = new();
     private int _posBuffer, _extraBuffer, _triBuffer, _edgeBuffer, _wireBuffer, _groundBuffer, _shadowTexture;
     private int _edgeCount, _wireCount;
     private int _uploadedIndices = -1, _uploadedExtras = -1, _uploadedEdges = -1, _uploadedShadow = -1;
     private bool _positionsUploaded, _wireUploaded, _hasShadow;
-    private int _fbo, _colourRb, _depthRb, _fboWidth, _fboHeight, _samples;
+    private int _samples;
 
     // Ambient occlusion at half resolution: depth (+ an unused colour target), raw result, blurred result
     private int _aoDepthFbo, _aoDepthTex, _aoNormalTex, _aoRawFbo, _aoRawTex, _aoFbo, _aoTex, _whiteTex, _aoWidth, _aoHeight;
@@ -108,8 +144,10 @@ internal sealed class ModelRenderer
         try
         {
             var head = Shaders.Header(gl);
-            _modelProgram = gl.Program(head + Shaders.ModelVertex, head + Shaders.ModelFragment, "aPos", "aPart");
-            _depthProgram = gl.Program(head + Shaders.ModelVertex, head + Shaders.DepthFragment, "aPos", "aPart");
+            _modelProgram = gl.Program(head + Shaders.ModelVertex, head + Shaders.ModelFragment, "aPos", "aPart", "aNormal");
+            _depthProgram = gl.Program(head + Shaders.ModelVertex, head + Shaders.DepthFragment, "aPos", "aPart", "aNormal");
+            _smoothLineProgram = gl.Program(head + Shaders.SmoothLineVertex, head + Shaders.SmoothLineFragment, "aA", "aB", "aCorner");
+            _desktop = !gl.IsEs;
             _ssaoProgram = gl.Program(head + Shaders.BackgroundVertex, head + Shaders.SsaoFragment);
             _blurProgram = gl.Program(head + Shaders.BackgroundVertex, head + Shaders.BlurFragment);
             _lineProgram = gl.Program(head + Shaders.LineVertex, head + Shaders.LineFragment, "aPos");
@@ -124,6 +162,23 @@ internal sealed class ModelRenderer
         }
 
         _mViewProj = gl.Uniform(_modelProgram, "uViewProj");
+        _mSmooth = gl.Uniform(_modelProgram, "uSmooth");
+        _mHwClip = gl.Uniform(_modelProgram, "uHwClip");
+        _mDither = gl.Uniform(_modelProgram, "uDither");
+        _mAoSharp = gl.Uniform(_modelProgram, "uAoSharp");
+        _mAoDepth = gl.Uniform(_modelProgram, "uAoDepth");
+        _mInvProj = gl.Uniform(_modelProgram, "uInvProj");
+        _mAoTolerance = gl.Uniform(_modelProgram, "uAoTolerance");
+        _dSmooth = gl.Uniform(_depthProgram, "uSmooth");
+        _dHwClip = gl.Uniform(_depthProgram, "uHwClip");
+        _lHwClip = gl.Uniform(_lineProgram, "uHwClip");
+        _bDither = gl.Uniform(_backgroundProgram, "uDither");
+        _slViewProj = gl.Uniform(_smoothLineProgram, "uViewProj");
+        _slViewport = gl.Uniform(_smoothLineProgram, "uViewport");
+        _slHalfWidth = gl.Uniform(_smoothLineProgram, "uHalfWidth");
+        _slColour = gl.Uniform(_smoothLineProgram, "uColour");
+        _slClipCount = gl.Uniform(_smoothLineProgram, "uClipCount");
+        for (var i = 0; i < 6; i++) _slClips[i] = gl.Uniform(_smoothLineProgram, $"uClips[{i}]");
         _mEye = gl.Uniform(_modelProgram, "uEye");
         _mForward = gl.Uniform(_modelProgram, "uForward");
         _mOrtho = gl.Uniform(_modelProgram, "uOrtho");
@@ -183,7 +238,11 @@ internal sealed class ModelRenderer
         _wireBuffer = gl.GenBuffer();
         _groundBuffer = gl.GenBuffer();
         _shadowTexture = gl.GenTexture();
-        _samples = Math.Clamp(gl.GetInteger(Gl.MaxSamples), 0, 4);
+        _smoothLineVao = gl.GenVertexArray();
+        _smoothLineBuffer = gl.GenBuffer();
+        _smoothLineIndexBuffer = gl.GenBuffer();
+        _normalBuffer = gl.GenBuffer();
+        _samples = Math.Clamp(gl.GetInteger(Gl.MaxSamples), 0, 8);
 
         // White 1 × 1 texture: "no occlusion" where the occlusion pass is not used
         _whiteTex = gl.GenTexture();
@@ -203,12 +262,17 @@ internal sealed class ModelRenderer
         gl.DeleteProgram(_depthProgram);
         gl.DeleteProgram(_ssaoProgram);
         gl.DeleteProgram(_blurProgram);
+        gl.DeleteProgram(_smoothLineProgram);
+        gl.DeleteVertexArray(_smoothLineVao);
+        foreach (var b in new[] { _smoothLineBuffer, _smoothLineIndexBuffer, _normalBuffer }) gl.DeleteBuffer(b);
+        _uploadedSmooth = -1;
+        _smoothLineCount = 0;
         gl.DeleteTexture(_whiteTex);
         DeleteOcclusionTargets();
         foreach (var vao in new[] { _modelVao, _lineVao, _wireVao, _groundVao, _emptyVao, _quadVao }) gl.DeleteVertexArray(vao);
         foreach (var b in new[] { _posBuffer, _extraBuffer, _triBuffer, _edgeBuffer, _wireBuffer, _groundBuffer, _quadBuffer }) gl.DeleteBuffer(b);
         gl.DeleteTexture(_shadowTexture);
-        DeleteFramebuffer();
+        _msaa.Delete(gl);
         _positionsUploaded = _wireUploaded = _hasShadow = false;
         _uploadedIndices = _uploadedExtras = _uploadedEdges = _uploadedShadow = -1;
     }
@@ -236,8 +300,27 @@ internal sealed class ModelRenderer
             return;
         }
 
-        var own = EnsureFramebuffer(width, height);
-        gl.BindFramebuffer(Gl.Framebuffer, own ? _fbo : target);
+        var quality = frame.Quality ?? RenderQuality.High;
+        if (!Pass(scene, frame, quality, _msaa, target, width, height))
+            Pass(scene, frame, quality, null, target, width, height);
+        gl.BindFramebuffer(Gl.Framebuffer, target);
+        gl.BindVertexArray(0);
+        gl.UseProgram(0);
+    }
+
+    /// <summary>
+    /// Draws the frame into the multisampled target and resolves it into the control; without a target (null) straight
+    /// into the control. False if the multisampled target is not available.
+    /// </summary>
+    private bool Pass(ModelScene scene, FrameState frame, RenderQuality quality, MsaaTarget? msaa, int target, int width, int height)
+    {
+        var gl = _gl;
+        // Clip distances and the smoothed lines need desktop OpenGL; on OpenGL ES the plain ways remain
+        _q = quality with { HardwareClip = quality.HardwareClip && _desktop, SmoothLines = quality.SmoothLines && _desktop };
+        var own = msaa is not null && _samples > 0 && msaa.Ensure(gl, width, height, Math.Min(quality.Samples, _samples));
+        if (msaa is not null && !own) return false;
+        var fbo = own ? msaa!.Fbo : target;
+        gl.BindFramebuffer(Gl.Framebuffer, fbo);
         gl.Viewport(0, 0, width, height);
         gl.Disable(Gl.ScissorTest);
         gl.ColorMask(true);
@@ -247,33 +330,41 @@ internal sealed class ModelRenderer
         gl.Clear(Gl.ColorBufferBit | Gl.DepthBufferBit);
 
         var occlusion = frame.Mode == RenderMode.Solid && OcclusionEnabled && Occlusion(scene, frame, width, height);
-        gl.BindFramebuffer(Gl.Framebuffer, own ? _fbo : target);
+        gl.BindFramebuffer(Gl.Framebuffer, fbo);
         gl.Viewport(0, 0, width, height);
 
         DrawBackground(frame);
         // With a section the shadow would show parts that are cut away
         if (frame.Mode == RenderMode.Solid && frame.Clips is not { Count: > 0 }) DrawGround(frame);
         if (frame.Mode != RenderMode.Wireframe) DrawModel(scene, frame, occlusion, width, height);
-        DrawLines(frame);
+        DrawLines(frame, width, height);
         DrawSectionPlanes(frame);
 
         if (own)
         {
-            gl.BindFramebuffer(Gl.ReadFramebuffer, _fbo);
+            gl.BindFramebuffer(Gl.ReadFramebuffer, msaa!.Fbo);
             gl.BindFramebuffer(Gl.DrawFramebuffer, target);
             gl.BlitFramebuffer(width, height);
             if (gl.GetError() != 0)
             {
                 // The control's framebuffer cannot take the resolve (format differs): draw straight into it from now on
                 AppLog.Write("3D: resolving into the control failed, drawing without smoothing");
-                DeleteFramebuffer();
+                _msaa.Delete(gl);
                 _samples = -1;
                 gl.BindFramebuffer(Gl.Framebuffer, target);
+                return false;
             }
         }
-        gl.BindFramebuffer(Gl.Framebuffer, target);
-        gl.BindVertexArray(0);
-        gl.UseProgram(0);
+        return true;
+    }
+
+    /// <summary>Clip distances on for the section planes (rasteriser cut), or off.</summary>
+    private void HardwareClip(FrameState f, bool on)
+    {
+        var n = on && _q.HardwareClip ? Math.Min(f.Clips?.Count ?? 0, 6) : 0;
+        for (var i = 0; i < 6; i++)
+            if (i < n) _gl.Enable(Gl.ClipDistance0 + i);
+            else _gl.Disable(Gl.ClipDistance0 + i);
     }
 
     /// <summary>Reads the last frame from the control's framebuffer (RGBA, top row first); for checks of the drawing.</summary>
@@ -290,11 +381,57 @@ internal sealed class ModelRenderer
         return flipped;
     }
 
+    /// <summary>Most edges drawn as smoothed bands (about 150 bytes each on the graphics card); beyond, plain lines.</summary>
+    private const int MaxSmoothLines = 4_000_000;
+
+    /// <summary>Each edge as a quad: both ends twice (one per side), widened on screen by the vertex shader.</summary>
+    private void UploadSmoothLines(float[] positions, int[] edges)
+    {
+        var gl = _gl;
+        var count = edges.Length / 2;
+        if (!_desktop || count > MaxSmoothLines)
+        {
+            _smoothLineCount = 0;
+            return;
+        }
+        var data = new float[count * 4 * 8];
+        var index = new int[count * 6];
+        for (var e = 0; e < count; e++)
+        {
+            int a = edges[2 * e] * 3, b = edges[2 * e + 1] * 3;
+            for (var k = 0; k < 4; k++)
+            {
+                var o = (e * 4 + k) * 8;
+                data[o] = positions[a]; data[o + 1] = positions[a + 1]; data[o + 2] = positions[a + 2];
+                data[o + 3] = positions[b]; data[o + 4] = positions[b + 1]; data[o + 5] = positions[b + 2];
+                data[o + 6] = k < 2 ? 0 : 1;          // end A or B
+                data[o + 7] = k % 2 == 0 ? -1 : 1;    // side
+            }
+            var v = e * 4;
+            index[e * 6] = v; index[e * 6 + 1] = v + 1; index[e * 6 + 2] = v + 3;
+            index[e * 6 + 3] = v; index[e * 6 + 4] = v + 3; index[e * 6 + 5] = v + 2;
+        }
+        gl.BindVertexArray(_smoothLineVao);
+        gl.BindBuffer(Gl.ArrayBuffer, _smoothLineBuffer);
+        gl.BufferData<float>(Gl.ArrayBuffer, data, Gl.StaticDraw);
+        gl.VertexAttribPointer(0, 3, Gl.Float, false, 32, 0);
+        gl.EnableVertexAttribArray(0);
+        gl.VertexAttribPointer(1, 3, Gl.Float, false, 32, 12);
+        gl.EnableVertexAttribArray(1);
+        gl.VertexAttribPointer(2, 2, Gl.Float, false, 32, 24);
+        gl.EnableVertexAttribArray(2);
+        gl.BindBuffer(Gl.ElementArrayBuffer, _smoothLineIndexBuffer);
+        gl.BufferData<int>(Gl.ElementArrayBuffer, index, Gl.StaticDraw);
+        gl.BindVertexArray(0);
+        _smoothLineCount = index.Length;
+    }
+
     private void Upload(ModelScene scene, bool wire)
     {
         var gl = _gl;
         if (!_positionsUploaded)
         {
+            _vertexCount = scene.Positions.Length / 3;
             gl.BindVertexArray(_modelVao);
             gl.BindBuffer(Gl.ArrayBuffer, _posBuffer);
             gl.BufferData<float>(Gl.ArrayBuffer, scene.Positions, Gl.StaticDraw);
@@ -310,11 +447,28 @@ internal sealed class ModelRenderer
             _positionsUploaded = true;
         }
 
+        if (_uploadedSmooth != scene.SmoothVersion && scene.Smooth is { } smooth)
+        {
+            // Added vertices for the curved faces: positions follow the mesh's own (whose indices stay valid for the
+            // edge lines), normals zero for the mesh's own (flat)
+            var extended = smooth.ExtendedPositions(scene.Positions);
+            gl.BindBuffer(Gl.ArrayBuffer, _posBuffer);
+            gl.BufferData<float>(Gl.ArrayBuffer, extended, Gl.StaticDraw);
+            gl.BindVertexArray(_modelVao);
+            gl.BindBuffer(Gl.ArrayBuffer, _normalBuffer);
+            gl.BufferData<float>(Gl.ArrayBuffer, smooth.Normals, Gl.StaticDraw);
+            gl.VertexAttribPointer(2, 3, Gl.Float, false, 12, 0);
+            gl.EnableVertexAttribArray(2);
+            _vertexCount = extended.Length / 3;
+            _uploadedSmooth = scene.SmoothVersion;
+            _uploadedExtras = -1;
+        }
+
         if (_uploadedIndices != scene.IndicesVersion)
         {
             gl.BindVertexArray(_modelVao);
             gl.BindBuffer(Gl.ElementArrayBuffer, _triBuffer);
-            var indices = scene.SortedIndices?.Invoke() ?? scene.FileIndices;
+            var indices = scene.SortedIndices?.Invoke() ?? scene.Smooth?.Corners ?? scene.FileIndices;
             gl.BufferData<int>(Gl.ElementArrayBuffer, indices, Gl.StaticDraw);
             _uploadedIndices = scene.IndicesVersion;
         }
@@ -322,6 +476,7 @@ internal sealed class ModelRenderer
         if (_uploadedExtras != scene.ExtrasVersion)
         {
             var parts = scene.Parts ?? new byte[scene.Positions.Length / 3];
+            if (scene.Smooth is { } sm && _uploadedSmooth == scene.SmoothVersion) parts = sm.Extended(parts);
             gl.BindVertexArray(_modelVao);
             gl.BindBuffer(Gl.ArrayBuffer, _extraBuffer);
             gl.BufferData<byte>(Gl.ArrayBuffer, parts, Gl.StaticDraw);
@@ -336,6 +491,7 @@ internal sealed class ModelRenderer
             gl.BindBuffer(Gl.ElementArrayBuffer, _edgeBuffer);
             gl.BufferData<int>(Gl.ElementArrayBuffer, edges, Gl.StaticDraw);
             _edgeCount = edges.Length;
+            UploadSmoothLines(scene.Positions, edges);
             _uploadedEdges = scene.SharpEdgesVersion;
         }
 
@@ -374,8 +530,8 @@ internal sealed class ModelRenderer
             _hasShadow = true;
         }
         gl.BindVertexArray(0);
-        GpuBytes = scene.Positions.Length * 4L + scene.TriangleCount * 12L + scene.Positions.Length / 3
-                   + _edgeCount * 4L + _wireCount * 4L;
+        GpuBytes = _vertexCount * 13L + (scene.Smooth is null ? 0 : _vertexCount * 12L) + scene.TriangleCount * 12L
+                   + _edgeCount * 4L + _wireCount * 4L + _smoothLineCount / 6 * 152L;
     }
 
     // Colours (sRGB 0 … 1)
@@ -395,6 +551,7 @@ internal sealed class ModelRenderer
         var (top, bottom) = f.Mode == RenderMode.Blueprint ? (BlueTop, BlueBottom) : f.Dark ? (DarkTop, DarkBottom) : (LightTop, LightBottom);
         gl.Uniform3(_bTop, top);
         gl.Uniform3(_bBottom, bottom);
+        gl.Uniform1(_bDither, _q.Dither ? 1 : 0);
         gl.BindVertexArray(_emptyVao);
         gl.DrawArrays(Gl.Triangles, 0, 3);
         gl.DepthMask(true);
@@ -453,7 +610,19 @@ internal sealed class ModelRenderer
         gl.Uniform1(_mFlat, blueprint ? 1f : 0f);
         gl.Uniform1(_mExposure, Math.Clamp(f.Exposure, 0.25f, 4f));
         gl.Uniform1(_mInner, blueprint ? 0 : 1);
+        gl.Uniform1(_mSmooth, _q.Smooth && !blueprint && _uploadedSmooth >= 0 ? 1 : 0);
+        gl.Uniform1(_mHwClip, _q.HardwareClip ? 1 : 0);
+        gl.Uniform1(_mDither, _q.Dither ? 1 : 0);
+        gl.Uniform1(_mAoSharp, occlusion && _q.SharpOcclusion ? 1 : 0);
+        gl.ActiveTexture(Gl.Texture1);
+        gl.BindTexture(Gl.Texture2D, occlusion ? _aoDepthTex : _whiteTex);
+        gl.Uniform1(_mAoDepth, 1);
+        gl.ActiveTexture(Gl.Texture0);
+        Matrix4x4.Invert(f.Projection, out var inverse);
+        gl.UniformMatrix(_mInvProj, inverse);
+        gl.Uniform1(_mAoTolerance, 0.1f * f.OcclusionRadius);
         SetClip(_mClips, _mClipCount, f);
+        HardwareClip(f, true);
         gl.Uniform4(_mTint, Vector4.Zero);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
@@ -464,15 +633,18 @@ internal sealed class ModelRenderer
             gl.Uniform4(_mTint, h.Colour);
             gl.DrawElements(Gl.Triangles, 3 * h.Triangles, 3L * h.FirstTriangle);
         }
+        HardwareClip(f, false);
         gl.Disable(Gl.PolygonOffsetFill);
     }
 
-    private void DrawLines(FrameState f)
+    private void DrawLines(FrameState f, int width, int height)
     {
         var gl = _gl;
         gl.UseProgram(_lineProgram);
         gl.UniformMatrix(_lViewProj, f.ViewProjection);
         SetClip(_lClips, _lClipCount, f);
+        gl.Uniform1(_lHwClip, _q.HardwareClip ? 1 : 0);
+        HardwareClip(f, true);
         gl.Enable(Gl.Blend);
         gl.BlendFunc(Gl.SrcAlpha, Gl.OneMinusSrcAlpha);
         if (f.Mode == RenderMode.Wireframe)
@@ -489,11 +661,26 @@ internal sealed class ModelRenderer
             gl.DepthMask(false);
             var colour = f.Mode == RenderMode.Blueprint ? new Vector4(1, 1, 1, 0.9f)
                 : f.Dark ? new Vector4(0.05f, 0.05f, 0.06f, 0.55f) : new Vector4(0.15f, 0.17f, 0.21f, 0.45f);
-            gl.Uniform4(_lColour, colour);
-            gl.BindVertexArray(_lineVao);
-            gl.DrawElements(Gl.Lines, _edgeCount, 0);
+            if (_q.SmoothLines && _smoothLineCount > 0)
+            {
+                gl.UseProgram(_smoothLineProgram);
+                gl.UniformMatrix(_slViewProj, f.ViewProjection);
+                gl.Uniform2(_slViewport, width, height);
+                gl.Uniform1(_slHalfWidth, 0.5f);
+                gl.Uniform4(_slColour, colour);
+                SetClip(_slClips, _slClipCount, f);
+                gl.BindVertexArray(_smoothLineVao);
+                gl.DrawElements(Gl.Triangles, _smoothLineCount, 0);
+            }
+            else
+            {
+                gl.Uniform4(_lColour, colour);
+                gl.BindVertexArray(_lineVao);
+                gl.DrawElements(Gl.Lines, _edgeCount, 0);
+            }
             gl.DepthMask(true);
         }
+        HardwareClip(f, false);
         gl.Disable(Gl.Blend);
     }
 
@@ -505,6 +692,7 @@ internal sealed class ModelRenderer
         gl.UseProgram(_lineProgram);
         gl.UniformMatrix(_lViewProj, f.ViewProjection);
         gl.Uniform1(_lClipCount, 0);   // the planes lie on the cuts themselves
+        gl.Uniform1(_lHwClip, 0);
         gl.Enable(Gl.DepthTest);
         gl.DepthFunc(Gl.LessEqual);
         gl.DepthMask(false);
@@ -558,8 +746,12 @@ internal sealed class ModelRenderer
         gl.Uniform3(_dUp, f.Up);
         gl.Uniform3(_dBack, -f.Forward);
         SetClip(_dClips, _dClipCount, f);
+        gl.Uniform1(_dSmooth, _q.Smooth && _uploadedSmooth >= 0 ? 1 : 0);
+        gl.Uniform1(_dHwClip, _q.HardwareClip ? 1 : 0);
+        HardwareClip(f, true);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
+        HardwareClip(f, false);
 
         gl.Disable(Gl.DepthTest);
         gl.DepthMask(false);
@@ -661,43 +853,45 @@ internal sealed class ModelRenderer
         gl.TexParameter(Gl.Texture2D, Gl.TextureWrapT, Gl.ClampToEdge);
     }
 
-    /// <summary>Own multisampled framebuffer of the control's size; false = draw directly (no smoothing available).</summary>
-    private bool EnsureFramebuffer(int width, int height)
-    {
-        if (_samples < 0) return false;
-        if (_fbo != 0 && _fboWidth == width && _fboHeight == height) return true;
-        var gl = _gl;
-        DeleteFramebuffer();
-        _fbo = gl.GenFramebuffer();
-        gl.BindFramebuffer(Gl.Framebuffer, _fbo);
-        _colourRb = gl.GenRenderbuffer();
-        gl.BindRenderbuffer(_colourRb);
-        gl.RenderbufferStorageMultisample(_samples, Gl.Rgba8, width, height);
-        gl.FramebufferRenderbuffer(Gl.ColorAttachment0, _colourRb);
-        _depthRb = gl.GenRenderbuffer();
-        gl.BindRenderbuffer(_depthRb);
-        gl.RenderbufferStorageMultisample(_samples, Gl.DepthComponent24, width, height);
-        gl.FramebufferRenderbuffer(Gl.DepthAttachment, _depthRb);
-        gl.BindRenderbuffer(0);
-        if (gl.CheckFramebufferStatus(Gl.Framebuffer) != Gl.FramebufferComplete)
-        {
-            AppLog.Write("3D: own framebuffer incomplete, drawing without smoothing");
-            DeleteFramebuffer();
-            _samples = -1;
-            return false;
-        }
-        _fboWidth = width;
-        _fboHeight = height;
-        return true;
-    }
 
-    private void DeleteFramebuffer()
+    /// <summary>Own multisampled framebuffer of the control's size.</summary>
+    private sealed class MsaaTarget
     {
-        var gl = _gl;
-        gl.DeleteFramebuffer(_fbo);
-        gl.DeleteRenderbuffer(_colourRb);
-        gl.DeleteRenderbuffer(_depthRb);
-        _fbo = _colourRb = _depthRb = 0;
-        _fboWidth = _fboHeight = 0;
+        public int Fbo;
+        private int _colour, _depth, _width, _height, _samples;
+
+        /// <summary>Creates or resizes it; false if the driver refuses (then drawn without smoothing).</summary>
+        public bool Ensure(Gl gl, int width, int height, int samples)
+        {
+            if (Fbo != 0 && _width == width && _height == height && _samples == samples) return true;
+            Delete(gl);
+            Fbo = gl.GenFramebuffer();
+            gl.BindFramebuffer(Gl.Framebuffer, Fbo);
+            _colour = gl.GenRenderbuffer();
+            gl.BindRenderbuffer(_colour);
+            gl.RenderbufferStorageMultisample(samples, Gl.Rgba8, width, height);
+            gl.FramebufferRenderbuffer(Gl.ColorAttachment0, _colour);
+            _depth = gl.GenRenderbuffer();
+            gl.BindRenderbuffer(_depth);
+            gl.RenderbufferStorageMultisample(samples, Gl.DepthComponent24, width, height);
+            gl.FramebufferRenderbuffer(Gl.DepthAttachment, _depth);
+            gl.BindRenderbuffer(0);
+            if (gl.CheckFramebufferStatus(Gl.Framebuffer) != Gl.FramebufferComplete)
+            {
+                AppLog.Write("3D: own framebuffer incomplete, drawing without smoothing", $"{samples} samples");
+                Delete(gl);
+                return false;
+            }
+            (_width, _height, _samples) = (width, height, samples);
+            return true;
+        }
+
+        public void Delete(Gl gl)
+        {
+            gl.DeleteFramebuffer(Fbo);
+            gl.DeleteRenderbuffer(_colour);
+            gl.DeleteRenderbuffer(_depth);
+            Fbo = _colour = _depth = _width = _height = _samples = 0;
+        }
     }
 }

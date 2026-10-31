@@ -32,6 +32,7 @@ internal sealed unsafe class Gl
     public const int ColorAttachment0 = 0x8CE0, DepthAttachment = 0x8D00, DepthComponent24 = 0x81A6, DepthComponent = 0x1902;
     public const int OutOfMemory = 0x0505;
     public const int FramebufferComplete = 0x8CD5, MaxSamples = 0x8D57, Nearest = 0x2600, FramebufferBinding = 0x8CA6;
+    public const int ClipDistance0 = 0x3000;
 
     private readonly delegate* unmanaged<int> _getError;
     private readonly delegate* unmanaged<int, int*, void> _getIntegerv;

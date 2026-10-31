@@ -171,6 +171,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         _pivotAtCentre = settings.PivotAtCentre;
         _inches = settings.Inches;
         _brightness = settings.Brightness;
+        _qualityIndex = settings.Quality;
         Tr.Instance.PropertyChanged += OnLanguageChanged;
     }
 
@@ -263,6 +264,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
                         return a;
                     };
                     Scene.IndicesVersion++;
+                    EnsureSmooth();
                     Progress = null;
                     OnPropertyChanged(nameof(CanMeasure));
                     OnPropertyChanged(nameof(MeasureHint));
@@ -446,6 +448,53 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     private int _brightness = 100;
 
     public string BrightnessLabel => $"{_brightness} %";
+
+    /// <summary>Drawing quality: 0 fast (as plain as possible), 1 medium (all refinements), 2 high (and 8× smoothing).</summary>
+    public int QualityIndex
+    {
+        get => _qualityIndex;
+        set
+        {
+            value = Math.Clamp(value, 0, 2);
+            if (!SetProperty(ref _qualityIndex, value)) return;
+            ViewerSettings.Update(s => s with { Quality = value });
+            EnsureSmooth();
+            Redraw();
+        }
+    }
+
+    private int _qualityIndex = 2;
+
+    internal RenderQuality Quality => RenderQuality.ForLevel(_qualityIndex);
+
+    private bool _smoothRequested;
+
+    /// <summary>
+    /// Smooth normals of the curved faces, worked out once in the background as soon as the faces are known and a
+    /// quality above "fast" is chosen (fast costs nothing extra, also when loading large models).
+    /// </summary>
+    private void EnsureSmooth()
+    {
+        if (_qualityIndex == 0 || _smoothRequested || Faces is not { } faces) return;
+        _smoothRequested = true;
+        var ct = _cts.Token;
+        var mesh = Mesh;
+        _ = Task.Run(() => SmoothShading.Build(mesh, faces, ct), ct).ContinueWith(t =>
+        {
+            if (!t.IsCompletedSuccessfully || ct.IsCancellationRequested) return;
+            var smooth = t.Result;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (ct.IsCancellationRequested) return;
+                Scene.Smooth = smooth;
+                Scene.SmoothVersion++;
+                // The triangles now point at the added vertices of the curved faces
+                Scene.SortedIndices = () => smooth.SortedByFace(faces);
+                Scene.IndicesVersion++;
+                Redraw();
+            });
+        }, TaskScheduler.Default);
+    }
 
     /// <summary>Puts the brightness back to 100 %.</summary>
     [RelayCommand]

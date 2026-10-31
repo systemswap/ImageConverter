@@ -11,21 +11,34 @@ internal static class Shaders
     {
         if (gl.IsEs) return "#version 300 es\nprecision highp float;\nprecision highp int;\n";
         var v = gl.Version.Major * 10 + gl.Version.Minor;
-        return v >= 33 ? "#version 330 core\n" : v >= 32 ? "#version 150\n" : "#version 130\n";
+        // DESKTOP: clip distances and noperspective are available (GLSL ES 3.00 has neither without extensions)
+        return (v >= 33 ? "#version 330 core\n" : v >= 32 ? "#version 150\n" : "#version 130\n") + "#define DESKTOP 1\n";
     }
 
     /// <summary>Model: position and the part number per vertex (normalised byte).</summary>
     public const string ModelVertex = """
         in vec3 aPos;
         in float aPart;
+        in vec3 aNormal;
         uniform mat4 uViewProj;
+        uniform vec4 uClips[6];
+        uniform int uClipCount;
         out vec3 vWorld;
         out float vPart;
+        out vec3 vNormal;
+        #ifdef DESKTOP
+        out float gl_ClipDistance[6];
+        #endif
         void main()
         {
             vWorld = aPos;
             vPart = floor(aPart * 255.0 + 0.5);
+            vNormal = aNormal;
             gl_Position = uViewProj * vec4(aPos, 1.0);
+        #ifdef DESKTOP
+            // Sections cut by the rasteriser: the cut edge is smoothed like any other edge
+            for (int i = 0; i < 6; i++) gl_ClipDistance[i] = i < uClipCount ? dot(aPos, uClips[i].xyz) - uClips[i].w : 1.0;
+        #endif
         }
         """;
 
@@ -39,6 +52,14 @@ internal static class Shaders
     public const string ModelFragment = """
         in vec3 vWorld;
         in float vPart;
+        in vec3 vNormal;
+        uniform int uSmooth;
+        uniform int uHwClip;
+        uniform int uDither;
+        uniform int uAoSharp;
+        uniform sampler2D uAoDepth;
+        uniform mat4 uInvProj;
+        uniform float uAoTolerance;
         uniform vec3 uEye;
         uniform vec3 uForward;
         uniform int uOrtho;
@@ -59,6 +80,36 @@ internal static class Shaders
 
         vec3 linear(vec3 c) { return pow(c, vec3(2.2)); }
 
+        float viewZ(float d)
+        {
+            vec4 p = uInvProj * vec4(0.0, 0.0, d * 2.0 - 1.0, 1.0);
+            return p.z / p.w;
+        }
+
+        // Occlusion at this pixel from the half-resolution result: where the four texels around it lie at clearly
+        // different depths (a silhouette or a cut edge), the one on this surface – otherwise the darkness of the
+        // surface behind or in front bleeds in as a two-pixel staircase
+        float occlusionHere()
+        {
+            vec2 uv = gl_FragCoord.xy / uScreen;
+            if (uAoSharp == 0) return texture(uSsao, uv).r;
+            ivec2 size = textureSize(uAoDepth, 0);
+            vec2 at = uv * vec2(size) - 0.5;
+            ivec2 base = ivec2(floor(at));
+            float z = viewZ(gl_FragCoord.z);
+            float best = 1e30;
+            float bestAo = 1.0;
+            float spread = 0.0;
+            for (int i = 0; i < 4; i++)
+            {
+                ivec2 q = clamp(base + ivec2(i % 2, i / 2), ivec2(0), size - 1);
+                float dz = abs(viewZ(texelFetch(uAoDepth, q, 0).r) - z);
+                spread = max(spread, dz);
+                if (dz < best) { best = dz; bestAo = texelFetch(uSsao, q, 0).r; }
+            }
+            return spread <= uAoTolerance ? texture(uSsao, uv).r : bestAo;
+        }
+
         vec3 partColour(float p)
         {
             float h = fract(p * 0.61803398875 + 0.08);
@@ -68,16 +119,27 @@ internal static class Shaders
 
         void main()
         {
-            for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
-            vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+            if (uHwClip == 0)
+                for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
             vec3 v = uOrtho == 1 ? -uForward : normalize(uEye - vWorld);
-            if (dot(n, v) < 0.0) n = -n;
+            vec3 n;
+            if (uSmooth == 1 && dot(vNormal, vNormal) > 0.25)
+            {
+                // Curved face: the normal of the surface the facets approximate, towards the side being looked at
+                n = normalize(vNormal);
+                if (!gl_FrontFacing) n = -n;
+            }
+            else
+            {
+                n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+                if (dot(n, v) < 0.0) n = -n;
+            }
             vec3 base = linear(uParts == 1 ? partColour(vPart) : uBase);
             // Inner side (back of a face: inside the material or a cut wall) in a warm grey
             if (uInner == 1 && !gl_FrontFacing) base = mix(base, linear(vec3(0.80, 0.60, 0.50)), 0.75);
             // Occlusion fades out on faces seen nearly edge-on: there the screen-space estimate has no reliable depth
             // neighbours left, and a face turning away must not darken abruptly
-            float ao = mix(1.0, pow(texture(uSsao, gl_FragCoord.xy / uScreen).r, 1.8), uAo * smoothstep(0.02, 0.15, dot(n, v)));
+            float ao = mix(1.0, pow(occlusionHere(), 1.8), uAo * smoothstep(0.02, 0.15, dot(n, v)));
             float up = n.z * 0.5 + 0.5;
             vec3 ambient = mix(vec3(0.13, 0.12, 0.12), vec3(0.42, 0.45, 0.51), up) * ao;
             float key = max(dot(n, uKey), 0.0);
@@ -92,7 +154,9 @@ internal static class Shaders
             // Brighter lifts the mid tones along a curve, so that lit faces do not burn out to white; darker scales down
             lit = uExposure >= 1.0 ? pow(clamp(lit, 0.0, 1.0), vec3(1.0 / uExposure)) : lit * uExposure;
             lit = mix(lit, linear(uTint.rgb), uTint.a);
-            fragColor = vec4(pow(clamp(lit, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
+            // Half a step of noise against visible steps in long gradients (8 bits per colour)
+            float dither = uDither == 1 ? (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0 : 0.0;
+            fragColor = vec4(pow(clamp(lit, 0.0, 1.0), vec3(1.0 / 2.2)) + dither, 1.0);
         }
         """;
 
@@ -103,6 +167,9 @@ internal static class Shaders
     public const string DepthFragment = """
         in vec3 vWorld;
         in float vPart;
+        in vec3 vNormal;
+        uniform int uSmooth;
+        uniform int uHwClip;
         uniform vec4 uClips[6];
         uniform int uClipCount;
         uniform vec3 uRight;
@@ -111,8 +178,9 @@ internal static class Shaders
         out vec4 fragColor;
         void main()
         {
-            for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
-            vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+            if (uHwClip == 0)
+                for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
+            vec3 n = uSmooth == 1 && dot(vNormal, vNormal) > 0.25 ? normalize(vNormal) : normalize(cross(dFdx(vWorld), dFdy(vWorld)));
             fragColor = vec4(vec3(dot(n, uRight), dot(n, uUp), dot(n, uBack)) * 0.5 + 0.5, 1.0);
         }
         """;
@@ -223,8 +291,91 @@ internal static class Shaders
     public const string LineVertex = """
         in vec3 aPos;
         uniform mat4 uViewProj;
+        uniform vec4 uClips[6];
+        uniform int uClipCount;
         out vec3 vWorld;
-        void main() { vWorld = aPos; gl_Position = uViewProj * vec4(aPos, 1.0); }
+        #ifdef DESKTOP
+        out float gl_ClipDistance[6];
+        #endif
+        void main()
+        {
+            vWorld = aPos;
+            gl_Position = uViewProj * vec4(aPos, 1.0);
+        #ifdef DESKTOP
+            for (int i = 0; i < 6; i++) gl_ClipDistance[i] = i < uClipCount ? dot(aPos, uClips[i].xyz) - uClips[i].w : 1.0;
+        #endif
+        }
+        """;
+
+    /// <summary>
+    /// Edge line as a narrow band facing the screen: each segment becomes a quad a few pixels wide, and the fragment
+    /// shader fades it out by the distance from the line in pixels – smooth at any angle, independent of the
+    /// multisampling. The line stays exactly on the edge. Desktop OpenGL only (needs <c>noperspective</c>).
+    /// </summary>
+    public const string SmoothLineVertex = """
+        in vec3 aA;
+        in vec3 aB;
+        in vec2 aCorner;
+        uniform mat4 uViewProj;
+        uniform vec2 uViewport;
+        uniform float uHalfWidth;
+        uniform vec4 uClips[6];
+        uniform int uClipCount;
+        out vec3 vWorld;
+        #ifdef DESKTOP
+        noperspective out float vAcross;
+        out float gl_ClipDistance[6];
+        #else
+        out float vAcross;
+        #endif
+        void main()
+        {
+            vec4 a = uViewProj * vec4(aA, 1.0);
+            vec4 b = uViewProj * vec4(aB, 1.0);
+            // An end behind the eye (perspective) moves along the segment to just in front of it
+            float e = 1e-5;
+            if (a.w < e && b.w < e) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vAcross = 0.0; vWorld = aA; return; }
+            float ta = 0.0, tb = 1.0;
+            vec4 a0 = a, b0 = b;
+            if (a0.w < e) { ta = (e - a0.w) / (b0.w - a0.w); a = mix(a0, b0, ta); }
+            if (b0.w < e) { tb = (e - a0.w) / (b0.w - a0.w); b = mix(a0, b0, tb); }
+            vec2 hv = uViewport * 0.5;
+            vec2 sa = a.xy / a.w * hv;
+            vec2 sb = b.xy / b.w * hv;
+            vec2 d = sb - sa;
+            float len = length(d);
+            d = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+            vec2 side = vec2(-d.y, d.x);
+            bool atA = aCorner.x < 0.5;
+            vec4 p = atA ? a : b;
+            float reach = uHalfWidth + 1.0;
+            p.xy += side * (aCorner.y * reach) / hv * p.w;
+            vAcross = aCorner.y * reach;
+            vWorld = atA ? mix(aA, aB, ta) : mix(aA, aB, tb);
+            gl_Position = p;
+        #ifdef DESKTOP
+            for (int i = 0; i < 6; i++) gl_ClipDistance[i] = i < uClipCount ? dot(vWorld, uClips[i].xyz) - uClips[i].w : 1.0;
+        #endif
+        }
+        """;
+
+    public const string SmoothLineFragment = """
+        in vec3 vWorld;
+        #ifdef DESKTOP
+        noperspective in float vAcross;
+        #else
+        in float vAcross;
+        #endif
+        uniform vec4 uColour;
+        uniform float uHalfWidth;
+        out vec4 fragColor;
+        void main()
+        {
+            // Coverage of a pixel by a line of 2 × uHalfWidth pixels (box filter of one pixel)
+            float cover = clamp(uHalfWidth + 0.5 - abs(vAcross), 0.0, 1.0);
+            if (cover <= 0.0) discard;
+            fragColor = vec4(uColour.rgb, uColour.a * cover);
+        }
         """;
 
     public const string LineFragment = """
@@ -232,10 +383,12 @@ internal static class Shaders
         uniform vec4 uColour;
         uniform vec4 uClips[6];
         uniform int uClipCount;
+        uniform int uHwClip;
         out vec4 fragColor;
         void main()
         {
-            for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
+            if (uHwClip == 0)
+                for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
             fragColor = uColour;
         }
         """;
@@ -256,13 +409,15 @@ internal static class Shaders
         in vec2 vUv;
         uniform vec3 uTop;
         uniform vec3 uBottom;
+        uniform int uDither;
         out vec4 fragColor;
         void main()
         {
             vec3 c = mix(uBottom, uTop, smoothstep(0.0, 1.0, vUv.y));
             float d = distance(vUv, vec2(0.5, 0.55));
             c *= 1.0 + 0.06 * (1.0 - smoothstep(0.0, 0.75, d));
-            fragColor = vec4(c, 1.0);
+            float dither = uDither == 1 ? (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0 : 0.0;
+            fragColor = vec4(c + dither, 1.0);
         }
         """;
 

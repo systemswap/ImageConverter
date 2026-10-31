@@ -78,6 +78,7 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
   bzw. ES 3 erscheint ein Hinweis, die Kennzahlen stehen trotzdem in der Spalte.
 - Flache, kantenscharfe Schattierung; die Flächennormale entsteht im Fragment-Shader aus
   den Ableitungen der Position – geteilte Eckpunkte reichen, auch bei Millionen Dreiecken.
+  Ausnahme in den Qualitätsstufen Mittel und Hoch: fein unterteilte Rundungen (unten).
 - Gestaltung: ruhiger Verlauf als Hintergrund (folgt Hell/Dunkel), mattes Material,
   Hauptlicht von links oben, schwache Aufhellung von rechts (beide an die Kamera
   gebunden), Himmel-/Bodenlicht entlang der Hochachse, Glanz und Randlicht schwach.
@@ -90,11 +91,44 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
   der Proben wächst mit der Neigung der Fläche, die Verdeckung blendet bei fast streifendem
   Blick aus, und das Glätten mischt nur Nachbarn derselben Fläche (keine dunklen Säume über
   Umrisse hinweg).
+  Weicher **Bodenschatten** aus der Draufsicht (256 × 256, geglättet), blendet beim Blick
+  von unten aus. Feine Linien an scharfen Kanten (> 40°), Kantenglättung (MSAA).
 - **Helligkeit** (Spalte › Ansicht, 50–150 %, gespeichert; Doppelklick auf den Wert = 100 %):
   heller hebt die Mitteltöne entlang einer Kurve an, so dass beleuchtete Flächen nicht weiß
   ausbrennen; dunkler skaliert das Licht herunter. Der Hintergrund bleibt.
-  Weicher **Bodenschatten** aus der Draufsicht (256 × 256, geglättet), blendet beim Blick
-  von unten aus. Feine Linien an scharfen Kanten (> 40°), Kantenglättung (4× MSAA).
+- **Qualität** (Spalte › Ansicht, gespeichert, voreingestellt Hoch) – gegen Treppen an Kanten und
+  auf Rundungen; die Geometrie (Umriss, Kantenlinien, Messen) bleibt in jeder Stufe die der Datei:
+
+  | Stufe | Inhalt | Aufwand |
+  |---|---|---|
+  | Schnell | flache Facetten, Schnitt je Bildpunkt, Linien 1 px, 4× MSAA | am wenigsten, für langsame Rechner |
+  | Mittel | alle Verfeinerungen (unten), 4× MSAA | kaum mehr als Schnell; Normalen einmal im Hintergrund |
+  | Hoch | wie Mittel, 8× MSAA (wo die Grafikkarte es kann) | doppelte Arbeit an den Kanten des Bildes |
+
+  Die Verfeinerungen:
+  - *Rundungen glatt* (`SmoothShading`): Nur Flächen, die die Flächenerkennung als Zylinder
+    oder Freiform erkannt hat, und nur, wo deren Facetten höchstens 5° von der Normalen an
+    ihren Ecken abweichen (Zylinder ab 36 Facetten je Umdrehung). Zylinder bekommen die
+    genaue Normale des erkannten Zylinders (radial zur Achse), Freiformflächen das nach dem
+    Winkel gewichtete Mittel der Facetten. Ebenen bleiben exakt flach, Kanten zwischen
+    Flächen scharf, grob unterteilte Teile facettiert wie in der Datei – nichts sieht runder
+    oder weicher aus, als die Datei es beschreibt. Dafür bekommen die Ecken der Rundungen
+    eigene Eckpunkte (je Fläche), die Eckpunkte der Datei behalten ihre Nummern (Kantenlinien).
+  - *Schnittkanten geglättet*: Die Schnittflächen schneidet die Grafikkarte geometrisch ab
+    (`gl_ClipDistance`) statt je Bildpunkt zu verwerfen – die Schnittkante wird geglättet
+    wie jede andere Kante.
+  - *Umgebungsschatten kantengenau*: An Tiefensprüngen (Umriss, Schnittkante) übernimmt jeder
+    Bildpunkt die Verdeckung aus dem Bildpunkt halber Auflösung, der auf seiner Fläche liegt;
+    sonst blutet die Verdeckung als Zwei-Pixel-Treppe über die Kante.
+  - *Kantenlinien geglättet*: Jede Kante wird als schmales Band gezeichnet, das zum Rand weich
+    ausläuft (Abdeckung eines Bildpunkts durch eine 1 px breite Linie); die Linie bleibt genau
+    auf der Kante. Bis 4 Mio. Kanten, darüber 1-px-Linien.
+  - *Dithering*: ein halber Helligkeitswert Rauschen gegen Stufen in langen Verläufen (8 Bit).
+
+  Unter OpenGL ES (Windows mit ANGLE) fallen geometrisches Abschneiden und geglättete Linien
+  auf die einfachen Wege zurück (dort fehlen `gl_ClipDistance` und `noperspective`). Gemessen
+  am Gehäuse: Ebenen ändern sich höchstens um einen Helligkeitswert (Dithering), größere
+  Unterschiede gibt es nur an Kanten und auf Rundungen (0,8 % der Bildpunkte).
 - Ansichten „Fläche“, „Drahtgitter“ (alle Kanten, auch verdeckte) und „Bauplan“ (blau,
   flache Flächen, weiße Kanten); „Teile färben“ zeigt die zusammenhängenden Teile.
 - Gezeichnet wird nur, wenn sich etwas ändert.
@@ -206,7 +240,8 @@ Suchbaum je Fläche. Anzeige in mm mit zwei Nachkommastellen (Zoll: drei), Winke
   Profil mit Rundung, Kugel, binär und Text) und prüfen Einlesen, Kennzahlen,
   Flächenerkennung, jede Maßart, Suchbaum gegen Ausprobieren aller Dreiecke, präparierte
   und zufällig beschädigte Dateien (Zeitgrenze), Kamera (Rückprojektion, Drehpunkt bleibt
-  stehen, Zoom zur Maus, Einpassen), vorbereitete Daten, Texte.
+  stehen, Zoom zur Maus, Einpassen), vorbereitete Daten, Texte, weiche Normalen (Quader und
+  flache Kante bleiben flach, feines Rohr radial, grobes Rohr facettiert, Kugel), Qualitätsstufen.
 - Die OpenGL-Ansicht wurde mit einem Prüfprogramm im echten Fenster aufgenommen (alle
   Ansichten, hell/dunkel, Messklicks) und das Blättern Bild ↔ Modell ↔ Bild geprüft.
   Ziehen mit der Maus und das Gefühl der Bedienung nimmt der Benutzer ab.
