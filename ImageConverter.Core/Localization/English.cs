@@ -1078,6 +1078,7 @@ public static class English
         ["Zylinder"] = "Cylinder",
         ["Die Grafikkarte hat nicht genug Speicher für dieses Modell."] = "The graphics card does not have enough memory for this model.",
         ["⌖  Zentrieren"] = "⌖  Centre",
+        ["Abstand am Klickpunkt"] = "Distance at the click",
         ["Modell in die Bildmitte holen – Zoom und Blickrichtung bleiben (C)."] = "Bring the model into the middle – zoom and direction stay (C).",
     };
 

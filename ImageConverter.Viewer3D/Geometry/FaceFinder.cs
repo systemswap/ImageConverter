@@ -65,11 +65,13 @@ public sealed record FaceSet(int[] FaceOf, Face[] Faces, int[] Triangles)
 /// <item>Planes: starting from the largest triangles (their normals are the most accurate), neighbours join while
 /// all their corners lie within a tolerance of the start plane (a few millionths of the model size, at least the
 /// float resolution of the coordinates).</item>
-/// <item>Facets: a plane is taken as a facet of a curved surface when more than half of its border meets
+/// <item>Facets: a plane is taken as a facet of a curved surface when more than a quarter of its border meets
 /// neighbours at a gentle angle (≤ <see cref="SmoothAngle"/>°) and it is not much broader than those neighbours –
-/// so the top of a box with rounded edges stays a plane, while the strips of a bore become facets.</item>
+/// so the top of a box with rounded edges stays a plane, while the strips of a bore become facets, also the last strip
+/// of an arc that ends at a sharp edge (one gentle long side).</item>
 /// <item>Cylinders: neighbouring facets whose normals are all perpendicular to one axis (the axis is the eigenvector
-/// of the smallest eigenvalue of Σ A n nᵀ) and whose corners fit one circle around it.</item>
+/// of the smallest eigenvalue of Σ A n nᵀ), which meet along edges parallel to that axis, and whose corners fit one
+/// circle around it.</item>
 /// <item>Freeform: the remaining facets, joined across gentle edges.</item>
 /// </list>
 /// <para>Each step visits every triangle a bounded number of times; a failed cylinder attempt removes its facets from
@@ -83,11 +85,15 @@ public static class FaceFinder
     /// <summary>Normals of a cylinder's facets may deviate this much (degrees) from perpendicular to the axis.</summary>
     private const double CylinderAxisAngle = 2;
 
+    /// <summary>Shared edges of neighbouring strips must run within 2° of the axis.</summary>
+    private static readonly double CosEdgeAlongAxis = Math.Cos(2 * Math.PI / 180);
+
     /// <summary>Finds the faces.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <param name="topology">Its neighbourhood (<see cref="MeshTopology.Build"/>).</param>
     /// <param name="ct">Cancels the search.</param>
-    public static FaceSet Find(Mesh mesh, MeshTopology topology, CancellationToken ct = default)
+    /// <param name="resolution">Relative rounding of the coordinates (<see cref="StlFile.Resolution"/>).</param>
+    public static FaceSet Find(Mesh mesh, MeshTopology topology, CancellationToken ct = default, double resolution = StlReader.FloatResolution)
     {
         var t = mesh.TriangleCount;
         var nbr = topology.Neighbours;
@@ -96,8 +102,9 @@ public static class FaceFinder
         var maxCoord = Math.Max(Math.Max(Math.Abs(bounds.Min.X), Math.Abs(bounds.Max.X)),
             Math.Max(Math.Max(Math.Abs(bounds.Min.Y), Math.Abs(bounds.Max.Y)), Math.Max(Math.Abs(bounds.Min.Z), Math.Abs(bounds.Max.Z))));
         // Coplanar tolerance: relative to the model, but never below a few float steps of the coordinates
-        var floatStep = 4 * maxCoord * Math.Pow(2, -23);
-        var tolerance = Math.Max(2e-5 * bounds.Diagonal, floatStep);
+        // Rounding of the corners in the file (half a step at the largest coordinate)
+        var noise = maxCoord * resolution;
+        var tolerance = Math.Max(2e-5 * bounds.Diagonal, 8 * noise);
 
         // ---- 1. Planes, seeded from the largest triangles
         var areas = new float[t];
@@ -188,7 +195,7 @@ public static class FaceFinder
         }
         var facet = new bool[regions];
         for (var r = 0; r < regions; r++)
-            facet[r] = rArea[r] <= 0 || gentle[r] > 0.5f * border[r] && breadth[r] < 3 * neighbourBreadth[r];
+            facet[r] = rArea[r] <= 0 || gentle[r] > 0.25f * border[r] && breadth[r] < 3 * neighbourBreadth[r];
         border = gentle = breadth = neighbourBreadth = null!;
         ct.ThrowIfCancellationRequested();
 
@@ -241,6 +248,7 @@ public static class FaceFinder
                     var ns = RNormal(rNormal, s);
                     if (NormalDot(rNormal, cur, s) < cosSmooth) continue;
                     if (Math.Abs(D3.Dot(ns, axis)) > sinAxis) continue;
+                    if (!EdgeAlongAxis(cur, s, axis)) continue;
                     Add(s);
                     regionQueue.Enqueue(s);
                     if (members.Count >= 3) axis = m.SmallestEigenvector(axis);
@@ -255,7 +263,7 @@ public static class FaceFinder
             var closed = links / 2 >= members.Count;
 
             var fit = members.Count >= 3 && m.SmallestEigenvalueShare(axis) <= sinAxis * sinAxis
-                ? FitCylinder(mesh, axis, members, regionFirst, regionTris, floatStep, closed)
+                ? FitCylinder(mesh, axis, members, regionFirst, regionTris, 3 * noise, closed)
                 : null;
             if (fit is { } c)
             {
@@ -266,6 +274,25 @@ public static class FaceFinder
             else
             {
                 foreach (var s in members) group[s] = -2;
+            }
+
+            // Strips of a cylinder meet along lines parallel to its axis; the fan of triangles at the pole of a sphere
+            // meets along spokes in all directions
+            bool EdgeAlongAxis(int a, int b, D3 dir)
+            {
+                var best = D3.Zero;
+                for (var i = regionFirst[b]; i < regionFirst[b + 1]; i++)
+                {
+                    var tri = regionTris[i];
+                    for (var k = 0; k < 3; k++)
+                    {
+                        var q = nbr[3 * tri + k];
+                        if (q < 0 || region[q] != a) continue;
+                        var e = D3.From(mesh.Vertex(idx[3 * tri + (k + 1) % 3])) - D3.From(mesh.Vertex(idx[3 * tri + k]));
+                        if (e.LengthSquared > best.LengthSquared) best = e;
+                    }
+                }
+                return best != D3.Zero && Math.Abs(D3.Dot(best.Normalized(), dir)) >= CosEdgeAlongAxis;
             }
 
             void Add(int s)
@@ -374,14 +401,14 @@ public static class FaceFinder
     /// I. Kåsa: A circle fitting procedure and its error analysis, IEEE Trans. Instrum. Meas. 25(1), 1976).
     /// </summary>
     /// <remarks>
-    /// Accepted only if every corner lies on the circle: a tessellated cylinder from a CAD program has its corners
-    /// exactly on the surface, while a strip of a sphere or another doubly curved surface also has normals
-    /// perpendicular to one axis but corners off the circle by about α²/8 of the radius (α = angle between
-    /// neighbouring facets). The limit is a fiftieth of that, plus float resolution – finely tessellated spheres are
-    /// refused as well. The facets must cover at least 15° around the axis.
+    /// Accepted only if every corner lies on the circle within the rounding of the file (plus a millionth of the radius):
+    /// a tessellated cylinder from a CAD program has its corners exactly on the surface, while a strip of a sphere or
+    /// another doubly curved surface also has normals perpendicular to one axis but corners off the circle. An open
+    /// piece must also cover at least 15° around the axis and be at least 2 % of its radius long along it – a finely
+    /// divided sphere has strips whose corners lie on a circle within any tolerance, but they are only one facet wide.
     /// </remarks>
     private static (D3 Axis, D3 AxisPoint, double Radius, double Coverage)? FitCylinder(
-        Mesh mesh, D3 axis, List<int> members, int[] regionFirst, int[] regionTris, double floatStep, bool closed)
+        Mesh mesh, D3 axis, List<int> members, int[] regionFirst, int[] regionTris, double rounding, bool closed)
     {
         var u = axis.AnyPerpendicular();
         var v = D3.Cross(axis, u);
@@ -415,13 +442,31 @@ public static class FaceFinder
         angles.Sort();
         var gap = 2 * Math.PI - (angles[^1] - angles[0]);
         for (var i = 1; i < angles.Count; i++) gap = Math.Max(gap, angles[i] - angles[i - 1]);
+        // A ring of neighbours is a closed cylinder only if its corners go all round the axis (largest gap about one
+        // facet); facets around a single corner of a finely divided surface are a ring of neighbours, too
+        if (closed && gap > 2.5 * 2 * Math.PI / members.Count) closed = false;
         var coverage = closed ? 2 * Math.PI : 2 * Math.PI - gap;
         if (coverage < 15 * Math.PI / 180) return null;
 
-        var alpha = coverage / members.Count;
-        var limit = radius * (alpha * alpha / 8 / 50 + 1e-6) + floatStep;
+        var limit = 1e-6 * radius + rounding;
         foreach (var (x, y) in Corners())
             if (Math.Abs(Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - radius) > limit) return null;
+
+        // An open piece must be at least 2 % of its radius long along the axis: a strip of a sphere one facet wide
+        // also has its corners on a circle, but no length
+        if (!closed)
+        {
+            double lo = double.MaxValue, hi = double.MinValue;
+            foreach (var r in members)
+                for (var i = regionFirst[r]; i < regionFirst[r + 1]; i++)
+                    for (var k = 0; k < 3; k++)
+                    {
+                        var t = D3.Dot(D3.From(mesh.Vertex(idx[3 * regionTris[i] + k])) - origin, axis);
+                        lo = Math.Min(lo, t);
+                        hi = Math.Max(hi, t);
+                    }
+            if (hi - lo < 0.02 * radius) return null;
+        }
 
         coverage *= 180 / Math.PI;
         var centre = origin + u * cx + v * cy;

@@ -158,7 +158,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
                     Redraw();
                 });
 
-                var facesTask = Task.Run(() => FaceFinder.Find(mesh, topology, ct), ct);
+                var resolution = File.Resolution;
+                var facesTask = Task.Run(() => FaceFinder.Find(mesh, topology, ct, resolution), ct);
                 var bvh = Bvh.Build(mesh, null, ct);
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {

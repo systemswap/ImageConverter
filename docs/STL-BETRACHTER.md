@@ -114,14 +114,17 @@ STL kennt nur einzelne Dreiecke; eine gekrümmte Fläche kommt als Streifen eben
 1. **Ebenen:** von den größten Dreiecken aus (ihre Normalen sind am genauesten) wachsen
    Nachbarn an, solange ihre Ecken in der Startebene liegen (2·10⁻⁵ der Modellgröße,
    mindestens einige Float-Schritte der Koordinaten).
-2. **Facetten:** eine Ebene gilt als Facette einer gekrümmten Fläche, wenn mehr als die
-   Hälfte ihres Randes sanft (≤ 40°) an Nachbarn stößt und sie nicht deutlich breiter ist
+2. **Facetten:** eine Ebene gilt als Facette einer gekrümmten Fläche, wenn mehr als ein
+   Viertel ihres Randes sanft (≤ 40°) an Nachbarn stößt und sie nicht deutlich breiter ist
    als diese – so bleibt die Oberseite eines Quaders mit gerundeten Kanten eine Ebene.
 3. **Zylinder:** benachbarte Facetten, deren Normalen alle senkrecht zu einer Achse
-   stehen (Eigenvektor zum kleinsten Eigenwert von Σ A n nᵀ) und deren Ecken auf einem
-   Kreis liegen (Kåsa-Ausgleich). Streng: Ecken eines CAD-Zylinders liegen exakt auf dem
-   Kreis, ein Kugelstreifen weicht um etwa α²/8 ab (α = Winkel der Facetten) – zugelassen
-   ist ein Fünfzigstel davon. Geschlossen (Ring aus Facetten) → Ø, sonst Bogen → R.
+   stehen (Eigenvektor zum kleinsten Eigenwert von Σ A n nᵀ), die sich entlang von Kanten
+   parallel zur Achse treffen und deren Ecken auf einem Kreis liegen (Kåsa-Ausgleich).
+   Streng: Ecken eines CAD-Zylinders liegen bis auf die Rundung der Datei genau auf dem
+   Kreis (binär: Float, Text: nach der Stellenzahl der Zahlen); ein offenes Stück muss
+   mindestens 15° abdecken und entlang der Achse 2 % seines Radius lang sein. Geschlossen
+   (Ecken rundum) → Ø, sonst Bogen → R. Nicht erkannt: Bögen aus zwei Streifen und
+   Vielecke mit weniger als neun Ecken (die gelten als Ebenen).
 4. **Freiform:** übrige Facetten, über sanfte Kanten verbunden.
 
 Ein gescheiterter Zylinderversuch nimmt seine Facetten aus weiteren Versuchen heraus – die
@@ -152,7 +155,7 @@ gerader Abstand, ΔX/ΔY/ΔZ; Punkt ↔ Fläche geht auch.
 | A ↔ B | angezeigt |
 |---|---|
 | Ebene ∥ Ebene | senkrechter Abstand (Linie vom Klick auf A senkrecht auf B) |
-| Ebene ∦ Ebene | Winkel, dazu kürzester Abstand |
+| Ebene ∦ Ebene | Winkel, kürzester Abstand; bis 5° Neigung zuerst der Abstand am Klickpunkt |
 | Zylinder ↔ Zylinder, Achsen parallel | Achsabstand, kürzester und größter Abstand, beide Ø (Rohr: Wandstärke) |
 | Zylinder ↔ Zylinder, sonst | Winkel der Achsen, Abstand der Achsen |
 | Zylinder ↔ Ebene | Achse parallel: Abstand Achse–Ebene, kürzester/größter Abstand; sonst Winkel |
@@ -214,7 +217,30 @@ keine Lücken), dann Speicher und Tempo. Prüfprogramme im lokalen Testordner (`
 Verworfen: Flächen und Suchbaum nacheinander statt gleichzeitig zu rechnen (Spitze etwas niedriger, aber 0,45 s später
 messbereit bei 5 Mio.).
 
-## 11. Später möglich
+## 11. Analyserunde Genauigkeit (31.10.2026, 0.8.14 → 0.8.15-beta)
+
+Prüfmodelle mit exakt bekannten Maßen, je zwölfmal zufällig gedreht und 0 / 100 / 1000 / 10 000 / 100 000 mm vom Nullpunkt
+verschoben, Facettierung 8–512 Segmente (Prüfprogramm `stl-fuzz accuracy`). Größte Abweichung:
+
+| Maßart | 0 mm | 1 000 mm | 10 000 mm | 100 000 mm |
+|---|---|---|---|---|
+| Abstand paralleler Ebenen | 0,010 µm | 0,023 µm | 0,32 µm | 2,1 µm |
+| Winkel zweier Ebenen | 0,008 m° | 0,04 m° | 0,33 m° | 3,9 m° |
+| Durchmesser (9–512 Ecken) | 0,006 µm | 0,014 µm | 0,11 µm | 1,3 µm |
+| Achsabstand paralleler Zylinder | 0,005 µm | 0,004 µm | 0,04 µm | 0,44 µm |
+| Wandstärke eines Rohrs | 0,000 µm | 0,011 µm | 0,04 µm | 2,6 µm |
+| Achse ↔ parallele Ebene | 0,002 µm | 0,004 µm | 0,21 µm | 1,3 µm |
+| Radius einer Rundung (3–8 Streifen) | 0,03 µm | 0,36 µm | 6 µm | 82 µm |
+| kürzester Abstand zweier Kugeln | 0,001 µm | 0,03 µm | 0,6 µm | 32 µm |
+
+Die Abweichungen folgen der Auflösung der Datei (32-Bit-Float: etwa 6·10⁻⁸ der Koordinate); angezeigt wird auf 0,01 mm.
+Gefunden und behoben: Schein-Zylinder auf Kugeln (#116), Rundungen an scharfen Kanten (#117); neu: Abstand am Klickpunkt für
+leicht geneigte Ebenen (unter 0,1° gelten Ebenen als parallel, der Abstand ist dann der ihrer Mittelpunkte entlang der Normale).
+Grundsätzlich: der kürzeste Abstand wird zwischen den Dreiecken gemessen – an gekrümmten Flächen liegen die Facetten innerhalb
+der echten Fläche, er ist dort um bis zur Sehnenhöhe der Facettierung zu groß; Achsabstände, Durchmesser und Radien sind davon
+nicht betroffen (der Kreis geht durch die Ecken).
+
+## 12. Später möglich
 
 Vorschaubilder in der Dateiliste, Schnittebene, Wandstärke an beliebiger Stelle, Messwerte
 kopieren, freies Drehen (Trackball) als Umschalter.

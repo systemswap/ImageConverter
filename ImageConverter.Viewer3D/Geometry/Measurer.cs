@@ -15,6 +15,9 @@ public enum Quantity
     /// <summary>Shortest distance between the surfaces.</summary>
     MinDistance,
 
+    /// <summary>Slightly tilted planes: distance from the click on the first face, perpendicular onto the second.</summary>
+    DistanceAtClick,
+
     /// <summary>Largest distance across both cylinders (outer edge to outer edge).</summary>
     MaxDistance,
 
@@ -72,6 +75,9 @@ public sealed class Measurer(Mesh mesh, FaceSet faces)
 {
     /// <summary>Planes closer to parallel than this (degrees) count as parallel.</summary>
     public const double ParallelPlanes = 0.1;
+
+    /// <summary>Up to this angle (degrees), tilted planes also get the distance at the click (<see cref="Quantity.DistanceAtClick"/>).</summary>
+    public const double SlightlyTilted = 5;
 
     /// <summary>Axes from fitted cylinders closer to parallel than this (degrees) count as parallel.</summary>
     public const double ParallelAxes = 0.5;
@@ -168,6 +174,14 @@ public sealed class Measurer(Mesh mesh, FaceSet faces)
             return new Measurement([new MeasureValue(Quantity.Distance, distance), new MeasureValue(Quantity.Angle, angle)], hitA, hitA + n * d);
         }
         var shortest = Shortest(a, b, hitA, hitB, ct);
+        if (angle < SlightlyTilted)
+        {
+            // Nearly parallel: the distance where the user clicked is what is wanted most; the line shows it
+            var off = D3.Dot(hitA - b.Centre, b.Normal);
+            return new Measurement(
+                [new MeasureValue(Quantity.DistanceAtClick, Math.Abs(off)), new MeasureValue(Quantity.Angle, angle), .. shortest.Values],
+                hitA, hitA - b.Normal * off);
+        }
         return shortest with { Values = [new MeasureValue(Quantity.Angle, angle), .. shortest.Values] };
     }
 

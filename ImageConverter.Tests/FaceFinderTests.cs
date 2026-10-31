@@ -66,6 +66,76 @@ public class FaceFinderTests
         Assert.Equal(6, faces.Faces.Count(f => f.Kind == FaceKind.Plane));   // 2 caps + 4 sides
     }
 
+    /// <summary>
+    /// A sphere away from the origin, turned, stays one freeform face: the float tolerance for the circle test is one step
+    /// of the coordinates, and fans of triangles (poles) are no cylinder because their shared edges do not run along an axis.
+    /// </summary>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(1000f)]
+    public void Sphere_AwayFromTheOrigin_IsOneFreeformFace(float offset)
+    {
+        var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Normalize(new Quaternion(0.3f, -0.2f, 0.5f, 0.7f)))
+                   * Matrix4x4.CreateTranslation(Vector3.Normalize(new Vector3(1, 0.4f, -0.7f)) * offset);
+        var tris = Sphere(Vector3.Zero, 5, 96, 48).Select(t => new Tri(Vector3.Transform(t.A, pose), Vector3.Transform(t.B, pose), Vector3.Transform(t.C, pose))).ToList();
+        var (_, _, faces) = Analyse(tris);
+        var face = Assert.Single(faces.Faces);
+        Assert.Equal(FaceKind.Freeform, face.Kind);
+    }
+
+    /// <summary>
+    /// A finely divided sphere is one freeform face: the facets around one corner form a ring of neighbours, but their
+    /// corners do not go round an axis – they used to become hundreds of tiny "closed cylinders".
+    /// </summary>
+    [Fact]
+    public void FineSphere_HasNoTinyCylinders()
+    {
+        var (_, _, faces) = Analyse(Sphere(Vector3.Zero, 1, 600, 300));
+        Assert.Equal(FaceKind.Freeform, Assert.Single(faces.Faces).Kind);
+    }
+
+    /// <summary>
+    /// Text files often keep only six significant digits; a cylinder from such a file, turned and away from the origin,
+    /// is still found – the tolerance follows the digits of the file.
+    /// </summary>
+    [Fact]
+    public void Cylinder_FromATextFileWithSixDigits_IsFound()
+    {
+        var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Normalize(new Quaternion(0.2f, 0.5f, -0.1f, 0.8f))) * Matrix4x4.CreateTranslation(120, -80, 45);
+        var tris = Extrude(Circle(Vector2.Zero, 7.5f, 72), 20, pose);
+        var sb = new System.Text.StringBuilder("solid six\n");
+        foreach (var t in tris)
+        {
+            sb.Append("facet normal 0 0 0\nouter loop\n");
+            foreach (var v in new[] { t.A, t.B, t.C })
+                sb.Append(System.FormattableString.Invariant($"vertex {v.X:G6} {v.Y:G6} {v.Z:G6}\n"));
+            sb.Append("endloop\nendfacet\n");
+        }
+        var file = Read(System.Text.Encoding.ASCII.GetBytes(sb.Append("endsolid\n").ToString()));
+        Assert.True(file.Resolution > 1e-6);
+        var faces = FaceFinder.Find(file.Mesh, MeshTopology.Build(file.Mesh), default, file.Resolution);
+        var cyl = Assert.Single(faces.Faces, f => f.Kind == FaceKind.Cylinder);
+        Assert.Equal(7.5, cyl.Radius, 3);
+    }
+
+    /// <summary>An arc that ends at sharp edges (a pie slice) is still found: its end strips have one gentle long side only.</summary>
+    [Theory]
+    [InlineData(90, 3)]
+    [InlineData(30, 6)]
+    public void ArcEndingAtSharpEdges_IsAPartialCylinder(int degrees, int segments)
+    {
+        var profile = new List<Vector2> { Vector2.Zero };
+        for (var i = 0; i <= segments; i++)
+        {
+            var a = degrees * MathF.PI / 180 * i / segments;
+            profile.Add(new Vector2(9 * MathF.Cos(a), 9 * MathF.Sin(a)));
+        }
+        var (_, _, faces) = Analyse(Extrude(profile, 10));
+        var cyl = Assert.Single(faces.Faces, f => f.Kind == FaceKind.Cylinder);
+        Assert.Equal(9, cyl.Radius, 4);
+        Assert.Equal(degrees, cyl.Coverage, 2);
+    }
+
     [Fact]
     public void Sphere_IsFreeform()
     {

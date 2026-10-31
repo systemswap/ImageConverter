@@ -53,6 +53,7 @@ public static class MeasureText
             Quantity.Angle => Tr.T("Winkel"),
             Quantity.AxisDistance => Tr.T("Achsabstand"),
             Quantity.MinDistance => Tr.T("Kürzester Abstand"),
+            Quantity.DistanceAtClick => Tr.T("Abstand am Klickpunkt"),
             Quantity.MaxDistance => Tr.T("Größter Abstand"),
             Quantity.Diameter => "Ø" + of,
             Quantity.Radius => "R" + of,

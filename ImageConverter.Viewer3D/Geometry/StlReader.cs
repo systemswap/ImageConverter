@@ -20,7 +20,13 @@ public enum StlEncoding
 /// <param name="Invalid">Triangles skipped because a coordinate was not a finite number or out of range.</param>
 /// <param name="Degenerate">Triangles skipped because two corners are the same point.</param>
 /// <param name="Truncated">The binary file ends before all announced triangles.</param>
-public sealed record StlFile(Mesh Mesh, StlEncoding Encoding, string Header, long FileTriangles, int Invalid, int Degenerate, bool Truncated);
+/// <param name="Resolution">
+/// Relative rounding of the coordinates in the file (half a step, relative to the value): 2⁻²⁴ for binary files (32-bit
+/// floats); for text files from the fewest significant digits found, for example 5·10⁻⁷ for seven digits. Faces are
+/// recognised with this tolerance.
+/// </param>
+public sealed record StlFile(Mesh Mesh, StlEncoding Encoding, string Header, long FileTriangles, int Invalid, int Degenerate, bool Truncated,
+    double Resolution = StlReader.FloatResolution);
 
 /// <summary>The file is no STL file, is damaged beyond use or exceeds the limits; the message is meant for the user.</summary>
 public sealed class StlFormatException(string message) : Exception(message);
@@ -66,6 +72,9 @@ public static class StlReader
 
     /// <summary>Largest coordinate accepted (in file units). Beyond that the float precision of the file is gone anyway.</summary>
     public const double MaxCoordinate = 1e9;
+
+    /// <summary>Half a float step relative to the value: the rounding of coordinates stored as 32-bit floats.</summary>
+    public const double FloatResolution = 1.0 / (1 << 24);
 
     private const int BinaryHeader = 84;
     private const int BinaryRecord = 50;
@@ -193,6 +202,7 @@ public static class StlReader
         string header = "";
 
         Span<double> corners = stackalloc double[3 * MaxFacetCorners];
+        var digits = 17;   // fewest significant digits of a coordinate seen so far
         var cornerCount = 0;
         var facetBad = false;
 
@@ -222,7 +232,7 @@ public static class StlReader
                     facetBad = true;
                     continue;
                 }
-                if (!Number(ref line, out var x) || !Number(ref line, out var y) || !Number(ref line, out var z))
+                if (!Number(ref line, out var x, ref digits) || !Number(ref line, out var y, ref digits) || !Number(ref line, out var z, ref digits))
                 {
                     facetBad = true;
                     continue;
@@ -246,7 +256,8 @@ public static class StlReader
         if (triangles == 0)
             throw new StlFormatException(Tr.T("Die STL-Datei enthält keine Dreiecke."));
         var mesh = Finish(welder, indices, written);
-        return new StlFile(mesh, StlEncoding.Ascii, header, triangles, invalid, degenerate, false);
+        var resolution = Math.Max(FloatResolution, 0.5 * Math.Pow(10, 1 - digits));
+        return new StlFile(mesh, StlEncoding.Ascii, header, triangles, invalid, degenerate, false, resolution);
 
         // One facet: normally three corners; more are split into a fan, fewer are skipped.
         void Flush(Span<double> c, ref int count, ref bool bad)
@@ -311,11 +322,27 @@ public static class StlReader
         return token;
     }
 
-    private static bool Number(ref ReadOnlySpan<byte> s, out double value)
+    private static bool Number(ref ReadOnlySpan<byte> s, out double value, ref int fewestDigits)
     {
         var token = NextToken(ref s);
-        return double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
-               && double.IsFinite(value) && Math.Abs(value) <= MaxCoordinate;
+        if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+            || !double.IsFinite(value) || Math.Abs(value) > MaxCoordinate) return false;
+        if (value != 0)
+        {
+            // Significant digits of the mantissa: leading zeros do not count, the exponent is not part of it
+            var count = 0;
+            var started = false;
+            foreach (var b in token)
+            {
+                if (b is (byte)'e' or (byte)'E') break;
+                if (b is < (byte)'0' or > (byte)'9') continue;
+                if (b != (byte)'0') started = true;
+                if (started) count++;
+            }
+            // Trailing zeros are digits the writer chose to print; a number like "12" may be exact, so at least six
+            if (count > 0) fewestDigits = Math.Min(fewestDigits, Math.Max(count, 6));
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------ shared

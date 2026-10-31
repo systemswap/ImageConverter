@@ -2899,3 +2899,42 @@ Test oder Nachweis.
   über Treffertest und Ereignisweg prüfen.
 - **Wo im Code:** `ModelGlView.HitTest`.
 - **Test:** `ModelViewTests.View_TakesTheMouseEverywhere`; Prüfprogramm `stl-shot` mit `hitonly` (Treffertest, Ziehen, Mausrad).
+
+## 116. 3D: Kugeln und andere Freiformflächen zerfielen in Schein-Zylinder – Messen traf Bruchstücke (0.8.10-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.14-beta, Analyserunde Genauigkeit (Wunsch des Nutzers): kürzester Abstand zweier Kugeln 1000 mm vom
+  Nullpunkt um 20 µm falsch, bei 10 m um 0,4–6 mm; eine fein geteilte Kugel (2 Mio. Dreiecke) hatte nach einer ersten Korrektur 315 Flächen.
+  **Behoben:** 0.8.15-beta.
+- **Was:** Die Flächensuche fand auf Kugeln kleine „Zylinder“; wer z. B. auf den Pol klickte, maß zu diesem Bruchstück statt zur Kugel.
+- **Warum (drei Ursachen):**
+  1. Die Float-Toleranz für den Kreistest war vier Rundungsschritte der größten Koordinate – sie wuchs mit dem Abstand vom Nullpunkt und
+     ließ kleine Kugelstreifen als Kreis durch.
+  2. Der Fächer aus Dreiecken am Pol: benachbarte Dreiecke haben Normalen fast senkrecht zu einer waagerechten Achse, und wenige Ecken
+     passen immer auf irgendeinen Kreis.
+  3. Rund um einen Eckpunkt einer fein geteilten Fläche bilden die Facetten einen Ring von Nachbarn – das galt als „geschlossener Zylinder“
+     (360°), und schmale Längsstreifen (eine Facette breit) liegen bei feiner Teilung beliebig genau auf einem Kreis.
+- **Lösung:** Toleranz = Rundung der Datei (`StlFile.Resolution`: binär 2⁻²⁴ relativ, Text nach der kleinsten Stellenzahl der Zahlen,
+  mindestens sechs) – dreifach, plus 10⁻⁶ des Radius; benachbarte Streifen müssen sich entlang von Kanten parallel zur Achse treffen
+  (Fächer scheiden aus); „geschlossen“ nur, wenn die Ecken rundum gehen (größte Winkellücke höchstens 2,5 Facetten); ein offenes Stück
+  muss entlang der Achse mindestens 2 % seines Radius lang sein. Verworfen: die Grenze an der Facettengröße festzumachen (α²/8) – bei
+  verschmolzenen Ebenen-Bereichen schätzt die Anzahl der Facetten α falsch.
+- **Ergebnis (Analyserunde):** Kugeln bis 1000 mm vom Nullpunkt eine einzige Fläche, kürzester Abstand zweier Kugeln auf 0,03 µm (bis 10 m:
+  0,6 µm). Grenze des Formats: kleine Kugeln mehr als etwa 10 m vom Nullpunkt (Auflösung der Datei dort ~1 µm) können zerfallen.
+- **Nicht tun:** Toleranzen nach der größten Koordinate großzügig bemessen; Nachbarschaftsringe ohne Winkelverteilung als geschlossen werten.
+- **Wo im Code:** `FaceFinder.Find` (Toleranzen, `EdgeAlongAxis`), `FaceFinder.FitCylinder`, `StlReader.Number` (Stellenzahl),
+  `StlFile.Resolution`, `ModelViewModel.StartAnalysis`.
+- **Test:** `FaceFinderTests.Sphere_AwayFromTheOrigin_IsOneFreeformFace(0/1000)`, `FineSphere_HasNoTinyCylinders`,
+  `Cylinder_FromATextFileWithSixDigits_IsFound` (alle drei scheitern am alten Stand).
+
+## 117. 3D: Rundungen, die an scharfen Kanten enden, wurden nicht erkannt (0.8.10-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.14-beta, Analyserunde Genauigkeit (Tortenstück aus 3 bzw. 6 Streifen). **Behoben:** 0.8.15-beta.
+- **Warum:** Ein Streifen galt nur als Facette einer gekrümmten Fläche, wenn mehr als die Hälfte seines Randes sanft an Nachbarn stößt. Die
+  beiden äußeren Streifen einer Rundung, die an einer scharfen Kante endet, haben nur eine sanfte Längsseite (knapp ein Drittel des Randes)
+  – sie wurden Ebenen, und für den Zylinder blieben zu wenige Streifen.
+- **Lösung:** Ein Viertel des Randes sanft genügt; dass breite Ebenen neben einer Rundung Ebenen bleiben, sichert weiter der
+  Breitenvergleich, und die Kantenrichtung (#116) hält fremde Streifen fern.
+- **Bleibt:** Bögen aus nur zwei Streifen werden nicht als Rundung erkannt (drei Kreispunkte unterscheiden eine Rundung nicht von einem
+  Knick), ebenso Vielecke mit weniger als neun Ecken (45° zwischen den Facetten ist ein Knick, z. B. eine Fase).
+- **Wo im Code:** `FaceFinder.Find` (Abschnitt Facetten).
+- **Test:** `FaceFinderTests.ArcEndingAtSharpEdges_IsAPartialCylinder(90/3, 30/6)`.

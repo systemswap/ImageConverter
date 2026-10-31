@@ -46,6 +46,22 @@ public class MeasurerTests
         Assert.False(m.HasLine);
     }
 
+    /// <summary>Slightly tilted planes (0.1° … 5°) also give the distance at the click, not only angle and shortest distance.</summary>
+    [Fact]
+    public void SlightlyTiltedPlanes_GiveTheDistanceAtTheClick()
+    {
+        var rise = MathF.Tan(1 * MathF.PI / 180) * 40;   // top tilted by 1°
+        var plate = Analyse(Extrude([new Vector2(0, 0), new Vector2(40, 0), new Vector2(40, 10 + rise), new Vector2(0, 10)], 20));
+        var measurer = new Measurer(plate.Mesh, plate.Faces);
+        Pick P(Vector3 p) => new(PickKind.Face, FaceAt(plate.Mesh, plate.Faces, p), D3.From(p));
+        var top = new Vector3(30, 10 + rise * 0.75f, 10);
+        var m = measurer.Measure(P(top), P(new Vector3(20, 0, 10)));
+        Assert.Equal(Quantity.DistanceAtClick, m.Values[0].Quantity);
+        Assert.Equal(10 + rise * 0.75, m.Values[0].Value, 4);
+        Assert.Equal(1, Value(m, Quantity.Angle), 4);
+        Assert.Equal(10, Value(m, Quantity.MinDistance), 4);
+    }
+
     [Fact]
     public void ParallelCylinders_GiveAxisDistanceAndGaps()
     {
