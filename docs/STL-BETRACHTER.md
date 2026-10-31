@@ -103,13 +103,18 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
 - **Drehscheibe:** die Hochachse (Z, wie beim 3D-Druck) bleibt immer senkrecht;
   waagerecht ziehen dreht um sie, senkrecht ziehen kippt höchstens bis zur Drauf- bzw.
   Untersicht.
-- **Hineinsehen:** in der Perspektive geht das Mausrad durch Flächen hindurch – nah an einer Fläche bewegt sich das Auge
-  mindestens 0,5 % der Modellgröße je Raste weiter, hinter der Fläche wieder auf die nächste zu (oder geradeaus); was vor
-  dem Auge liegt, schneidet die nahe Schnittebene weg. **Umschalt + Mausrad** schiebt in beiden Ansichten einen Schnitt
-  parallel zum Bildschirm durch das Modell (2 % der Tiefe je Raste, Anzeige oben links, Esc oder ✕ hebt ihn auf); Klicks
-  und Überfahren treffen erst hinter dem Schnitt, der Bodenschatten ist dann aus. **Innenseiten** (Rückseiten von Flächen –
-  im Material oder an aufgeschnittenen Wänden) erscheinen warm grau; bei Dateien mit falsch herum gespeicherten Dreiecken
-  sind auch Außenflächen so getönt.
+- **Hineinsehen:**
+  - *Wand für Wand durchzoomen* (orthografisch): das Mausrad vergrößert bis zu einer Bildhöhe von 2 % der Modellgröße;
+    jede weitere Raste nimmt die nächste Wand unter der Maus weg – der Schnitt springt knapp hinter die Stelle, an der der
+    Strahl die Wand verlässt (Fläche von innen gesehen). Herauszoomen lässt die Wand weg, so dass man sieht, was dahinter
+    liegt (z. B. die Fläche eines Stegs, die zur Außenwand zeigt); Esc oder ✕ holt alle Wände zurück.
+  - *Durchfliegen* (Perspektive): nah an einer Fläche bewegt sich das Auge mindestens 0,5 % der Modellgröße je Raste
+    weiter, hinter der Fläche auf die nächste zu (oder geradeaus); die nahe Schnittebene schneidet weg, was davor liegt.
+  - *Umschalt + Mausrad* schiebt den Schnitt fein (2 % des sichtbaren Ausschnitts je Raste), Anzeige oben links in mm.
+  - Der Schnitt wird parallel zum Bildschirm gesetzt und bleibt dann im Modell stehen – man kann um das Aufgeschnittene
+    herumdrehen. Klicks und Überfahren treffen erst hinter dem Schnitt, der Bodenschatten ist dann aus.
+  - **Innenseiten** (Rückseiten von Flächen – im Material oder an aufgeschnittenen Wänden) erscheinen warm grau; bei
+    Dateien mit falsch herum gespeicherten Dreiecken sind auch Außenflächen so getönt.
 - Knöpfe: Einpassen (F), Zentrieren (C: Modellmitte in die Bildmitte, Zoom und Blickrichtung bleiben), Iso, Vorne,
   Hinten, Links, Rechts, Oben, Unten (mit kurzem Übergang);
   Orthografisch/Perspektive (zum Messen orthografisch voreingestellt).

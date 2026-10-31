@@ -402,6 +402,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
             foreach (var m in Measurements) m.Inches = value;
             RefreshStatistics();
             OnPropertyChanged(nameof(PendingText));
+            OnPropertyChanged(nameof(SectionText));
             Redraw();
         }
     }
@@ -517,22 +518,64 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     // ------------------------------------------------------------------ section
 
-    /// <summary>Section parallel to the screen: 0 = none, up to 1 = through the whole depth of the model (Shift + wheel).</summary>
+    /// <summary>
+    /// Section: a plane that cuts away everything in front of it, as (normal, distance) – points with
+    /// <c>dot(p, normal) &lt; distance</c> are hidden. It is set parallel to the screen (by zooming through a wall or with
+    /// Shift + wheel) and then stays fixed in the model, so that what lies behind can be looked at from any side; null =
+    /// no section.
+    /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSection), nameof(SectionText))]
-    public partial float SectionDepth { get; set; }
+    [NotifyPropertyChangedFor(nameof(HasSection), nameof(SectionText), nameof(SectionDepth))]
+    public partial Vector4? Section { get; set; }
 
-    partial void OnSectionDepthChanged(float value) => Redraw();
+    partial void OnSectionChanged(Vector4? value) => Redraw();
 
-    public bool HasSection => SectionDepth > 0;
+    public bool HasSection => Section is not null;
 
-    public string SectionText => Tr.T("Schnitt {0:0} % der Tiefe", SectionDepth * 100);
+    /// <summary>How far behind the front of the model (along the section's normal) it cuts, in model units.</summary>
+    public float SectionDepth => Section is { } c ? c.W - Mesh.Bounds.Extent(Normal(c)).Front : 0;
 
-    /// <summary>Moves the section by a step (Shift + wheel; positive = deeper).</summary>
-    public void MoveSection(float steps) => SectionDepth = Math.Clamp(SectionDepth + 0.02f * steps, 0, 0.99f);
+    public string SectionText => Tr.T("Schnitt {0} tief", MeasureText.Length(SectionDepth, Inches));
+
+    private static Vector3 Normal(Vector4 c) => new(c.X, c.Y, c.Z);
+
+    /// <summary>Moves the section by <paramref name="delta"/> (Shift + wheel; positive = deeper); without one, starts one facing <paramref name="viewDirection"/>.</summary>
+    public void MoveSection(float delta, Vector3 viewDirection)
+    {
+        var n = Section is { } c ? Normal(c) : viewDirection;
+        var (front, back) = Mesh.Bounds.Extent(n);
+        var w = Math.Clamp((Section?.W ?? front) + delta, front, back);
+        Section = w <= front ? null : new Vector4(n, w);
+    }
+
+    /// <summary>Zooming through a wall: the section goes just behind <paramref name="exit"/> (only deeper, never back).</summary>
+    public void PeelTo(Vector3 exit, Vector3 viewDirection)
+    {
+        var n = Section is { } c ? Normal(c) : viewDirection;
+        var w = Vector3.Dot(exit, n) + 1e-4f * Mesh.Bounds.Diagonal;
+        if (Section is { } old && w <= old.W) return;
+        Section = new Vector4(n, w);
+    }
+
+    /// <summary>Where the ray under the mouse leaves the next wall (behind the section), or null.</summary>
+    public Vector3? ExitOfNextWall(Vector3 origin, Vector3 direction, Vector4? clip)
+    {
+        if (Hierarchy is not { } bvh) return null;
+        if (clip is { } c)
+        {
+            var n = new Vector3(c.X, c.Y, c.Z);
+            var along = Vector3.Dot(direction, n);
+            if (along > 1e-9f)
+            {
+                var t = (c.W - Vector3.Dot(origin, n)) / along;
+                if (t > 0) origin += direction * t;
+            }
+        }
+        return Walls.ExitOfNextWall(Mesh, bvh, origin, direction);
+    }
 
     [RelayCommand]
-    private void ClearSection() => SectionDepth = 0;
+    private void ClearSection() => Section = null;
 
     /// <summary>The surface point along a ray, with its face (−1 while faces are not known).</summary>
     /// <param name="origin">Start of the ray.</param>

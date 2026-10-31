@@ -2938,3 +2938,29 @@ Test oder Nachweis.
   Knick), ebenso Vielecke mit weniger als neun Ecken (45° zwischen den Facetten ist ein Knick, z. B. eine Fase).
 - **Wo im Code:** `FaceFinder.Find` (Abschnitt Facetten).
 - **Test:** `FaceFinderTests.ArcEndingAtSharpEdges_IsAPartialCylinder(90/3, 30/6)`.
+
+## 118. 3D: Durch eine Wand zoomen ging nicht, der Zoom blieb hängen (0.8.16-beta)
+
+- **Entdeckt:** 31.10.2026, 0.8.16-beta, vom Nutzer an einem Gehäuse (Unterteil, 49,5 × 66,1 × 19,5 mm): „Ich möchte durch eine lange
+  Seite zoomen, so dass ich den Steg hinter dieser Wand sehe – das geht nicht, und der Zoom bleibt irgendwann hängen.“ **Behoben:** 0.8.17-beta.
+- **Wie geprüft:** mit Mausrad-Ereignissen über den Ereignisweg des Fensters (Ansicht von rechts, auf die lange Wand vor dem Steg), jeder
+  Schritt protokolliert.
+- **Was und warum:**
+  1. Orthografisch (voreingestellt) gibt es keinen Kamerastandort; das Mausrad vergrößerte nur bis zur kleinsten Bildhöhe (0,04 mm) und stand
+     dann still – das „Hängen“. Durch Wände ging es dort nie.
+  2. Der Steg liegt nur 0,7 mm hinter der Innenseite der 4 mm dicken Wand: Durchfliegen in der Perspektive schießt darüber hinaus oder der
+     Steg füllt das ganze Bild; der Schnitt mit Umschalt + Mausrad sprang 2 % der Modelltiefe (rund 1 mm) und traf den Spalt nicht.
+  3. Der Schnitt drehte mit der Ansicht – nach dem Drehen war die Wand wieder da.
+- **Lösung:** Orthografisch zoomt das Rad bis 2 % der Modellgröße; jede weitere Raste nimmt die nächste Wand unter der Maus weg
+  (`Walls.ExitOfNextWall`: wo der Strahl das Material verlässt, Schnitt knapp dahinter); Herauszoomen behält den Schnitt. Umschalt + Mausrad
+  bewegt den Schnitt um 2 % des sichtbaren Ausschnitts. Der Schnitt steht nach dem Setzen fest im Modell (`ModelViewModel.Section`). Ergebnis
+  am Gehäuse: nach ~29 Rasten Schnitt 4,01 mm tief, unter der Maus die Stegfläche bei x = 20,00 mit Normale zur Außenwand; herausgezoomt und
+  schräg gedreht ist die lange Wand weg, der Steg frei.
+- **Verworfen:** Herauszoomen holt die Wände Schritt für Schritt zurück – dann lässt sich das Freigelegte nie im Ganzen ansehen (bei der
+  stärksten Vergrößerung zeigt das Bild nur 1,7 mm).
+- **Nicht tun:** Eingaben nur am Modell prüfen statt mit echten Ereignissen; Schritte von Schnitt oder Zoom an die Modellgröße statt an den
+  sichtbaren Ausschnitt binden.
+- **Wo im Code:** `ModelGlView.OnPointerWheelChanged`/`PeelAt`, `OrbitCamera.Zoom` (`minViewHeight`), `Walls`, `ModelViewModel.Section`/
+  `MoveSection`/`PeelTo`, `Box3.Extent`.
+- **Test:** `ModelViewTests.Walls_ExitPoints_GoWallByWall`, `Zoom_InOrthographic_StopsAtTheSmallestView`, `BoxExtent_CoversAllCorners`;
+  Prüfprogramm `stl-shot <stl> peel`.

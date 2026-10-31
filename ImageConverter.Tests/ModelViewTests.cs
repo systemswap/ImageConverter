@@ -93,23 +93,49 @@ public class ModelViewTests
         Assert.True(cam.Distance >= cam.SceneRadius * 1e-3f * 0.999f);
     }
 
+    /// <summary>Extent of a box along a direction – the range in which a section through the model can lie.</summary>
     [Fact]
-    public void SectionPlane_RunsFromTheFrontToTheBackOfTheModel()
+    public void BoxExtent_CoversAllCorners()
     {
-        var cam = Camera(true);
         var box = new Box3(new Vector3(0, 0, 0), new Vector3(10, 20, 5));
-        var front = cam.SectionPlane(box, 0);
-        var back = cam.SectionPlane(box, 1);
-        var n = new Vector3(front.X, front.Y, front.Z);
-        Assert.True(Vector3.Distance(n, cam.Forward) < 1e-6f);
-        // Every corner lies behind the front plane (not cut) and in front of the back plane (cut)
+        var n = Vector3.Normalize(new Vector3(1, -2, 0.5f));
+        var (front, back) = box.Extent(n);
         for (var i = 0; i < 8; i++)
         {
             var c = new Vector3((i & 1) == 0 ? 0 : 10, (i & 2) == 0 ? 0 : 20, (i & 4) == 0 ? 0 : 5);
-            Assert.True(Vector3.Dot(c, n) >= front.W - 1e-4f);
-            Assert.True(Vector3.Dot(c, n) <= back.W + 1e-4f);
+            Assert.InRange(Vector3.Dot(c, n), front - 1e-4f, back + 1e-4f);
         }
-        Assert.Equal((front.W + back.W) / 2, cam.SectionPlane(box, 0.5f).W, 4);
+        Assert.Equal((0f, 10f), box.Extent(Vector3.UnitX));
+    }
+
+    /// <summary>The orthographic zoom stops at its smallest view and says so (the wheel then goes through walls).</summary>
+    [Fact]
+    public void Zoom_InOrthographic_StopsAtTheSmallestView()
+    {
+        var cam = Camera(true);
+        var zoomed = 0;
+        while (cam.Zoom(0.87f, cam.Target, 0, 1.5f) && zoomed < 500) zoomed++;
+        Assert.InRange(cam.ViewHeight, 1.5f * 0.999f, 1.5f * 1.2f);
+        Assert.True(zoomed < 500);
+    }
+
+    /// <summary>
+    /// Zooming through walls: from outside, the first step goes just past the outer wall of a tube, the next past the far
+    /// wall – where the ray leaves the material each time.
+    /// </summary>
+    [Fact]
+    public void Walls_ExitPoints_GoWallByWall()
+    {
+        var mesh = MeshOf(Tube(3, 5, 10, 64));
+        var bvh = Bvh.Build(mesh);
+        var dir = -Vector3.UnitX;
+        var first = Walls.ExitOfNextWall(mesh, bvh, new Vector3(20, 0, 5), dir);
+        Assert.NotNull(first);
+        Assert.Equal(3, first.Value.X, 3);   // leaves the near wall at its inner side
+        var second = Walls.ExitOfNextWall(mesh, bvh, first.Value + dir * 0.01f, dir);
+        Assert.NotNull(second);
+        Assert.Equal(-5, second.Value.X, 3);   // through the cavity and the far wall
+        Assert.Null(Walls.ExitOfNextWall(mesh, bvh, second.Value + dir * 0.01f, dir));
     }
 
     [Fact]

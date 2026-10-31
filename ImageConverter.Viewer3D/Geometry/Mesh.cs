@@ -20,6 +20,20 @@ public readonly record struct Box3(Vector3 Min, Vector3 Max)
 
     public Box3 Including(Vector3 p) => new(Vector3.Min(Min, p), Vector3.Max(Max, p));
 
+    /// <summary>Smallest and largest dot product of the corners with a direction: the box's extent along it.</summary>
+    public (float Front, float Back) Extent(Vector3 direction)
+    {
+        float lo = float.MaxValue, hi = float.MinValue;
+        for (var i = 0; i < 8; i++)
+        {
+            var corner = new Vector3((i & 1) == 0 ? Min.X : Max.X, (i & 2) == 0 ? Min.Y : Max.Y, (i & 4) == 0 ? Min.Z : Max.Z);
+            var t = Vector3.Dot(corner, direction);
+            lo = Math.Min(lo, t);
+            hi = Math.Max(hi, t);
+        }
+        return (lo, hi);
+    }
+
     public Box3 Including(Box3 b) => new(Vector3.Min(Min, b.Min), Vector3.Max(Max, b.Max));
 }
 

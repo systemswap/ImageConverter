@@ -1,5 +1,4 @@
 using System.Numerics;
-using ImageConverter.Viewer3D.Geometry;
 
 namespace ImageConverter.Viewer3D.Rendering;
 
@@ -174,7 +173,9 @@ public sealed class OrbitCamera
     /// the ray by <paramref name="minStep"/> instead: through the wall, and what lies behind it comes into view (the near
     /// clip plane cuts away what is in front of the eye).
     /// </remarks>
-    public void Zoom(float factor, Vector3 anchor, float minStep = 0)
+    /// <param name="minViewHeight">Orthographic only: the view never shows less than this height.</param>
+    /// <returns>False if the orthographic view is already at <paramref name="minViewHeight"/> and could not zoom in further.</returns>
+    public bool Zoom(float factor, Vector3 anchor, float minStep = 0, float minViewHeight = 0)
     {
         if (!Orthographic && factor < 1 && minStep > 0)
         {
@@ -185,34 +186,16 @@ public sealed class OrbitCamera
                 // Towards the point under the mouse; once past it (or right on it), straight on
                 var dir = length > 0 && Vector3.Dot(toAnchor, Forward) > 0 ? toAnchor / length : Forward;
                 Target += dir * minStep;   // eye moves along with the target, the distance stays
-                return;
+                return true;
             }
         }
-        var newDistance = Math.Clamp(Distance * factor, SceneRadius * 1e-3f, SceneRadius * 200);
+        var floor = Math.Max(SceneRadius * 1e-3f, Orthographic ? minViewHeight / (2 * TanHalf) : 0);
+        var newDistance = Math.Clamp(Distance * factor, floor, SceneRadius * 200);
+        if (factor < 1 && newDistance >= Distance * 0.9999f) return false;
         factor = newDistance / Distance;
         Distance = newDistance;
         Target = anchor + (Target - anchor) * factor;
-    }
-
-    /// <summary>
-    /// Section plane parallel to the screen: <paramref name="depth"/> 0 … 1 across the model's extent along the view.
-    /// Points with <c>dot(p, Normal) &lt; D</c> lie in front of it and are cut away.
-    /// </summary>
-    /// <param name="model">Box of the model.</param>
-    /// <param name="depth">0 = in front of the model (nothing cut), 1 = behind it.</param>
-    /// <returns>Plane as (normal = view direction, distance D).</returns>
-    public Vector4 SectionPlane(Box3 model, float depth)
-    {
-        var n = Forward;
-        float lo = float.MaxValue, hi = float.MinValue;
-        for (var i = 0; i < 8; i++)
-        {
-            var corner = new Vector3((i & 1) == 0 ? model.Min.X : model.Max.X, (i & 2) == 0 ? model.Min.Y : model.Max.Y, (i & 4) == 0 ? model.Min.Z : model.Max.Z);
-            var t = Vector3.Dot(corner, n);
-            lo = Math.Min(lo, t);
-            hi = Math.Max(hi, t);
-        }
-        return new Vector4(n, lo + Math.Clamp(depth, 0, 1) * (hi - lo));
+        return true;
     }
 
     /// <summary>Puts a sphere into view with a small margin.</summary>

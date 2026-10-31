@@ -178,8 +178,8 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         }
     }
 
-    /// <summary>The section plane for the current view, or null without a section.</summary>
-    internal Vector4? Section() => _model.HasSection ? Camera.SectionPlane(_model.Mesh.Bounds, _model.SectionDepth) : null;
+    /// <summary>The section plane, or null without a section.</summary>
+    internal Vector4? Section() => _model.Section;
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
@@ -322,19 +322,39 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         base.OnPointerWheelChanged(e);
         _animation?.Stop();
         var pos = e.GetPosition(this);
+        e.Handled = true;
+        var box = _model.Mesh.Bounds;
         if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            // Shift + wheel: the section goes deeper (wheel towards the screen) or back; some systems send it sideways
+            // Shift + wheel: the section goes deeper (wheel towards the screen) or back, by 2 % of what is visible – fine
+            // when zoomed in; some systems send Shift + wheel sideways
             var steps = (float)(Math.Abs(e.Delta.Y) >= Math.Abs(e.Delta.X) ? e.Delta.Y : e.Delta.X);
-            _model.MoveSection(-steps);
-            e.Handled = true;
+            _model.MoveSection(steps * 0.02f * Camera.UnitsPerPixel(Camera.Target) * Camera.Height, Camera.Forward);
             return;
         }
+
+        var zoomIn = e.Delta.Y > 0;
+        if (Camera.Orthographic)
+        {
+            // Zooming back out keeps the walls away, so that what lies behind them can be seen as a whole;
+            // Esc, ✕ or Shift + wheel bring them back.
+            // Fully zoomed in: each further step goes through the next wall under the mouse (the section jumps behind it)
+            if (zoomIn && Camera.ViewHeight <= MinViewHeight * 1.001f)
+            {
+                if ((_peelSteps += (float)e.Delta.Y) >= 1)
+                {
+                    _peelSteps = 0;
+                    PeelAt(pos);
+                }
+                return;
+            }
+        }
+        _peelSteps = 0;
         var factor = MathF.Pow(0.87f, (float)e.Delta.Y);
-        // Perspective: at least half a percent of the model per step, so that the wheel goes through surfaces
-        Camera.Zoom(factor, AnchorAt(pos), 0.005f * _model.Mesh.Bounds.Diagonal);
+        // Perspective: at least half a percent of the model per step, so that the wheel goes through surfaces;
+        // orthographic: down to a view of 2 % of the model, then through walls (above)
+        Camera.Zoom(factor, AnchorAt(pos), 0.005f * box.Diagonal, MinViewHeight);
         Invalidate();
-        e.Handled = true;
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
@@ -349,7 +369,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         if (e.Key == Key.Escape && _model.CancelPending()) e.Handled = true;
         else if (e.Key == Key.Escape && _model.HasSection)
         {
-            _model.SectionDepth = 0;
+            _model.ClearSectionCommand.Execute(null);
             e.Handled = true;
         }
         else if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.None)
@@ -362,6 +382,19 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             OnCentreRequested();
             e.Handled = true;
         }
+    }
+
+    /// <summary>Smallest view height of the orthographic view: 2 % of the model.</summary>
+    private float MinViewHeight => 0.02f * _model.Mesh.Bounds.Diagonal;
+
+    // Wheel steps gathered while fully zoomed in (touchpads send fractions of a step)
+    private float _peelSteps;
+
+    /// <summary>Takes away the next wall under the mouse: the section goes just behind where the ray leaves it.</summary>
+    private void PeelAt(Point at)
+    {
+        var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
+        if (_model.ExitOfNextWall(o, d, Section()) is { } exit) _model.PeelTo(exit, Camera.Forward);
     }
 
     /// <summary>Turning centre: the centre axis of the model, or the surface under the mouse (else the current centre).</summary>

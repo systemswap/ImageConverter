@@ -102,7 +102,7 @@
                     <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,6,0,0"
                                Text="{l:T 'Linke Maustaste ziehen: drehen · rechte oder mittlere (oder Strg + links): verschieben · Mausrad: zoomen · Doppelklick: einpassen.'}" />
                     <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Text="{l:T 'Hineinsehen: in der Perspektive führt das Mausrad durch Flächen hindurch; Umschalt + Mausrad schneidet das Modell parallel zum Bildschirm auf (Esc hebt den Schnitt auf). Innenseiten erscheinen warm grau.'}" />
+                               Text="{l:T 'Hineinsehen: Zoomt man ganz heran, nimmt jede weitere Raste die nächste Wand unter der Maus weg; herauszoomen zeigt dann, was dahinter liegt. In der Perspektive fliegt man durch Flächen hindurch. Umschalt + Mausrad schiebt den Schnitt fein, Esc holt alle Wände zurück. Innenseiten erscheinen warm grau.'}" />
                 </StackPanel>
             </HeaderedContentControl>
 

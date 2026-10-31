@@ -1079,9 +1079,9 @@ public static class English
         ["Die Grafikkarte hat nicht genug Speicher für dieses Modell."] = "The graphics card does not have enough memory for this model.",
         ["⌖  Zentrieren"] = "⌖  Centre",
         ["Abstand am Klickpunkt"] = "Distance at the click",
-        ["Schnitt {0:0} % der Tiefe"] = "Section at {0:0} % of the depth",
+        ["Schnitt {0} tief"] = "Section {0} deep",
         ["Schnitt aufheben (Esc)"] = "Remove the section (Esc)",
-        ["Hineinsehen: in der Perspektive führt das Mausrad durch Flächen hindurch; Umschalt + Mausrad schneidet das Modell parallel zum Bildschirm auf (Esc hebt den Schnitt auf). Innenseiten erscheinen warm grau."] = "Looking inside: in the perspective view the mouse wheel goes through surfaces; Shift + wheel cuts the model open parallel to the screen (Esc removes the section). Inner sides appear warm grey.",
+        ["Hineinsehen: Zoomt man ganz heran, nimmt jede weitere Raste die nächste Wand unter der Maus weg; herauszoomen zeigt dann, was dahinter liegt. In der Perspektive fliegt man durch Flächen hindurch. Umschalt + Mausrad schiebt den Schnitt fein, Esc holt alle Wände zurück. Innenseiten erscheinen warm grau."] = "Looking inside: once fully zoomed in, each further wheel step takes away the next wall under the mouse; zooming back out then shows what lies behind it. In the perspective view you fly through surfaces. Shift + wheel moves the section finely, Esc brings all walls back. Inner sides appear warm grey.",
         ["Modell in die Bildmitte holen – Zoom und Blickrichtung bleiben (C)."] = "Bring the model into the middle – zoom and direction stay (C).",
     };
 
