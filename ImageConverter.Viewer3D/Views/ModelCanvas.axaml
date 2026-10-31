@@ -57,6 +57,17 @@
         <Panel x:Name="Stage">
             <!-- 3D-Ansicht und Maßlinien kommen aus dem Code (sie brauchen das Modell beim Erzeugen) -->
 
+            <!-- Schnitt parallel zum Bildschirm (Umschalt + Mausrad): wie tief, und weg damit -->
+            <Border VerticalAlignment="Top" HorizontalAlignment="Left" Margin="12" Padding="10,4,4,4" CornerRadius="10"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                    IsVisible="{Binding HasSection}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding SectionText}" />
+                    <Button Classes="icon" Width="22" Height="22" FontSize="11" Content="✕" Command="{Binding ClearSectionCommand}"
+                            ToolTip.Tip="{l:T 'Schnitt aufheben (Esc)'}" />
+                </StackPanel>
+            </Border>
+
             <!-- Fortschritt der Flächenerkennung -->
             <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="12" Padding="12,6" CornerRadius="10"
                     Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"

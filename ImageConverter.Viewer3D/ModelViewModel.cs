@@ -515,19 +515,51 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ------------------------------------------------------------------ section
+
+    /// <summary>Section parallel to the screen: 0 = none, up to 1 = through the whole depth of the model (Shift + wheel).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSection), nameof(SectionText))]
+    public partial float SectionDepth { get; set; }
+
+    partial void OnSectionDepthChanged(float value) => Redraw();
+
+    public bool HasSection => SectionDepth > 0;
+
+    public string SectionText => Tr.T("Schnitt {0:0} % der Tiefe", SectionDepth * 100);
+
+    /// <summary>Moves the section by a step (Shift + wheel; positive = deeper).</summary>
+    public void MoveSection(float steps) => SectionDepth = Math.Clamp(SectionDepth + 0.02f * steps, 0, 0.99f);
+
+    [RelayCommand]
+    private void ClearSection() => SectionDepth = 0;
+
     /// <summary>The surface point along a ray, with its face (−1 while faces are not known).</summary>
-    public (D3 Point, int Face)? HitTest(Vector3 origin, Vector3 direction)
+    /// <param name="origin">Start of the ray.</param>
+    /// <param name="direction">Direction of the ray.</param>
+    /// <param name="clip">Section plane (normal, distance): the ray starts where it crosses it, so that cut-away parts are not hit.</param>
+    public (D3 Point, int Face)? HitTest(Vector3 origin, Vector3 direction, Vector4? clip = null)
     {
+        if (clip is { } c)
+        {
+            var n = new Vector3(c.X, c.Y, c.Z);
+            var along = Vector3.Dot(direction, n);
+            if (along > 1e-9f)
+            {
+                var t = (c.W - Vector3.Dot(origin, n)) / along;
+                if (t > 0) origin += direction * t;
+            }
+        }
         if (Hierarchy is not { } bvh || !bvh.Raycast(origin, direction, float.MaxValue, out var hit)) return null;
         var p = origin + direction * hit.Distance;
         return (D3.From(p), Faces is { } f ? f.FaceOf[hit.Triangle] : -1);
     }
 
     /// <summary>The mouse moved over the model while measuring.</summary>
-    public void Hover(Vector3 origin, Vector3 direction)
+    public void Hover(Vector3 origin, Vector3 direction, Vector4? clip = null)
     {
         if (!MeasureTool) return;
-        HoverFace = HitTest(origin, direction) is { Face: >= 0 } h ? h.Face : -1;
+        HoverFace = HitTest(origin, direction, clip) is { Face: >= 0 } h ? h.Face : -1;
     }
 
     /// <summary>A click while measuring: picks, lets go of the first pick or completes a measurement.</summary>
@@ -535,9 +567,10 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     /// <param name="direction">Its direction.</param>
     /// <param name="point">Shift held: a point instead of a face.</param>
     /// <param name="sameSpot">Whether a world point lies under the mouse within a few pixels of another (for letting go of a point).</param>
-    public void Click(Vector3 origin, Vector3 direction, bool point, Func<D3, D3, bool> sameSpot)
+    /// <param name="clip">Section plane, see <see cref="HitTest"/>.</param>
+    public void Click(Vector3 origin, Vector3 direction, bool point, Func<D3, D3, bool> sameSpot, Vector4? clip = null)
     {
-        if (!MeasureTool || HitTest(origin, direction) is not { } hit) return;
+        if (!MeasureTool || HitTest(origin, direction, clip) is not { } hit) return;
         if (!point && hit.Face < 0) return;   // faces not known yet
         var pick = new Pick(point ? PickKind.Point : PickKind.Face, hit.Face, hit.Point);
 

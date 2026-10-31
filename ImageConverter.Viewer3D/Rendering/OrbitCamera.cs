@@ -1,4 +1,5 @@
 using System.Numerics;
+using ImageConverter.Viewer3D.Geometry;
 
 namespace ImageConverter.Viewer3D.Rendering;
 
@@ -161,16 +162,57 @@ public sealed class OrbitCamera
     }
 
     /// <summary>Zooms by a factor (&lt; 1 = closer) keeping <paramref name="anchor"/> at its place on screen.</summary>
+    /// <param name="factor">Below 1 closer, above 1 farther.</param>
+    /// <param name="anchor">Point under the mouse (on the surface or on the plane through the centre).</param>
+    /// <param name="minStep">
+    /// Perspective only: the eye moves at least this far towards the anchor per step, so that it goes through the surface
+    /// instead of only creeping up to it; 0 = never through.
+    /// </param>
     /// <remarks>
     /// Scaling the eye and the target around a point on the ray under the mouse keeps that ray – and so the point under
-    /// the mouse – where it is, in both projections.
+    /// the mouse – where it is, in both projections. Close to a surface in the perspective view the eye moves on along
+    /// the ray by <paramref name="minStep"/> instead: through the wall, and what lies behind it comes into view (the near
+    /// clip plane cuts away what is in front of the eye).
     /// </remarks>
-    public void Zoom(float factor, Vector3 anchor)
+    public void Zoom(float factor, Vector3 anchor, float minStep = 0)
     {
+        if (!Orthographic && factor < 1 && minStep > 0)
+        {
+            var toAnchor = anchor - Eye;
+            var length = toAnchor.Length();
+            if (length * (1 - factor) < minStep)
+            {
+                // Towards the point under the mouse; once past it (or right on it), straight on
+                var dir = length > 0 && Vector3.Dot(toAnchor, Forward) > 0 ? toAnchor / length : Forward;
+                Target += dir * minStep;   // eye moves along with the target, the distance stays
+                return;
+            }
+        }
         var newDistance = Math.Clamp(Distance * factor, SceneRadius * 1e-3f, SceneRadius * 200);
         factor = newDistance / Distance;
         Distance = newDistance;
         Target = anchor + (Target - anchor) * factor;
+    }
+
+    /// <summary>
+    /// Section plane parallel to the screen: <paramref name="depth"/> 0 … 1 across the model's extent along the view.
+    /// Points with <c>dot(p, Normal) &lt; D</c> lie in front of it and are cut away.
+    /// </summary>
+    /// <param name="model">Box of the model.</param>
+    /// <param name="depth">0 = in front of the model (nothing cut), 1 = behind it.</param>
+    /// <returns>Plane as (normal = view direction, distance D).</returns>
+    public Vector4 SectionPlane(Box3 model, float depth)
+    {
+        var n = Forward;
+        float lo = float.MaxValue, hi = float.MinValue;
+        for (var i = 0; i < 8; i++)
+        {
+            var corner = new Vector3((i & 1) == 0 ? model.Min.X : model.Max.X, (i & 2) == 0 ? model.Min.Y : model.Max.Y, (i & 4) == 0 ? model.Min.Z : model.Max.Z);
+            var t = Vector3.Dot(corner, n);
+            lo = Math.Min(lo, t);
+            hi = Math.Max(hi, t);
+        }
+        return new Vector4(n, lo + Math.Clamp(depth, 0, 1) * (hi - lo));
     }
 
     /// <summary>Puts a sphere into view with a small margin.</summary>

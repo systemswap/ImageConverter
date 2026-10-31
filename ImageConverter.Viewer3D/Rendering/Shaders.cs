@@ -51,6 +51,9 @@ internal static class Shaders
         uniform sampler2D uSsao;
         uniform vec2 uScreen;
         uniform float uAo;
+        uniform vec4 uClip;
+        uniform int uClipOn;
+        uniform int uInner;
         out vec4 fragColor;
 
         vec3 linear(vec3 c) { return pow(c, vec3(2.2)); }
@@ -64,10 +67,13 @@ internal static class Shaders
 
         void main()
         {
+            if (uClipOn == 1 && dot(vWorld, uClip.xyz) < uClip.w) discard;
             vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
             vec3 v = uOrtho == 1 ? -uForward : normalize(uEye - vWorld);
             if (dot(n, v) < 0.0) n = -n;
             vec3 base = linear(uParts == 1 ? partColour(vPart) : uBase);
+            // Inner side (back of a face: inside the material or a cut wall) in a warm grey
+            if (uInner == 1 && !gl_FrontFacing) base = mix(base, linear(vec3(0.80, 0.60, 0.50)), 0.75);
             float ao = mix(1.0, pow(texture(uSsao, gl_FragCoord.xy / uScreen).r, 1.8), uAo);
             float up = n.z * 0.5 + 0.5;
             vec3 ambient = mix(vec3(0.13, 0.12, 0.12), vec3(0.42, 0.45, 0.51), up) * ao;
@@ -85,10 +91,18 @@ internal static class Shaders
         }
         """;
 
-    /// <summary>Depth pass for the ambient occlusion: only the depth counts.</summary>
+    /// <summary>Depth pass for the ambient occlusion: only the depth counts (cut away parts excluded).</summary>
     public const string DepthFragment = """
+        in vec3 vWorld;
+        in float vPart;
+        uniform vec4 uClip;
+        uniform int uClipOn;
         out vec4 fragColor;
-        void main() { fragColor = vec4(1.0); }
+        void main()
+        {
+            if (uClipOn == 1 && dot(vWorld, uClip.xyz) < uClip.w) discard;
+            fragColor = vec4(1.0);
+        }
         """;
 
     /// <summary>
@@ -173,13 +187,21 @@ internal static class Shaders
     public const string LineVertex = """
         in vec3 aPos;
         uniform mat4 uViewProj;
-        void main() { gl_Position = uViewProj * vec4(aPos, 1.0); }
+        out vec3 vWorld;
+        void main() { vWorld = aPos; gl_Position = uViewProj * vec4(aPos, 1.0); }
         """;
 
     public const string LineFragment = """
+        in vec3 vWorld;
         uniform vec4 uColour;
+        uniform vec4 uClip;
+        uniform int uClipOn;
         out vec4 fragColor;
-        void main() { fragColor = uColour; }
+        void main()
+        {
+            if (uClipOn == 1 && dot(vWorld, uClip.xyz) < uClip.w) discard;
+            fragColor = uColour;
+        }
         """;
 
     /// <summary>Full-screen triangle without vertex data (gl_VertexID 0, 1, 2).</summary>

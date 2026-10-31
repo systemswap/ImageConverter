@@ -26,7 +26,7 @@ internal sealed record FrameState(
     Matrix4x4 ViewProjection, Matrix4x4 Projection, float OcclusionRadius,
     Vector3 Eye, Vector3 Forward, Vector3 Right, Vector3 Up, bool Orthographic,
     RenderMode Mode, bool Edges, bool Parts, bool Dark,
-    IReadOnlyList<Highlight> Highlights);
+    IReadOnlyList<Highlight> Highlights, Vector4? Clip = null);
 
 /// <summary>
 /// CPU side of what is drawn: owned by the UI thread, filled by the background steps. Each part carries a version, so
@@ -91,6 +91,7 @@ internal sealed class ModelRenderer
     // Uniform locations
     private int _mViewProj, _mEye, _mForward, _mOrtho, _mKey, _mFill, _mBase, _mParts, _mTint, _mAo, _mFlat, _mSsao, _mScreen;
     private int _dViewProj, _sDepth, _sProj, _sInvProj, _sTexel, _sRadius, _blInput;
+    private int _mClip, _mClipOn, _mInner, _dClip, _dClipOn, _lClip, _lClipOn;
     private int _lViewProj, _lColour, _bTop, _bBottom, _gViewProj, _gShadow, _gColour;
 
     /// <summary>Why drawing is not possible (missing OpenGL features), or null.</summary>
@@ -131,6 +132,13 @@ internal sealed class ModelRenderer
         _mSsao = gl.Uniform(_modelProgram, "uSsao");
         _mScreen = gl.Uniform(_modelProgram, "uScreen");
         _dViewProj = gl.Uniform(_depthProgram, "uViewProj");
+        _mClip = gl.Uniform(_modelProgram, "uClip");
+        _mClipOn = gl.Uniform(_modelProgram, "uClipOn");
+        _mInner = gl.Uniform(_modelProgram, "uInner");
+        _dClip = gl.Uniform(_depthProgram, "uClip");
+        _dClipOn = gl.Uniform(_depthProgram, "uClipOn");
+        _lClip = gl.Uniform(_lineProgram, "uClip");
+        _lClipOn = gl.Uniform(_lineProgram, "uClipOn");
         _sDepth = gl.Uniform(_ssaoProgram, "uDepth");
         _sProj = gl.Uniform(_ssaoProgram, "uProj");
         _sInvProj = gl.Uniform(_ssaoProgram, "uInvProj");
@@ -225,7 +233,8 @@ internal sealed class ModelRenderer
         gl.Viewport(0, 0, width, height);
 
         DrawBackground(frame);
-        if (frame.Mode == RenderMode.Solid) DrawGround(frame);
+        // With a section the shadow would show parts that are cut away
+        if (frame.Mode == RenderMode.Solid && frame.Clip is null) DrawGround(frame);
         if (frame.Mode != RenderMode.Wireframe) DrawModel(scene, frame, occlusion, width, height);
         DrawLines(frame);
 
@@ -423,6 +432,8 @@ internal sealed class ModelRenderer
         gl.Uniform1(_mSsao, 0);
         gl.Uniform2(_mScreen, width, height);
         gl.Uniform1(_mFlat, blueprint ? 1f : 0f);
+        gl.Uniform1(_mInner, blueprint ? 0 : 1);
+        SetClip(_mClip, _mClipOn, f);
         gl.Uniform4(_mTint, Vector4.Zero);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
@@ -441,6 +452,7 @@ internal sealed class ModelRenderer
         var gl = _gl;
         gl.UseProgram(_lineProgram);
         gl.UniformMatrix(_lViewProj, f.ViewProjection);
+        SetClip(_lClip, _lClipOn, f);
         gl.Enable(Gl.Blend);
         gl.BlendFunc(Gl.SrcAlpha, Gl.OneMinusSrcAlpha);
         if (f.Mode == RenderMode.Wireframe)
@@ -465,6 +477,12 @@ internal sealed class ModelRenderer
         gl.Disable(Gl.Blend);
     }
 
+    private void SetClip(int plane, int on, FrameState f)
+    {
+        _gl.Uniform1(on, f.Clip is null ? 0 : 1);
+        if (f.Clip is { } c) _gl.Uniform4(plane, c);
+    }
+
     /// <summary>Depth at half resolution, occlusion from it, blurred into <see cref="_aoTex"/>; false if not available.</summary>
     private bool Occlusion(ModelScene scene, FrameState f, int width, int height)
     {
@@ -480,6 +498,7 @@ internal sealed class ModelRenderer
         gl.DepthFunc(Gl.LessEqual);
         gl.UseProgram(_depthProgram);
         gl.UniformMatrix(_dViewProj, f.ViewProjection);
+        SetClip(_dClip, _dClipOn, f);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
 

@@ -103,6 +103,13 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
 - **Drehscheibe:** die Hochachse (Z, wie beim 3D-Druck) bleibt immer senkrecht;
   waagerecht ziehen dreht um sie, senkrecht ziehen kippt höchstens bis zur Drauf- bzw.
   Untersicht.
+- **Hineinsehen:** in der Perspektive geht das Mausrad durch Flächen hindurch – nah an einer Fläche bewegt sich das Auge
+  mindestens 0,5 % der Modellgröße je Raste weiter, hinter der Fläche wieder auf die nächste zu (oder geradeaus); was vor
+  dem Auge liegt, schneidet die nahe Schnittebene weg. **Umschalt + Mausrad** schiebt in beiden Ansichten einen Schnitt
+  parallel zum Bildschirm durch das Modell (2 % der Tiefe je Raste, Anzeige oben links, Esc oder ✕ hebt ihn auf); Klicks
+  und Überfahren treffen erst hinter dem Schnitt, der Bodenschatten ist dann aus. **Innenseiten** (Rückseiten von Flächen –
+  im Material oder an aufgeschnittenen Wänden) erscheinen warm grau; bei Dateien mit falsch herum gespeicherten Dreiecken
+  sind auch Außenflächen so getönt.
 - Knöpfe: Einpassen (F), Zentrieren (C: Modellmitte in die Bildmitte, Zoom und Blickrichtung bleiben), Iso, Vorne,
   Hinten, Links, Rechts, Oben, Unten (mit kurzem Übergang);
   Orthografisch/Perspektive (zum Messen orthografisch voreingestellt).

@@ -72,6 +72,46 @@ public class ModelViewTests
         Assert.InRange(after.Y - before.Y, -0.05f, 0.05f);
     }
 
+    /// <summary>In the perspective view the wheel goes through a surface: the eye passes the point under the mouse.</summary>
+    [Fact]
+    public void Zoom_InPerspective_GoesThroughTheSurface()
+    {
+        var cam = Camera(false);
+        var anchor = cam.Target + cam.Forward * 0;   // a surface point straight ahead
+        var before = Vector3.Dot(anchor - cam.Eye, cam.Forward);
+        for (var i = 0; i < 400; i++) cam.Zoom(0.87f, anchor, 0.2f);
+        Assert.True(before > 0);
+        Assert.True(Vector3.Dot(anchor - cam.Eye, cam.Forward) < 0, "the eye should be past the surface");
+    }
+
+    [Fact]
+    public void Zoom_InOrthographic_NeverPassesTheAnchor()
+    {
+        var cam = Camera(true);
+        var anchor = cam.Target;
+        for (var i = 0; i < 400; i++) cam.Zoom(0.87f, anchor, 0.2f);
+        Assert.True(cam.Distance >= cam.SceneRadius * 1e-3f * 0.999f);
+    }
+
+    [Fact]
+    public void SectionPlane_RunsFromTheFrontToTheBackOfTheModel()
+    {
+        var cam = Camera(true);
+        var box = new Box3(new Vector3(0, 0, 0), new Vector3(10, 20, 5));
+        var front = cam.SectionPlane(box, 0);
+        var back = cam.SectionPlane(box, 1);
+        var n = new Vector3(front.X, front.Y, front.Z);
+        Assert.True(Vector3.Distance(n, cam.Forward) < 1e-6f);
+        // Every corner lies behind the front plane (not cut) and in front of the back plane (cut)
+        for (var i = 0; i < 8; i++)
+        {
+            var c = new Vector3((i & 1) == 0 ? 0 : 10, (i & 2) == 0 ? 0 : 20, (i & 4) == 0 ? 0 : 5);
+            Assert.True(Vector3.Dot(c, n) >= front.W - 1e-4f);
+            Assert.True(Vector3.Dot(c, n) <= back.W + 1e-4f);
+        }
+        Assert.Equal((front.W + back.W) / 2, cam.SectionPlane(box, 0.5f).W, 4);
+    }
+
     [Fact]
     public void Fit_ShowsTheWholeSphere()
     {

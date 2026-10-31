@@ -18,8 +18,9 @@ namespace ImageConverter.Viewer3D.Views;
 /// <remarks>
 /// <list type="bullet">
 /// <item>Left drag turns (turntable around +Z): around the point under the mouse, or around the centre axis of the
-/// model when chosen; right or middle drag (or Ctrl + left) moves; the wheel zooms towards the mouse; a double
-/// click fits the model.</item>
+/// model when chosen; right or middle drag (or Ctrl + left) moves; the wheel zooms towards the mouse – in the
+/// perspective view through surfaces, see <see cref="OrbitCamera.Zoom"/>; Shift + wheel moves a section parallel to
+/// the screen through the model; a double click fits the model.</item>
 /// <item>A click without dragging (less than <see cref="DragThreshold"/> pixels) is a measuring click.</item>
 /// <item>Frames are drawn only when something changed.</item>
 /// <item>The whole area takes the mouse (<see cref="ICustomHitTest"/>): Avalonia counts a control as hit only where it
@@ -159,7 +160,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         var dark = ActualThemeVariant == ThemeVariant.Dark;
         var frame = new FrameState(Camera.ViewProjection, Camera.Projection, 0.06f * _model.Mesh.Bounds.Diagonal,
             Camera.Eye, Camera.Forward, Camera.Right, Camera.Up, Camera.Orthographic,
-            _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights());
+            _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights(), Section());
         _renderer.Render(_model.Scene, frame, fb, size.Width, size.Height);
         FramesDrawn++;
         if (_renderer.Failure is { } failure && Failure is null)
@@ -176,6 +177,9 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             Dispatcher.UIThread.Post(() => capture(pixels, size.Width, size.Height));
         }
     }
+
+    /// <summary>The section plane for the current view, or null without a section.</summary>
+    internal Vector4? Section() => _model.HasSection ? Camera.SectionPlane(_model.Mesh.Bounds, _model.SectionDepth) : null;
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
@@ -266,7 +270,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             if (_model.MeasureTool)
             {
                 var (o, d) = Camera.Ray((float)pos.X, (float)pos.Y);
-                _model.Hover(o, d);
+                _model.Hover(o, d, Section());
             }
             return;
         }
@@ -309,7 +313,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             return;
         }
         var (o, d) = Camera.Ray((float)pos.X, (float)pos.Y);
-        _model.Click(o, d, e.KeyModifiers.HasFlag(KeyModifiers.Shift), SameSpot);
+        _model.Click(o, d, e.KeyModifiers.HasFlag(KeyModifiers.Shift), SameSpot, Section());
         e.Handled = true;
     }
 
@@ -318,8 +322,17 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         base.OnPointerWheelChanged(e);
         _animation?.Stop();
         var pos = e.GetPosition(this);
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            // Shift + wheel: the section goes deeper (wheel towards the screen) or back; some systems send it sideways
+            var steps = (float)(Math.Abs(e.Delta.Y) >= Math.Abs(e.Delta.X) ? e.Delta.Y : e.Delta.X);
+            _model.MoveSection(-steps);
+            e.Handled = true;
+            return;
+        }
         var factor = MathF.Pow(0.87f, (float)e.Delta.Y);
-        Camera.Zoom(factor, AnchorAt(pos));
+        // Perspective: at least half a percent of the model per step, so that the wheel goes through surfaces
+        Camera.Zoom(factor, AnchorAt(pos), 0.005f * _model.Mesh.Bounds.Diagonal);
         Invalidate();
         e.Handled = true;
     }
@@ -334,6 +347,11 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
     {
         base.OnKeyDown(e);
         if (e.Key == Key.Escape && _model.CancelPending()) e.Handled = true;
+        else if (e.Key == Key.Escape && _model.HasSection)
+        {
+            _model.SectionDepth = 0;
+            e.Handled = true;
+        }
         else if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.None)
         {
             OnViewRequested(null);
@@ -351,14 +369,14 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
     {
         if (_model.PivotAtCentre) return _model.Mesh.Bounds.Center;
         var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
-        return _model.HitTest(o, d) is { } hit ? hit.Point.ToVector3() : Camera.Target;
+        return _model.HitTest(o, d, Section()) is { } hit ? hit.Point.ToVector3() : Camera.Target;
     }
 
     /// <summary>Point that stays under the mouse while zooming: the surface, else the plane through the current centre.</summary>
     private Vector3 AnchorAt(Point at)
     {
         var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
-        if (_model.HitTest(o, d) is { } hit) return hit.Point.ToVector3();
+        if (_model.HitTest(o, d, Section()) is { } hit) return hit.Point.ToVector3();
         var f = Camera.Forward;
         var t = Vector3.Dot(Camera.Target - o, f) / Math.Max(Vector3.Dot(d, f), 1e-6f);
         return o + d * t;

@@ -101,6 +101,8 @@
                               ToolTip.Tip="{l:T 'Jedes zusammenhängende Teil in einer eigenen Farbe.'}" />
                     <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,6,0,0"
                                Text="{l:T 'Linke Maustaste ziehen: drehen · rechte oder mittlere (oder Strg + links): verschieben · Mausrad: zoomen · Doppelklick: einpassen.'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="{l:T 'Hineinsehen: in der Perspektive führt das Mausrad durch Flächen hindurch; Umschalt + Mausrad schneidet das Modell parallel zum Bildschirm auf (Esc hebt den Schnitt auf). Innenseiten erscheinen warm grau.'}" />
                 </StackPanel>
             </HeaderedContentControl>
 
