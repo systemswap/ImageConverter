@@ -269,6 +269,32 @@ public class ModelViewTests
     public void View_TakesTheMouseEverywhere() =>
         Assert.True(typeof(Avalonia.Rendering.ICustomHitTest).IsAssignableFrom(typeof(ImageConverter.Viewer3D.Views.ModelGlView)));
 
+    /// <summary>A section placed on a face lies on it with its normal into the material; moving it deeper cuts the face away.</summary>
+    [Fact]
+    public void SectionOnFace_PointsIntoTheMaterial()
+    {
+        var plane = SectionGeometry.OnFace(new Vector3(24.75f, 3, 4), Vector3.UnitX);   // outer wall, outward +X
+        Assert.Equal(-Vector3.UnitX, new Vector3(plane.X, plane.Y, plane.Z));
+        Assert.Equal(-24.75f, plane.W, 4);
+        // A point of the wall (x = 24) lies behind the plane: kept; once the plane moves 4 mm in, it is in front: cut
+        Assert.True(Vector3.Dot(new Vector3(24, 0, 0), -Vector3.UnitX) >= plane.W);
+        Assert.True(Vector3.Dot(new Vector3(24, 0, 0), -Vector3.UnitX) < plane.W + 4);
+    }
+
+    [Fact]
+    public void SectionQuad_CoversTheModel_AndTakesTheMouse()
+    {
+        var box = new Box3(new Vector3(-10, -20, 0), new Vector3(10, 20, 15));
+        var plane = new Vector4(-Vector3.UnitX, -5);   // x = 5, normal −X
+        var quad = SectionGeometry.Quad(box, plane);
+        Assert.All(quad, c => Assert.Equal(5, c.X, 4));
+        Assert.True(quad.Min(c => c.Y) < -20 && quad.Max(c => c.Y) > 20 && quad.Min(c => c.Z) < 0 && quad.Max(c => c.Z) > 15);
+        // A ray from +X towards the plane hits it inside, misses it beside the model's extent
+        Assert.Equal(15f, SectionGeometry.Hit(box, plane, new Vector3(20, 0, 7), -Vector3.UnitX)!.Value, 4);
+        Assert.Null(SectionGeometry.Hit(box, plane, new Vector3(20, 40, 7), -Vector3.UnitX));
+        Assert.Null(SectionGeometry.Hit(box, plane, new Vector3(20, 0, 7), Vector3.UnitY));   // along the plane
+    }
+
     [Fact]
     public void Registry_FindsTheViewerByExtension_AnyCase()
     {

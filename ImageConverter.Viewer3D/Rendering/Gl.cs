@@ -18,7 +18,7 @@ namespace ImageConverter.Viewer3D.Rendering;
 internal sealed unsafe class Gl
 {
     public const int DepthBufferBit = 0x0100, ColorBufferBit = 0x4000;
-    public const int Triangles = 0x0004, Lines = 0x0001;
+    public const int Triangles = 0x0004, Lines = 0x0001, LineLoop = 0x0002, TriangleFan = 0x0006;
     public const int ArrayBuffer = 0x8892, ElementArrayBuffer = 0x8893, StaticDraw = 0x88E4, DynamicDraw = 0x88E8;
     public const int Float = 0x1406, UnsignedByte = 0x1401, UnsignedInt = 0x1405;
     public const int VertexShader = 0x8B31, FragmentShader = 0x8B30, CompileStatus = 0x8B81, LinkStatus = 0x8B82;

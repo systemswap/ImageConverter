@@ -26,7 +26,7 @@ internal sealed record FrameState(
     Matrix4x4 ViewProjection, Matrix4x4 Projection, float OcclusionRadius,
     Vector3 Eye, Vector3 Forward, Vector3 Right, Vector3 Up, bool Orthographic,
     RenderMode Mode, bool Edges, bool Parts, bool Dark,
-    IReadOnlyList<Highlight> Highlights, Vector4? Clip = null);
+    IReadOnlyList<Highlight> Highlights, Vector4? Clip = null, Vector3[]? SectionQuad = null, bool SectionActive = false);
 
 /// <summary>
 /// CPU side of what is drawn: owned by the UI thread, filled by the background steps. Each part carries a version, so
@@ -77,7 +77,7 @@ internal sealed class ModelRenderer
 {
     private Gl _gl = null!;
     private int _modelProgram, _lineProgram, _backgroundProgram, _groundProgram, _depthProgram, _ssaoProgram, _blurProgram;
-    private int _modelVao, _lineVao, _wireVao, _groundVao, _emptyVao;
+    private int _modelVao, _lineVao, _wireVao, _groundVao, _emptyVao, _quadVao, _quadBuffer;
     private int _posBuffer, _extraBuffer, _triBuffer, _edgeBuffer, _wireBuffer, _groundBuffer, _shadowTexture;
     private int _edgeCount, _wireCount;
     private int _uploadedIndices = -1, _uploadedExtras = -1, _uploadedEdges = -1, _uploadedShadow = -1;
@@ -158,6 +158,8 @@ internal sealed class ModelRenderer
         _wireVao = gl.GenVertexArray();
         _groundVao = gl.GenVertexArray();
         _emptyVao = gl.GenVertexArray();
+        _quadVao = gl.GenVertexArray();
+        _quadBuffer = gl.GenBuffer();
         _posBuffer = gl.GenBuffer();
         _extraBuffer = gl.GenBuffer();
         _triBuffer = gl.GenBuffer();
@@ -187,8 +189,8 @@ internal sealed class ModelRenderer
         gl.DeleteProgram(_blurProgram);
         gl.DeleteTexture(_whiteTex);
         DeleteOcclusionTargets();
-        foreach (var vao in new[] { _modelVao, _lineVao, _wireVao, _groundVao, _emptyVao }) gl.DeleteVertexArray(vao);
-        foreach (var b in new[] { _posBuffer, _extraBuffer, _triBuffer, _edgeBuffer, _wireBuffer, _groundBuffer }) gl.DeleteBuffer(b);
+        foreach (var vao in new[] { _modelVao, _lineVao, _wireVao, _groundVao, _emptyVao, _quadVao }) gl.DeleteVertexArray(vao);
+        foreach (var b in new[] { _posBuffer, _extraBuffer, _triBuffer, _edgeBuffer, _wireBuffer, _groundBuffer, _quadBuffer }) gl.DeleteBuffer(b);
         gl.DeleteTexture(_shadowTexture);
         DeleteFramebuffer();
         _positionsUploaded = _wireUploaded = _hasShadow = false;
@@ -237,6 +239,7 @@ internal sealed class ModelRenderer
         if (frame.Mode == RenderMode.Solid && frame.Clip is null) DrawGround(frame);
         if (frame.Mode != RenderMode.Wireframe) DrawModel(scene, frame, occlusion, width, height);
         DrawLines(frame);
+        DrawSectionPlane(frame);
 
         if (own)
         {
@@ -475,6 +478,34 @@ internal sealed class ModelRenderer
             gl.DepthMask(true);
         }
         gl.Disable(Gl.Blend);
+    }
+
+    /// <summary>The section plane as a see-through rectangle with an outline; stronger while it is being moved.</summary>
+    private void DrawSectionPlane(FrameState f)
+    {
+        if (f.SectionQuad is not { Length: 4 } q) return;
+        var gl = _gl;
+        Span<float> corners = [q[0].X, q[0].Y, q[0].Z, q[1].X, q[1].Y, q[1].Z, q[2].X, q[2].Y, q[2].Z, q[3].X, q[3].Y, q[3].Z];
+        gl.BindVertexArray(_quadVao);
+        gl.BindBuffer(Gl.ArrayBuffer, _quadBuffer);
+        gl.BufferData<float>(Gl.ArrayBuffer, corners, Gl.DynamicDraw);
+        gl.VertexAttribPointer(0, 3, Gl.Float, false, 12, 0);
+        gl.EnableVertexAttribArray(0);
+        gl.UseProgram(_lineProgram);
+        gl.UniformMatrix(_lViewProj, f.ViewProjection);
+        gl.Uniform1(_lClipOn, 0);   // the plane lies on the cut itself
+        gl.Enable(Gl.DepthTest);
+        gl.DepthFunc(Gl.LessEqual);
+        gl.DepthMask(false);
+        gl.Enable(Gl.Blend);
+        gl.BlendFunc(Gl.SrcAlpha, Gl.OneMinusSrcAlpha);
+        var accent = new Vector3(0.24f, 0.48f, 0.92f);
+        gl.Uniform4(_lColour, new Vector4(accent, f.SectionActive ? 0.24f : 0.12f));
+        gl.DrawArrays(Gl.TriangleFan, 0, 4);
+        gl.Uniform4(_lColour, new Vector4(accent, f.SectionActive ? 1f : 0.7f));
+        gl.DrawArrays(Gl.LineLoop, 0, 4);
+        gl.Disable(Gl.Blend);
+        gl.DepthMask(true);
     }
 
     private void SetClip(int plane, int on, FrameState f)

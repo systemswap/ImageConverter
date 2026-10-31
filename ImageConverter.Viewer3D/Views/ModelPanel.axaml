@@ -106,6 +106,30 @@
                 </StackPanel>
             </HeaderedContentControl>
 
+            <!-- ============================== Schnitt -->
+            <HeaderedContentControl Header="{l:T 'SCHNITT'}">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,6,*">
+                        <ToggleButton Grid.Column="0" Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                      Padding="8,6" FontSize="12" IsChecked="{Binding PlaceSectionTool}" Content="{l:T 'Anlegen'}"
+                                      ToolTip.Tip="{l:T 'Dann auf eine Fläche klicken, z. B. eine Wand: die Schnittfläche legt sich darauf und lässt sich ins Objekt verschieben.'}" />
+                        <ToggleButton Grid.Column="2" Classes="chain" Width="NaN" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                      Padding="8,6" FontSize="12" IsChecked="{Binding MoveSectionTool}" IsEnabled="{Binding HasSection}"
+                                      Content="{l:T 'Verschieben'}"
+                                      ToolTip.Tip="{l:T 'Schnittfläche mit der Maus ziehen oder das Mausrad über ihr drehen; ein Klick daneben beendet das Verschieben.'}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto" IsVisible="{Binding HasSection}">
+                        <TextBlock Classes="label" Text="{l:T 'Tiefe'}" />
+                        <NumericUpDown Grid.Column="1" Minimum="0" Increment="0.1" FormatString="0.00" Value="{Binding SectionDepthInUnit}" />
+                        <TextBlock Grid.Column="2" Classes="hint" Margin="6,0,0,0" VerticalAlignment="Center" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            IsVisible="{Binding HasSection}" Content="{l:T 'Schnitt aufheben'}" Command="{Binding ClearSectionCommand}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding SectionHint}"
+                               IsVisible="{Binding SectionHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
             <!-- ============================== Messen -->
             <HeaderedContentControl Header="{l:T 'MESSEN'}">
                 <StackPanel Spacing="8">

@@ -38,7 +38,7 @@ public partial class ModelCanvas : UserControl
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ModelViewModel.HoverText) or nameof(ModelViewModel.MeasureHint) or nameof(ModelViewModel.MeasureTool)
-            or nameof(ModelViewModel.HoverFace) or nameof(ModelViewModel.Pending))
+            or nameof(ModelViewModel.HoverFace) or nameof(ModelViewModel.Pending) or nameof(ModelViewModel.SectionHint))
             UpdateStatus();
     }
 
@@ -48,7 +48,9 @@ public partial class ModelCanvas : UserControl
     private void UpdateStatus()
     {
         if (_model is null || this.FindControl<TextBlock>("Status") is not { } status) return;
-        status.Text = _model.MeasureTool && _model.HoverText.Length > 0 ? _model.HoverText : _model.MeasureTool ? _model.MeasureHint : "";
+        status.Text = _model.SectionHint.Length > 0 ? _model.SectionHint
+            : _model.MeasureTool && _model.HoverText.Length > 0 ? _model.HoverText
+            : _model.MeasureTool ? _model.MeasureHint : "";
     }
 
     protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)

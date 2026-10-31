@@ -403,6 +403,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
             RefreshStatistics();
             OnPropertyChanged(nameof(PendingText));
             OnPropertyChanged(nameof(SectionText));
+            OnPropertyChanged(nameof(SectionDepthInUnit));
+            OnPropertyChanged(nameof(UnitLabel));
             Redraw();
         }
     }
@@ -441,7 +443,12 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     partial void OnMeasureToolChanged(bool value)
     {
-        if (!value)
+        if (value)
+        {
+            PlaceSectionTool = false;
+            MoveSectionTool = false;
+        }
+        else
         {
             Pending = null;
             HoverFace = -1;
@@ -525,10 +532,92 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     /// no section.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSection), nameof(SectionText), nameof(SectionDepth))]
+    [NotifyPropertyChangedFor(nameof(HasSection), nameof(SectionText), nameof(SectionDepth), nameof(SectionDepthInUnit))]
     public partial Vector4? Section { get; set; }
 
-    partial void OnSectionChanged(Vector4? value) => Redraw();
+    partial void OnSectionChanged(Vector4? value)
+    {
+        if (value is null) MoveSectionTool = false;
+        Redraw();
+    }
+
+    /// <summary>„Schnittfläche anlegen“: the next click on a face puts a section plane onto it.</summary>
+    [ObservableProperty] public partial bool PlaceSectionTool { get; set; }
+
+    partial void OnPlaceSectionToolChanged(bool value)
+    {
+        if (value)
+        {
+            MeasureTool = false;
+            MoveSectionTool = false;
+        }
+        OnPropertyChanged(nameof(SectionHint));
+        Redraw();
+    }
+
+    /// <summary>
+    /// „Schnittfläche verschieben“: dragging the plane (or the wheel over it) moves it. Only switched on by its button; a
+    /// click beside the plane switches it off again, so that clicks go to faces otherwise.
+    /// </summary>
+    [ObservableProperty] public partial bool MoveSectionTool { get; set; }
+
+    partial void OnMoveSectionToolChanged(bool value)
+    {
+        if (value && Section is null)
+        {
+            MoveSectionTool = false;
+            return;
+        }
+        if (value)
+        {
+            MeasureTool = false;
+            PlaceSectionTool = false;
+        }
+        OnPropertyChanged(nameof(SectionHint));
+        Redraw();
+    }
+
+    /// <summary>What to do next with the section tools, for the status line; empty when none is active.</summary>
+    public string SectionHint =>
+        PlaceSectionTool ? Tr.T("Fläche anklicken, auf die die Schnittfläche gelegt wird (Esc bricht ab).")
+        : MoveSectionTool ? Tr.T("Schnittfläche ziehen oder Mausrad über ihr; Klick daneben beendet das Verschieben.")
+        : "";
+
+    /// <summary>Unit of the number fields: mm or in.</summary>
+    public string UnitLabel => Inches ? "in" : "mm";
+
+    /// <summary>Depth of the section in the chosen unit, for the number field (0.1 steps).</summary>
+    public double SectionDepthInUnit
+    {
+        get => Math.Round(SectionDepth / (Inches ? MeasureText.MillimetresPerInch : 1), 4);
+        set => SetSectionDepth((float)(value * (Inches ? MeasureText.MillimetresPerInch : 1)));
+    }
+
+    /// <summary>Puts the section at a depth behind the front of the model (along its normal).</summary>
+    public void SetSectionDepth(float depth)
+    {
+        if (Section is not { } c) return;
+        var n = Normal(c);
+        var (front, back) = Mesh.Bounds.Extent(n);
+        Section = new Vector4(n, Math.Clamp(front + depth, front, back));
+    }
+
+    /// <summary>Moves the section to a plane distance (dragging it), within the model.</summary>
+    public void SetSectionDistance(float w)
+    {
+        if (Section is not { } c) return;
+        var n = Normal(c);
+        var (front, back) = Mesh.Bounds.Extent(n);
+        Section = new Vector4(n, Math.Clamp(w, front, back));
+    }
+
+    /// <summary>Puts a new section plane onto a clicked face; its normal points into the material.</summary>
+    public void PlaceSection(D3 point, int face, Vector3 triangleNormal)
+    {
+        var outward = Faces is { } f && face >= 0 && f.Faces[face].Kind == FaceKind.Plane ? f.Faces[face].Normal.ToVector3() : triangleNormal;
+        Section = SectionGeometry.OnFace(point.ToVector3(), outward);
+        PlaceSectionTool = false;
+    }
 
     public bool HasSection => Section is not null;
 
@@ -545,7 +634,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         var n = Section is { } c ? Normal(c) : viewDirection;
         var (front, back) = Mesh.Bounds.Extent(n);
         var w = Math.Clamp((Section?.W ?? front) + delta, front, back);
-        Section = w <= front ? null : new Vector4(n, w);
+        // A new one only once it cuts something; an existing one stays, also at the front (placed planes start there)
+        Section = Section is null && w <= front ? null : new Vector4(n, w);
     }
 
     /// <summary>Zooming through a wall: the section goes just behind <paramref name="exit"/> (only deeper, never back).</summary>
@@ -575,7 +665,11 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ClearSection() => Section = null;
+    private void ClearSection()
+    {
+        PlaceSectionTool = false;
+        Section = null;
+    }
 
     /// <summary>The surface point along a ray, with its face (−1 while faces are not known).</summary>
     /// <param name="origin">Start of the ray.</param>
@@ -596,6 +690,24 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         if (Hierarchy is not { } bvh || !bvh.Raycast(origin, direction, float.MaxValue, out var hit)) return null;
         var p = origin + direction * hit.Distance;
         return (D3.From(p), Faces is { } f ? f.FaceOf[hit.Triangle] : -1);
+    }
+
+    /// <summary>Like <see cref="HitTest"/>, with the outward normal of the triangle hit.</summary>
+    public (D3 Point, int Face, Vector3 Normal)? HitTestWithNormal(Vector3 origin, Vector3 direction, Vector4? clip = null)
+    {
+        if (clip is { } c)
+        {
+            var n = new Vector3(c.X, c.Y, c.Z);
+            var along = Vector3.Dot(direction, n);
+            if (along > 1e-9f)
+            {
+                var t = (c.W - Vector3.Dot(origin, n)) / along;
+                if (t > 0) origin += direction * t;
+            }
+        }
+        if (Hierarchy is not { } bvh || !bvh.Raycast(origin, direction, float.MaxValue, out var hit)) return null;
+        var normal = Vector3.Normalize(Mesh.AreaNormal(hit.Triangle).ToVector3());
+        return (D3.From(origin + direction * hit.Distance), Faces is { } f ? f.FaceOf[hit.Triangle] : -1, normal);
     }
 
     /// <summary>The mouse moved over the model while measuring.</summary>

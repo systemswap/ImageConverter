@@ -14,7 +14,7 @@
                 BorderBrush="{DynamicResource BorderBrush2}"
                 BorderThickness="0,1,0,0"
                 Padding="10,6">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
                     <Button Classes="tool" Content="{l:T '⤢  Einpassen'}" Command="{Binding FitCommand}"
                             ToolTip.Tip="{l:T 'Ganzes Modell zeigen (F oder Doppelklick ins Bild).'}" />
@@ -39,7 +39,18 @@
                 <TextBlock Grid.Column="3" Classes="hint" Margin="14,0" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" x:Name="Status" />
 
-                <ToggleButton Grid.Column="4" Classes="chain" Width="NaN" Padding="12,5" FontSize="12"
+                <!-- Schnittfläche: anlegen (dann auf eine Fläche klicken) und verschieben (nur über diesen Knopf) -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0">
+                    <ToggleButton Classes="chain" Width="NaN" Padding="10,5" FontSize="12"
+                                  IsChecked="{Binding PlaceSectionTool}" Content="{l:T '▱  Schnittfläche anlegen'}"
+                                  ToolTip.Tip="{l:T 'Dann auf eine Fläche klicken, z. B. eine Wand: die Schnittfläche legt sich darauf und lässt sich ins Objekt verschieben.'}" />
+                    <ToggleButton Classes="chain" Width="NaN" Padding="10,5" FontSize="12"
+                                  IsChecked="{Binding MoveSectionTool}" IsEnabled="{Binding HasSection}"
+                                  Content="{l:T '⇕  Schnittfläche verschieben'}"
+                                  ToolTip.Tip="{l:T 'Schnittfläche mit der Maus ziehen oder das Mausrad über ihr drehen; ein Klick daneben beendet das Verschieben.'}" />
+                </StackPanel>
+
+                <ToggleButton Grid.Column="5" Classes="chain" Width="NaN" Padding="12,5" FontSize="12"
                               IsChecked="{Binding MeasureTool}"
                               Content="{l:T '📏  Messen'}">
                     <ToolTip.Tip>
@@ -62,7 +73,11 @@
                     Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                     IsVisible="{Binding HasSection}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding SectionText}" />
+                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:T 'Schnitt'}" />
+                    <NumericUpDown Width="104" VerticalAlignment="Center" Minimum="0" Increment="0.1" FormatString="0.00"
+                                   Value="{Binding SectionDepthInUnit}"
+                                   ToolTip.Tip="{l:T 'Tiefe des Schnitts hinter der Vorderseite des Modells; Pfeile ändern sie um 0,1.'}" />
+                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding UnitLabel}" />
                     <Button Classes="icon" Width="22" Height="22" FontSize="11" Content="✕" Command="{Binding ClearSectionCommand}"
                             ToolTip.Tip="{l:T 'Schnitt aufheben (Esc)'}" />
                 </StackPanel>
