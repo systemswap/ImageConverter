@@ -42,6 +42,33 @@ public static class SectionGeometry
     }
 
     /// <summary>
+    /// The part of a ray that lies behind all section planes (what is visible along it): from <c>Min</c> to <c>Max</c>
+    /// in units of the direction's length, or null if every part of it is cut away.
+    /// </summary>
+    /// <param name="planes">The section planes; each cuts away the side where <c>dot(p, normal) &lt; distance</c>.</param>
+    /// <param name="origin">Start of the ray.</param>
+    /// <param name="direction">Direction of the ray.</param>
+    public static (float Min, float Max)? VisibleInterval(IReadOnlyList<Vector4> planes, Vector3 origin, Vector3 direction)
+    {
+        float lo = 0, hi = float.MaxValue;
+        foreach (var plane in planes)
+        {
+            var n = new Vector3(plane.X, plane.Y, plane.Z);
+            var along = Vector3.Dot(direction, n);
+            var at = Vector3.Dot(origin, n);
+            if (Math.Abs(along) < 1e-12f)
+            {
+                if (at < plane.W) return null;   // parallel and on the cut side
+                continue;
+            }
+            var t = (plane.W - at) / along;
+            if (along > 0) lo = Math.Max(lo, t);   // enters the kept side at t
+            else hi = Math.Min(hi, t);             // leaves it at t
+        }
+        return lo <= hi ? (lo, hi) : null;
+    }
+
+    /// <summary>
     /// Plane for a new section on a face: lying on the clicked point, its normal pointing into the material (opposite
     /// to the face's outward normal), so that moving it deeper cuts the material in front away.
     /// </summary>

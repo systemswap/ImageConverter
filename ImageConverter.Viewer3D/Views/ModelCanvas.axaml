@@ -42,7 +42,7 @@
                 <!-- Schnittfläche: anlegen (dann auf eine Fläche klicken) und verschieben (nur über diesen Knopf) -->
                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0">
                     <ToggleButton Classes="chain" Width="NaN" Padding="10,5" FontSize="12"
-                                  IsChecked="{Binding PlaceSectionTool}" Content="{l:T '▱  Schnittfläche anlegen'}"
+                                  IsChecked="{Binding PlaceSectionTool}" IsEnabled="{Binding CanAddSection}" Content="{l:T '▱  Schnittfläche anlegen'}"
                                   ToolTip.Tip="{l:T 'Dann auf eine Fläche klicken, z. B. eine Wand: die Schnittfläche legt sich darauf und lässt sich ins Objekt verschieben.'}" />
                     <ToggleButton Classes="chain" Width="NaN" Padding="10,5" FontSize="12"
                                   IsChecked="{Binding MoveSectionTool}" IsEnabled="{Binding HasSection}"
@@ -73,13 +73,13 @@
                     Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
                     IsVisible="{Binding HasSection}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:T 'Schnitt'}" />
+                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding SectionLabel}" />
                     <NumericUpDown Width="104" VerticalAlignment="Center" Minimum="0" Increment="0.1" FormatString="0.00"
                                    Value="{Binding SectionDepthInUnit}"
                                    ToolTip.Tip="{l:T 'Tiefe des Schnitts hinter der Vorderseite des Modells; Pfeile ändern sie um 0,1.'}" />
                     <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding UnitLabel}" />
-                    <Button Classes="icon" Width="22" Height="22" FontSize="11" Content="✕" Command="{Binding ClearSectionCommand}"
-                            ToolTip.Tip="{l:T 'Schnitt aufheben (Esc)'}" />
+                    <Button Classes="icon" Width="22" Height="22" FontSize="11" Content="✕" Command="{Binding RemoveSelectedSectionCommand}"
+                            ToolTip.Tip="{l:T 'Diese Schnittfläche entfernen (Esc entfernt alle)'}" />
                 </StackPanel>
             </Border>
 

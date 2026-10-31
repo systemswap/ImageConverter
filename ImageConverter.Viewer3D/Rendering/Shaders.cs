@@ -51,8 +51,8 @@ internal static class Shaders
         uniform sampler2D uSsao;
         uniform vec2 uScreen;
         uniform float uAo;
-        uniform vec4 uClip;
-        uniform int uClipOn;
+        uniform vec4 uClips[6];
+        uniform int uClipCount;
         uniform int uInner;
         out vec4 fragColor;
 
@@ -67,7 +67,7 @@ internal static class Shaders
 
         void main()
         {
-            if (uClipOn == 1 && dot(vWorld, uClip.xyz) < uClip.w) discard;
+            for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
             vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
             vec3 v = uOrtho == 1 ? -uForward : normalize(uEye - vWorld);
             if (dot(n, v) < 0.0) n = -n;
@@ -95,12 +95,12 @@ internal static class Shaders
     public const string DepthFragment = """
         in vec3 vWorld;
         in float vPart;
-        uniform vec4 uClip;
-        uniform int uClipOn;
+        uniform vec4 uClips[6];
+        uniform int uClipCount;
         out vec4 fragColor;
         void main()
         {
-            if (uClipOn == 1 && dot(vWorld, uClip.xyz) < uClip.w) discard;
+            for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
             fragColor = vec4(1.0);
         }
         """;
@@ -194,12 +194,12 @@ internal static class Shaders
     public const string LineFragment = """
         in vec3 vWorld;
         uniform vec4 uColour;
-        uniform vec4 uClip;
-        uniform int uClipOn;
+        uniform vec4 uClips[6];
+        uniform int uClipCount;
         out vec4 fragColor;
         void main()
         {
-            if (uClipOn == 1 && dot(vWorld, uClip.xyz) < uClip.w) discard;
+            for (int i = 0; i < 6; i++) { if (i >= uClipCount) break; if (dot(vWorld, uClips[i].xyz) < uClips[i].w) discard; }
             fragColor = uColour;
         }
         """;

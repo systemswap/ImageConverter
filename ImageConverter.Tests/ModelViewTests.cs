@@ -295,6 +295,23 @@ public class ModelViewTests
         Assert.Null(SectionGeometry.Hit(box, plane, new Vector3(20, 0, 7), Vector3.UnitY));   // along the plane
     }
 
+    /// <summary>
+    /// Several sections: only what lies behind all of them is visible – the visible part of a ray starts after the last
+    /// plane it enters and ends where it leaves the kept side of another.
+    /// </summary>
+    [Fact]
+    public void SeveralSections_LeaveTheIntersectionVisible()
+    {
+        var cutX = new Vector4(-Vector3.UnitX, -5);   // keeps x ≤ 5
+        var cutY = new Vector4(Vector3.UnitY, 2);     // keeps y ≥ 2
+        // Ray along −X at y = 3: enters at x = 5 (t = 15 from x = 20), y stays kept
+        Assert.Equal((15f, float.MaxValue), SectionGeometry.VisibleInterval([cutX, cutY], new Vector3(20, 3, 0), -Vector3.UnitX));
+        // Same ray at y = 1: the second plane cuts it all away
+        Assert.Null(SectionGeometry.VisibleInterval([cutX, cutY], new Vector3(20, 1, 0), -Vector3.UnitX));
+        // Ray along −Y at x = 0 from y = 20: visible from the start until it leaves at y = 2 (t = 18)
+        Assert.Equal((0f, 18f), SectionGeometry.VisibleInterval([cutX, cutY], new Vector3(0, 20, 0), -Vector3.UnitY));
+    }
+
     [Fact]
     public void Registry_FindsTheViewerByExtension_AnyCase()
     {

@@ -160,8 +160,8 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         var dark = ActualThemeVariant == ThemeVariant.Dark;
         var frame = new FrameState(Camera.ViewProjection, Camera.Projection, 0.06f * _model.Mesh.Bounds.Diagonal,
             Camera.Eye, Camera.Forward, Camera.Right, Camera.Up, Camera.Orthographic,
-            _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights(), Section(),
-            _model.Section is { } sp ? SectionGeometry.Quad(_model.Mesh.Bounds, sp) : null, _model.MoveSectionTool);
+            _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights(), _model.SectionPlanes,
+            _model.Sections.Select(x => (SectionGeometry.Quad(_model.Mesh.Bounds, x.Plane), x.IsSelected)).ToArray(), _model.MoveSectionTool);
         _renderer.Render(_model.Scene, frame, fb, size.Width, size.Height);
         FramesDrawn++;
         if (_renderer.Failure is { } failure && Failure is null)
@@ -178,9 +178,6 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             Dispatcher.UIThread.Post(() => capture(pixels, size.Width, size.Height));
         }
     }
-
-    /// <summary>The section plane, or null without a section.</summary>
-    internal Vector4? Section() => _model.Section;
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
@@ -258,7 +255,11 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         _planeDrag = null;
         if (_model.MoveSectionTool && p.Properties.IsLeftButtonPressed && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            if (SectionPlaneAt(_pressAt) is { } grab && _model.Section is { } plane) _planeDrag = (grab, plane.W);
+            if (SectionPlaneAt(_pressAt) is { } grab)
+            {
+                _model.SelectedSection = grab.Section;
+                _planeDrag = (grab.Point, grab.Section.Plane.W);
+            }
             else _model.MoveSectionTool = false;
         }
 
@@ -279,7 +280,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             if (_model.MeasureTool)
             {
                 var (o, d) = Camera.Ray((float)pos.X, (float)pos.Y);
-                _model.Hover(o, d, Section());
+                _model.Hover(o, d);
             }
             else if (_model.MoveSectionTool)
             {
@@ -334,7 +335,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         {
             // Put the section onto the face under the mouse
             var (ro, rd) = Camera.Ray((float)pos.X, (float)pos.Y);
-            if (_model.HitTestWithNormal(ro, rd, Section()) is { } hit) _model.PlaceSection(hit.Point, hit.Face, hit.Normal);
+            if (_model.HitTestWithNormal(ro, rd) is { } hit) _model.PlaceSection(hit.Point, hit.Face, hit.Normal);
             e.Handled = true;
             return;
         }
@@ -346,7 +347,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             return;
         }
         var (o, d) = Camera.Ray((float)pos.X, (float)pos.Y);
-        _model.Click(o, d, e.KeyModifiers.HasFlag(KeyModifiers.Shift), SameSpot, Section());
+        _model.Click(o, d, e.KeyModifiers.HasFlag(KeyModifiers.Shift), SameSpot);
         e.Handled = true;
     }
 
@@ -367,8 +368,9 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         }
 
         // Moving the section: the wheel over the plane moves it finely (1 % of what is visible per step)
-        if (_model.MoveSectionTool && SectionPlaneAt(pos) is not null)
+        if (_model.MoveSectionTool && SectionPlaneAt(pos) is { } over)
         {
+            _model.SelectedSection = over.Section;
             _model.MoveSection((float)e.Delta.Y * 0.01f * Camera.UnitsPerPixel(Camera.Target) * Camera.Height, Camera.Forward);
             return;
         }
@@ -434,16 +436,22 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
     private (Vector3 Point, float Distance)? _planeDrag;
 
     /// <summary>
-    /// The point of the drawn section plane under the mouse, or null: off the rectangle, or hidden behind model parts on
-    /// the kept side (looking at the plane from behind).
+    /// The nearest drawn section plane under the mouse and the point on it, or null: off all rectangles, or hidden behind
+    /// visible model parts (looking at a plane from behind).
     /// </summary>
-    private Vector3? SectionPlaneAt(Point at)
+    private (SectionItem Section, Vector3 Point)? SectionPlaneAt(Point at)
     {
-        if (_model.Section is not { } plane) return null;
         var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
-        if (SectionGeometry.Hit(_model.Mesh.Bounds, plane, o, d) is not { } t) return null;
-        if (_model.HitTest(o, d, plane) is { } hit && Vector3.Dot(hit.Point.ToVector3() - o, d) < t - 1e-6f) return null;
-        return o + d * t;
+        var model = _model.HitTest(o, d) is { } hit ? Vector3.Dot(hit.Point.ToVector3() - o, d) : float.MaxValue;
+        (SectionItem Section, Vector3 Point)? best = null;
+        var bestT = float.MaxValue;
+        foreach (var s in _model.Sections)
+        {
+            if (SectionGeometry.Hit(_model.Mesh.Bounds, s.Plane, o, d) is not { } t || t >= bestT || t > model + 1e-6f) continue;
+            bestT = t;
+            best = (s, o + d * t);
+        }
+        return best;
     }
 
     /// <summary>
@@ -452,8 +460,8 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
     /// </summary>
     private void DragSection(Vector3 grabbed, float startDistance, Point now)
     {
-        if (_model.Section is not { } plane) return;
-        var n = new Vector3(plane.X, plane.Y, plane.Z);
+        if (_model.SelectedSection is not { } section) return;
+        var n = section.Normal;
         var k = Camera.UnitsPerPixel(grabbed) * 50;
         var s0 = Camera.Project(grabbed);
         var s1 = Camera.Project(grabbed + n * k);
@@ -475,7 +483,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
     private void PeelAt(Point at)
     {
         var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
-        if (_model.ExitOfNextWall(o, d, Section()) is { } exit) _model.PeelTo(exit, Camera.Forward);
+        if (_model.ExitOfNextWall(o, d) is { } exit) _model.PeelTo(exit, Camera.Forward);
     }
 
     /// <summary>Turning centre: the centre axis of the model, or the surface under the mouse (else the current centre).</summary>
@@ -483,14 +491,14 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
     {
         if (_model.PivotAtCentre) return _model.Mesh.Bounds.Center;
         var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
-        return _model.HitTest(o, d, Section()) is { } hit ? hit.Point.ToVector3() : Camera.Target;
+        return _model.HitTest(o, d) is { } hit ? hit.Point.ToVector3() : Camera.Target;
     }
 
     /// <summary>Point that stays under the mouse while zooming: the surface, else the plane through the current centre.</summary>
     private Vector3 AnchorAt(Point at)
     {
         var (o, d) = Camera.Ray((float)at.X, (float)at.Y);
-        if (_model.HitTest(o, d, Section()) is { } hit) return hit.Point.ToVector3();
+        if (_model.HitTest(o, d) is { } hit) return hit.Point.ToVector3();
         var f = Camera.Forward;
         var t = Vector3.Dot(Camera.Target - o, f) / Math.Max(Vector3.Dot(d, f), 1e-6f);
         return o + d * t;

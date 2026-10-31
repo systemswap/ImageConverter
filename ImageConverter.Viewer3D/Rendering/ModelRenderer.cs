@@ -26,7 +26,8 @@ internal sealed record FrameState(
     Matrix4x4 ViewProjection, Matrix4x4 Projection, float OcclusionRadius,
     Vector3 Eye, Vector3 Forward, Vector3 Right, Vector3 Up, bool Orthographic,
     RenderMode Mode, bool Edges, bool Parts, bool Dark,
-    IReadOnlyList<Highlight> Highlights, Vector4? Clip = null, Vector3[]? SectionQuad = null, bool SectionActive = false);
+    IReadOnlyList<Highlight> Highlights, IReadOnlyList<Vector4>? Clips = null,
+    IReadOnlyList<(Vector3[] Quad, bool Selected)>? SectionQuads = null, bool SectionActive = false);
 
 /// <summary>
 /// CPU side of what is drawn: owned by the UI thread, filled by the background steps. Each part carries a version, so
@@ -91,7 +92,8 @@ internal sealed class ModelRenderer
     // Uniform locations
     private int _mViewProj, _mEye, _mForward, _mOrtho, _mKey, _mFill, _mBase, _mParts, _mTint, _mAo, _mFlat, _mSsao, _mScreen;
     private int _dViewProj, _sDepth, _sProj, _sInvProj, _sTexel, _sRadius, _blInput;
-    private int _mClip, _mClipOn, _mInner, _dClip, _dClipOn, _lClip, _lClipOn;
+    private int _mInner, _mClipCount, _dClipCount, _lClipCount;
+    private readonly int[] _mClips = new int[6], _dClips = new int[6], _lClips = new int[6];
     private int _lViewProj, _lColour, _bTop, _bBottom, _gViewProj, _gShadow, _gColour;
 
     /// <summary>Why drawing is not possible (missing OpenGL features), or null.</summary>
@@ -132,13 +134,16 @@ internal sealed class ModelRenderer
         _mSsao = gl.Uniform(_modelProgram, "uSsao");
         _mScreen = gl.Uniform(_modelProgram, "uScreen");
         _dViewProj = gl.Uniform(_depthProgram, "uViewProj");
-        _mClip = gl.Uniform(_modelProgram, "uClip");
-        _mClipOn = gl.Uniform(_modelProgram, "uClipOn");
         _mInner = gl.Uniform(_modelProgram, "uInner");
-        _dClip = gl.Uniform(_depthProgram, "uClip");
-        _dClipOn = gl.Uniform(_depthProgram, "uClipOn");
-        _lClip = gl.Uniform(_lineProgram, "uClip");
-        _lClipOn = gl.Uniform(_lineProgram, "uClipOn");
+        _mClipCount = gl.Uniform(_modelProgram, "uClipCount");
+        _dClipCount = gl.Uniform(_depthProgram, "uClipCount");
+        _lClipCount = gl.Uniform(_lineProgram, "uClipCount");
+        for (var i = 0; i < 6; i++)
+        {
+            _mClips[i] = gl.Uniform(_modelProgram, $"uClips[{i}]");
+            _dClips[i] = gl.Uniform(_depthProgram, $"uClips[{i}]");
+            _lClips[i] = gl.Uniform(_lineProgram, $"uClips[{i}]");
+        }
         _sDepth = gl.Uniform(_ssaoProgram, "uDepth");
         _sProj = gl.Uniform(_ssaoProgram, "uProj");
         _sInvProj = gl.Uniform(_ssaoProgram, "uInvProj");
@@ -236,10 +241,10 @@ internal sealed class ModelRenderer
 
         DrawBackground(frame);
         // With a section the shadow would show parts that are cut away
-        if (frame.Mode == RenderMode.Solid && frame.Clip is null) DrawGround(frame);
+        if (frame.Mode == RenderMode.Solid && frame.Clips is not { Count: > 0 }) DrawGround(frame);
         if (frame.Mode != RenderMode.Wireframe) DrawModel(scene, frame, occlusion, width, height);
         DrawLines(frame);
-        DrawSectionPlane(frame);
+        DrawSectionPlanes(frame);
 
         if (own)
         {
@@ -436,7 +441,7 @@ internal sealed class ModelRenderer
         gl.Uniform2(_mScreen, width, height);
         gl.Uniform1(_mFlat, blueprint ? 1f : 0f);
         gl.Uniform1(_mInner, blueprint ? 0 : 1);
-        SetClip(_mClip, _mClipOn, f);
+        SetClip(_mClips, _mClipCount, f);
         gl.Uniform4(_mTint, Vector4.Zero);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
@@ -455,7 +460,7 @@ internal sealed class ModelRenderer
         var gl = _gl;
         gl.UseProgram(_lineProgram);
         gl.UniformMatrix(_lViewProj, f.ViewProjection);
-        SetClip(_lClip, _lClipOn, f);
+        SetClip(_lClips, _lClipCount, f);
         gl.Enable(Gl.Blend);
         gl.BlendFunc(Gl.SrcAlpha, Gl.OneMinusSrcAlpha);
         if (f.Mode == RenderMode.Wireframe)
@@ -480,38 +485,46 @@ internal sealed class ModelRenderer
         gl.Disable(Gl.Blend);
     }
 
-    /// <summary>The section plane as a see-through rectangle with an outline; stronger while it is being moved.</summary>
-    private void DrawSectionPlane(FrameState f)
+    /// <summary>The section planes as see-through rectangles with an outline; the selected one stronger, most while moving.</summary>
+    private void DrawSectionPlanes(FrameState f)
     {
-        if (f.SectionQuad is not { Length: 4 } q) return;
+        if (f.SectionQuads is not { Count: > 0 } quads) return;
         var gl = _gl;
-        Span<float> corners = [q[0].X, q[0].Y, q[0].Z, q[1].X, q[1].Y, q[1].Z, q[2].X, q[2].Y, q[2].Z, q[3].X, q[3].Y, q[3].Z];
-        gl.BindVertexArray(_quadVao);
-        gl.BindBuffer(Gl.ArrayBuffer, _quadBuffer);
-        gl.BufferData<float>(Gl.ArrayBuffer, corners, Gl.DynamicDraw);
-        gl.VertexAttribPointer(0, 3, Gl.Float, false, 12, 0);
-        gl.EnableVertexAttribArray(0);
         gl.UseProgram(_lineProgram);
         gl.UniformMatrix(_lViewProj, f.ViewProjection);
-        gl.Uniform1(_lClipOn, 0);   // the plane lies on the cut itself
+        gl.Uniform1(_lClipCount, 0);   // the planes lie on the cuts themselves
         gl.Enable(Gl.DepthTest);
         gl.DepthFunc(Gl.LessEqual);
         gl.DepthMask(false);
         gl.Enable(Gl.Blend);
         gl.BlendFunc(Gl.SrcAlpha, Gl.OneMinusSrcAlpha);
+        gl.BindVertexArray(_quadVao);
+        gl.BindBuffer(Gl.ArrayBuffer, _quadBuffer);
         var accent = new Vector3(0.24f, 0.48f, 0.92f);
-        gl.Uniform4(_lColour, new Vector4(accent, f.SectionActive ? 0.24f : 0.12f));
-        gl.DrawArrays(Gl.TriangleFan, 0, 4);
-        gl.Uniform4(_lColour, new Vector4(accent, f.SectionActive ? 1f : 0.7f));
-        gl.DrawArrays(Gl.LineLoop, 0, 4);
+        foreach (var (q, selected) in quads)
+        {
+            if (q.Length != 4) continue;
+            Span<float> corners = [q[0].X, q[0].Y, q[0].Z, q[1].X, q[1].Y, q[1].Z, q[2].X, q[2].Y, q[2].Z, q[3].X, q[3].Y, q[3].Z];
+            gl.BufferData<float>(Gl.ArrayBuffer, corners, Gl.DynamicDraw);
+            gl.VertexAttribPointer(0, 3, Gl.Float, false, 12, 0);
+            gl.EnableVertexAttribArray(0);
+            var fill = selected ? f.SectionActive ? 0.22f : 0.12f : 0.06f;
+            var line = selected ? f.SectionActive ? 1f : 0.75f : 0.4f;
+            gl.Uniform4(_lColour, new Vector4(accent, fill));
+            gl.DrawArrays(Gl.TriangleFan, 0, 4);
+            gl.Uniform4(_lColour, new Vector4(accent, line));
+            gl.DrawArrays(Gl.LineLoop, 0, 4);
+        }
         gl.Disable(Gl.Blend);
         gl.DepthMask(true);
     }
 
-    private void SetClip(int plane, int on, FrameState f)
+    private void SetClip(int[] planes, int count, FrameState f)
     {
-        _gl.Uniform1(on, f.Clip is null ? 0 : 1);
-        if (f.Clip is { } c) _gl.Uniform4(plane, c);
+        var clips = f.Clips ?? [];
+        var n = Math.Min(clips.Count, planes.Length);
+        _gl.Uniform1(count, n);
+        for (var i = 0; i < n; i++) _gl.Uniform4(planes[i], clips[i]);
     }
 
     /// <summary>Depth at half resolution, occlusion from it, blurred into <see cref="_aoTex"/>; false if not available.</summary>
@@ -529,7 +542,7 @@ internal sealed class ModelRenderer
         gl.DepthFunc(Gl.LessEqual);
         gl.UseProgram(_depthProgram);
         gl.UniformMatrix(_dViewProj, f.ViewProjection);
-        SetClip(_dClip, _dClipOn, f);
+        SetClip(_dClips, _dClipCount, f);
         gl.BindVertexArray(_modelVao);
         gl.DrawElements(Gl.Triangles, 3 * scene.TriangleCount, 0);
 

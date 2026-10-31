@@ -103,13 +103,17 @@ Nachbarschaft 0,4 s, Flächen 1,6 s, Suchbaum 0,45 s; ein Klick (Strahl) etwa 2 
 - **Drehscheibe:** die Hochachse (Z, wie beim 3D-Druck) bleibt immer senkrecht;
   waagerecht ziehen dreht um sie, senkrecht ziehen kippt höchstens bis zur Drauf- bzw.
   Untersicht.
-- **Schnittfläche (Werkzeug):** „Schnittfläche anlegen“ (unten neben Messen, oder Spalte › Schnitt › Anlegen), dann auf eine
-  Fläche klicken – die Schnittfläche legt sich darauf (Normale ins Material, bei Ebenen deren genaue Richtung), gezeichnet als
-  halbdurchsichtige Ebene mit Rand über die Ausdehnung des Modells. „Schnittfläche verschieben“ schaltet den Schiebemodus ein
-  (nur über diesen Knopf): Fläche mit der Maus ziehen (sie folgt der Maus entlang ihrer Richtung; blickt man senkrecht darauf,
-  schiebt Ziehen nach oben tiefer), Mausrad über ihr fein (1 % des sichtbaren Ausschnitts), oder die Tiefe in mm eintippen
-  (Feld oben links und in der Spalte, Pfeile ± 0,1). Ein Klick neben die Schnittfläche beendet den Schiebemodus, damit Klicks
-  wieder auf Flächen gehen (Messen). Esc beendet zuerst die Werkzeuge, dann den Schnitt.
+- **Schnittflächen (Werkzeug), bis zu sechs gleichzeitig:** jede schneidet weg, was vor ihr liegt; zu sehen ist, was hinter
+  allen liegt (zwei Schnitte stellen z. B. eine Ecke frei). „Schnittfläche anlegen“ (unten neben Messen, oder Spalte ›
+  Schnitt › Anlegen), dann auf eine Fläche klicken – eine weitere Schnittfläche legt sich darauf (Normale ins Material, bei
+  Ebenen deren genaue Richtung) und ist ausgewählt; gezeichnet als halbdurchsichtige Ebene mit Rand, die ausgewählte kräftiger.
+  „Schnittfläche verschieben“ schaltet den Schiebemodus ein (nur über diesen Knopf): eine Fläche anfassen und ziehen (sie
+  wird dabei ausgewählt und folgt der Maus entlang ihrer Richtung; blickt man senkrecht darauf, schiebt Ziehen nach oben
+  tiefer), Mausrad über ihr fein (1 % des sichtbaren Ausschnitts). Ein Klick neben alle Flächen beendet den Schiebemodus,
+  damit Klicks wieder auf Flächen gehen (Messen). Die Spalte listet jede Schnittfläche mit Auswahlknopf, Tiefe in mm
+  (Pfeile ± 0,1) und ✕; oben links Tiefe der ausgewählten und ✕ für sie; „Alle Schnitte aufheben“. Esc beendet zuerst die
+  Werkzeuge, dann entfernt es alle Schnitte. Durchzoomen und Umschalt + Mausrad wirken auf die ausgewählte Schnittfläche
+  (ohne eine legen sie eine neue parallel zum Bildschirm an).
 - **Hineinsehen:**
   - *Wand für Wand durchzoomen* (orthografisch): das Mausrad vergrößert bis zu einer Bildhöhe von 2 % der Modellgröße;
     jede weitere Raste nimmt die nächste Wand unter der Maus weg – der Schnitt springt knapp hinter die Stelle, an der der
