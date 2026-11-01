@@ -3075,3 +3075,31 @@ Test oder Nachweis.
 - **Lösung:** Diese Knöpfe heben die feste Höhe auf (`Height="NaN"`, Mindesthöhe 30 bzw. 32 px, Innenabstand 5 px); jetzt 20 px Platz für
   18,5 px Inhalt. **Nicht tun:** den Kettenstil für Knöpfe mit Text übernehmen, ohne die Höhe freizugeben.
 - **Wo im Code:** `ImageConverter.Viewer3D/Views/ModelPanel.axaml` (Gruppen SCHNITT und MESSEN). **Test:** Prüfprogramm `panel` (Maße im Fenster).
+
+## 124. 3D: Das ✕ im Maß-Etikett löschte das Maß nur bei eingeschaltetem „Messen“ (0.12.0)
+
+- **Entdeckt:** 01.11.2026, 0.12.0, vom Nutzer („Messen-Labels gehen über das ✕ im Label nicht weg, nur links in der Liste“).
+  **Behoben:** 0.12.1-beta.
+- **Was und warum:** `ModelGlView.OnPointerReleased` fragte das Etikett unter der Maus (`LabelAt`) erst hinter der Bedingung „Messen ist
+  eingeschaltet“ ab; mit einem anderen Werkzeug oder ohne Werkzeug kam der Klick nie dort an.
+- **Lösung:** Ein Klick auf ein Etikett wird vor allen Werkzeugen ausgewertet: beim Drücken nimmt ihn kein anderes Werkzeug, beim
+  Loslassen (ohne Ziehen) entfernt er das Maß. **Nicht tun:** Klicks auf Bedienelemente im Bild an den Zustand eines Werkzeugs hängen.
+- **Wo im Code:** `ModelGlView.OnPointerPressed`/`OnPointerReleased`. **Test:** Prüfprogramm (Etikett anklicken bei ausgeschaltetem Messen).
+
+## 125. 3D-Bearbeiten: Fallen beim Bau (vor der Übernahme behoben, nie ausgeliefert)
+
+- **Entdeckt:** 01.11.2026 in der Probe für das Bearbeiten, durch Volumen-Gegenrechnung und Durchspielen mit echten Mausereignissen.
+  **Behoben:** vor der Übernahme in 0.12.1-beta.
+- **Was, warum, Lösung:**
+  1. *Zylinder zu grob:* Teilung auf 5 µm Abstand zum Kreis gab einer Bohrung ⌀ 3 mm nur 39 Ecken und 0,4 % zu wenig Querschnitt. Jetzt
+     1 µm (86 Ecken, 0,09 %); `SolidEditor.Segments`, Test `RemoveCylinder_AlongEachAxis`.
+  2. *Verdeckte Kanten als Bezug:* Beim Bemaßen galt die nächste Modellkante im Bild, auch wenn sie hinter einer Wand lag. Jetzt nur
+     eine Kante, die der sichtbare Treffpunkt erreicht (oder am Umriss, wenn nichts getroffen ist); `ModelGlView.SharpEdgeAt`.
+  3. *Schmale gezeichnete Flächen:* Ein Klick in eine 0,4 mm breite Fläche lag immer innerhalb von 12 Bildpunkten einer Kante und wurde als
+     Kante gewertet. Innen zählt jetzt die Höhe, außer der Klick liegt höchstens 3 Bildpunkte neben einer Kante; `ModelGlView.EditPress`.
+  4. *Maske gespiegelt:* Bei Flächen in negativer Achsrichtung läuft die erste (bzw. bei −Z die zweite) Richtung des Flächenrahmens
+     rückwärts; die Maskenfelder zeigten dann −Y statt Y. Umgerechnet über `FrameSigns`; Test `MoveFace_Masked_RemovesTheMiddleOfTheRail`.
+  5. *Leerer Querschnitt:* Liegt die Trennebene in einer Lücke zwischen Teilen, gibt es nichts hochzuziehen – das C++-Original lieferte
+     dann ein leeres Ergebnis, ManifoldSharp nicht; abgefangen in `SolidEditor.ChangeLength` (nur der ferne Teil rückt weiter).
+- **Nicht tun:** Werkzeug-Ergebnisse ohne Gegenrechnung des Volumens übernehmen; Bedienung nur über das Modell statt mit echten
+  Mausereignissen prüfen (siehe #115); Testpunkte auf verdeckte Geometrie legen (die Treffer sind dann richtig, die Erwartung falsch).

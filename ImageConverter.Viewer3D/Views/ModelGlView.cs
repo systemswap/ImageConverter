@@ -28,7 +28,7 @@ namespace ImageConverter.Viewer3D.Views;
 /// (Fehlergedächtnis #115).</item>
 /// </list>
 /// </remarks>
-internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
+internal sealed partial class ModelGlView : OpenGlControlBase, ICustomHitTest
 {
     private const double DragThreshold = 4;
     private const float TurnPerPixel = 0.0065f;
@@ -61,15 +61,26 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         model.Changed += OnModelChanged;
         model.ViewRequested += OnViewRequested;
         model.CentreRequested += OnCentreRequested;
+        model.MeshReplaced += OnMeshReplaced;
         ActualThemeVariantChanged += (_, _) => Invalidate();
         model.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(ModelViewModel.MeasureTool) or nameof(ModelViewModel.PlaceSectionTool) or nameof(ModelViewModel.MoveSectionTool))
-                Cursor = model.MeasureTool || model.PlaceSectionTool ? new Cursor(StandardCursorType.Cross) : Cursor.Default;
+            if (e.PropertyName is nameof(ModelViewModel.MeasureTool) or nameof(ModelViewModel.PlaceSectionTool) or nameof(ModelViewModel.MoveSectionTool) or nameof(ModelViewModel.SketchTool) or nameof(ModelViewModel.PushTool))
+                Cursor = model.MeasureTool || model.PlaceSectionTool || model.SketchTool || model.PushTool ? new Cursor(StandardCursorType.Cross) : Cursor.Default;
         };
     }
 
     public OrbitCamera Camera { get; } = new();
+
+    /// <summary>An edit replaced the model: the scene bounds follow it, the drawing uploads it anew; the view stays.</summary>
+    private void OnMeshReplaced()
+    {
+        var box = _model.Mesh.Bounds;
+        Camera.SceneCentre = box.Center;
+        Camera.SceneRadius = Math.Max(box.Diagonal * 0.5f * 1.8f, 1e-3f);
+        _renderer.ForgetScene();
+        Invalidate();
+    }
 
     /// <summary>Ambient occlusion on (for comparisons of the shading).</summary>
     internal bool OcclusionEnabled
@@ -99,6 +110,9 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
 
     /// <summary>Hit test of the overlay's labels; set by the canvas.</summary>
     public Func<Point, MeasurementItem?>? LabelAt { get; set; }
+
+    /// <summary>The grip of the drawn face's frame under a point (from the overlay), or null.</summary>
+    public Func<Point, int?>? GripAt { get; set; }
 
     private void OnModelChanged()
     {
@@ -173,7 +187,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             Camera.Eye, Camera.Forward, Camera.Right, Camera.Up, Camera.Orthographic,
             _model.Mode, _model.ShowEdges, _model.ShowParts, dark, _model.Highlights(), _model.SectionPlanes,
             _model.Sections.Select(x => (SectionGeometry.Quad(_model.Mesh.Bounds, x.Plane), x.IsSelected)).ToArray(), _model.MoveSectionTool,
-            _model.Brightness / 100f, _model.Quality);
+            _model.Brightness / 100f, _model.Quality, _model.ResizeGuide, _model.Previews);
         _renderer.Render(_model.Scene, frame, fb, size.Width, size.Height);
         FramesDrawn++;
         if (_renderer.Failure is { } failure && Failure is null)
@@ -263,6 +277,21 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         _panning = !p.Properties.IsLeftButtonPressed || e.KeyModifiers.HasFlag(KeyModifiers.Control);
         e.Pointer.Capture(this);
 
+        // A press on a measurement label only removes it on release, whatever tool is on
+        _gesture = EditGesture.None;
+        if (p.Properties.IsLeftButtonPressed && LabelAt?.Invoke(_pressAt) is not null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        // Editing tools: grips, drawn faces, the body, moving a face (ModelGlView.Editing)
+        if (p.Properties.IsLeftButtonPressed && !e.KeyModifiers.HasFlag(KeyModifiers.Control) && EditPress(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Moving the section: a press on the plane grabs it, a press beside it ends the moving
         _planeDrag = null;
         if (_model.MoveSectionTool && p.Properties.IsLeftButtonPressed && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -298,12 +327,19 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
             {
                 Cursor = SectionPlaneAt(pos) is not null ? new Cursor(StandardCursorType.SizeNorthSouth) : Cursor.Default;
             }
+            else EditHover(pos);
             return;
         }
 
         if (_planeDrag is { } drag)
         {
             DragSection(drag.Point, drag.Distance, pos);
+            e.Handled = true;
+            return;
+        }
+        if (_gesture != EditGesture.None)
+        {
+            EditMove(pos, e.KeyModifiers);
             e.Handled = true;
             return;
         }
@@ -335,14 +371,26 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         var wasDrag = _dragging;
         _dragging = false;
         TurningAround = null;
-        Cursor = _model.MeasureTool || _model.PlaceSectionTool ? new Cursor(StandardCursorType.Cross) : Cursor.Default;
+        Cursor = _model.MeasureTool || _model.PlaceSectionTool || _model.SketchTool || _model.PushTool ? new Cursor(StandardCursorType.Cross) : Cursor.Default;
         Invalidate();
         if (_planeDrag is not null)
         {
             _planeDrag = null;
             return;
         }
+        if (_gesture != EditGesture.None)
+        {
+            EditRelease(wasDrag || Distance(e.GetPosition(this), _pressAt) >= DragThreshold);
+            return;
+        }
         var pos = e.GetPosition(this);
+        if (!wasDrag && e.InitialPressMouseButton == MouseButton.Left && LabelAt?.Invoke(pos) is { } clicked)
+        {
+            // the label of a measurement (with its ✕): removes it, also when measuring is switched off
+            _model.Remove(clicked);
+            e.Handled = true;
+            return;
+        }
         if (!wasDrag && e.InitialPressMouseButton == MouseButton.Left && _model.PlaceSectionTool)
         {
             // Put the section onto the face under the mouse
@@ -353,11 +401,6 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
         }
         if (wasDrag || e.InitialPressMouseButton != MouseButton.Left || !_model.MeasureTool) return;
 
-        if (LabelAt?.Invoke(pos) is { } label)
-        {
-            _model.Remove(label);
-            return;
-        }
         var (o, d) = Camera.Ray((float)pos.X, (float)pos.Y);
         _model.Click(o, d, e.KeyModifiers.HasFlag(KeyModifiers.Shift), SameSpot);
         e.Handled = true;
@@ -446,6 +489,7 @@ internal sealed class ModelGlView : OpenGlControlBase, ICustomHitTest
 
     // Section being dragged: the point grabbed on the plane and the plane's distance at the press
     private (Vector3 Point, float Distance)? _planeDrag;
+
 
     /// <summary>
     /// The nearest drawn section plane under the mouse and the point on it, or null: off all rectangles, or hidden behind

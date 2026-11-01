@@ -21,6 +21,9 @@ public partial class ModelCanvas : UserControl
         var overlay = new MeasureOverlay(model, View);
         View.LabelAt = overlay.LabelAt;
         var stage = this.FindControl<Panel>("Stage")!;
+        var grips = new SketchOverlay(model, View);
+        View.GripAt = grips.GripAt;
+        stage.Children.Insert(0, grips);
         stage.Children.Insert(0, overlay);
         stage.Children.Insert(0, View);
         View.Failed += () =>

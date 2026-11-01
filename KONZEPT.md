@@ -438,6 +438,11 @@ Gesichtsmodell? Gewicht der PiSA-Regler (λpix/λsem kosten einen zweiten UNet-L
   zeigen Ø, Umschalt+Klick misst Punkt zu Punkt.
 - Drehen um die Klickstelle oder um die Mittelachse des Modells (umschaltbar), Drehscheibe
   um Z; Darstellung mit Umgebungsverdeckung im Bildraum, Bodenschatten, Kantenlinien.
+- Bearbeiten (Wunsch vom 01.11.2026, umgesetzt in 0.12.1 beta): Länge zwischen zwei parallelen
+  Flächen ändern, Quader/Zylinder hinzufügen oder wegnehmen (andocken, frei verschieben), Fläche
+  (auch maskiert) verschieben, Flächen zeichnen und aufbauen oder wegnehmen, mit Griffen,
+  Einrasten und Bemaßen; Rückgängig und „Speichern unter …“ als STL. Nur geschlossene Modelle;
+  Geometriekern ManifoldSharp hinter einer schmalen Schnittstelle (`Editing/`).
 
 ---
 

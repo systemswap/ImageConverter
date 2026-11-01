@@ -45,6 +45,11 @@ public sealed partial class MeasurementItem : ObservableObject
 
     public required IRelayCommand DeleteCommand { get; init; }
 
+    /// <summary>Between two parallel planes: the length can be changed ("Länge ändern").</summary>
+    [ObservableProperty] public partial bool CanResize { get; set; }
+
+    public IRelayCommand? ResizeCommand { get; init; }
+
     /// <summary>Texts again (other language).</summary>
     public void Refresh()
     {
@@ -152,8 +157,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         Color.Parse("#D04A5A"), Color.Parse("#1F9DB0"),
     ];
 
-    private readonly CancellationTokenSource _cts = new();
-    private readonly CancellationTokenSource _measureCts = new();
+    private CancellationTokenSource _cts = new();
+    private CancellationTokenSource _measureCts = new();
     private int _nextColour;
 
     private ModelViewModel(string path, StlFile file)
@@ -173,6 +178,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         _brightness = settings.Brightness;
         _qualityIndex = settings.Quality;
         Tr.Instance.PropertyChanged += OnLanguageChanged;
+        InitEditing();
     }
 
     /// <summary>Reads the file in the background and starts working out the rest.</summary>
@@ -185,13 +191,15 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         return vm;
     }
 
-    public string Path { get; }
+    /// <summary>The file shown; after "Save as" the new one.</summary>
+    public string Path { get; private set; }
 
-    public StlFile File { get; }
+    public StlFile File { get; private set; }
 
-    public Mesh Mesh { get; }
+    /// <summary>The model; replaced as a whole by an edit (see <see cref="ReplaceMesh"/>).</summary>
+    public Mesh Mesh { get; private set; }
 
-    internal ModelScene Scene { get; }
+    internal ModelScene Scene { get; private set; }
 
     /// <summary>Closed? parts, area, volume – null until the neighbourhood is worked out.</summary>
     public MeshSummary? Summary { get; private set; }
@@ -229,6 +237,8 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
                 {
                     if (ct.IsCancellationRequested) return;
                     Summary = topology.Summary;
+                    OnPropertyChanged(nameof(CanEdit));
+                    OnPropertyChanged(nameof(EditHint));
                     Scene.SharpEdges = edges;
                     Scene.SharpEdgesVersion++;
                     Scene.Parts = parts;
@@ -864,10 +874,10 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         return (D3.From(start + direction * hit.Distance), Faces is { } f ? f.FaceOf[hit.Triangle] : -1, normal);
     }
 
-    /// <summary>The mouse moved over the model while measuring.</summary>
+    /// <summary>The mouse moved over the model while measuring or moving a face.</summary>
     public void Hover(Vector3 origin, Vector3 direction)
     {
-        if (!MeasureTool) return;
+        if (!MeasureTool && !PushTool) return;
         HoverFace = HitTest(origin, direction) is { Face: >= 0 } h ? h.Face : -1;
     }
 
@@ -918,6 +928,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
             Title = MeasureText.Kind(a, Faces) + " ↔ " + MeasureText.Kind(b, Faces),
             Inches = Inches,
             DeleteCommand = new RelayCommand(() => Remove(item!)),
+            ResizeCommand = new RelayCommand(() => StartResize(item!)),
         };
         Measurements.Add(item);
         OnPropertyChanged(nameof(HasMeasurements));
@@ -935,6 +946,7 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
                 return;
             }
             item.Result = t.Result;
+            item.CanResize = ParallelPlanes(a, b) is not null;
             Redraw();
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
@@ -969,6 +981,16 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
             Add(m.B, m.Colour, 0.30f);
         }
         if (Pending is { } p) Add(p, NextColour, 0.55f);
+        if (ResizeTarget is { } r)
+        {
+            // Length change: the face that stays in green, the one that moves in orange
+            var (stays, moves) = ResizeFixedIndex == 0 ? (r.A, r.B) : (r.B, r.A);
+            Add(stays, Color.Parse("#2FA36B"), 0.55f);
+            Add(moves, Color.Parse("#F08A24"), 0.55f);
+        }
+        if (PushFace >= 0) list.Add(Range(PushFace, Color.Parse("#F08A24"), 0.6f));
+        if (DimensionFace >= 0) list.Add(Range(DimensionFace, Color.Parse("#CC33BF"), 0.45f));
+        if (PushTool && HoverFace >= 0 && HoverFace != PushFace) list.Add(Range(HoverFace, Color.Parse("#F08A24"), 0.3f));
         if (MeasureTool && HoverFace >= 0 && (Pending is not { Kind: PickKind.Face } q || q.Face != HoverFace))
             list.Add(Range(HoverFace, NextColour, 0.22f));
         return list;

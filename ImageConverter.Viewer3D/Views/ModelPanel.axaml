@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:l="using:ImageConverter.Localization"
              xmlns:v="using:ImageConverter.Viewer3D"
+             xmlns:views="using:ImageConverter.Viewer3D.Views"
              x:Class="ImageConverter.Viewer3D.Views.ModelPanel"
              x:DataType="v:ModelViewModel">
 
@@ -170,6 +171,10 @@
                                         <StackPanel Grid.Column="1" Spacing="2">
                                             <TextBlock FontWeight="SemiBold" FontSize="12" Text="{Binding Title}" />
                                             <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding Lines}" />
+                                            <Button Classes="subtle" FontSize="12" Padding="8,3" Margin="0,4,0,0" HorizontalAlignment="Left"
+                                                    IsVisible="{Binding CanResize}" Command="{Binding ResizeCommand}"
+                                                    Content="{l:T '↔  Länge ändern'}"
+                                                    ToolTip.Tip="{l:T 'Den Abstand dieser beiden Flächen ändern: das Teil wird an einer Trennebene länger oder kürzer.'}" />
                                         </StackPanel>
                                         <Button Grid.Column="2" Classes="icon" Width="24" Height="24" FontSize="11" VerticalAlignment="Top"
                                                 Content="✕" Command="{Binding DeleteCommand}"
@@ -185,6 +190,9 @@
                             Content="{l:T 'Alle Maße löschen'}" Command="{Binding ClearMeasurementsCommand}" />
                 </StackPanel>
             </HeaderedContentControl>
+
+            <!-- ============================== Bearbeiten (eigenes Steuerelement) -->
+            <views:EditPanel />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

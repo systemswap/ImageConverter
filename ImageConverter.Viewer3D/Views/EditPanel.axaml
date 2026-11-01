@@ -1,0 +1,256 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:ImageConverter.Localization"
+             xmlns:v="using:ImageConverter.Viewer3D"
+             x:Class="ImageConverter.Viewer3D.Views.EditPanel"
+             x:DataType="v:ModelViewModel">
+
+    <!-- Gruppe BEARBEITEN in der Spalte: Rückgängig, Länge ändern, Körper, Fläche verschieben, gezeichnete Flächen, Speichern -->
+    <HeaderedContentControl Header="{l:T 'BEARBEITEN'}">
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,6,*">
+                <Button Grid.Column="0" Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Content="{l:T '↶  Rückgängig'}" Command="{Binding UndoCommand}" />
+                <Button Grid.Column="2" Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Content="{l:T '↷  Wiederholen'}" Command="{Binding RedoCommand}" />
+            </Grid>
+            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding EditHint}" IsVisible="{Binding !IsResizing}" />
+
+            <Border IsVisible="{Binding IsResizing}" Padding="10,8" CornerRadius="8"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="{l:T 'Länge ändern'}" />
+                    <TextBlock FontSize="12" Text="{Binding ResizeCurrentText}" />
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                        <TextBlock Classes="label" Text="{l:T 'Neue Länge'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding ResizeNew}" Increment="0.1" FormatString="0.###" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Bleibt stehen'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding ResizeFixedIndex}">
+                            <ComboBoxItem Content="{l:T 'Fläche 1'}" />
+                            <ComboBoxItem Content="{l:T 'Fläche 2'}" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                        <TextBlock Classes="label" Text="{l:T 'Trennebene'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding ResizeCut}" Increment="0.5" FormatString="0.###"
+                                       ToolTip.Tip="{l:T 'Abstand der Trennebene von der Fläche, die stehen bleibt.'}" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding UniformText}" IsVisible="{Binding HasUniformText}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Grün bleibt stehen, orange rückt weiter. Alles hinter der orangen Trennebene wandert mit, davor bleibt alles, wie es ist. Beim Kürzen fällt der Streifen hinter der Trennebene weg.'}" />
+                    <Grid ColumnDefinitions="*,6,*">
+                        <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T 'Anwenden'}" Command="{Binding ApplyResizeCommand}" IsEnabled="{Binding CanEdit}" />
+                        <Button Grid.Column="2" Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T 'Abbrechen'}" Command="{Binding CancelResizeCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Content="{l:T '▣  Körper hinzufügen oder wegnehmen'}" Command="{Binding OpenBodyCommand}"
+                    IsVisible="{Binding CanOpenBody}" IsEnabled="{Binding CanEdit}"
+                    ToolTip.Tip="{l:T 'Einen Quader oder Zylinder mit Maßen anlegen und dem Modell hinzufügen oder aus dem Material wegnehmen.'}" />
+            <Border IsVisible="{Binding IsBodyOpen}" Padding="10,8" CornerRadius="8"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="{l:T 'Körper'}" />
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Form'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding BodyShapeIndex}">
+                            <ComboBoxItem Content="{l:T 'Quader'}" />
+                            <ComboBoxItem Content="{l:T 'Zylinder'}" />
+                        </ComboBox>
+                    </Grid>
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding ModelExtentText}" />
+                    <StackPanel Spacing="4" IsVisible="{Binding IsBox}">
+                        <Grid ColumnDefinitions="64,*,6,*">
+                            <TextBlock Grid.Column="1" Classes="hint" Text="{l:T 'von'}" />
+                            <TextBlock Grid.Column="3" Classes="hint" Text="{l:T 'bis'}" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="64,*,6,*">
+                            <TextBlock Classes="label" Text="X" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding BoxFromX}" Increment="0.1" FormatString="0.###" />
+                            <NumericUpDown Grid.Column="3" Value="{Binding BoxToX}" Increment="0.1" FormatString="0.###" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="64,*,6,*">
+                            <TextBlock Classes="label" Text="Y" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding BoxFromY}" Increment="0.1" FormatString="0.###" />
+                            <NumericUpDown Grid.Column="3" Value="{Binding BoxToY}" Increment="0.1" FormatString="0.###" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="64,*,6,*">
+                            <TextBlock Classes="label" Text="Z" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding BoxFromZ}" Increment="0.1" FormatString="0.###" />
+                            <NumericUpDown Grid.Column="3" Value="{Binding BoxToZ}" Increment="0.1" FormatString="0.###" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel Spacing="4" IsVisible="{Binding IsCylinder}">
+                        <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                            <TextBlock Classes="label" Text="{l:T 'Mitte X'}" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding CylX}" Increment="0.1" FormatString="0.###" />
+                            <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                            <TextBlock Classes="label" Text="{l:T 'Mitte Y'}" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding CylY}" Increment="0.1" FormatString="0.###" />
+                            <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                            <TextBlock Classes="label" Text="{l:T 'Mitte Z'}" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding CylZ}" Increment="0.1" FormatString="0.###" />
+                            <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                            <TextBlock Classes="label" Text="{l:T 'Durchmesser'}" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding CylDiameter}" Increment="0.1" FormatString="0.###" />
+                            <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                            <TextBlock Classes="label" Text="{l:T 'Länge'}" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding CylLength}" Increment="0.5" FormatString="0.###" />
+                            <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                        </Grid>
+                        <Grid Classes="row" ColumnDefinitions="96,*">
+                            <TextBlock Classes="label" Text="{l:T 'Achse'}" />
+                            <ComboBox Grid.Column="1" SelectedIndex="{Binding CylAxisIndex}">
+                                <ComboBoxItem Content="X" />
+                                <ComboBoxItem Content="Y" />
+                                <ComboBoxItem Content="Z" />
+                            </ComboBox>
+                        </Grid>
+                    </StackPanel>
+                    <Grid Classes="row" ColumnDefinitions="96,*">
+                        <TextBlock Classes="label" Text="{l:T 'Andocken'}" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding DockModeIndex}"
+                                  ToolTip.Tip="{l:T 'Beim Ziehen auf eine Fläche: aufsetzen (zum Hinzufügen) oder ins Material einsenken (zum Wegnehmen).'}">
+                            <ComboBoxItem Content="{l:T 'aufsetzen'}" />
+                            <ComboBoxItem Content="{l:T 'einsenken'}" />
+                        </ComboBox>
+                    </Grid>
+                    <CheckBox IsChecked="{Binding BodyMirror}" Content="{Binding MirrorText}"
+                              ToolTip.Tip="{l:T 'Für symmetrische Teile: derselbe Körper zusätzlich auf der anderen Seite.'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Der Körper erscheint blau im Bild. Ziehen mit der Maus: dockt an die Fläche darunter an · Umschalt + Ziehen: frei verschieben. Lage in den Koordinaten der Datei.'}" />
+                    <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding BodyMessage}" IsVisible="{Binding HasBodyMessage}" />
+                    <Grid ColumnDefinitions="*,6,*">
+                        <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T '＋  Hinzufügen'}" Command="{Binding AddBodyCommand}" IsEnabled="{Binding CanEdit}" />
+                        <Button Grid.Column="2" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T '−  Wegnehmen'}" Command="{Binding RemoveBodyCommand}" IsEnabled="{Binding CanEdit}" />
+                    </Grid>
+                    <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Schließen'}" Command="{Binding CloseBodyCommand}" />
+                </StackPanel>
+            </Border>
+
+            <ToggleButton Classes="chain" Width="NaN" Height="NaN" MinHeight="30" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          Padding="8,5" IsChecked="{Binding PushTool}" IsEnabled="{Binding CanEdit}" Content="{l:T '⇕  Fläche verschieben'}"
+                          ToolTip.Tip="{l:T 'Eine ebene Fläche anklicken und entlang ihrer Richtung ziehen: der Körper wächst oder schrumpft mit. Rastet an parallelen Flächen ein.'}" />
+            <Border IsVisible="{Binding HasPushFace}" Padding="10,8" CornerRadius="8"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="{l:T 'Fläche verschieben'}" />
+                    <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding PushText}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Maske (orange): nur dieser Teil der Fläche wird verschoben. Voreingestellt ist die ganze Fläche.'}" />
+                    <Grid ColumnDefinitions="64,*,6,*">
+                        <TextBlock Grid.Column="1" Classes="hint" Text="{l:T 'von'}" />
+                        <TextBlock Grid.Column="3" Classes="hint" Text="{l:T 'bis'}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="64,*,6,*">
+                        <TextBlock Classes="label" Text="{Binding MaskNameU}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding MaskFromU}" Increment="0.5" FormatString="0.###" />
+                        <NumericUpDown Grid.Column="3" Value="{Binding MaskToU}" Increment="0.5" FormatString="0.###" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="64,*,6,*">
+                        <TextBlock Classes="label" Text="{Binding MaskNameV}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding MaskFromV}" Increment="0.5" FormatString="0.###" />
+                        <NumericUpDown Grid.Column="3" Value="{Binding MaskToV}" Increment="0.5" FormatString="0.###" />
+                    </Grid>
+                    <Button Classes="subtle" FontSize="12" Padding="8,3" HorizontalAlignment="Left"
+                            Content="{l:T 'Maske auf ganze Fläche'}" Command="{Binding ResetMaskCommand}" />
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                        <TextBlock Classes="label" Text="{l:T 'Abstand'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding PushDistance}" Increment="0.1" FormatString="0.###"
+                                       ToolTip.Tip="{l:T 'Plus: nach außen (der Körper wird größer). Minus: nach innen.'}" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,6,*">
+                        <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T 'Anwenden'}" Command="{Binding ApplyPushCommand}" IsEnabled="{Binding CanEdit}" />
+                        <Button Grid.Column="2" Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T 'Abbrechen'}" Command="{Binding CancelPushCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+            <Grid ColumnDefinitions="*,6,Auto">
+                <ToggleButton Grid.Column="0" Classes="chain" Width="NaN" Height="NaN" MinHeight="30" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                              Padding="8,5" IsChecked="{Binding SketchTool}" IsEnabled="{Binding CanEdit}" Content="{l:T '✎  Fläche zeichnen'}"
+                              ToolTip.Tip="{l:T 'Auf einer ebenen Fläche ein Rechteck oder einen Kreis aufziehen; danach um ein Maß aufbauen oder ins Material wegnehmen.'}" />
+                <ComboBox Grid.Column="2" SelectedIndex="{Binding SketchShapeIndex}" MinWidth="110">
+                    <ComboBoxItem Content="{l:T 'Rechteck'}" />
+                    <ComboBoxItem Content="{l:T 'Kreis'}" />
+                </ComboBox>
+            </Grid>
+            <Border IsVisible="{Binding HasSketch}" Padding="10,8" CornerRadius="8"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="{l:T 'Gezeichnete Fläche'}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding SketchAxesText}" IsVisible="{Binding SketchIsRectangle}" />
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto" IsVisible="{Binding SketchIsRectangle}">
+                        <TextBlock Classes="label" Text="{l:T 'Breite'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding SketchW}" Increment="0.1" FormatString="0.###" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto" IsVisible="{Binding SketchIsRectangle}">
+                        <TextBlock Classes="label" Text="{l:T 'Länge'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding SketchH}" Increment="0.1" FormatString="0.###" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto" IsVisible="{Binding SketchIsCircle}">
+                        <TextBlock Classes="label" Text="{l:T 'Durchmesser'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding SketchW}" Increment="0.1" FormatString="0.###" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto">
+                        <TextBlock Classes="label" Text="{l:T 'Höhe / Tiefe'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding SketchDepth}" Increment="0.5" Minimum="0" FormatString="0.###" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Die gezeichnete Fläche lässt sich im Bild anfassen und verschieben: ihre Kanten rasten an Wänden ein, mit Umschalt frei.'}" />
+                    <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T '📐  Bemaßen'}" Command="{Binding StartDimensionCommand}"
+                            ToolTip.Tip="{l:T 'Eine Kante der gezeichneten Fläche und eine Wand, Kante oder Fläche des Modells anklicken, dann den Abstand eintippen.'}" />
+                    <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding DimensionText}" IsVisible="{Binding HasDimensionText}" />
+                    <Grid Classes="row" ColumnDefinitions="96,*,Auto" IsVisible="{Binding HasDimension}">
+                        <TextBlock Classes="label" Text="{l:T 'Abstand'}" />
+                        <NumericUpDown Grid.Column="1" Value="{Binding DimensionValue}" Increment="0.1" Minimum="0" FormatString="0.###" />
+                        <TextBlock Grid.Column="2" Classes="value" Text="{Binding UnitLabel}" />
+                    </Grid>
+                    <Button Classes="subtle" FontSize="12" Padding="8,3" HorizontalAlignment="Left" IsVisible="{Binding HasDimensionText}"
+                            Content="{l:T 'Bemaßen beenden'}" Command="{Binding StopDimensionCommand}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               Text="{l:T 'Grün: so viel käme beim Aufbauen dazu. Rot: so viel fiele beim Wegnehmen aus dem Material.'}" />
+                    <Grid ColumnDefinitions="*,6,*">
+                        <Button Grid.Column="0" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T '▲  Aufbauen'}" Command="{Binding BuildUpCommand}" IsEnabled="{Binding CanEdit}" />
+                        <Button Grid.Column="2" Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                Content="{l:T '▼  Wegnehmen'}" Command="{Binding CutDownCommand}" IsEnabled="{Binding CanEdit}" />
+                    </Grid>
+                    <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{l:T 'Verwerfen'}" Command="{Binding CancelSketchCommand}" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding EditMessage}" IsVisible="{Binding HasEditMessage}" />
+            <Button Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Content="{l:T 'Speichern unter …'}" Click="OnSaveAs"
+                    ToolTip.Tip="{l:T 'Das bearbeitete Modell als STL-Datei speichern. Die Originaldatei bleibt unverändert.'}" />
+        </StackPanel>
+    </HeaderedContentControl>
+</UserControl>

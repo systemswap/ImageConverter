@@ -20,6 +20,8 @@ Lizenz es steht und wo der Lizenztext liegt.
 | Magick.NET (Anbindung an ImageMagick, Mehrkern-Fassung Q16-OpenMP-x64) | 14.17.2 | Apache-2.0 | https://github.com/dlemstra/Magick.NET |
 | Microsoft.ML.OnnxRuntime.Managed (Anbindung an die ONNX Runtime) | 1.24.4 | MIT | https://github.com/microsoft/onnxruntime |
 | PDFsharp (Druck, „Als PDF speichern“) | 6.2.4 | MIT | https://github.com/empira/PDFsharp |
+| ManifoldSharp (3D-Betrachter, Bearbeiten: Boolesche Operationen auf geschlossenen Dreiecksnetzen – vereinigen, abziehen, zerteilen, Querschnitt hochziehen; reine C#-Übertragung von Manifold über manifold-rust; benutzt nur in `ImageConverter.Viewer3D/Editing/SolidEditor*.cs`) | 0.6.0 | Apache-2.0 – `licenses/Apache-2.0.txt` | https://github.com/larsbrubaker/manifold-sharp (Grundlage: Manifold, https://github.com/elalish/manifold) |
+| Clipper2 (2D-Umrisse für ManifoldSharp: Polygone vereinigen und verschneiden) | 1.5.4 | Boost Software License 1.0 – `licenses/clipper2-BSL-1.0.txt` | https://github.com/AngusJohnson/Clipper2 |
 | MetadataExtractor (Bildinformationen anzeigen: EXIF, IPTC, XMP, ICC, Herstellerdaten) | 2.9.3 | Apache-2.0 | https://github.com/drewnoakes/metadata-extractor-dotnet |
 | XmpCore (XMP lesen, von MetadataExtractor benutzt) | 6.1.10.1 | BSD-3-Clause (Adobe XMP) – `licenses/xmpcore-BSD-3-Clause.txt` | https://github.com/drewnoakes/xmp-core-dotnet |
 | ILGPU, ILGPU.Algorithms (Bildfilter auf der Grafikkarte über OpenCL/CUDA) | 1.5.1 | University of Illinois/NCSA – `licenses/ilgpu-NCSA.txt` | https://github.com/m4rs-mt/ILGPU |

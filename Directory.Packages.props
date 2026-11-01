@@ -25,6 +25,10 @@
              sie als Rückfall daneben, NativeLibraries lädt sie, wenn das System keine hat). -->
         <PackageVersion Include="Magick.NET-Q16-OpenMP-x64" Version="14.17.2" />
 
+        <!-- 3D-Bearbeitung: Boolesche Operationen auf geschlossenen Dreiecksnetzen (vereinigen, abziehen, zerteilen,
+             Querschnitt hochziehen) — reines C#, keine native Bibliothek, Apache-2.0; bringt Clipper2 (Boost) mit -->
+        <PackageVersion Include="ManifoldSharp" Version="0.6.0" />
+
         <!-- PDF für Druck und „Als PDF speichern" — plattformunabhängige Core-Variante, MIT -->
         <PackageVersion Include="PDFsharp" Version="6.2.4" />
 

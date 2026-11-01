@@ -50,7 +50,7 @@ internal sealed record FrameState(
     RenderMode Mode, bool Edges, bool Parts, bool Dark,
     IReadOnlyList<Highlight> Highlights, IReadOnlyList<Vector4>? Clips = null,
     IReadOnlyList<(Vector3[] Quad, bool Selected)>? SectionQuads = null, bool SectionActive = false, float Exposure = 1,
-    RenderQuality? Quality = null);
+    RenderQuality? Quality = null, Vector3[]? Guide = null, IReadOnlyList<(float[] Triangles, Vector4 Colour)>? Previews = null);
 
 /// <summary>
 /// CPU side of what is drawn: owned by the UI thread, filled by the background steps. Each part carries a version, so
@@ -134,6 +134,21 @@ internal sealed class ModelRenderer
 
     /// <summary>Ambient occlusion on (for comparisons of the shading).</summary>
     internal bool OcclusionEnabled { get; set; } = true;
+
+    /// <summary>
+    /// A new scene replaces the old one (after an edit): everything is uploaded again on the next frame. The buffers
+    /// themselves stay and are refilled.
+    /// </summary>
+    public void ForgetScene()
+    {
+        _positionsUploaded = _wireUploaded = _hasShadow = false;
+        _uploadedIndices = _uploadedExtras = _uploadedEdges = _uploadedShadow = _uploadedSmooth = -1;
+        _edgeCount = _wireCount = _smoothLineCount = 0;
+        _forgetNormals = true;
+    }
+
+    /// <summary>The normals of the previous scene are still attached and must be let go before drawing.</summary>
+    private bool _forgetNormals;
 
     /// <summary>Why drawing is not possible (missing OpenGL features), or null.</summary>
     public string? Failure { get; private set; }
@@ -429,6 +444,14 @@ internal sealed class ModelRenderer
     private void Upload(ModelScene scene, bool wire)
     {
         var gl = _gl;
+        if (_forgetNormals)
+        {
+            // Smooth normals of the old model would be read past the end of the new positions
+            gl.BindVertexArray(_modelVao);
+            gl.DisableVertexAttribArray(2);
+            _forgetNormals = false;
+        }
+
         if (!_positionsUploaded)
         {
             _vertexCount = scene.Positions.Length / 3;
@@ -687,7 +710,8 @@ internal sealed class ModelRenderer
     /// <summary>The section planes as see-through rectangles with an outline; the selected one stronger, most while moving.</summary>
     private void DrawSectionPlanes(FrameState f)
     {
-        if (f.SectionQuads is not { Count: > 0 } quads) return;
+        var quads = f.SectionQuads ?? [];
+        if (quads.Count == 0 && f.Guide is null && f.Previews is not { Count: > 0 }) return;
         var gl = _gl;
         gl.UseProgram(_lineProgram);
         gl.UniformMatrix(_lViewProj, f.ViewProjection);
@@ -700,6 +724,32 @@ internal sealed class ModelRenderer
         gl.BlendFunc(Gl.SrcAlpha, Gl.OneMinusSrcAlpha);
         gl.BindVertexArray(_quadVao);
         gl.BindBuffer(Gl.ArrayBuffer, _quadBuffer);
+        foreach (var (body, colour) in f.Previews ?? [])
+        {
+            // Body to add or remove, drawn face: solid where it lies in front, faintly where the model hides it
+            if (body.Length == 0) continue;
+            gl.BufferData<float>(Gl.ArrayBuffer, body, Gl.DynamicDraw);
+            gl.VertexAttribPointer(0, 3, Gl.Float, false, 12, 0);
+            gl.EnableVertexAttribArray(0);
+            gl.Disable(Gl.DepthTest);
+            gl.Uniform4(_lColour, colour with { W = 0.14f });
+            gl.DrawArrays(Gl.Triangles, 0, body.Length / 3);
+            gl.Enable(Gl.DepthTest);
+            gl.Uniform4(_lColour, colour with { W = 0.42f });
+            gl.DrawArrays(Gl.Triangles, 0, body.Length / 3);
+        }
+        if (f.Guide is { Length: 4 } g)
+        {
+            // Dividing plane of a length change: orange, so that it is not taken for a section
+            Span<float> gc = [g[0].X, g[0].Y, g[0].Z, g[1].X, g[1].Y, g[1].Z, g[2].X, g[2].Y, g[2].Z, g[3].X, g[3].Y, g[3].Z];
+            gl.BufferData<float>(Gl.ArrayBuffer, gc, Gl.DynamicDraw);
+            gl.VertexAttribPointer(0, 3, Gl.Float, false, 12, 0);
+            gl.EnableVertexAttribArray(0);
+            gl.Uniform4(_lColour, new Vector4(0.95f, 0.55f, 0.15f, 0.22f));
+            gl.DrawArrays(Gl.TriangleFan, 0, 4);
+            gl.Uniform4(_lColour, new Vector4(0.95f, 0.55f, 0.15f, 1f));
+            gl.DrawArrays(Gl.LineLoop, 0, 4);
+        }
         var accent = new Vector3(0.24f, 0.48f, 0.92f);
         foreach (var (q, selected) in quads)
         {

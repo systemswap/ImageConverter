@@ -36,9 +36,11 @@ IDocumentViewer                         IOpenDocument : IDisposable
 
 - Angemeldet im Startprojekt (`Program.Main`: `DocumentViewers.Register(new StlViewer())`);
   die Oberfläche kennt das Plugin nicht. `MainViewModel.Documents.cs` zeigt Dokumente.
-- `Geometry/` ohne Avalonia (Einlesen, Nachbarschaft, Flächen, Suchbaum, Messen – voll
-  getestet), `Rendering/` (OpenGL, Kamera, vorbereitete Daten), `Views/` (Ansicht,
-  Maßlinien, Spalte), `ModelViewModel` (Zustand, Hintergrundschritte, Auswahl, Messliste).
+- `Geometry/` ohne Avalonia (Einlesen, Nachbarschaft, Flächen, Suchbaum, Messen, STL schreiben –
+  voll getestet), `Editing/` (Bearbeiten, Abschnitt 13: der einzige Teil, der den Geometriekern
+  kennt), `Rendering/` (OpenGL, Kamera, vorbereitete Daten), `Views/` (Ansicht, Maßlinien, Spalte,
+  Gruppe BEARBEITEN, Rahmen der gezeichneten Flächen), `ModelViewModel` (Zustand,
+  Hintergrundschritte, Auswahl, Messliste; das Bearbeiten in eigenen Teildateien je Werkzeug).
 - Kein Nachladen aus einem `plugins/`-Ordner: das Programm wird als Einzeldatei bzw.
   AppImage gebaut, Nachladen würde Bau, Versionen und Startprüfung verkomplizieren. Die
   Schnittstelle lässt es später zu.
@@ -241,15 +243,24 @@ Suchbaum je Fläche. Anzeige in mm mit zwei Nachkommastellen (Zoll: drei), Winke
   Flächenerkennung, jede Maßart, Suchbaum gegen Ausprobieren aller Dreiecke, präparierte
   und zufällig beschädigte Dateien (Zeitgrenze), Kamera (Rückprojektion, Drehpunkt bleibt
   stehen, Zoom zur Maus, Einpassen), vorbereitete Daten, Texte, weiche Normalen (Quader und
-  flache Kante bleiben flach, feines Rohr radial, grobes Rohr facettiert, Kugel), Qualitätsstufen.
+  flache Kante bleiben flach, feines Rohr radial, grobes Rohr facettiert, Kugel), Qualitätsstufen,
+  Bearbeiten (`SolidEditorTests`: Länge ändern entlang jeder Achse und schräg, Bohrung wandert mit,
+  Kürzen nur im gleichförmigen Bereich, gleichförmige Bereiche über eine Naht hinweg, Quader
+  hinzufügen und gespiegelt wegnehmen, Zylinder entlang jeder Achse, Fläche verschieben ganz und
+  maskiert, offene Modelle abgelehnt, STL schreiben und wieder lesen).
+- Die Bedienung des Bearbeitens wurde im Prüfprogramm mit echten Mausereignissen durchgespielt
+  (Länge ändern, Körper andocken und frei verschieben, Fläche zeichnen, Griffe, Einrasten,
+  Bemaßen von Kanten und Höhe, Fläche verschieben mit Maske), jeweils mit Volumen-Gegenrechnung.
 - Die OpenGL-Ansicht wurde mit einem Prüfprogramm im echten Fenster aufgenommen (alle
   Ansichten, hell/dunkel, Messklicks) und das Blättern Bild ↔ Modell ↔ Bild geprüft.
   Ziehen mit der Maus und das Gefühl der Bedienung nimmt der Benutzer ab.
 
 ## 9. Lizenzen und Datenschutz
 
-Kein neues Paket und kein fremder Code → keine Telemetrie, keine neuen Einträge in
-`THIRD-PARTY-NOTICES.md`. Verfahren aus Fachliteratur stehen im Code als Quelle:
+Für das Bearbeiten: **ManifoldSharp** 0.6.0 (Apache-2.0) und **Clipper2** 1.5.4 (Boost Software
+License 1.0), beide reines C# ohne native Teile und ohne Netzzugriff, eingetragen in
+`THIRD-PARTY-NOTICES.md`, Lizenztexte in `packaging/licenses/`. Sonst kein fremder Code, keine
+Telemetrie. Verfahren aus Fachliteratur stehen im Code als Quelle:
 Möller–Trumbore (Strahl/Dreieck), Ericson (nächste Punkte), Kåsa (Kreisausgleich),
 Chapman bzw. Mittring (Umgebungsverdeckung im Bildraum).
 
@@ -313,4 +324,52 @@ nicht betroffen (der Kreis geht durch die Ecken).
 ## 12. Später möglich
 
 Vorschaubilder in der Dateiliste, Schnittebene, Wandstärke an beliebiger Stelle, Messwerte
-kopieren, freies Drehen (Trackball) als Umschalter.
+kopieren, freies Drehen (Trackball) als Umschalter. Beim Bearbeiten: Zeichnen auf schrägen
+Flächen, Maskenrahmen mit der Maus ziehen, Körper drehen, Vielecke als gezeichnete Fläche.
+
+## 13. Bearbeiten (Spalte › BEARBEITEN)
+
+Nur für **geschlossene** Modelle (Kennzahl „Geschlossen: ja“). Jede Änderung erzeugt ein neues Netz,
+das das alte ganz ersetzt; Flächen, Messen und Bild werden neu ermittelt, Maße gelöscht,
+Schnittflächen bleiben. **Rückgängig/Wiederholen** (bis 30 Schritte) und **„Speichern unter …“**
+(binäre STL; zuerst in eine `.part`-Datei, dann ersetzt – die Originaldatei bleibt unverändert).
+
+**Werkzeuge**
+
+| Werkzeug | Bedienung | Ergebnis |
+|---|---|---|
+| Länge ändern | mit „Messen“ zwei parallele Ebenen anklicken, am Maß „↔ Länge ändern“, neue Länge eintippen, wählen, welche Fläche stehen bleibt (grün; orange rückt weiter) | an einer Trennebene (orange): verlängern füllt die Lücke mit dem Querschnitt, kürzen nimmt den Streifen hinter der Ebene heraus. Die Ebene legt sich selbst in einen Bereich mit gleichem Querschnitt (`UniformStretches`), damit Schlitze, Bohrungen und Stege unverändert bleiben; kürzen wird abgelehnt, wenn der Streifen nicht gleichförmig ist |
+| Körper hinzufügen oder wegnehmen | Quader („von–bis“ je Achse) oder Zylinder (Mitte, Durchmesser, Länge, Achse), wahlweise gespiegelt an der Modellmitte (X); im Bild anfassen: dockt an die Fläche darunter an (aufsetzen oder einsenken, seitlich an Wände), Umschalt + Ziehen frei | Vereinigung bzw. Differenz |
+| Fläche verschieben | ebene Fläche anklicken (Überfahren zeigt sie), ziehen oder Abstand eintippen; **Maske** (orange) begrenzt den verschobenen Teil (von/bis in den beiden Richtungen der Fläche, Datei-Koordinaten); rastet an parallelen Flächen ein | die (maskierte) Fläche entlang ihrer Normalen: + aufbauen, − wegnehmen. Verdeckte Flächen (z. B. zur Wand hin) mit einer Schnittfläche freilegen |
+| Fläche zeichnen | Rechteck oder Kreis auf einer ebenen Fläche quer zu einer Achse aufziehen (Ecken rasten an Wänden ein, Umschalt frei); Liste „GEZEICHNETE FLÄCHEN“ unten rechts; Höhe/Tiefe, „▲ Aufbauen“, „▼ Wegnehmen“ (grün/rot in der Vorschau) | die Fläche als Prisma vereinigt bzw. abgezogen; die gezeichnete Fläche bleibt in der Liste |
+| … verschieben, Griffe | gezeichnete Fläche anfassen und ziehen (Kanten rasten ein, Umschalt frei); Rahmen mit 8 Griffen (Kreis: 4): Kanten docken an, Ecke mit Umschalt **zu Beginn** proportional bis zum Loslassen | Lage und Größe |
+| … bemaßen | „📐 Bemaßen“: Kante (Kreis: Mitte) oder Fläche selbst (Höhe) anklicken, dann Wand, Kante oder Fläche des Modells, Abstand eintippen | Kante bzw. Boden des Wegnehmens/Oberseite des Aufbaus rückt genau auf das Maß. Bezug exakt aus einer sichtbaren Modellkante oder einer Ebene quer zur Messrichtung, sonst „ungefähr“ (angeklickter Punkt) |
+
+**Genauigkeit**
+
+- Der Kern rechnet doppelt genau; Ein- und Ausgabe in einfacher Genauigkeit wie die STL-Datei selbst.
+  Nicht berührte Eckpunkte behalten ihre Werte; bei Achsen-Richtungen dreht der Kern exakt (Faktoren
+  0/±1). Werkzeuge reichen 1 µm über die Fläche, an der sie beginnen (fügen sich an, keine Haut).
+- Zylinder als Vieleck mit höchstens 1 µm Abstand zum Kreis (⌀ 3 mm: 86 Ecken, 0,09 % Fläche weniger).
+- Ziehen mit der Maus rundet auf 0,01 mm (angezeigte Einheit); Einrasten innerhalb von 8 Bildpunkten
+  genau auf die Lage einer Ebene (Wände, Stegseiten).
+- Am Gehäuse nachgerechnet: Steg bis zur Wand +126,0000 mm³ (2 × 0,75 × 28 × 3), Fläche verschoben
+  +63,0000, Mitte maskiert −69,6000, Schlitz 0,4 × 2 × 1,5 mm −1,2000, verlängert um 5 mm +Querschnitt ×
+  5 auf 4 Nachkommastellen.
+
+**Aufbau**
+
+- `Editing/SolidEditor*.cs` – Kern-Anbindung (`SolidEditor.cs`: Netz ↔ Kern, Drehung auf Z, Prüfen),
+  `.Length.cs` (Länge, gleichförmige Bereiche), `.Bodies.cs` (Quader/Zylinder), `.Faces.cs` (Umriss
+  einer Fläche, Maske, Verschieben); `Editing/Body.cs`. Nur hier steht ManifoldSharp – ein anderer Kern
+  ließe sich dort tauschen.
+- `ModelViewModel.Editing.cs` (Rückgängig, Speichern, Netz tauschen, Länge ändern), `.Bodies.cs`,
+  `.FaceMove.cs`, `.Sketches.cs` (Liste, Aufbauen/Wegnehmen), `.SketchPlacement.cs` (Verschieben,
+  Einrasten, Bemaßen), `.SketchGrips.cs` (Rahmen, Größe); `SketchItem.cs` (gezeichnete Fläche).
+- `Views/EditPanel.axaml` (Gruppe BEARBEITEN), `Views/ModelGlView.Editing.cs` (Maus der Werkzeuge),
+  `Views/SketchOverlay.cs` (Rahmen und Griffe in 2D), `ModelRenderer` (Vorschau-Körper, Trennebene,
+  neue Szene nach einer Änderung).
+- Der Kern wurde vor der Wahl gegen das C++-Original (Manifold 3.5.4, selbst gebaut) verglichen: gleiche
+  Volumen auf 4 Nachkommastellen, größter Abstand der Ergebnisse 0,002 µm; das Original ist rund
+  sechsmal schneller (Gehäuse mit 20 000 Dreiecken: 206 gegen 36 ms) – bei Bedarf hinter derselben
+  Schnittstelle austauschbar.
