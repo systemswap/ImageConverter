@@ -11,7 +11,7 @@
                                  einrichten.ps1       Rechtsklick "Mit ImageConverter oeffnen"
         published\linux-x64\     ImageConverter       Linux-Programm als eine Datei (ohne AppImage -
                                                       die baut nur publish.sh unter Linux)
-        published\ImageConverter-windows-x64.zip
+        published\ImageConverter-<Version>-windows-x64.zip   (aeltere Archive werden ersetzt)
 
     Fremde native Bibliotheken liegen nicht in der Programmdatei, sondern je in einem
     eigenen Ordner daneben (Build-Target in ImageConverter.Desktop.csproj). Heruntergeladene
@@ -166,8 +166,9 @@ if ($Target -in @('windows', 'beides')) {
     Copy-Notices $winDir
     Copy-Item (Join-Path $root 'packaging\windows\einrichten.ps1') $winDir -Force
 
-    $zip = Join-Path $outDir 'ImageConverter-windows-x64.zip'
-    if (Test-Path $zip) { Remove-Item $zip -Force }
+    # Der Name traegt die Version; aeltere Archive (auch die ohne Version) werden vorher entfernt
+    $zip = Join-Path $outDir "ImageConverter-$version-windows-x64.zip"
+    Get-ChildItem $outDir -Filter 'ImageConverter-*windows-x64.zip' -ErrorAction SilentlyContinue | Remove-Item -Force
     $items = Get-ChildItem $winDir | Where-Object { $_.Name -notin @('KI-Modelle', 'ImageConverter.log', 'ImageConverter.log.alt') }
     # Die frisch kopierte EXE haelt kurz ein anderer Prozess fest, auch wenn ImageConverter
     # nicht laeuft (vermutlich der Virenscanner) - dann warten und erneut versuchen.

@@ -8,7 +8,8 @@ set -Eeuo pipefail
 #   published/linux-x64/Tools/OnnxRuntime/               ONNX Runtime (KI) mit Lizenztexten
 #   published/windows-x64/ImageConverter.exe             eine Datei: Programm, .NET und Avalonia
 #   published/windows-x64/Tools/…                        wie unter Linux
-#   published/ImageConverter-linux-x64.tar.gz, ImageConverter-windows-x64.zip
+#   published/ImageConverter-<Version>-linux-x64.tar.gz, ImageConverter-<Version>-windows-x64.zip
+#                                                        (ältere Archive derselben Plattform werden ersetzt)
 #
 # Fremde native Bibliotheken liegen bewusst nicht in der Programmdatei, sondern
 # je in einem eigenen Ordner daneben (Build-Target in ImageConverter.Desktop.csproj,
@@ -204,10 +205,12 @@ bundle_models() {
   echo "   KI-Modelle aus tools/KI-Models: $copied Datei(en) kopiert"
 }
 
-# Paket ohne die heruntergeladenen KI-Modelle und ohne das Log.
+# Paket ohne die heruntergeladenen KI-Modelle und ohne das Log; der Name trägt die Version,
+# ältere Archive derselben Plattform (auch die ohne Version) werden vorher entfernt.
 package() {
-  local folder="$1" archive="$2"
-  rm -f "$OUT_DIR/$archive"
+  local folder="$1" kind="$2"
+  local archive="ImageConverter-$VERSION-$folder.$kind"
+  rm -f "$OUT_DIR"/ImageConverter-*"$folder.$kind"
   case "$archive" in
     *.tar.gz) tar -C "$OUT_DIR" --exclude="$folder/KI-Modelle" --exclude="$folder/ImageConverter.log*" -czf "$OUT_DIR/$archive" "$folder" ;;
     *.zip) (cd "$OUT_DIR" && zip -qr "$archive" "$folder" -x "$folder/KI-Modelle/*" "$folder/ImageConverter.log*") ;;
@@ -269,7 +272,7 @@ APPRUN
   install -Dm644 "$PROJECT_DIR/packaging/linux/ImageConverter.desktop" "$LINUX_DIR/share/applications/ImageConverter.desktop"
   install -m 0755 "$PROJECT_DIR/packaging/linux/einrichten.sh" "$PROJECT_DIR/packaging/linux/entfernen.sh" "$LINUX_DIR/"
 
-  package linux-x64 ImageConverter-linux-x64.tar.gz
+  package linux-x64 tar.gz
   bundle_models "$LINUX_DIR"
 fi
 
@@ -289,7 +292,7 @@ if [ "$TARGET" = all ] || [ "$TARGET" = windows ]; then
   # Rechtsklick „Mit ImageConverter öffnen“ im Explorer (nur für den angemeldeten Benutzer)
   install -m 0644 "$PROJECT_DIR/packaging/windows/einrichten.ps1" "$WINDOWS_DIR/einrichten.ps1"
 
-  package windows-x64 ImageConverter-windows-x64.zip
+  package windows-x64 zip
   bundle_models "$WINDOWS_DIR"
 fi
 
