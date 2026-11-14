@@ -57,13 +57,17 @@ public static class ImageLoader
     public static Task<LoadedImage> LoadAsync(string path, CancellationToken ct = default) =>
         Task.Run(async () =>
         {
-            CheckSize(path);
+            var detected = CheckSize(path);
             var image = new MagickImage();
             try
             {
+                // The asynchronous read takes the format from the file extension unless it is given explicitly; a file whose
+                // content does not match its name (an AVIF saved as .png) then fails. Pass the format detected from the
+                // content, as a read by path would do (Fehlergedächtnis #126).
                 var vector = VectorSettings(path);
-                if (vector is null) await image.ReadAsync(path, ct).ConfigureAwait(false);
-                else await image.ReadAsync(path, vector, ct).ConfigureAwait(false);
+                var settings = vector ?? (detected == MagickFormat.Unknown ? null : new MagickReadSettings { Format = detected });
+                if (settings is null) await image.ReadAsync(path, ct).ConfigureAwait(false);
+                else await image.ReadAsync(path, settings, ct).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
 
                 var formatName = vector is null ? image.Format.ToString().ToUpperInvariant() : "SVG";
@@ -175,13 +179,15 @@ public static class ImageLoader
     /// <see cref="Platform.ImageMagickPolicy.MaxEdge"/> before decoding.
     /// </summary>
     /// <param name="path">Path of the image file.</param>
+    /// <returns>The format ImageMagick detected from the content (the extension only decides if the content is
+    /// ambiguous); <see cref="MagickFormat.Unknown"/> if the header cannot be read.</returns>
     /// <exception cref="ImageTooLargeException">The image is too large.</exception>
     /// <remarks>
     /// A crafted file can be small and claim huge dimensions (1.5 MB for 40000 × 40000); without the check ImageMagick
     /// would allocate memory or swap space of that size. If the header cannot be read, the method returns without an
     /// error, and ImageMagick decides with its own limits when the image is read.
     /// </remarks>
-    public static void CheckSize(string path)
+    public static MagickFormat CheckSize(string path)
     {
         MagickImageInfo info;
         try
@@ -190,12 +196,13 @@ public static class ImageLoader
         }
         catch (MagickException)
         {
-            return;   // ImageMagick reports the actual error when the image is read
+            return MagickFormat.Unknown;   // ImageMagick reports the actual error when the image is read
         }
         var pixels = (long)info.Width * info.Height;
         if (pixels > MaxPixels || info.Width > Platform.ImageMagickPolicy.MaxEdge || info.Height > Platform.ImageMagickPolicy.MaxEdge)
             throw new ImageTooLargeException(Tr.T("Das Bild ist zu groß für diesen Rechner ({0} × {1} Pixel, {2:0} Megapixel; höchstens {3:0} Megapixel).",
                 info.Width, info.Height, pixels / 1e6, MaxPixels / 1e6));
+        return info.Format;
     }
 
     /// <summary>Long edge a vector graphic is drawn at least, so that small icons are sharp on screen.</summary>

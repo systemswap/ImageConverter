@@ -75,4 +75,20 @@ public class ImageLoaderProbeTests : IDisposable
         Assert.True(clock.Elapsed.TotalSeconds < 2, $"{clock.Elapsed}");
         Assert.InRange(ImageLoader.MaxPixels, 100_000_000, 2_000_000_000);
     }
+
+    /// <summary>A file whose content does not match its extension (an AVIF or JPEG saved as .png) opens by its content
+    /// (Fehlergedächtnis #126).</summary>
+    [Theory]
+    [InlineData("falsch.png", MagickFormat.Jpeg, "JPEG")]
+    [InlineData("falsch.jpg", MagickFormat.WebP, "WEBP")]
+    [InlineData("falsch.webp", MagickFormat.Png, "PNG")]
+    public async Task ContentNotMatchingExtension_LoadsByContent(string name, MagickFormat content, string expected)
+    {
+        var path = Path.Combine(_dir, name);
+        using (var img = new MagickImage(new MagickColor(20000, 30000, 40000), 300, 200))
+            img.Write(path, content);
+
+        using var loaded = await ImageLoader.LoadAsync(path);
+        Assert.Equal((300, 200, expected), (loaded.Width, loaded.Height, loaded.FormatName));
+    }
 }

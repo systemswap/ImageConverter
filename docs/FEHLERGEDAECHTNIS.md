@@ -3103,3 +3103,18 @@ Test oder Nachweis.
      dann ein leeres Ergebnis, ManifoldSharp nicht; abgefangen in `SolidEditor.ChangeLength` (nur der ferne Teil rückt weiter).
 - **Nicht tun:** Werkzeug-Ergebnisse ohne Gegenrechnung des Volumens übernehmen; Bedienung nur über das Modell statt mit echten
   Mausereignissen prüfen (siehe #115); Testpunkte auf verdeckte Geometrie legen (die Treffer sind dann richtig, die Erwartung falsch).
+
+## 126. Öffnen: Ein Bild, dessen Inhalt nicht zur Dateiendung passt, ließ sich nicht öffnen (seit 0.4.1)
+
+- **Entdeckt:** 14.11.2026, 0.12.2-beta, vom Nutzer (ein Buchscan als „.png“ öffnete nicht). **Behoben:** 0.12.3-beta.
+- **Wie bemerkt:** Die Datei war in Wahrheit ein AVIF mit der Endung `.png`. Das Vorschaubild erschien, das Bild selbst nicht:
+  „improper image header … ReadPNGImage“. Nachgestellt in einer Probe über `ImageLoader.LoadAsync`.
+- **Warum:** `MagickImage.ReadAsync(path)` liest die Bytes selbst und gibt ImageMagick dann das Format nach der Dateiendung vor – der
+  PNG-Leser bekam AVIF-Daten. Das Lesen über den Pfad (Vorschaubild, `MagickImageInfo`) erkennt das Format dagegen am Inhalt.
+- **Lösung:** `CheckSize` liest den Kopf ohnehin schon mit `MagickImageInfo` und gibt jetzt das dort am Inhalt erkannte Format zurück;
+  `LoadAsync` übergibt es in den `MagickReadSettings`. Kein zweites Lesen des Kopfes; ist der Kopf unlesbar, bleibt es beim alten
+  Aufruf (ImageMagick meldet dann den eigentlichen Fehler). Verworfen: synchron über den Pfad lesen – verliert das asynchrone Einlesen.
+  SVG behält seine eigenen Einstellungen (`VectorSettings`, #108).
+- **Nicht tun:** `ReadAsync(path)` ohne Format aufrufen; der Dateiendung trauen (Downloads und Messenger benennen Bilder oft falsch).
+- **Wo im Code:** `ImageLoader.LoadAsync`, `ImageLoader.CheckSize`. **Test:** `ImageLoaderProbeTests.ContentNotMatchingExtension_LoadsByContent`
+  (JPEG als .png, WebP als .jpg, PNG als .webp – schlägt mit dem alten Code fehl).
