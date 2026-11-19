@@ -82,7 +82,7 @@ jobs:
             echo "**Windows:** Zip entpacken, \`ImageConverter.exe\` starten (optional \`einrichten.ps1\` für „Öffnen mit“)."
             echo "**Linux:** \`tar xzf\` und im Ordner \`./einrichten.sh\` (Menüeintrag); das AppImage braucht den Ordner \`Tools/\` daneben."
             echo
-            echo "KI-Modelle sind nicht enthalten: in der App unter Einstellungen › KI laden oder aus dem Release \`ki-modelle-2026-10-14\`."
+            echo "KI-Modelle sind nicht enthalten: Die App lädt sie auf Knopfdruck unter Einstellungen › KI von den Originalquellen."
             echo
             echo "Laden: \`gh release download neueste -R ${GITHUB_REPOSITORY}\`"
           } > "$notes"
