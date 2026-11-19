@@ -28,7 +28,7 @@ $extensions = @(
     '.jpg', '.jpeg', '.jpe', '.png', '.bmp', '.gif', '.tif', '.tiff',
     '.webp', '.avif', '.jxl', '.heic', '.heif', '.ico',
     '.cr2', '.nef', '.arw', '.dng',
-    '.stl'
+    '.stl', '.3mf'
 )
 
 $appsKey = "HKCU:\Software\Classes\Applications\$exeName"

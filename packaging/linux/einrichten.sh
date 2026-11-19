@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Trägt ImageConverter für den angemeldeten Benutzer ins Anwendungsmenü ein und
-# meldet es im Dateimanager unter „Öffnen mit …“ für Bilder und STL-Modelle an – ohne
+# meldet es im Dateimanager unter „Öffnen mit …“ für Bilder und 3D-Modelle (STL, 3MF) an – ohne
 # Root-Rechte. Kopiert werden nur Menüeintrag und Symbol; der Eintrag zeigt auf
 # die AppImage in diesem Ordner (bei der Paketform „einzeln“ auf das Programm
 # im Ordner). Zum Standardprogramm wird ImageConverter nicht – das legt man im
@@ -49,5 +49,5 @@ install -m 644 "$NEW" "$ENTRY"
 command -v update-desktop-database > /dev/null 2>&1 && update-desktop-database "$DATA/applications" || true
 command -v gtk-update-icon-cache > /dev/null 2>&1 && gtk-update-icon-cache -f -t "$DATA/icons/hicolor" > /dev/null 2>&1 || true
 
-echo "Eingetragen: ImageConverter steht jetzt im Anwendungsmenü und bei Bildern und STL-Modellen unter „Öffnen mit …“."
+echo "Eingetragen: ImageConverter steht jetzt im Anwendungsmenü und bei Bildern und 3D-Modellen (STL, 3MF) unter „Öffnen mit …“."
 echo "Rückgängig: ./entfernen.sh"

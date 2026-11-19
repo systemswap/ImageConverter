@@ -37,7 +37,7 @@ irgendwo ein Werkzeug – ImageConverter macht all das in einem Programm, ohne d
 - **Bildbearbeitung mit Feingefühl:** Dunst, Licht, Farbe, Weißabgleich, Rauschen, Körnung – gerechnet in 32-Bit-Fließkomma.
 - **Viele Bilder auf einmal:** gleiche Einstellungen für alle oder für jedes Bild eigene, Dateinamen nach Muster, nie überschrieben.
 - **Drucken:** mehrere Fotos sparsam auf eine Seite, mit Schnittmarken – oder gleich als PDF.
-- **Und nebenbei:** STL-Modelle für den 3D-Druck ansehen, messen und sogar bearbeiten.
+- **Und nebenbei:** STL- und 3MF-Modelle für den 3D-Druck ansehen, messen und sogar bearbeiten.
 
 ---
 
@@ -141,7 +141,7 @@ Rückgängig und Wiederholen gibt es für jeden Handgriff (Strg+Z / Strg+Y).
 
 ## 3D-Modelle ansehen, messen, ändern
 
-- **STL ansehen:** bis 20 Millionen Dreiecke, glatt dargestellt mit Umgebungsschatten; Maße, Volumen, Oberfläche, ob das Modell
+- **STL und 3MF ansehen:** bis 20 Millionen Dreiecke, glatt dargestellt mit Umgebungsschatten; Maße, Volumen, Oberfläche, ob das Modell
   geschlossen ist; bis zu sechs Schnittebenen.
 - **Messen:** Abstand, Winkel, Zylinderdurchmesser, Punkt zu Punkt.
 - **Bearbeiten:** Längen ändern, Quader oder Zylinder hinzufügen und wegnehmen, Flächen verschieben, Formen zeichnen und aufbauen oder

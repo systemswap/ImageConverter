@@ -1,7 +1,7 @@
 # STL-Betrachter mit Messen
 
-ImageConverter ist auch ein Bildbetrachter; er zeigt STL-Modelle an und misst Abstände
-zwischen Flächen. Nur STL – STEP und andere
+ImageConverter ist auch ein Bildbetrachter; er zeigt STL- und 3MF-Modelle an und misst Abstände
+zwischen Flächen. Nur Dreiecksnetze (STL, 3MF) – STEP und andere
 CAD-Formate bewusst nicht. Umgesetzt ab 0.8.10-beta (Rechenteil), Anzeige und Einbau danach.
 
 ## 1. Verhalten im Programm
@@ -16,7 +16,7 @@ CAD-Formate bewusst nicht. Umgesetzt ab 0.8.10-beta (Rechenteil), Anzeige und Ei
   (sie hängen an `HasImage`). Export- und Druckfenster listen nur Bilder.
 - Bleibt nutzbar: Hell/Dunkel, Vollbild (F11, dann ohne Spalte), Blättern (←/→, Bild
   auf/ab, Pos1/Ende).
-- Kennzahlen: Format (binär/Text), Größe X × Y × Z, Dreiecke, Eckpunkte, Oberfläche,
+- Kennzahlen: Format (STL binär/Text, 3MF), Größe X × Y × Z, Dreiecke, Eckpunkte, Oberfläche,
   Volumen (≈ wenn nicht geschlossen), geschlossen (offene / mehrfach genutzte Kanten),
   Teile, erkannte Flächen, Kopfzeile, Hinweise zu übersprungenen Dreiecken.
 - Die Einstellungen des Betrachters (Darstellung, Kanten, Teile färben, Projektion,
@@ -59,6 +59,26 @@ IDocumentViewer                         IOpenDocument : IDisposable
   Startwert je Programmlauf, damit eine Datei keine Kollisionsketten erzwingen kann; −0 = +0).
   Dreiecke mit zwei gleichen Ecken fallen weg und werden gezählt.
 - STL hat keine Einheit: angenommen werden Millimeter, umschaltbar auf Zoll.
+
+### 3MF (`ThreeMfReader`, Auswahl nach Endung in `ModelReader`)
+
+- 3MF (ISO/ASTM 52915) ist ein Zip-Archiv; `_rels/.rels` nennt das Modellteil (sonst
+  `3D/3dmodel.model`), ein XML mit `resources` (Objekte mit `mesh` aus `vertices` und
+  `triangles` oder `components`, die andere Objekte mit einer Transformation einbauen) und
+  `build` (Platzierung der Objekte auf der Bauplatte, ebenfalls mit Transformation).
+- Alle platzierten Objekte werden zu einem Netz zusammengeführt; Transformationen sind
+  zeilenweise 3 × 4-Matrizen, die letzte Zeile die Verschiebung; eine Spiegelung (negative
+  Determinante) tauscht zwei Ecken, damit die Außenseite außen bleibt. Objekte vom Typ
+  `support`, `surface` und `other` (Stützen) gehören nicht zum Modell.
+- Die Einheit der Datei (micron … meter) wird in Millimeter umgerechnet. Farben,
+  Materialien, Texturen und Slices werden nicht gelesen; der Titel aus den Metadaten
+  erscheint als Kopfzeile.
+- Grenzen wie bei STL (Dreiecke, Eckpunkte, Koordinaten), dazu: das Modellteil höchstens
+  2 GB entpackt, XML ohne DTD und externe Verweise, Bauteile höchstens 32 Ebenen tief und
+  ohne Kreise. Die Auflösung ergibt sich wie bei Text-STL aus der Stellenzahl.
+- Tempo: Das Einlesen ist Text und damit langsamer als binäres STL – gemessen 1,0 s je
+  Million Dreiecke gegenüber 0,16 s (Kugel, 1 Mio. Dreiecke); alles danach ist identisch.
+  Bearbeitungen werden weiterhin als STL gespeichert.
 
 ## 4. Was im Hintergrund folgt
 

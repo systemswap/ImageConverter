@@ -5,18 +5,20 @@ using System.Text;
 
 namespace ImageConverter.Viewer3D.Geometry;
 
-/// <summary>How the STL file stores its triangles.</summary>
+/// <summary>How the model file stores its triangles.</summary>
 public enum StlEncoding
 {
     Binary,
     Ascii,
+    /// <summary>3MF: XML in a zip archive (see <see cref="ThreeMfReader"/>).</summary>
+    ThreeMf,
 }
 
-/// <summary>Result of reading an STL file.</summary>
+/// <summary>Result of reading a model file (STL or 3MF).</summary>
 /// <param name="Mesh">The triangles with shared vertices.</param>
-/// <param name="Encoding">Binary or text.</param>
-/// <param name="Header">Printable part of the header (binary) or the solid name (text); may be empty.</param>
-/// <param name="FileTriangles">Triangles the file announces (binary) or contains (text).</param>
+/// <param name="Encoding">Binary, text or 3MF.</param>
+/// <param name="Header">Printable part of the header (binary), the solid name (text) or the title (3MF); may be empty.</param>
+/// <param name="FileTriangles">Triangles the file announces (binary) or contains (text, 3MF).</param>
 /// <param name="Invalid">Triangles skipped because a coordinate was not a finite number or out of range.</param>
 /// <param name="Degenerate">Triangles skipped because two corners are the same point.</param>
 /// <param name="Truncated">The binary file ends before all announced triangles.</param>

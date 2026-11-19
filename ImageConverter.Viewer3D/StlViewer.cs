@@ -4,12 +4,12 @@ using ImageConverter.Viewer3D.Views;
 
 namespace ImageConverter.Viewer3D;
 
-/// <summary>Registers STL models with the main window (<see cref="DocumentViewers.Register"/>).</summary>
+/// <summary>Registers 3D models (STL, 3MF) with the main window (<see cref="DocumentViewers.Register"/>).</summary>
 public sealed class StlViewer : IDocumentViewer
 {
-    public IReadOnlyCollection<string> Extensions { get; } = [".stl"];
+    public IReadOnlyCollection<string> Extensions => Geometry.ModelReader.Extensions;
 
-    public string FileTypeName => Tr.T("3D-Modelle (STL)");
+    public string FileTypeName => Tr.T("3D-Modelle (STL, 3MF)");
 
     public async Task<IOpenDocument> OpenAsync(string path, CancellationToken ct)
     {
@@ -18,7 +18,7 @@ public sealed class StlViewer : IDocumentViewer
     }
 }
 
-/// <summary>An open STL model in the main window.</summary>
+/// <summary>An open 3D model in the main window.</summary>
 internal sealed class StlDocument : IOpenDocument
 {
     private readonly ModelViewModel _model;

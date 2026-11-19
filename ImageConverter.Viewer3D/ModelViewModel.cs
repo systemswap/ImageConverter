@@ -181,11 +181,11 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
         InitEditing();
     }
 
-    /// <summary>Reads the file in the background and starts working out the rest.</summary>
-    /// <exception cref="StlFormatException">Not readable as STL; the message is for the user.</exception>
+    /// <summary>Reads the file (STL or 3MF) in the background and starts working out the rest.</summary>
+    /// <exception cref="StlFormatException">Not readable; the message is for the user.</exception>
     public static async Task<ModelViewModel> OpenAsync(string path, CancellationToken ct)
     {
-        var file = await Task.Run(() => StlReader.Read(path, ct), ct);
+        var file = await Task.Run(() => ModelReader.Read(path, ct), ct);
         var vm = new ModelViewModel(path, file);
         vm.StartAnalysis();
         return vm;
@@ -316,7 +316,12 @@ public sealed partial class ModelViewModel : ObservableObject, IDisposable
 
     // ------------------------------------------------------------------ figures for the side column
 
-    public string Format => File.Encoding == StlEncoding.Binary ? Tr.T("STL (binär)") : Tr.T("STL (Text)");
+    public string Format => File.Encoding switch
+    {
+        StlEncoding.Binary => Tr.T("STL (binär)"),
+        StlEncoding.Ascii => Tr.T("STL (Text)"),
+        _ => Tr.T("3MF"),
+    };
 
     public string Size
     {
