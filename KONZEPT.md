@@ -142,7 +142,7 @@ seinen Namen in allen Sprachen.
   (sortiert wie beim Öffnen eines Ordners); beim Exportieren sind nur das geöffnete und geänderte Bilder vorausgewählt.
 - **Automatisch bauen** (19.11.2026): `.github/workflows/neueste.yml` ruft nach jedem Push auf main (egal von welchem Rechner)
   `./publish.sh beides` auf einem Linux-Server auf – Tests, dann AppImage im tar.gz und Windows-Zip mit ReadyToRun – und ersetzt die
-  Dateien im privaten Vorab-Release „neueste“ (`gh release download neueste`). Ein neuer Push bricht einen laufenden Bau ab; reine
+  Dateien im Vorab-Release „neueste“ (`gh release download neueste`). Ein neuer Push bricht einen laufenden Bau ab; reine
   Doku-Änderungen bauen nicht. Nur ein Linux-Lauf, weil Windows-Läufe im privaten Repository doppelt gegen die Freiminuten zählen.
 - **Spenden und Sprache** (19.11.2026): flacher goldener Knopf „♥ Spenden“ über Drucken und Exportieren (so breit wie beide), öffnet nur auf
   Klick die Spendenseite (Ko-fi) im Browser. Sprachauswahl oben rechts vor ☾/☀, so breit wie die längste Sprache;
