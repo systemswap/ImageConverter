@@ -3,7 +3,7 @@
 Kopie von <https://github.com/csslc/PiSA-SR> (Commit `9c76e12e261d1980148738a0cff41e5e27d18c9f` vom 15.03.2026, kopiert am
 14.10.2026), damit der Rechenweg nachvollziehbar bleibt, auch wenn das Original verschwindet. Weggelassen: `figs/`
 (Bilder der README), `.idea/`. Die README nennt die Apache-2.0-Lizenz; die dort verlinkte Datei `LICENSE` fehlt im
-Repository selbst.
+Repository selbst. Deshalb liegt hier der Standardtext der Apache-2.0-Lizenz als `LICENSE-Apache-2.0.txt` bei.
 
 **Unverändert** bis auf eine Zeile: in `ram/models/utils.py` stand ein Pfad auf dem Rechner der Autoren
 (`/home/…/bert-base-uncased`), ersetzt durch einen Platzhalter (der Teil „RAM“ erzeugt Beschreibungen und wird für die

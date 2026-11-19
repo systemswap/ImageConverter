@@ -1,6 +1,6 @@
 # Fremde Bestandteile und ihre Lizenzen
 
-ImageConverter selbst steht unter der MIT-Lizenz (siehe `LICENSE`). Mit dem
+ImageConverter selbst steht unter der MIT-Lizenz mit der Commons Clause (siehe `LICENSE`). Mit dem
 Programm werden Bestandteile anderer Projekte weitergegeben; ihre Rechte
 liegen bei den jeweiligen Autoren. Hier steht, was dabei ist, unter welcher
 Lizenz es steht und wo der Lizenztext liegt.
