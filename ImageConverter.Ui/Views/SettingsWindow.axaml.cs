@@ -48,7 +48,7 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>Selects the given page in the navigation on the left (e.g. "Entfernen" from the "Modelle laden …" button).</summary>
-    /// <param name="page">Page to show; unknown values select the performance page.</param>
+    /// <param name="page">Page to show; unknown values select the general page (language first).</param>
     public void ShowPage(SettingsPage page)
     {
         var button = page switch
@@ -62,7 +62,7 @@ public partial class SettingsWindow : Window
             SettingsPage.Background => NavBackground,
             SettingsPage.Dewarp => NavDewarp,
             SettingsPage.Upscale => NavUpscale,
-            _ => NavPerformance,
+            _ => NavGeneral,
         };
         button.IsChecked = true;
     }

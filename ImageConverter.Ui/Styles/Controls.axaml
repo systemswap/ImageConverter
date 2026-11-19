@@ -511,4 +511,50 @@
         <Setter Property="MinHeight" Value="28" />
     </Style>
 
+    <!-- ===================================================================
+         Spenden: goldener Glasknopf —
+         der harte Farbsprung in der Mitte macht den Glanz, oben hell, unten
+         dunkler und zum Rand wieder heller wie eine gewölbte Fläche. Schrift
+         schwarz, Herz rot; in heller und dunkler Darstellung gleich.
+         =================================================================== -->
+    <Style Selector="Button.donate">
+        <Setter Property="Foreground" Value="Black" />
+        <Setter Property="BorderBrush" Value="#C8940B" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.donate /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderBrush" Value="#C8940B" />
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#FFF3BE" />
+                <GradientStop Offset="0.48" Color="#FFD256" />
+                <GradientStop Offset="0.52" Color="#F7B300" />
+                <GradientStop Offset="1" Color="#FFDE7C" />
+            </LinearGradientBrush>
+        </Setter>
+    </Style>
+    <Style Selector="Button.donate:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="BorderBrush" Value="#C8940B" />
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#FFFAD8" />
+                <GradientStop Offset="0.48" Color="#FFE083" />
+                <GradientStop Offset="0.52" Color="#FFC02A" />
+                <GradientStop Offset="1" Color="#FFEBA8" />
+            </LinearGradientBrush>
+        </Setter>
+    </Style>
+    <Style Selector="Button.donate:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#E5A400" />
+                <GradientStop Offset="1" Color="#FFD256" />
+            </LinearGradientBrush>
+        </Setter>
+    </Style>
+
 </Styles>

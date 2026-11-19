@@ -31,16 +31,16 @@
         <Border DockPanel.Dock="Left" Classes="rail" Width="210">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Spacing="4">
+                    <RadioButton x:Name="NavGeneral" Classes="tile" GroupName="seite" Margin="0">
+                        <StackPanel Margin="10,0,0,0">
+                            <TextBlock Classes="tileName" Text="{l:T 'Allgemein'}" />
+                            <TextBlock Classes="tileHint" Text="{l:T 'Sprache · Darstellung'}" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavPerformance" Classes="tile" GroupName="seite" Margin="0">
                         <StackPanel Margin="10,0,0,0">
                             <TextBlock Classes="tileName" Text="{l:T 'Leistung'}" />
                             <TextBlock Classes="tileHint" Text="{l:T 'Grafikkarte oder CPU · Test'}" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="NavGeneral" Classes="tile" GroupName="seite" Margin="0">
-                        <StackPanel Margin="10,0,0,0">
-                            <TextBlock Classes="tileName" Text="{l:T 'Allgemein'}" />
-                            <TextBlock Classes="tileHint" Text="{l:T 'Sprache'}" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavAi" Classes="tile" GroupName="seite" Margin="0">
@@ -97,19 +97,9 @@
                 </StackPanel>
                 <StackPanel Spacing="12" IsVisible="{Binding #NavGeneral.IsChecked}">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'Allgemein'}" />
-                    <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'Darstellung'}" />
-                    <StackPanel Spacing="6" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0,4,8">
-                        <ComboBox SelectedIndex="{Binding ThemeIndex}" MinWidth="260" FontSize="14">
-                            <ComboBoxItem Content="{l:T 'Wie das System'}" />
-                            <ComboBoxItem Content="{l:T 'Hell'}" />
-                            <ComboBoxItem Content="{l:T 'Dunkel'}" />
-                        </ComboBox>
-                        <TextBlock Classes="hint" TextWrapping="Wrap"
-                                   Text="{l:T 'Dunkel ist ein gedämpftes, neutrales Grau statt Schwarz – angenehm für die Augen und ohne Farbstich, damit Fotos richtig wirken. Umschalten geht auch mit dem Knopf ☾/☀ oben rechts.'}" />
-                    </StackPanel>
                     <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'Sprache'}" />
                         <StackPanel DataContext="{Binding Language}" x:DataType="vm:LanguageViewModel"
-                                    Spacing="12" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0">
+                                    Spacing="12" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0,4,8">
                             <!-- Flagge + Name in der eigenen Sprache: die eigene Sprache findet man wieder,
                                  auch wenn gerade eine fremde eingestellt ist -->
                             <ComboBox ItemsSource="{Binding Available}" SelectedItem="{Binding Selected}"
@@ -145,6 +135,16 @@
                                 </StackPanel>
                             </Border>
                         </StackPanel>
+                    <TextBlock Classes="label" FontWeight="SemiBold" Text="{l:T 'Darstellung'}" />
+                    <StackPanel Spacing="6" MaxWidth="520" HorizontalAlignment="Left" Margin="4,0,4,8">
+                        <ComboBox SelectedIndex="{Binding ThemeIndex}" MinWidth="260" FontSize="14">
+                            <ComboBoxItem Content="{l:T 'Wie das System'}" />
+                            <ComboBoxItem Content="{l:T 'Hell'}" />
+                            <ComboBoxItem Content="{l:T 'Dunkel'}" />
+                        </ComboBox>
+                        <TextBlock Classes="hint" TextWrapping="Wrap"
+                                   Text="{l:T 'Dunkel ist ein gedämpftes, neutrales Grau statt Schwarz – angenehm für die Augen und ohne Farbstich, damit Fotos richtig wirken. Umschalten geht auch mit dem Knopf ☾/☀ oben rechts.'}" />
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel Spacing="12" IsVisible="{Binding #NavAi.IsChecked}">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="{l:T 'KI'}" />

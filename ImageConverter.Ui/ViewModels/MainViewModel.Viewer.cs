@@ -28,6 +28,22 @@ public partial class MainViewModel
         AppSettings.Update(s => s with { Theme = mode });
     }
 
+    /// <summary>The page where the development of ImageConverter can be supported.</summary>
+    public const string DonationAddress = "https://ko-fi.com/systemswap";
+
+    /// <summary>Opens an address in the browser of the system; replaced in tests.</summary>
+    internal System.Func<string, bool> OpenAddress { get; set; } = ImageConverter.Services.FolderOpener.TryOpen;
+
+    /// <summary>
+    /// The donate button above "Drucken" and "Exportieren": opens the donation page in the browser of the system – only on this click,
+    /// nothing is sent before or by itself; no window inside the program, so that payment data and logins stay in the browser.
+    /// </summary>
+    [RelayCommand]
+    private void Donate()
+    {
+        if (!OpenAddress(DonationAddress)) ErrorMessage = Tr.T("Kein Browser gefunden. Die Seite ist: {0}", DonationAddress);
+    }
+
     /// <summary>Switches between light and dark (button next to the menu); from "as the system" to the other one.</summary>
     [RelayCommand]
     private void ToggleTheme() => ThemeIndex = AppTheme.IsDark ? 1 : 2;

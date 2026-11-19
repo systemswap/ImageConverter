@@ -1,13 +1,13 @@
 namespace ImageConverter.ViewModels;
 
 /// <summary>
-/// Pages of the settings window in the order of the left-hand sidebar: Performance, General, AI and, indented
-/// below it, one page per AI application with its models.
+/// Pages of the settings window in the order of the left-hand sidebar: General (opened first), Performance, AI and,
+/// indented below it, one page per AI application with its models.
 /// </summary>
 public enum SettingsPage
 {
-    Performance,
     General,
+    Performance,
     Ai,
     Improve,
     Faces,

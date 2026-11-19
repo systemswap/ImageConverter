@@ -83,7 +83,7 @@ public partial class MainView : UserControl
         if (TopLevel.GetTopLevel(this) is not Window owner || _vm is null) return Task.CompletedTask;
 
         _settings = new SettingsWindow(_vm);
-        _settings.ShowPage(page ?? SettingsPage.Performance);
+        _settings.ShowPage(page ?? SettingsPage.General);   // language first (wish of the user)
         _settings.Closed += (_, _) => _settings = null;
         _settings.Show(owner);
         return Task.CompletedTask;
