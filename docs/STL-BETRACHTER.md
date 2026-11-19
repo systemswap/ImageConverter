@@ -1,7 +1,7 @@
 # STL-Betrachter mit Messen
 
-Wunsch vom 30.10.2026: ImageConverter ist auch ein Bildbetrachter; er soll STL-Modelle
-anzeigen und Abstände zwischen Flächen messen können. Nur STL – STEP und andere
+ImageConverter ist auch ein Bildbetrachter; er zeigt STL-Modelle an und misst Abstände
+zwischen Flächen. Nur STL – STEP und andere
 CAD-Formate bewusst nicht. Umgesetzt ab 0.8.10-beta (Rechenteil), Anzeige und Einbau danach.
 
 ## 1. Verhalten im Programm
@@ -253,7 +253,7 @@ Suchbaum je Fläche. Anzeige in mm mit zwei Nachkommastellen (Zoll: drei), Winke
   Bemaßen von Kanten und Höhe, Fläche verschieben mit Maske), jeweils mit Volumen-Gegenrechnung.
 - Die OpenGL-Ansicht wurde mit einem Prüfprogramm im echten Fenster aufgenommen (alle
   Ansichten, hell/dunkel, Messklicks) und das Blättern Bild ↔ Modell ↔ Bild geprüft.
-  Ziehen mit der Maus und das Gefühl der Bedienung nimmt der Benutzer ab.
+  Ziehen mit der Maus und das Gefühl der Bedienung werden von Hand abgenommen.
 
 ## 9. Lizenzen und Datenschutz
 
@@ -266,7 +266,7 @@ Chapman bzw. Mittring (Umgebungsverdeckung im Bildraum).
 
 ## 10. Analyserunde (31.10.2026, 0.8.11 → 0.8.12-beta)
 
-Wunsch des Benutzers: Sicherheit zuerst (keine Speicherüberläufe, beschädigte Dateien dürfen das System nicht verlangsamen,
+Reihenfolge der Schwerpunkte: Sicherheit zuerst (keine Speicherüberläufe, beschädigte Dateien dürfen das System nicht verlangsamen,
 keine Lücken), dann Speicher und Tempo. Prüfprogramme im lokalen Testordner (`stl-fuzz`, `stl-probe`, `stl-shot`).
 
 **Sicherheit**

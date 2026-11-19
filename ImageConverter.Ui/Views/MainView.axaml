@@ -142,7 +142,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Spenden (Wunsch des Nutzers): flach und so breit wie Drucken und Exportieren zusammen, darüber; öffnet die
+                <!-- Spenden: flach und so breit wie Drucken und Exportieren zusammen, darüber; öffnet die
                      Spendenseite im Browser, nur auf Klick -->
                 <Grid Grid.Column="3" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto" VerticalAlignment="Center">
                     <Button Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Name="DonateButton" Classes="donate"

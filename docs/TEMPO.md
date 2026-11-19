@@ -43,7 +43,7 @@ Dazu die Dateigrößen-Schätzung nach 0,35 s Ruhe (zuerst 4 s, danach 0,2 s).
 „Vereinzelte Pixel“: unter 1 von 10 000 Werten, im Mittel 0,0003 Stufen, an einzelnen Stellen bis zu einigen zehn
 Stufen — dort kippt eine Schwelle (Entstufen, Himmel) durch einen Unterschied in der siebten Nachkommastelle. Bitgleich mit
 der CPU geht auf der Grafikkarte nicht (Exponential- und Potenzfunktionen runden anders). Prüfstand:
-`~/.cache/imageconverter-build/gleich-probe` (`ref` speichert die CPU-Ergebnisse, `ab.sh` misst alt/neu im Wechsel und
+`<testordner>/gleich-probe` (`ref` speichert die CPU-Ergebnisse, `ab.sh` misst alt/neu im Wechsel und
 vergleicht); Tests `DenoiserTests.LumaDenoise_GpuAndCpu_Agree`, `DehazeTests.Dehaze_GpuAndCpu_Agree`.
 
 ## Was nicht ging (gemessen, verworfen)
@@ -90,7 +90,7 @@ Gemessen auf dem Debian-Rechner (16 Kerne) mit der fertigen AppImage bzw. im uns
 ## PNG schreiben: zlib-Stufe 5 statt 9 (0.7.10 beta, 30.10.2026)
 
 Notebook mit integrierter Grafik, 8 Testfotos und 3 freigestellte Bilder (bis 3000 px), je mit 8 und 16 Bit, also 22 Fälle, Quality 95 gegen 55
-im Wechsel, bester von 2 Läufen (`~/.cache/imageconverter-build/export-probe`):
+im Wechsel, bester von 2 Läufen (`<testordner>/export-probe`):
 
 | | Quality 95 (Stufe 9) | Quality 55 (Stufe 5) |
 |---|---|---|
@@ -109,4 +109,4 @@ im Programm ≈ 0,27 s. Ein verkleinertes Aufbereiten (2048 px) wäre langsamer 
 **Schnellvorschau für JPEG verworfen:** Der Decoder liefert mit Größenhinweis zwar ein verkleinertes Bild (96 MP → 3000 × 2000), braucht dafür
 aber 0,26 s statt 0,41 s – das Entpacken der komprimierten Daten läuft auch für ein kleines Bild ganz durch. Parallel zum vollen Laden kam
 die Vorschau nie zuerst an und nähme langsamen Rechnern Rechenzeit weg. Wirklich schneller blättern ginge nur mit Vorladen des nächsten
-Bildes (kostet Speicher für ein bis zwei Bilder) – vom Nutzer vorerst nicht gewünscht.
+Bildes (kostet Speicher für ein bis zwei Bilder) – vorerst nicht vorgesehen.

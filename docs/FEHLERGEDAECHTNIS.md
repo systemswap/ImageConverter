@@ -58,7 +58,7 @@ Test oder Nachweis.
   `DllNotFoundException: Magick.Native-Q16-x64.dll` ab, obwohl die Bibliothek
   in `Tools/ImageMagick/` lag.
 - **Situation:** Veröffentlichung mit ImageMagick und ONNX Runtime außerhalb
-  der Programmdatei (Wunsch: in EXE/AppImage nur Programm, .NET und Avalonia;
+  der Programmdatei (Ziel: in EXE/AppImage nur Programm, .NET und Avalonia;
   fremde Bibliotheken je in eigenem Ordner daneben).
 - **Warum:** `MagickNET.SetNativeLibraryDirectory` ist für das alte .NET
   Framework gedacht; unter .NET 10 sucht der `DllImport` weiter nur im
@@ -149,7 +149,7 @@ Test oder Nachweis.
 ## 5. „Ordner öffnen“ stürzte ohne xdg-open ab
 
 - **Entdeckt:** 0.4.17 (Commit `123b17f`, 07.10.2026), bei der Durchsicht für
-  Linux (nicht beim Benutzer aufgetreten). **Behoben:** 0.4.22.
+  Linux (im Betrieb noch nicht aufgetreten). **Behoben:** 0.4.22.
 - **Was:** Die Knöpfe „Ordner öffnen“ (nach dem Export) und „Modellordner
   öffnen“ (KI) riefen `xdg-open` direkt mit `Process.Start` auf, ohne
   Fehlerbehandlung. Fehlt `xdg-open` (schlankes Linux, manche Container),
@@ -168,7 +168,7 @@ Test oder Nachweis.
 ## 6. Druckdialog: konnte bei hängendem Druckdienst einfrieren
 
 - **Entdeckt:** 0.4.17 (Commit `123b17f`, 07.10.2026), bei der Durchsicht für
-  Linux (nicht beim Benutzer aufgetreten). **Behoben:** 0.4.22.
+  Linux (im Betrieb noch nicht aufgetreten). **Behoben:** 0.4.22.
 - **Was:** Der Druckdialog holte die Druckerliste (`lpstat`, unter Windows
   der Druckdienst) synchron im Konstruktor – die Oberfläche stand, bis die
   Antwort kam. Zusätzlich las `SystemPrinters.RunWithExit` die Ausgabe mit
@@ -219,8 +219,8 @@ Test oder Nachweis.
 
 ## 8. Bildwechsel langsam: ImageMagick rechnet nur auf einem Kern
 
-- **Entdeckt:** 0.4.24 (Commit `bb10203`, 08.10.2026), vom Benutzer beim
-  Blättern zwischen Bildern bemerkt. **Behoben:** 0.4.25.
+- **Entdeckt:** 0.4.24 (Commit `bb10203`, 08.10.2026), beim Benutzen
+  am Blättern zwischen Bildern bemerkt. **Behoben:** 0.4.25.
 - **Was:** Das Blättern dauerte bei großen Fotos mehrere Sekunden. Gemessen
   an einem 6000 × 4000-JPEG (Release, 16 Kerne): Laden 0,4 s, Anzeige 0,1 s,
   **Verkleinern auf 2048 px gamma-korrekt 2,8 s** (Umrechnung nach linear
@@ -250,11 +250,11 @@ Test oder Nachweis.
 - **Test:** `ImageOpsTests.Resize_LargeImage_InStrips_MatchesImageMagick`
   (Vergleich mit dem einfachen Weg, mit Alpha, Adobe-RGB-Profil, EXIF, 8 Bit),
   `ConcurrentOperations_OnSameSource_AreSafe` jetzt über der Schwelle.
-  Messung mit einem Testprogramm unter `%LOCALAPPDATA%\imageconverter-build\bench`.
+  Messung mit einem Testprogramm unter `<testordner>\bench`.
 
 ## 9. Tiefen hellte Gesichter mit auf
 
-- **Entdeckt:** 0.4.27 (Commit `06baede`, 08.10.2026), vom Benutzer an einem
+- **Entdeckt:** 0.4.27 (Commit `06baede`, 08.10.2026), beim Benutzen an einem
   Familienfoto (Innenraum, dunkler Flur hinten). **Behoben:** 0.4.28.
 - **Was:** „Tiefen“ sollte nur den dunklen Flur aufhellen, hellte aber auch
   Gesichter, Haare und Augenpartie merklich auf.
@@ -347,7 +347,7 @@ Test oder Nachweis.
   anderen Prozess verwendet“.
 - **Warum:** (1) `publish.ps1` prüfte – anders als `publish.sh` – nicht, ob das
   Programm aus `published\` läuft; die Prüfung von außen vor dem Aufruf reicht
-  nicht, weil der Benutzer es während der Tests starten kann. (2) Ein anderer
+  nicht, weil das Programm während der Tests von Hand gestartet werden kann. (2) Ein anderer
   Prozess hält neue Programmdateien kurz fest, vermutlich der Virenscanner.
 - **Wie behoben:** `Assert-NotRunning` vor dem Bau und noch einmal unmittelbar
   vor `Clear-ProgramFolder` (bricht mit Meldung ab, beendet nichts). Das Packen
@@ -361,7 +361,7 @@ Test oder Nachweis.
 
 ## 14. Dunst entfernen: Bild dunkel, Himmel türkis/violett, heller Streifen am Horizont
 
-- **Entdeckt:** 0.4.34 (08.10.2026), vom Benutzer an zwei Panoramen mit
+- **Entdeckt:** 0.4.34 (08.10.2026), beim Benutzen an zwei Panoramen mit
   Dunst (Landschaft mit Sonne im Bild, Gegenlicht am Abend). **Behoben:** 0.4.35.
 - **Was:** Mit der ersten Fassung (0.4.30) wurde das Bild dunkler, der Himmel
   kippte ins Türkis bzw. bekam neben der Sonne einen violetten Stich; Zwischen-
@@ -398,7 +398,7 @@ Test oder Nachweis.
 
 ## 15. Dunst über 100: Bänder, Sonnensaum – dann Regler wirkungslos
 
-- **Entdeckt:** 0.4.35 (08.10.2026), Regler auf Wunsch des Benutzers bis 300
+- **Entdeckt:** 0.4.35 (08.10.2026), Regler bis 300
   erweitert (bei Gegenlicht und leichtem Dunst wirkte 100 zu dezent).
   **Behoben:** 0.4.36.
 - **Was:** Die Dunstmenge einfach zu vervielfachen ergab schwarze und rote
@@ -432,8 +432,8 @@ Test oder Nachweis.
 
 ## 16. Dunst: ein Luftlicht für das ganze Bild – Gegenlicht-Panorama blieb fast unverändert
 
-- **Entdeckt:** 0.4.36 (08.10.2026), vom Benutzer: „Panorama wird deutlich
-  besser, Turmlandschaft leider noch nicht.“ **Behoben:** 0.4.37.
+- **Entdeckt:** 0.4.36 (08.10.2026), Sichtprüfung: das Panorama wurde deutlich
+  besser, die Turmlandschaft noch nicht. **Behoben:** 0.4.37.
 - **Was:** Bei einem Panorama mit hoch stehender Sonne erkannte das Verfahren
   links kaum Dunst, und am Horizont unter der Sonne blieb der dichteste Dunst
   ganz stehen.
@@ -462,8 +462,8 @@ Test oder Nachweis.
 
 ## 17. Dunst: Grün wurde ocker und braun, Smog blieb fast unverändert
 
-- **Entdeckt:** 0.4.37 (08.10.2026), vom Benutzer: „aus grünen Flächen werden eher
-  rötlich-braune … es wird alles sehr unnatürlich“; dazu zwei Testbilder (Berge
+- **Entdeckt:** 0.4.37 (08.10.2026), Sichtprüfung: grüne Flächen wurden eher
+  rötlich-braun, das Bild wirkte insgesamt unnatürlich; dazu zwei Testbilder (Berge
   mit Seen, Stadt im Smog). **Behoben:** 0.4.38.
 - **Was:** Felder in mittlerer Ferne kippten ins Ocker/Braun (bei 300 deutlich);
   ein Bild mit dichtem Smog über einer Stadt änderte sich kaum.
@@ -494,9 +494,9 @@ Test oder Nachweis.
 
 ## 18. Dunst: Messumgebung mit bekannter Wahrheit – Himmelsschutz hielt den Dunst fest
 
-- **Entdeckt:** 0.4.38 (08.10.2026), Benutzer: „als ob der Nebel gar nicht da
-  gewesen wäre“, Wiesen hinten (Turmlandschaft) noch bräunlich. **Behoben:** 0.4.39.
-- **Messumgebung** (`%LOCALAPPDATA%\imageconverter-build\bench`,
+- **Entdeckt:** 0.4.38 (08.10.2026), Sichtprüfung: Ziel ist ein Bild, als wäre der
+  Nebel nie da gewesen; die Wiesen hinten (Turmlandschaft) waren noch bräunlich. **Behoben:** 0.4.39.
+- **Messumgebung** (`<testordner>\bench`,
   `Program.labor.cs.txt`, `labor.sh`): Aus dem klaren Vordergrund von
   Turmlandschaft und Berglandschaft wird künstlicher Dunst erzeugt (Dichte nach oben,
   Luftlicht links bläulich → rechts warm, wahlweise Himmelsstreifen). Gemessen:
@@ -529,8 +529,8 @@ Test oder Nachweis.
 - **Wo:** `Dehaze.cs` (`SkyMap`, `ReachFromTop`, `AirLightOf`, `Apply`).
 - **Test:** DehazeTests, Sichtprüfung an 4 Bildern (Sonne, Wolken, Smog, Äste).
   Rechenzeit 78 MP: 6–7 s (vorher 4 s).
-- **Zurückgenommen in 0.4.40:** Der Benutzer fand 0.4.39 „deutlich schlechter“
-  als 0.4.38 – zu Recht: Die Ferne wurde ein dunkles graubraunes Band
+- **Zurückgenommen in 0.4.40:** In der Sichtprüfung war 0.4.39 deutlich schlechter
+  als 0.4.38: Die Ferne wurde ein dunkles graubraunes Band
   (Turmlandschaft), das Tal kippte ins Türkis (Panorama), das Bild wurde dunkler.
   Ursache: Das Laborziel (klarer Vordergrund als „Wahrheit“, Luftperspektive
   null) ist nicht das Sehziel. Ein Foto soll die Belichtung behalten und die
@@ -543,14 +543,14 @@ Test oder Nachweis.
 
 ## 19. Dunst (Beta 0.4.41): Durchläufe statt Stärke, Luftlicht in Bereichen, Feineinstellung
 
-- **Anlass:** Benutzer (08.10.2026): So denkt sich das Auge den Dunst weg — in
+- **Anlass (08.10.2026):** So denkt sich das Auge den Dunst weg — in
   Runden (Farbe erkennen, Kontrast, Sättigung, feine Schärfe, dann Kanten),
-  jede Runde auf dem Ergebnis der vorigen; und „wo er weg ist, nicht noch mal“.
+  jede Runde auf dem Ergebnis der vorigen; und wo er weg ist, nicht noch einmal.
   Außerdem: Ring um die Sonne, Farben kippen je Bereich in andere Richtungen.
 - **Messungen (Labor, Turmlandschaft und Panorama, volle Auflösung):**
   - Ungebremste Schleife 3 × 40 schlug den Einmal-Filter 100 klar (Wiese
     hinten: Farbton 93° → 95°, Buntheit 0,060 → 0,065 = Wiese vorn), 3 × 70
-    ≈ das Rezept des Benutzers (Dunst 211). Ab 4 Runden kippte es: Himmel
+    ≈ das Vergleichsrezept (Dunst 211). Ab 4 Runden kippte es: Himmel
     körnig, Vordergrund heller und bunter, Ferne magenta — Kontrast, Dynamik
     und Schärfe summierten sich je Runde, und die Schätzung fand im Himmel
     immer wieder „Dunst“.
@@ -569,7 +569,7 @@ Test oder Nachweis.
   Versionszusatz: `<Version>0.4.41-beta</Version>` → Fenstertitel aus der
   InformationalVersion („0.4.41 beta“), AssemblyVersion bleibt 0.4.41.
 - **Offen:** rosa Horizont (Farbton in dichtem Dunst); Standardwerte der
-  Feineinstellung sucht der Benutzer in der Software; Luftlicht ohne Himmel
+  Feineinstellung werden im Programm ermittelt; Luftlicht ohne Himmel
   (Haze-Lines) noch nicht gebaut.
 - **Nicht tun:** Wahrnehmungsanteile je Durchlauf anwenden; Himmel in jedem
   Durchlauf neu schätzen; Luftlicht je Kachel ohne Rückfall auf die Spalte.
@@ -577,7 +577,7 @@ Test oder Nachweis.
   `Adjustments.cs` (`DehazePasses` …, `PrepareKey`), `MainViewModel.Tools.cs`,
   `MainView.axaml` (Gruppe „DUNST · BETA“), `MainWindow.axaml.cs` (Titel).
 - **Test:** `DehazeTests.Passes_RemoveMoreHaze_AndDetailsOnlyCountWithDehaze`.
-  Vergleichsbilder: `%LOCALAPPDATA%\imageconverter-build\vergleich`.
+  Vergleichsbilder: `<testordner>\vergleich`.
 - **Nachtrag 0.4.42-beta (Ring um die Sonne):** Gemessen entlang einer Linie
   durch die Sonne: Die Himmelskarte war im Lichthof 0 (Strahlen = Struktur),
   der Hof galt als Landschaft mit roher Durchlässigkeit 0,2–0,6; die
@@ -585,7 +585,7 @@ Test oder Nachweis.
   der pinke Ring. Abhilfe: Lichtquelle mit Hof zählt als Himmel (ausgefressene
   Pixel, Gauß σ 5 % der Kante, ab 1 %); im Himmel gelten nur die Grenzen, nicht
   die Pixelregeln; im Himmel keine zusätzliche Buntheit und keine Dynamik.
-  Feinregler immer sichtbar (Wunsch). Der Block rechnet bei jeder
+  Feinregler immer sichtbar. Der Block rechnet bei jeder
   Reglerbewegung vom Original — nichts kumuliert.
 - **Nachtrag 0.4.43-beta (Durchläufe wirkten nicht, Sonne ohne Strahlen):**
   Abnahme gegen die Laborschleife (Stapel `Abnahme*` im Vergleichsordner):
@@ -614,7 +614,7 @@ Test oder Nachweis.
   stand rechnen, den das Labor hatte (`bench-0438` im Worktree `wt-0438`), und
   Strukturen (Strahlen, Wiese) messen statt Ringmittel — Ringmittel glätten
   genau das weg, was das Auge sieht. Bei Durchläufen > 1 wirkt jeder
-  Feinregler je Durchlauf (Semantik des Benutzers); 6 Durchläufe mit den
+  Feinregler je Durchlauf (so gewollt); 6 Durchläufe mit den
   Vorgaben kippen (L 0,44, Buntheit 0,085) — das ist Reglersache, 3–4 sind gut.
 - **Nachtrag (Hof-Grenze):** Ein Hof nach Radius (Gauß um die ausgefressene
   Scheibe, auf den Scheitel normiert) ergab im glatten Himmel eine sichtbar
@@ -642,10 +642,10 @@ Test oder Nachweis.
   als Vorgabe. 100 × 3 liegt zwischen 0.4.43 60 × 1 und 60 × 2 (Kontrast 62,1,
   Buntheit Wiese 0,059). Die Tests für den einzelnen Schritt (bis 300, klares
   Bild) laufen deshalb ausdrücklich mit einem Durchlauf.
-- **Meilenstein 0.4.45 (Referenz für den Neubau):** Stand 0.4.44 beta, vom
-  Benutzer abgenommen („3–4 Durchläufe sehen sehr gut aus, das Abschwächen hat
-  viel gebracht“). Exe gesichert unter
-  `%LOCALAPPDATA%\imageconverter-build\publish-0445\`. Folgende Versionen bis
+- **Meilenstein 0.4.45 (Referenz für den Neubau):** Stand 0.4.44 beta,
+  abgenommen (3–4 Durchläufe sehen sehr gut aus, das Abschwächen je Durchlauf hat
+  viel gebracht). Exe gesichert unter
+  `<testordner>\publish-0445\`. Folgende Versionen bis
   zum nächsten Meilenstein tragen wieder `-beta`. Leistung als Ausgangswert in
   KONZEPT.md §6 — Speicher ist der Engpass (28,7 MP, 3 Durchläufe: 8,3 GB Spitze).
 - **Tooltips unter dem Mauszeiger (bis 0.4.46):** Avalonias Vorgabe ist
@@ -714,20 +714,20 @@ Test oder Nachweis.
   die Einzelbilder glatt waren. Stapel als JPEG schreiben; bei Treppen im Vergleich
   immer zuerst das Einzelbild ansehen.
 - **Meilenstein 0.5.0 (09.10.2026):** Neubau der Bildkette Phasen 0–4 (32 Bit,
-  Pufferpool, Szenenkarte, Dunst in Physik und Look getrennt), vom Benutzer als
-  Meilenstein bestimmt. Im Bild bei den Vorgaben bewusst wie 0.4.45. Neue Referenz:
-  Exe unter `%LOCALAPPDATA%\imageconverter-build\publish-050\`, Abnahme-Referenz
+  Pufferpool, Szenenkarte, Dunst in Physik und Look getrennt), als
+  Meilenstein abgenommen. Im Bild bei den Vorgaben bewusst wie 0.4.45. Neue Referenz:
+  Exe unter `<testordner>\publish-050\`, Abnahme-Referenz
   `abnahme/0.5.0`. Linux-Bau noch offen. Hinweis zum Hook: Er zählt bei „-beta“ nur
   die Zahl hoch und verliert den Zusatz — Version immer von Hand setzen.
 - **Meilenstein 0.5.2 (09.10.2026):** Vorschau-Bedienung — Knopf für das
   Auswahlwerkzeug (Vorgabe an, blau; aus = Ziehen verschiebt), Strg + Ziehen
-  verschiebt immer, Leertaste + Ziehen entfernt (vom Benutzer gewünscht, Strg
+  verschiebt immer, Leertaste + Ziehen entfernt (Strg
   reicht). Bildkette unverändert gegenüber 0.5.0. Hinweis: `dotnet test` baut die
   Desktop-Exe nicht neu — für Bildschirmfotos erst die ganze Lösung bauen (sonst
   zeigte der Testlauf noch 0.4.51).
 - **Meilenstein 0.5.4 (09.10.2026):** Verschieben im Zoom nur noch mit Strg + Ziehen
   (oder Ziehen bei ausgeschaltetem Auswahlrahmen) — mittlere Maustaste und Mausrad
-  entfernt (vom Benutzer gewünscht). Strg + Mausrad zoomt weiter. Bildkette unverändert.
+  entfernt. Strg + Mausrad zoomt weiter. Bildkette unverändert.
 - **Dunstfarbe (0.5.5 beta):** Bis 0.5.4 blieb der Farbton des Originals stehen — samt
   Farbstich des Dunstes (künstlicher Dunst: Wiesen 16° zu blau). Der volle Farbton des
   Modells machte Felder braun (dunkelster Kanal gegen null); jetzt wird nur der Anteil
@@ -739,12 +739,12 @@ Test oder Nachweis.
   die Dunstfarbe aus dem Bild selbst; Testbilder brauchen nach oben zunehmenden Dunst.
 - **Regler „Dunstfarbe“ mit festem Verlauf (0.5.7 beta):** 0.5.6 zeigte die geschätzte
   Dunstfarbe des Bildes und ihre Gegenfarbe — der Verlauf blieb grau, bis eine Vorschau
-  mit Dunst gerechnet war, und war für den Benutzer meist grau. Auf Wunsch jetzt fest wie
+  mit Dunst gerechnet war, und war für den Benutzer meist grau. Jetzt fest wie
   beim Regler „Farbe“: links orange-rötlich, Mitte grau, rechts bläulich. Bei bläulichem
   Dunst wirkt der Regler umgekehrt — bewusst in Kauf genommen, die Richtung ist so sofort
-  verständlich. Dichten Dunst/Smog nicht weiter verfolgen (Benutzer: dort ist keine
+  verständlich. Dichten Dunst/Smog nicht weiter verfolgen (dort ist keine
   Information mehr herzustellen). Abnahme: neuer Fall „NutzerPanorama“ (Dunst 54 × 7,
-  Schärfe fein 29 %, Kanten 13 %, Dunstfarbe 48 % — vom Benutzer als sehr gut befunden).
+  Schärfe fein 29 %, Kanten 13 %, Dunstfarbe 48 % — in der Sichtprüfung sehr gut).
 - **Meilenstein 0.5.8 (09.10.2026):** Stand 0.5.7 beta als Meilenstein — Dunst mit
   Physik/Look getrennt, Regler Dunstfarbe (Vorgabe 50 %, fester Verlauf warm → kühl),
   Auswahlwerkzeug-Knopf, Verschieben mit Strg + Ziehen. Danach: KI live mischen
@@ -753,8 +753,8 @@ Test oder Nachweis.
 
 ## 20. KI: Stärke rechnete das Modell neu, Läufe häuften sich, Vorher/Nachher gesperrt
 
-- **Entdeckt:** 0.5.8 (09.10.2026), Fragen des Benutzers („funktioniert Stärke nur als
-  Overlay?“, „beginnt KI anwenden immer vom Original?“) und Test mit offenem Ergebnis.
+- **Entdeckt:** 0.5.8 (09.10.2026), bei der Prüfung, ob „Stärke“ nur eine Überblendung ist
+  und ob „KI anwenden“ immer vom Original beginnt, und im Test mit offenem Ergebnis.
   **Behoben:** 0.5.9 beta.
 - **Was:** (1) „Stärke“ war nur eine Mischung mit dem Bild davor, wurde aber vor dem
   Lauf festgelegt — jeder andere Wert hieß: Modell noch einmal rechnen (Sekunden bis
@@ -786,9 +786,9 @@ Test oder Nachweis.
 
 ## 21. KI und Einstellungen: Reihenfolge wählbar, Vorschau sprang beim Übernehmen
 
-- **Entdeckt:** 0.5.9 beta (09.10.2026). Wunsch des Benutzers: der KI wahlweise das fertig
+- **Entdeckt:** 0.5.9 beta (09.10.2026). Anforderung: der KI wahlweise das fertig
   eingestellte Bild geben (Gesichter zuletzt) oder erst die KI und danach die Einstellungen —
-  „doppelt soll nichts angewendet werden“. **Behoben:** 0.5.10 beta.
+  nichts darf doppelt angewendet werden. **Behoben:** 0.5.10 beta.
 - **Was:** (1) Ein offenes KI-Ergebnis wurde ohne Einstellungen gezeigt — Dunst, Helligkeit usw.
   fehlten, bis man übernahm. (2) Beim Übernehmen sprang die Vorschau sichtbar (Laub, ~10 Stufen
   im Mittel): das offene Ergebnis war mit Flächenmittel auf höchstens 2048 px verkleinert, die normale
@@ -811,7 +811,7 @@ Test oder Nachweis.
 
 ## 22. Neue Bilder übernahmen die Regler des vorigen Bildes
 
-- **Entdeckt:** 0.5.11 beta (09.10.2026), vom Benutzer: nach dem Hineinziehen eines neuen Bildes
+- **Entdeckt:** 0.5.11 beta (09.10.2026), beim Benutzen bemerkt: nach dem Hineinziehen eines neuen Bildes
   standen Dunst, Helligkeit usw. noch vom vorigen Bild. **Behoben:** 0.5.12 beta.
 - **Was/Warum:** `OpenAsync` ersetzt Dateien und Verlauf, ließ aber die Reglerwerte stehen — das
   erste neue Bild bekam sie wie ein „für alle“-Stand.
@@ -821,7 +821,7 @@ Test oder Nachweis.
   Bleiben: Format, Qualität, Größe, DPI, Metadaten, Farbraum, Ordner, Name, KI-Modell, Reihenfolge
   (Vorlieben, keine Bearbeitung). Blättern zwischen den geöffneten Bildern ändert nichts.
 - **Nachweis:** `NewImagesTests`.
-- **Nachtrag 0.5.13 beta:** Auf Wunsch des Benutzers beginnen neu geladene Bilder jetzt *ganz* wie
+- **Nachtrag 0.5.13 beta:** Neu geladene Bilder beginnen jetzt *ganz* wie
   nach dem Programmstart — auch Format, Qualität, Größe (Originalauflösung), DPI aus der Datei,
   Metadaten, Farbraum, Ordner, Name, „für alle“, Auswahlwerkzeug, KI-Modell und Reihenfolge.
   `MainViewModel.ResetToStart()` stellt den beim Start gemerkten Stand (`_startSettings`) wieder her;
@@ -829,7 +829,7 @@ Test oder Nachweis.
   geöffneten Bildern ändert weiterhin nichts. UI-Test über den Dateidialog: Qualität 36 → 82,
   Dunst +184 → 0, Größe 1200 × 900 (Original).
 - **Nachtrag 0.5.14 beta:** „Gleiche Einstellungen für alle Bilder“ wird beim Laden neuer Bilder
-  *ausgeschaltet* (nicht wie beim Start eingeschaltet) — Wunsch des Benutzers: sonst überschreibt
+  *ausgeschaltet* (nicht wie beim Start eingeschaltet) — sonst überschreibt
   eine Änderung an einem Bild, wenn man den Haken übersieht, unbemerkt die anderen. Jedes neue Bild
   beginnt beim ersten Anzeigen mit dem Startstand (`_individualTemplate = _startSettings`, DPI aus
   der Datei) — vorher hätte es im Einzelmodus den Stand des zuletzt gezeigten Bildes übernommen.
@@ -860,7 +860,7 @@ Test oder Nachweis.
 
 ## 24. KI-Detailregler: Falten & Züge, Körnung, Karte — drei Fallen beim Bau
 
-- **Gebaut:** 0.5.19 beta (09.10.2026), Wunsch des Benutzers: Gesichter kommen zu glatt; Regler für
+- **Gebaut:** 0.5.19 beta (09.10.2026). Anlass: Gesichter kamen zu glatt. Ziel: Regler für
   Falten und für Menge und Größe des Korns, vorher aus dem Ausgangsbild einlesen, nachher vergleichen,
   übereinanderlegen zum Anschauen. Alles wirkt live (das Modell rechnet einmal).
 - **Wie:** `FaceDetails` + `AiFaces.Run`/`PasteBack`. *Vor der KI:* Gesichtsbereiche mit BiSeNet
@@ -889,13 +889,13 @@ Test oder Nachweis.
   Kornmessung weiß und grob; Körnung füllt bis zum Foto auf; nichts, wenn das Gesicht schon körnig
   ist). Vergleichsbögen an Familienfotos (lokal, nicht im Repo).
 - **Meilenstein 0.5.20 (09.10.2026):** Stand 0.5.19 beta — KI-Detailregler (Falten, Körnung, Korngröße,
-  Karte) vom Benutzer am Foto 172251 als gut befunden: GFPGAN Stärke 80, Hautstruktur 69, Falten 48,
+  Karte) in der Sichtprüfung am Foto 172251 gut: GFPGAN Stärke 80, Hautstruktur 69, Falten 48,
   Körnung 31, Korngröße ×0,46, erst KI; Dunst 47 × 6, Klarheit 29, Kontrast 12, Dynamik 20, Schärfe fein 18,
   Kanten aus, Helligkeit 72, Entstufen 50, Dunstfarbe 50.
 
 ## 25. KI: Dunst nach der KI ohne Fortschritt, Vorher zeigte gefiltertes Bild, Regler versteckt
 
-- **Entdeckt:** 0.5.20 (09.10.2026), vom Benutzer. **Behoben:** 0.5.21 beta.
+- **Entdeckt:** 0.5.20 (09.10.2026), beim Benutzen. **Behoben:** 0.5.21 beta.
 - **Was:** (1) Bei „Erst KI, dann Einstellungen“ lief nach der KI der Dunst (mehrere Durchläufe) über
   das Ergebnis, ohne dass etwas angezeigt wurde — im Debug-Build ~2,5 s je Durchlauf auf 2048 px.
   (2) „Vorher / Nachher“ zeigte bei offenem Ergebnis links das Bild *mit* Einstellungen. (3) Regler
@@ -911,7 +911,7 @@ Test oder Nachweis.
 
 ## 26. Liste „Bearbeitungen“: je Bearbeitung eine Zeile, Auge blendet aus Nachher und Export aus
 
-- **Gebaut:** 0.5.23 beta (09.10.2026), Wunsch des Benutzers: Liste mit Augensymbol, was in „Nachher“
+- **Gebaut:** 0.5.23 beta (09.10.2026). Ziel: Liste mit Augensymbol, was in „Nachher“
   einfließt; nicht jede Reglerbewegung, sondern je Bearbeitung in Rechen-Reihenfolge; beim Export nur
   das Angehakte; „Neu anwenden“ schreibt die Auswahl fest. Knopf unten rechts in der Vorschau.
 - **Wie:** `MainViewModel.Edits.cs`. Einstellungen: `HiddenSteps` (Flags, Teil von `SettingsState`,
@@ -932,11 +932,11 @@ Test oder Nachweis.
 
 ## 27. Drehen bei offenem KI-Ergebnis, Liste nur mit Funktionen, eine Fortschrittsanzeige
 
-- **Entdeckt:** 0.5.23 beta (09.10.2026), vom Benutzer. **Behoben:** 0.5.24 beta.
+- **Entdeckt:** 0.5.23 beta (09.10.2026), beim Benutzen. **Behoben:** 0.5.24 beta.
 - **Was:** (1) Nach der KI gedreht: Bild schmal, Gesichter an falscher Stelle — das *offene* Ergebnis
   lag als Vorschau-Ebene im alten Querformat über dem gedrehten Bild. (2) Nach Übernehmen und Drehen
   rechnete ein neuer KI-Lauf auf dem gedrehten KI-Ergebnis (KI auf KI). (3) Die Liste zeigte jede
-  Drehung als Zeile; gewünscht ist je Funktion eine Zeile zum Aus-/Einschalten,
+  Drehung als Zeile; vorgesehen ist je Funktion eine Zeile zum Aus-/Einschalten,
   dazu Haut & Details getrennt von der KI. (4) Drei Fortschrittsanzeigen (Vorschau unten rechts, KI
   unten mitte, Balken im KI-Bereich).
 - **Wie:** (1) `RunSetup.Current` = Bild beim Rechnen; ändert es sich (FullBitmap), wird das offene
@@ -961,7 +961,7 @@ Test oder Nachweis.
 
 ## 28. Rauschen getrennt nach Helligkeit und Farbe (statt ImageMagick-Wavelet)
 
-- **Gebaut:** 0.5.26 beta (09.10.2026), Wunsch des Benutzers: eigene Gruppe Rauschen mit Reglern für
+- **Gebaut:** 0.5.26 beta (09.10.2026). Ziel: eigene Gruppe Rauschen mit Reglern für
   normales Rauschen und Farbrauschen, Details möglichst erhalten.
 - **Wie:** `Core/Imaging/Denoiser.cs` im 32-Bit-Puffer, in Y / Cb = B − Y / Cr = R − Y. Farbrauschen:
   Guided Filter (He u. a. 2010) auf Cb und Cr, Führung = Helligkeit, zwei Stufen (3 und 10 px im
@@ -982,7 +982,7 @@ Test oder Nachweis.
 
 ## 29. Reihenfolge der Kette: Gleiche Farbe vor der Kurve, Entrauschen vor dem Vergrößern
 
-- **Gebaut:** 0.5.27 beta (09.10.2026), Frage des Benutzers, ob alle Filter in der bestmöglichen
+- **Gebaut:** 0.5.27 beta (09.10.2026), Prüfung, ob alle Filter in der bestmöglichen
   Reihenfolge laufen (Beispiel: erst schärfen, dann entrauschen wäre falsch — das war schon richtig).
 - **Was falsch war:**
   1. Gleiche Farbe (Ausgleichen, Farbe, Luminanz) lief in `Adjustments.Apply` nach der
@@ -1001,7 +1001,7 @@ Test oder Nachweis.
   Entrauscher aus 0.5.26 (glättet flache Stellen stärker), die bei KombiPanorama (Ferne) aus den
   Dunst-Änderungen seit 0.5.0 — beide Fälle nutzen weder Gleiche Farbe noch Vergrößern.
 - **Meilenstein 0.5.28 (09.10.2026):** Stand 0.5.27 beta — Rauschen und Farbrauschen (Non-Local Means,
-  helligkeitsgeführter Farbfilter) und die neue Reihenfolge der Kette vom Benutzer als gut befunden.
+  helligkeitsgeführter Farbfilter) und die neue Reihenfolge der Kette als gut abgenommen.
   Hinweis aus der Prüfung: Die Vorschau rechnet höchstens 2048 px; beim Hineinzoomen (120 %) wirkt schon
   ein kleiner Reglerwert wie Weichzeichnen, weil die Anzeige vom Original auf die Vorschau wechselt —
   nicht der Filter. Angeboten: sichtbaren Ausschnitt beim Zoomen in voller Auflösung rechnen.
@@ -1047,7 +1047,7 @@ Test oder Nachweis.
 - **Neu in:** 0.5.31 beta (10.10.2026). Kein gemeldeter Fehler; Entscheidungen und Fallen beim Bau.
 - **Funktion:** Symbol neben „Frei drehen“. Der Rahmen hat vier frei verschiebbare Ecken (Griffe auch an den
   Kantenmitten, Innenfläche verschiebt das Ganze), außen abgedunkelt – man sieht gleich, wo die Ränder des
-  Ergebnisses liegen (Wunsch des Benutzers statt zweitem Schritt mit automatischem Rahmen). Man legt die
+  Ergebnisses liegen (bewusst statt eines zweiten Schritts mit automatischem Rahmen). Man legt die
   Ecken auf etwas, das rechteckig ist (Blatt, Bild an der Wand, Fenster); „Entzerren und zuschneiden“
   (Enter, Doppelklick) macht genau den Inhalt des Vierecks zum geraden Rechteck – ein Schritt, Strg+Z.
   Lupe beim Ziehen einer Ecke, Pfeiltasten verschieben die zuletzt gezogene Ecke, Esc bricht ab.
@@ -1079,11 +1079,11 @@ Test oder Nachweis.
 
 ## 32. Standardformate (A4 …) und zwei Fallen an kleinen Knöpfen
 
-- **Neu in:** 0.5.32 beta (10.10.2026). **Fehler:** Winkel-Symbol ragte über den runden Knopf (vom Benutzer
+- **Neu in:** 0.5.32 beta (10.10.2026). **Fehler:** Winkel-Symbol ragte über den runden Knopf (beim Benutzen
   gesehen, eingeführt 0.5.29 beta `cdcc02f`), behoben 0.5.32 beta.
 - **Funktion:** Knopf mit Blatt-Symbol über der Kette (Größe → Einheit). Menü mit DIN-Formaten, Fotoabzügen und
   US-Formaten. Auswahl: Einheit mm, Hoch-/Querformat wie das Bild, bei geschlossener Kette ganz hinein
-  (eine Kante füllt das Format, `PaperFormats.Fit`), sonst genau das Format. Ziel des Benutzers: gleich passend
+  (eine Kante füllt das Format, `PaperFormats.Fit`), sonst genau das Format. Ziel: gleich passend
   drucken, z. B. 65 × 110 mm → A4 = 175,2 × 297 mm. Die DPI bleibt; bei „Nur Metadaten ändern“ ändert sich die
   DPI statt der Pixel. Muss das Bild dafür größer werden, wird „Nicht vergrößern“ ausgeschaltet – sonst käme
   ein kleines Bild nie auf das Format. Ein Klick = ein Rückgängig-Schritt (Turns im Verlauf).
@@ -1105,7 +1105,7 @@ Test oder Nachweis.
 - **Nachtrag 0.5.33:** Standardformate um A2, A1 und A0 erweitert (Menü jetzt A0 … A7, DIN lang, Fotoabzüge,
   US); Test `Din_GoesFromA0ToA7`.
 - **Meilenstein 0.5.33 (10.10.2026):** Stand 0.5.32 beta plus A0–A2 – Frei drehen mit automatischem Rahmen,
-  Entzerren mit frei verschiebbaren Ecken und Standardformate vom Benutzer als gut befunden. Tag `v0.5.33`,
+  Entzerren mit frei verschiebbaren Ecken und Standardformate als gut abgenommen. Tag `v0.5.33`,
   Sicherung `../ImageConverter-0.5.33-Sicherung.zip`.
 
 ## 33. Weißabgleich mit drei Pipetten (Neutral, Schwarz, Weiß)
@@ -1141,26 +1141,26 @@ Test oder Nachweis.
   Schwarz+Weiß; alle drei; nur Weiß; Ausgefressenes; Mitteln nach Anzahl; durch die ganze Kette). Unsichtbares
   Testfenster mit Testmaus: Zimmer unter warmem Licht, Neutral 2×, Schwarz, Weiß → Wand 161/161/160, Weiß 255,
   Schwarz 0; Liste „Neutral 2× · Schwarz · Weiß“; Strg+Z Klick für Klick samt Markierungen; × schaltet ab.
-- **Nachtrag 0.5.35:** Hinweis und Tooltip zu „Neutral“ verständlicher (Rückfrage des Benutzers, welches Grau):
+- **Nachtrag 0.5.35:** Hinweis und Tooltip zu „Neutral“ verständlicher (unklar war, welches Grau gemeint ist):
   Es kommt nicht auf hell oder dunkel an, sondern darauf, dass die Stelle in Wirklichkeit farblos ist; genannt
   sind gute (Asphalt, Beton, graue Wolke, weißes Papier im Schatten) und ungeeignete Stellen (grelles Weiß, fast
   Schwarzes, Beige, Holz).
-- **Meilenstein 0.5.35 (10.10.2026):** Stand 0.5.34 beta plus Hinweistext – Weißabgleich mit drei Pipetten vom
-  Benutzer als passend befunden. Tag `v0.5.35`, Sicherung `../ImageConverter-0.5.35-Sicherung.zip`.
+- **Meilenstein 0.5.35 (10.10.2026):** Stand 0.5.34 beta plus Hinweistext – Weißabgleich mit drei Pipetten als
+  passend abgenommen. Tag `v0.5.35`, Sicherung `../ImageConverter-0.5.35-Sicherung.zip`.
 
 ## 34. Luminanz mit Schwellwert (Gleiche Farbe)
 
 - **Neu in:** 0.5.36 beta (10.10.2026, Commit „Luminanz mit Schwellwert“). Kein gemeldeter Fehler; Bauweise
   und eine Falle beim Testen.
-- **Wunsch:** Beim Aufhellen mit Luminanz dunkle Bereiche (Vordergrund) heller machen, ohne dass helle Bereiche
+- **Ziel:** Beim Aufhellen mit Luminanz dunkle Bereiche (Vordergrund) heller machen, ohne dass helle Bereiche
   (Himmel) weiter aufhellen – Regler „Schwellwert“ unter Luminanz.
 - **Rechnen:** `Adjust.Limited`: unterhalb der Grenze dieselbe weiche Schulter wie ohne Grenze, nur auf die Grenze
   statt auf Weiß gestaucht (`limit · Shoulder(L · k / limit)`), darüber unverändert; das Maximum mit dem
   Ausgangswert hält die Kurve stetig und steigend (keine Umkehr der Tonwerte). 100 % = keine Grenze = genau die
   alte Rechnung. Wirkt nur beim Aufhellen (Regler sonst gesperrt, `Normalized` setzt ihn auf 100).
 - **Grenze der Lösung:** Rein je Pixel – Töne knapp unter der Grenze rücken zusammen (wirkt dort flacher), und ein
-  helles Detail im dunklen Vordergrund wird wie der Himmel behandelt. Rückmeldung des Benutzers: Auf die Bäume
-  allein lässt es sich so nicht begrenzen → bereichsbezogene Lösung geplant (nach dem Entfernen, eigene Beta).
+  helles Detail im dunklen Vordergrund wird wie der Himmel behandelt. Im Praxistest ließ es sich so nicht auf die Bäume
+  allein begrenzen → bereichsbezogene Lösung geplant (nach dem Entfernen, eigene Beta).
 - **Falle beim Testen:** `Adjust.Apply(byte[] …)` rundet mit Dither (±1 Stufe Rauschen) – ein Test auf „steigend“
   über die 8-Bit-Ausgabe meldete scheinbare Umkehrungen. Monotonie auf den Float-Werten prüfen.
 - **Wo:** `Core/Imaging/Adjustments.cs` (`MatchLimit`, `Limited`, `Normalized`), `Ui/ViewModels/MainViewModel.Tools.cs`,
@@ -1175,7 +1175,7 @@ Test oder Nachweis.
   gleich) über das Störende malen, „Entfernen“ – ein Füllmodell malt die Stellen passend zur Umgebung neu. Jedes
   Entfernen ist ein Rückgängig-Schritt (`ImageStepKind.Retouch`, Zeile „Entfernt“ in der Liste, nicht
   ausschaltbar). Die Markierung bleibt danach stehen (ausgeblendet): Ein neuer Versuch mit anderem Modell oder
-  ergänzter Markierung rechnet vom Bild vor dem letzten Entfernen (Wunsch des Benutzers) und ersetzt die Zeile;
+  ergänzter Markierung rechnet vom Bild vor dem letzten Entfernen und ersetzt die Zeile;
   Strg+Z führt zum vorigen Ergebnis. „Neue Markierung“ beginnt beim aktuellen Bild. Modelle: LaMa (Apache-2.0,
   208 MB, gründlich) und MI-GAN (MIT, 28 MB, schnell), Download in den Einstellungen, dort jetzt in Gruppen
   (Bilder verbessern, Gesichter, Gesichtserkennung, Entfernen).
@@ -1210,7 +1210,7 @@ Test oder Nachweis.
 
 ## 36. Luminanz: Schwellwert nach Bereichen und „Ferne schonen“
 
-- **Neu in:** 0.5.38 beta (10.10.2026). Folgt auf #34: Rückmeldung des Benutzers zu 0.5.36 – mit 200 % und ohne
+- **Neu in:** 0.5.38 beta (10.10.2026). Folgt auf #34: Praxistest mit 0.5.36 – mit 200 % und ohne
   Schwellwert sind die Bäume gut zu sehen, aber hinten im Bild ist alles überstrahlt; der Schwellwert ließ sich
   nicht so einstellen, dass nur die Bäume heller werden.
 - **Warum der alte Schwellwert nicht reichte:** Er entschied je Pixel. Dunkles durfte nur bis zur Grenze hell
@@ -1239,8 +1239,8 @@ Test oder Nachweis.
 
 ## 37. Luminanz: heller Saum am Übergang Ferne → Vordergrund (Pyramide, Dunstkarte ohne Minimumfilter)
 
-- **Entdeckt in:** 0.5.38 beta (Commit `4ef443b`, 10.10.2026), beim eigenen Test am Panorama; dem Benutzer bei der
-  Übergabe genannt. **Behoben in:** 0.5.39 beta.
+- **Entdeckt in:** 0.5.38 beta (Commit `4ef443b`, 10.10.2026), beim eigenen Test am Panorama; bei der
+  Übergabe als offen vermerkt. **Behoben in:** 0.5.39 beta.
 - **Was:** Mit „Ferne schonen“ hoch lag um Büsche und Baumkanten vor dem dunstigen Tal ein heller Saum.
 - **Recherche (Stand der Technik):** Belichtungsverschmelzung nach Mertens über eine Laplace-Pyramide; für ein einzelnes
   Bild mit künstlichen Belichtungen (Extended Exposure Fusion, WACV 2020). Entfernung per KI-Tiefenkarte (Tiefenmaske
@@ -1265,7 +1265,7 @@ Test oder Nachweis.
 
 ## 38. Luminanz: „Ferne schonen“ mit KI-Tiefenkarte (Depth Anything V2)
 
-- **Neu in:** 0.5.40 beta (10.10.2026). Folgt auf #37 (Wunsch des Benutzers nach der Recherche: beide Teile umsetzen).
+- **Neu in:** 0.5.40 beta (10.10.2026). Folgt auf #37 (nach der Recherche entschieden: beide Teile umsetzen).
 - **Funktion:** Ist das Modell „Tiefenkarte – Depth Anything V2 (klein)“ geladen (Einstellungen → KI-Modelle, Gruppe
   Tiefenkarte, 99 MB, Apache-2.0), nimmt „Ferne schonen“ die geschätzte Entfernung statt des Dunstes; ohne Modell
   wie bisher der Dunst, unter dem Regler ein Hinweis mit „Laden …“.
@@ -1280,7 +1280,7 @@ Test oder Nachweis.
   ein Hof um den Baum in den Himmel – die Obergrenze kam nur vom Schwellwert, die Pyramide mischte die Aufhellung über
   die Kante. Jetzt gehört die Tiefenkarte zur Obergrenze. Gegenprobe: mit der alten Regel schlägt
   `WithDepthMap_DistanceFollowsDepth_AndKeepsFarSideUpToTheEdge` fehl.
-- **Durchläufe geprüft (Frage des Benutzers):** zwei bzw. drei schwächere Durchläufe hintereinander, Bereiche jedes
+- **Durchläufe geprüft:** zwei bzw. drei schwächere Durchläufe hintereinander, Bereiche jedes
   Mal neu aus dem Zwischenstand – kaum Unterschied zu einem Durchlauf, eher weniger Aufhellung im Vordergrund (er ist
   nach dem ersten schon heller als die Grenze), nur mehr Rechenzeit. Wie schon Rolling Guidance (#36): **keine
   Durchläufe**. Nicht wieder vorschlagen ohne neuen Befund.
@@ -1298,8 +1298,8 @@ Test oder Nachweis.
 
 ## 39. Luminanz: weiße Ränder um Bäume, weißlicher Himmel zwischen Ästen (Durchblicke erkennen)
 
-- **Entdeckt in:** 0.5.40 beta (Commit `5a68ba1`), vom Benutzer gemeldet („Überstrahlungen … die weißen Ränder,
-  Säume um die Bäume“); bestätigt mit Lupe (3×) am Panorama. **Behoben in:** 0.5.41 beta.
+- **Entdeckt in:** 0.5.40 beta (Commit `5a68ba1`), beim Benutzen bemerkt: Überstrahlungen, weiße Ränder und
+  Säume um die Bäume; bestätigt mit Lupe (3×) am Panorama. **Behoben in:** 0.5.41 beta.
 - **Was:** Zwischen den Nadeln am Baumrand wurde der Himmel weißlich, über dem Tal lag zwischen den Ästen ein
   grauweißer Schleier.
 - **Warum:** Die Karten sind bewusst grob (Bereiche 1200 px, Tiefe 518 px). Für sie ist ein Baum ein dunkler, naher
@@ -1324,12 +1324,12 @@ Test oder Nachweis.
 
 ## 40. Luminanz: Regler „Zielwert“ (Aufhellen bis zu einer Helligkeit statt mit festem Faktor)
 
-- **Neu in:** 0.5.42 beta (10.10.2026). Wunsch des Benutzers: Überstrahlung z. B. der Wiesen links.
+- **Neu in:** 0.5.42 beta (10.10.2026). Anlass: Überstrahlung z. B. der Wiesen links.
 - **Warum:** Luminanz 200 % verdoppelt alles in den gewählten Bereichen – ein Mittelton (Wiese, sonniger Busch) wird
   fast so stark angehoben wie ein dunkler Baum und strahlt über.
 - **Wie:** Faktor **je Bereich** (eingeebnete Helligkeit, nicht je Pixel – die Struktur im Baum bleibt):
   `Ziel / Bereichshelligkeit`, begrenzt auf 1 … Luminanz-Faktor. Ein Baum bei 20 % bekommt viel, eine Wiese bei 45 % mit
-  Ziel 40 % nichts. „Luminanz“ bleibt unverändert (Entscheidung des Benutzers: eigener Regler statt
+  Ziel 40 % nichts. „Luminanz“ bleibt unverändert (entschieden: eigener Regler statt
   Umdeuten); Zielwert ganz links = aus.
 - **Falle:** Der Regler sollte „Ziel“ heißen – den deutschen Text gab es schon („Ziel“ = Speicherort beim Export,
   englisch „Destination“). Die englische Tabelle wird über den Indexer gefüllt, ein zweiter Eintrag überschreibt den
@@ -1341,26 +1341,26 @@ Test oder Nachweis.
   `Views/MainView.axaml` (unter Luminanz).
 - **Test/Nachweis:** `AdjustTests.MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone` (Gegenprobe: ohne Zielwert
   rot); Panorama mit Tiefenkarte: sonnige Büsche nicht mehr grell, dunkler Vordergrund gleichmäßig angehoben.
-- **Nachtrag 0.5.43:** Luminanz bis 400 % (Wunsch des Benutzers; vorher höchstens 200 %). Sinnvoll vor
+- **Nachtrag 0.5.43:** Luminanz bis 400 % (vorher höchstens 200 %). Sinnvoll vor
   allem mit Zielwert – der Faktor ist dann nur die Obergrenze, tiefe Schatten (8 %) brauchen ×5 bis 40 %. Ohne Zielwert
   wird bei 400 % fast alles weiß, und Rauschen in tiefen Schatten wird stark sichtbar (Tooltip sagt es).
   Test `MatchLuminance_UpTo400_LetsDeepShadowsReachTheTarget` (Gegenprobe: mit Grenze 200 % rot).
-- **Nachtrag 0.5.44:** Regler „Gesamt“ oben in „Gleiche Farbe“, durch einen Strich abgesetzt (Wunsch des Benutzers):
+- **Nachtrag 0.5.44:** Regler „Gesamt“ oben in „Gleiche Farbe“, durch einen Strich abgesetzt:
   Luminanz für das ganze Bild ohne Masken (0–200 %, weiche Schulter), gerechnet **nach** der Bereichs-Luminanz –
   die gleicht mit Zielwert und Ferne die Bereiche an, macht das Bild insgesamt aber nicht heller. Kein Einfluss auf
   den teuren Teil (`PrepareKey` unverändert). Test `MatchGlobal_BrightensWholeImage_AfterRegionalLuminance`
   (Gegenprobe: ohne den Regler rot).
-- **Nachtrag 0.5.45:** Luminanz wieder höchstens 300 % (Wunsch des Benutzers) – insgesamt heller macht jetzt „Gesamt“,
+- **Nachtrag 0.5.45:** Luminanz wieder höchstens 300 % – insgesamt heller macht jetzt „Gesamt“,
   die Bereichs-Luminanz braucht über 300 % nicht mehr. Test `MatchLuminance_UpTo300_LetsDeepShadowsReachTheTarget`
   (prüft auch, dass Werte darüber begrenzt werden).
 - **Meilenstein 0.5.46 (10.10.2026):** Stand 0.5.45 beta – Entfernen mit LaMa/MI-GAN (#35) und Luminanz mit Bereichen,
-  Zielwert, Ferne (Tiefenkarte), Durchblicken und „Gesamt“ (#34, #36–#40) vom Benutzer als passend befunden. Tag
-  `v0.5.46`, Sicherung `../ImageConverter-0.5.46-Sicherung.zip`; Windows-Stand einmalig in den vom Benutzer genannten
-  Ordner übertragen (`KI-Modelle/` dort unverändert).
+  Zielwert, Ferne (Tiefenkarte), Durchblicken und „Gesamt“ (#34, #36–#40) als passend abgenommen. Tag
+  `v0.5.46`, Sicherung `../ImageConverter-0.5.46-Sicherung.zip`; Windows-Stand einmalig in den Ablageordner der
+  Windows-Fassung übertragen (`KI-Modelle/` dort unverändert).
 
 ## 41. Luminanz „Ferne“ (ohne Tiefenmodell) schonte zu wenig, wenn der Dunst-Regler aktiv war
 
-- **Entdeckt in:** 0.5.46 (Commit `566d177`) beim Durchdenken der Reihenfolge (Frage des Benutzers, ob die Masken
+- **Entdeckt in:** 0.5.46 (Commit `566d177`) beim Durchdenken der Reihenfolge (Frage, ob die Masken
   auf Dunst wirken); kein Bericht. **Behoben in:** 0.5.47 beta.
 - **Was:** Ohne Tiefenmodell erkennt „Ferne“ die Ferne am Dunst (dunkelster Farbkanal). Die Karte wurde aus dem Bild
   *nach* dem Dunst-Regler berechnet – hatte er den Dunst entfernt, sah die Ferne aus wie Vordergrund und wurde
@@ -1377,7 +1377,7 @@ Test oder Nachweis.
 
 ## 42. Ausrichten als Rezept (Entzerren, Gerade richten, Zuschnitt, Drehen/Spiegeln)
 
-- **Neu in:** 0.5.48 beta (Kern) und 0.5.49 beta (Einbau), 10.10.2026. Wunsch des Benutzers (Ganzes Ausrichten-Rezept):
+- **Neu in:** 0.5.48 beta (Kern) und 0.5.49 beta (Einbau), 10.10.2026. Anlass (ganzes Ausrichten als Rezept):
   Entzerren und Drehen fehlten in der Liste „Bearbeitungen“; dreimal 90° sollte als 270° zurückzunehmen sein, freies
   Drehen ist die Feinkorrektur.
 - **Vorher:** Jede Geometrie-Aktion rechnete sofort in die Pixel (ein Bild je Schritt im Verlauf). Rückgängig ging,
@@ -1407,7 +1407,7 @@ Test oder Nachweis.
   verdrängte erst freigeben, wenn die Vorschau steht (`EmptyGeometryTrash`). (3) „Neu anwenden“ prüfte „angezeigtes Bild
   ≠ Pixelbild“ — mit Rezept immer wahr; jetzt wird das Pixelbild mit/ohne KI verglichen.
 - **Bewusst so:** Beim Zuschneiden mit ausgeschaltetem Gerade-richten fällt die (unsichtbare) Drehung weg — der neue
-  Rahmen gilt im ungedrehten Bild. „Frei drehen“ setzt den Rahmen bei jeder Winkeländerung neu (wie bisher, vom Benutzer
+  Rahmen gilt im ungedrehten Bild. „Frei drehen“ setzt den Rahmen bei jeder Winkeländerung neu (wie bisher, so
   abgenommen). Speicher: höchstens drei Fassungen je Bild, andere Bilder beim Wechsel freigegeben.
 - **Wo:** `Core/Imaging/GeometryRecipe.cs`; `Ui/ViewModels/MainViewModel.Editing.cs` (`EditHistory`, `Snapshot`,
   `CropToSelection`, `CommitRecipeAsync`, `Orient`, Werkzeug-Ansichten, `RestoreAsync`, `ShowCurrentAsync`),
@@ -1425,12 +1425,12 @@ Test oder Nachweis.
 
 ## 43. Luminanz: „Ferne schonen“ und KI-Tiefenkarte wieder entfernt
 
-- **Entschieden in:** 0.5.50 beta (10.10.2026), Rückmeldung des Benutzers zu 0.5.49: Mit Tiefenmodell „greift das zu
-  stark“ — und grundsätzlich: „ich würde gar nicht mit Ferne und Nähe arbeiten, weil es ja auf Luminanz gehen soll, und
-  da kann Sonne auch näher sein (anderer Winkel, Reflexionen mitten im Bild)“.
+- **Entschieden in:** 0.5.50 beta (10.10.2026), nach dem Praxistest mit 0.5.49: Mit Tiefenmodell griff die Schonung zu
+  stark — und grundsätzlich soll Luminanz nach Helligkeit gehen, nicht nach Ferne und Nähe; Sonne und Helles können auch
+  nah sein (anderer Winkel, Reflexionen mitten im Bild).
 - **Warum es weg ist:** Nähe/Ferne ist für eine Helligkeitsanpassung das falsche Merkmal. Den Mittelton (dunstiges Tal),
-  für den „Ferne“ einst gebaut wurde (#36), hält inzwischen der Zielwert (#40) ruhig — am Panorama mit den Werten des
-  Benutzers (Luminanz 173 %, Zielwert 45–52 %, Schwellwert aus) sieht das Tal ohne „Ferne“ fast so natürlich aus wie mit
+  für den „Ferne“ einst gebaut wurde (#36), hält inzwischen der Zielwert (#40) ruhig — am Panorama mit den
+  Praxiswerten (Luminanz 173 %, Zielwert 45–52 %, Schwellwert aus) sieht das Tal ohne „Ferne“ fast so natürlich aus wie mit
   Tiefenkarte, entschieden wird aber rein nach Helligkeit.
 - **Was entfiel:** Regler „Ferne“ samt Hinweis, Dunstkarte (#36, #37, #41), Tiefenkarte (#38: `IDepthEstimator`,
   `OnnxDepthEstimator`, Modell „Depth Anything V2“ im Katalog und in der Verwaltung, `AiModelKind.Depth`),
@@ -1448,12 +1448,12 @@ Test oder Nachweis.
 
 ## 44. Neue Gruppe „Luminanzmaske“
 
-- **Neu in:** 0.5.51 beta (11.10.2026). Wunsch des Benutzers: Dunkles stärker anheben als Helles, um die Sonne nichts,
-  Felder etwas, Himmel dezent — „eine feine Maske drüber, was dunkler ist bekommt mehr, bei den hellen
-  Bereichen lässt man sie auslaufen“. Das Blau zwischen den Zweigen wurde mit „Gleiche Farbe“ zu hell (Saum).
+- **Neu in:** 0.5.51 beta (11.10.2026). Ziel: Dunkles stärker anheben als Helles, um die Sonne nichts,
+  Felder etwas, Himmel dezent — eine feine Maske darüber: was dunkler ist, bekommt mehr, zu den hellen
+  Bereichen hin läuft sie aus. Das Blau zwischen den Zweigen wurde mit „Gleiche Farbe“ zu hell (Saum).
 - **Ursache des Saums (gemessen, Lupe):** Richtig blaue Lücken erkannte schon die Durchblick-Erkennung; der Saum kam von
   Mischpixeln (halb Nadel, halb Himmel), die die grobe Bereichskarte als Baum sah und voll anhob.
-- **Bewusst als eigene Gruppe** neben „Gleiche Farbe“ (Entscheidung des Benutzers): das Erreichte bleibt unangetastet,
+- **Bewusst als eigene Gruppe** neben „Gleiche Farbe“ (entschieden): das Erreichte bleibt unangetastet,
   die Gruppe lässt sich einfach wieder entfernen (`LumMask.cs`, Felder `Mask*`, eine Gruppe in der XAML, Zeile in der Liste).
 - **Rechnen (`LumMask`):** Gewicht = (1 − Helligkeit/Auslaufen)^p, Helligkeit zu 70 % die des Pixels (pixelgenau, kein
   Hof, Mischpixel bekommen nur anteilig) und zu 30 % die eingeebnete des Bereichs (sonst hebt die Maske im Baum dunkle
@@ -1478,21 +1478,21 @@ Test oder Nachweis.
 - **Test/Nachweis:** `AdjustTests.LumMask_WeightsDarkMost_AndFadesOutAtTheEnd`, `LumMask_NeverReversesTones` (4 Fälle,
   Gegenprobe: mit p = 0,5 erlaubt schlagen zwei fehl), `LumMask_Preview_ShowsTheMaskInGrey`. Unsichtbares Testfenster:
   Gruppe, Liste („Luminanzmaske: +100 % · bis 70 % · Verlauf 30“), Maske zeigen.
-- **Nachtrag 0.5.51 (Himmel „gräulicher“, gemessen, nichts geändert):** Mit den Werten des Benutzers (Stärke +49 %,
+- **Nachtrag 0.5.51 (Himmel „gräulicher“, gemessen, nichts geändert):** Mit Praxiswerten (Stärke +49 %,
   Auslaufen 87 %, Verlauf 49, dazu Dunst, Gleiche Farbe und Kontrast +45) nimmt die Maske dem Himmel keine Farbe:
   Helligkeit und Buntheit steigen im selben Verhältnis (Blau oben L 0,48 → 0,52, C 0,036 → 0,039; insgesamt hat der
   Himmel mehr Farbe als das Original, vor allem durch Kontrast und Dunst). Gräulich wirkt es, weil das dunkle, satte
   Blau oben und an den Bäumen heller wird und sich dem fast grauen Himmel in der Mitte angleicht. Abhilfe ohne Umbau:
   Auslaufen auf ca. 55–60 %, Stärke etwas höher. Vorgemerkt, falls es doch stört: beim Aufhellen mehr Farbe mitnehmen
-  oder Regler „Blau schonen“ (schützt auch das Blau zwischen den Zweigen). Der Benutzer lässt es so („wirklich gut“).
+  oder Regler „Blau schonen“ (schützt auch das Blau zwischen den Zweigen). Bleibt so – das Ergebnis ist in der Sichtprüfung gut.
 - **Meilenstein 0.5.52 (11.10.2026):** Stand 0.5.51 beta – Ausrichten als Rezept (#42), Luminanz nur nach Helligkeit
-  ohne Ferne (#43) und Gruppe Luminanzmaske (#44) vom Benutzer als passend befunden. Tag `v0.5.52`, Sicherung
-  `../ImageConverter-0.5.52-Sicherung.zip`; Windows-Stand in den vom Benutzer genannten Ordner übertragen
+  ohne Ferne (#43) und Gruppe Luminanzmaske (#44) als passend abgenommen. Tag `v0.5.52`, Sicherung
+  `../ImageConverter-0.5.52-Sicherung.zip`; Windows-Stand in den Ablageordner der Windows-Fassung übertragen
   (`KI-Modelle/` dort unverändert).
 
 ## 45. Neue Gruppe „Körnung“ (Filmkorn über das fertige Bild)
 
-- **Neu in:** 0.5.53 beta (12.10.2026). Wunsch des Benutzers: Körnung wie bei „Haut & Details“, aber als eigene Gruppe
+- **Neu in:** 0.5.53 beta (12.10.2026). Ziel: Körnung wie bei „Haut & Details“, aber als eigene Gruppe
   bei den Reglern, unabhängig davon und nicht an die Luminanzmaske gebunden; Knopf „Aus dem Foto ermitteln“, danach
   von Hand nachbessern. Konzept: `KONZEPT.md` §1 K.
 - **Immer der letzte Schritt:** nach Entrauschen und Schärfen, auch nach KI und „Haut & Details“ — gleich, welche
@@ -1520,7 +1520,7 @@ Test oder Nachweis.
 - **Test/Nachweis:** `GrainTests` (aus = Puffer selbst; Mittelton = Stärke, 0,1 → 0,6, Schwarz 0; fest je Pixel;
   Streifen = am Stück für echten Gauß und Boxen; Farbanteil 0/50/100 → Korrelation 1/0,5/0; Vorschau wie
   verkleinerter Export; Messen findet 40 %/1 px/50 % wieder, halbe Ausgabe schwächer, glattes Bild kein Korn; im
-  Export nach dem Schärfen; Auge aus). Sichtprüfung am Grauverlauf (`~/.cache/imageconverter-build/werkzeuge/korn`).
+  Export nach dem Schärfen; Auge aus). Sichtprüfung am Grauverlauf (`<testordner>/werkzeuge/korn`).
 
 ## 46. Gewölbtes Blatt gerade ziehen (Schritt 1: Linien von Hand)
 
@@ -1558,7 +1558,7 @@ Test oder Nachweis.
 - **Test/Nachweis:** `DewarpTests` (gewölbt: auch nicht gezeichnete Zeilen ≤ 1 ‰ gebogen; umrandet: DIN eingerastet,
   1,2 auf ± 5 % gefunden; Doppelseite; wellig nur mit Gitter; eine Linie: nur sie, Größe bleibt; Rezept: Stufe zuerst,
   Punkte hin und zurück < 0,5 px, ausschaltbar, Größe beim Anwenden). Die Bedienung in der Vorschau ist nicht
-  automatisch getestet (kein unsichtbares Testfenster unter Windows) — vom Benutzer zu prüfen.
+  automatisch getestet (kein unsichtbares Testfenster unter Windows) — von Hand zu prüfen.
 
 ## 47. Gewölbtes Blatt: Linien vorschlagen (Schritt 2, ohne Modell)
 
@@ -1586,14 +1586,14 @@ Test oder Nachweis.
   schlechter (3 ‰) — die Kante abwählen.
 - **Test/Nachweis:** `LineFinderTests` (künstliche Seite ohne Schriftart: gebogene Zeilen aus Kästchen mit Ober-/Unterlängen
   ≤ 1 px auf der Grundlinie; vier Kanten ≤ 2 px; kein Falz auf einem Blatt; Falz einer Doppelseite ± 5 px; Blatt füllt
-  das Foto: keine Kanten). Sichtprüfung an `TestBilder/` (`~/.cache/imageconverter-build/werkzeuge/vorschlag`): Schulbuch-Blatt
+  das Foto: keine Kanten). Sichtprüfung an `TestBilder/` (`<testordner>/werkzeuge/vorschlag`): Schulbuch-Blatt
   8 Zeilen + 4 Kanten, Fehler 0,33 ‰, DIN; Doppelseiten 12 Zeilen + 4 Kanten + Falz, 0,3–0,7 ‰.
 
 ## 48. Gewölbtes Blatt: Vorschläge genauer, senkrechte Linien, Fehlerbild gegen das Original
 
-- **Neu in:** 0.5.56 beta (12.10.2026). Wunsch des Benutzers: Linien liegen teils daneben, unten wellig (Testbild Schulbuch-Blatt),
+- **Neu in:** 0.5.56 beta (12.10.2026). Anlass: Linien lagen teils daneben, unten wellig (Testbild Schulbuch-Blatt),
   auch senkrechte Linien erkennen.
-- **Messen statt schätzen — Fehlerbild** (`~/.cache/imageconverter-build/werkzeuge/fehlerbild/Fehlerbild.cs`): Für die
+- **Messen statt schätzen — Fehlerbild** (`<testordner>/werkzeuge/fehlerbild/Fehlerbild.cs`): Für die
   Testbilder ist die wahre Form bekannt (Woelbung.cs). Ergebnis → Bild → Blatt (Umkehrung), ideal affin; Abweichung je
   Stelle in Pixeln (Mittel, 95 %, max), dazu je Linie die Streuung quer zur wahren Linie und ein Wärmebild. **Nicht
   tun:** Verbesserungen nach Augenschein beurteilen — erst das Fehlerbild zeigte, dass die Rechnung selbst stimmte
@@ -1620,7 +1620,7 @@ Test oder Nachweis.
   Kreuzungen überbrückt, Schräge und Kurzes verworfen) und Textränder (RANSAC über Zeilenanfänge/-enden, ≥ 5 Zeilen).
   Nachschärfen im Original (`LineFinder.Refine`: Kanten auf den Sprung, Falz/gezeichnete Linien auf die dunkelste Stelle,
   Unterpixel). Vorschau zeichnet Linien glatt (Catmull-Rom).
-- **Entfernen (Wunsch des Benutzers):** an der Linie unter der Maus (bzw. der aktiven/angefassten) ein × neben der Mitte —
+- **Entfernen:** an der Linie unter der Maus (bzw. der aktiven/angefassten) ein × neben der Mitte —
   Klick entfernt die ganze Linie, Vorschlag oder eigene; Entf auf einem Vorschlag entfernt ihn ganz; „Abgewählte entfernen“.
 - **Grenze:** Das wellige Testbild dehnt das Papier (nicht abwickelbar) — dort bleibt die Abweichung hoch, echtes Papier
   kann das nicht; nicht danach abgleichen.
@@ -1629,7 +1629,7 @@ Test oder Nachweis.
 
 ## 49. Gewölbtes Blatt: Absturz beim Klick auf eine vorgeschlagene Linie (oder neben das ×)
 
-- **Entdeckt:** 0.5.56 beta (12.10.2026), vom Benutzer („über das × bricht die App ab“). **Behoben:** im selben Stand.
+- **Entdeckt:** 0.5.56 beta (12.10.2026), beim Benutzen: ein Klick über das × beendete die App. **Behoben:** im selben Stand.
 - **Was:** `ArgumentOutOfRangeException` in `CropView.RenderWarpLines` (Ereignisanzeige, Quelle „.NET Runtime“, auch schon um
   12:27 vor dem ×). Ein Klick auf den *Verlauf* eines Vorschlags (nicht auf einen Punkt) merkt sich die Linie mit Punkt −1
   (`PressSuggestion(…, -1)`), der Ziehmodus läuft — die Lupe zeichnete `Points[-1]`. Beim × kam dazu: Es verschwand, sobald
@@ -1641,7 +1641,7 @@ Test oder Nachweis.
 
 ## 50. Lupe auch beim Zuschnitt, Fadenkreuz in Negativfarbe, Verschieben über den Rand, Zeichenmodus
 
-- **Neu in:** 0.5.56 beta (12.10.2026), Wünsche des Benutzers.
+- **Neu in:** 0.5.56 beta (12.10.2026), Verbesserungen der Bedienung.
 - **Lupe beim Zuschnitt:** beim Aufziehen und beim Ziehen an Ecken/Kanten (Stelle: gezogene Ecke bzw. Punkt der gezogenen
   Kante unter der Maus, `_dragImage`), Rahmen als Linie darin; nicht beim Frei drehen (Bild dort gedreht gezeichnet).
 - **Fadenkreuz:** alle Lupen laufen über `CropView.DrawLoupe` (eine Stelle für alle: Entzerren, Pipette, Linien, Zuschnitt).
@@ -1654,19 +1654,19 @@ Test oder Nachweis.
   Klick (ohne Ziehen) auf eine Linie markiert sie bzw. wählt einen Vorschlag ab/an (`ReleaseWarpClick`). „Linien zeichnen“
   ist ein Schalter (`CropView.DrawLines` ↔ `DewarpDrawing`, Taste N): Klick setzt Punkte, Enter/Doppelklick beginnt die
   nächste Linie, Esc beendet den Modus. Entf auf einer markierten Linie entfernt sie ganz.
-- **Nachtrag (Wunsch):** Linie verlängern — eine angeklickte (markierte) Linie wird beim Einschalten von „Linien zeichnen“
+- **Nachtrag:** Linie verlängern — eine angeklickte (markierte) Linie wird beim Einschalten von „Linien zeichnen“
   die aktive; jeder Klick kommt an ihr **näheres Ende** (vorn oder hinten), ein Vorschlag wird dabei zur normalen Linie.
   Im Zeichenmodus folgt die Lupe der Maus schon vor dem Klick, dazu gestrichelt das nächste Stück vom näheren Ende.
 - **Meilenstein 0.5.57 (12.10.2026):** Stand 0.5.56 beta — Körnung (#45), gewölbtes Blatt gerade ziehen von Hand (#46), Linien
   vorschlagen samt senkrechten Linien, Abwählen unpassender Vorschläge und Nachschärfen (#47, #48), Absturz beim Klick auf
   eine Linie behoben (#49), Lupe beim Zuschnitt, Fadenkreuz in Negativfarbe, Verschieben über den Rand, Zeichenmodus und
-  Verlängern (#50) — vom Benutzer als passend befunden. Tag `v0.5.57`; schlanke Sicherung auf Wunsch des Benutzers in
+  Verlängern (#50) — als passend abgenommen. Tag `v0.5.57`; schlanke Sicherung in
   `published/ImageConverter-0.5.57-Sicherung.zip` (mit `.git` samt Hooks und der lokalen Anweisungsdatei; ohne `bin/`, `obj/`, `published/`,
   `KI-Modelle/`, `TestBilder/`).
 
 ## 51. Gewölbtes Blatt: Linienfindung — schwache Striche, Flächenkanten, Auswahl (0.5.58 beta)
 
-- **Neu in:** 0.5.58 beta (12.10.2026). Wunsch des Benutzers: klare, präzisere Linien, mehr senkrechte und waagerechte,
+- **Neu in:** 0.5.58 beta (12.10.2026). Ziel: klare, präzisere Linien, mehr senkrechte und waagerechte,
   insbesondere Überschriftenbalken, farbige Kästen und das Karoraster, die 0.5.57 nicht fand.
 - **Befund vorher** (`Fehlerbild.cs`, Streuung je Linie quer zur wahren Linie, Schulbuch-Blatt): Textzeilen und Blattkanten
   0,1–0,7 px, gezeichnete waagerechte nur 4 (alle am Fußende, nach Länge gewählt), senkrechte: zwei Würfelkanten aus den
@@ -1698,14 +1698,14 @@ Test oder Nachweis.
   zerknitterten Faltblatt 60_1 sichtbar geradere Ränder. Nur im Werkzeug (`Stapel.neu.cs`, `ZWEITER=1`), nicht in der App.
 - **Verworfen am selben Tag:** KI-Modelle UVDoc, Flattener (13–25 px direkt), SyntheticDoc (13 px direkt auf
   Arbeitsblättern, aber klar besser als wir bei Bon in der Hand und Knitter — ONNX müsste selbst gebaut und gehostet
-  werden, Export-Skript außerhalb des Projekts) und DvD (AGPL, ~800 MB, kein ONNX). Entscheidung des Benutzers: keine KI.
-- **Werkzeuge** (außerhalb des Projekts, `~/.cache/imageconverter-build/werkzeuge/`): `vergleich-alle.sh` (alt gegen
+  werden, Export-Skript außerhalb des Projekts) und DvD (AGPL, ~800 MB, kein ONNX). Entschieden: keine KI.
+- **Werkzeuge** (außerhalb des Projekts, `<testordner>/werkzeuge/`): `vergleich-alle.sh` (alt gegen
   neu mit echtem Fehler), `stapel/` (viele Bilder in einem Prozess, 0.5.57 aus einem `git worktree`), `ki/` (KI-Modelle),
   `raster/`, `vergleich/`. Jedes Werkzeug braucht einen eigenen `ArtifactsPath`, sonst überschreiben sie sich gegenseitig.
 
 ## 52. „KI begradigen“ mit SyntheticDoc (0.5.59 beta, erst einmal nur lokal)
 
-- **Neu in:** 0.5.59 beta (12.10.2026), Entscheidung des Benutzers nach dem Test: SyntheticDoc (ECCV 2026, Nachfolger von
+- **Neu in:** 0.5.59 beta (12.10.2026), nach dem Test entschieden: SyntheticDoc (ECCV 2026, Nachfolger von
   UVDoc vom selben Autor, 8,45 Mio. Parameter) als **eigene Option** neben „Gewölbtes Blatt“ — eigenes Symbol in der Vorschau,
   beide Symbole in einem Rahmen, weil es zwei Begradigungen derselben Stufe sind. Andere Modelle (UVDoc, Flattener, DvD)
   bleiben verworfen (#51).
@@ -1737,7 +1737,7 @@ Test oder Nachweis.
 
 ## 53. SyntheticDoc ohne Python: Checkpoint → ONNX in C#, Download vom Autor, schneller, Training im Projekt (0.5.61 beta)
 
-- **Neu in:** 0.5.61 beta (13.10.2026), Wunsch des Benutzers: das Bauen der ONNX-Datei in unseren Quellcode, kein
+- **Neu in:** 0.5.61 beta (13.10.2026). Ziel: das Bauen der ONNX-Datei im eigenen Quellcode, kein
   Hosting, unabhängig vom Original-Repository, selbst trainieren können, leicht wieder entfernbar. Beschreibung, Ablauf
   des Trainings und **Entfernen-Liste**: `docs/KI-BEGRADIGEN.md`.
 - **Umwandler** (`ImageConverter.Core/Ai/SyntheticDoc/`): `TorchCheckpoint` (Zip + Pickle-Protokoll 2 — der Checkpoint
@@ -1781,7 +1781,7 @@ Test oder Nachweis.
 
 ## 55. KI begradigen: Schatten entfernen; Feld „Gewölbtes Blatt“ im kleinen Fenster abgeschnitten (0.5.64 beta)
 
-- **Schatten (Wunsch):** SyntheticDoc sagt eine Schattenkarte voraus, die App nutzte sie nicht. Jetzt rechnet der
+- **Schatten:** SyntheticDoc sagt eine Schattenkarte voraus, die App nutzte sie nicht. Jetzt rechnet der
   genaue Lauf sie mit (zweite Datei `syntheticdoc-schatten.onnx`, +0,55 s), sie kommt gerade gezogen (256 × 360 × RGB,
   `DewarpShading`) ins Rezept und wird in `DewarpMap.Render` herausgerechnet wie bei den Autoren (÷ Licht · Stärke +
   1 − Stärke, Stärke = min(1, 0,4 / Helligkeit)). Rechtsklick auf das KI-Symbol → „Schatten entfernen“, gemerkt in
@@ -1798,7 +1798,7 @@ Test oder Nachweis.
 
 ## 56. Dunst rechnete bei Tiefen/Lichtern und in der Größenschätzung neu; Korn feiner als ein Pixel, Härte (0.5.66 beta)
 
-- **Frage des Benutzers:** Muss der Dunst neu gerechnet werden, wenn sich nur Spätere in der Kette ändern? Licht und
+- **Frage:** Muss der Dunst neu gerechnet werden, wenn sich nur Spätere in der Kette ändern? Licht und
   Farbe, Schärfen, Körnung nutzten den Zwischenstand schon. Aber: Tiefen/Lichter (nach dem Dunst) steckten im selben
   Schlüssel (`PrepareKey`) — jeder Zug an Tiefen oder Lichtern rechnete alle Dunst-Durchläufe neu, ebenso „Maske
   zeigen“ und die Luminanz-Schwelle (Bereichskarten). Und die Größenschätzung rechnete nach **jeder** Änderung (auch
@@ -1808,17 +1808,17 @@ Test oder Nachweis.
   entrauscht → Dunst → Tiefen/Lichter → Licht und Farbe; Schärfen und Körnung jedes Mal), über
   `ImageExporter.Render(…, cache)`, dasselbe Ergebnis wie ohne (`LookCacheTests` vergleicht Pixel und Stufenzahl);
   ein `WorkPlan` nur mit dem Abbruch bricht jetzt auch zwischen den Dunst-Durchläufen ab.
-- **Korn 0,1 px (Wunsch):** Bis 0,3 px wurde das Korn gar nicht weichgezeichnet — 0,25 px war schon weißes Rauschen
+- **Korn 0,1 px:** Bis 0,3 px wurde das Korn gar nicht weichgezeichnet — 0,25 px war schon weißes Rauschen
   (jedes Pixel für sich), ein längerer Regler allein hätte nichts geändert. Feiner als ein Pixel heißt deshalb: weißes
   Rauschen minus ein Teil seiner Gauß-Fassung (1 px), Anteil 0 bei 0,25 px bis 1 bei 0,1 px, Streuung analytisch auf 1
   (1 − 2a·g₀² + a²·(Σg²)²) — grobe Häufungen fallen weg, Nachbarn laufen gegeneinander. Regler −27 … 100
   (`GrainSettings.MinSize`), Anzeige unter 1 px mit zwei Stellen (0,25 statt „0,3“). Messen bleibt bei ≥ 0,25 px.
-- **Härte (Wunsch):** tanh(k · Korn), k = 4 · Härte/100, Streuung zurück auf 1 — aus weichen Gauß-Tupfen werden scharf
+- **Härte:** tanh(k · Korn), k = 4 · Härte/100, Streuung zurück auf 1 — aus weichen Gauß-Tupfen werden scharf
   begrenzte Körner. Auf feines, grobes und Farbkorn, nicht auf die Klumpen. 0 = wie bisher.
 
 ## 57. Mehrere Tooltips gleichzeitig offen beim Ziehen eines Reglers (0.5.67 beta)
 
-- **Fehlerbild (Benutzer):** Regler mit gedrückter linker Taste ziehen und dabei nach unten auf den nächsten rutschen —
+- **Fehlerbild (beim Benutzen bemerkt):** Regler mit gedrückter linker Taste ziehen und dabei nach unten auf den nächsten rutschen —
   beide Tooltips offen. Avalonia öffnet Tooltips auch bei gedrückter Taste und schließt den alten nicht, solange der
   Regler den Zeiger festhält.
 - **Lösung (`App.TooltipsOnlyWhenIdle`, für alle Fenster):** Klassen-Handler auf `TopLevel` (Tunnel, auch behandelte
@@ -1830,7 +1830,7 @@ Test oder Nachweis.
 
 ## 58. Gewölbtes Blatt: Linie blieb nach Esc aktiv, Esc warf aus dem Werkzeug, Abwählen statt Weiterzeichnen; Infozeile blieb stehen (0.5.68 beta)
 
-- **Fehlerbilder (Benutzer):** Nach Esc blieb die zuletzt gezeichnete Linie markiert, und „Zeichnen“ machte an ihr weiter
+- **Fehlerbilder (beim Benutzen bemerkt):** Nach Esc blieb die zuletzt gezeichnete Linie markiert, und „Zeichnen“ machte an ihr weiter
   (Ursache: Esc beendete nur das Zeichnen, `_warpSel` blieb, und das Einschalten machte eine markierte Linie zur aktiven —
   das Verlängern aus #50). Mehrmals Esc verließ das Werkzeug (`WarpLines = null`) — alle Linien weg. Ein Klick auf einen
   Vorschlag wählte ihn ab (grau), statt etwas Nützliches zu tun; „Vorschlagen“ verwarf angepasste Vorschläge, die nur per
@@ -1854,7 +1854,7 @@ Test oder Nachweis.
 
 ## 59. Gewölbtes Blatt: nach „Gerade ziehen“ justieren statt Rückgängig (0.5.69 beta)
 
-- **Wunsch des Benutzers:** die verwendeten Linien nach dem Geradeziehen nacharbeiten können — nicht über Rückgängig
+- **Ziel:** die verwendeten Linien nach dem Geradeziehen nacharbeiten können — nicht über Rückgängig
   (das bleibt ein gewöhnlicher Schritt), sondern im Werkzeug.
 - **Umsetzung:** `ApplyDewarpAsync` schließt das Werkzeug nicht mehr: `DewarpShowsResult` = Ergebnis zeigen
   (`ToolView` = alle Stufen), unten Info (`DescribeDewarp`) und „Justieren“ (`AdjustDewarpCommand` → Original mit den
@@ -1869,15 +1869,15 @@ Test oder Nachweis.
 
 ## 60. 16 Bit je Kanal: wirkte scheinbar nicht; jetzt Empfehlung und automatisch an (0.5.71 beta)
 
-- **Frage des Benutzers:** Der Haken änderte die Dateigröße nicht. Gemessen (PNG, `Bild(2).jpg`): unbearbeitet 0,86 MB
+- **Beobachtung:** Der Haken änderte die Dateigröße nicht. Gemessen (PNG, `Bild(2).jpg`): unbearbeitet 0,86 MB
   mit und ohne — der PNG-Kodierer speichert 8-Bit-Inhalt ohne Rechnung verlustfrei mit 8 Bit, die 16 Bit trügen nichts.
   Helligkeit +10: 1,22 → 2,37 MB, verkleinert 70 %: 0,61 → 1,96 MB; die Schätzung traf jedes Mal die echte Datei.
   Quellen mit mehr als 8 Bit werden ohnehin immer mit 16 Bit gespeichert.
-- **Wunsch:** automatisch an, wenn es Treppen beim Weiterbearbeiten vermeidet. In der Datei selbst verhindert schon das
+- **Ziel:** automatisch an, wenn es Treppen beim Weiterbearbeiten vermeidet. In der Datei selbst verhindert schon das
   Dither beim Runden auf 8 Bit sichtbare Stufen; es geht um kräftig gespreizte Tonwerte. Regel `Adjustments.SpreadsTones`:
   Dunst ≥ 20, |Kontrast|, |Tiefen|, |Lichter| ≥ 25, |Helligkeit| ≥ 30, Luminanz/Maske ≥ 20, |Luminanz Gesamt| ≥ 25.
 - **Verhalten:** Nach jeder Änderung einer Einstellung über der Schwelle setzt die App den Haken (`OnSettingChanged` →
-  `TickHighBitDepthIfRecommended`), auch wenn er von Hand heraus war — Wunsch: lieber an als vergessen; herausnehmen geht
+  `TickHighBitDepthIfRecommended`), auch wenn er von Hand heraus war — Grundsatz: lieber an als vergessen; herausnehmen geht
   jederzeit. Fällt die Empfehlung weg, nimmt sie nur einen selbst gesetzten wieder heraus. Still (`SuppressHistory`):
   Rückgängig des Reglers nimmt den Haken mit. Daneben orange „empfohlen“ (`RecommendBrush`), Tooltip um „etwa doppelt
   so groß“ und „wirkt nur bei Rechnung“ erweitert.
@@ -1889,13 +1889,13 @@ Test oder Nachweis.
   Python, Schatten entfernen, Update-Prüfung (#52–#55), Start mit ReadyToRun (#54), Dunst nur noch neu, wenn nötig, und
   Größenschätzung mit Zwischenspeicher, Korn bis 0,1 px und „Härte“ (#56), Tooltips nur ohne gedrückte Maustaste (#57),
   Gewölbtes Blatt: Esc, Weiterzeichnen, kein Abwählen, Justieren nach „Gerade ziehen“ (#58, #59), Standardformat PNG,
-  16 Bit automatisch bei kräftiger Bearbeitung (#60) — vom Benutzer als Meilenstein bestimmt. Tag `v0.5.72`; schlanke
+  16 Bit automatisch bei kräftiger Bearbeitung (#60) — als Meilenstein abgenommen. Tag `v0.5.72`; schlanke
   Sicherung `../ImageConverter-0.5.72-Sicherung.zip` (Kopie in `published/`), mit `.git` samt Hooks, der lokalen Anweisungsdatei und
   `KI-Modelle/syntheticdoc/` (Checkpoint, ARCSim), ohne ONNX-Dateien, `TestBilder/`, `bin/`, `obj/`, `published/`.
 
 ## 61. Upscaling mit KI: Gruppe unter „Größe“, PiSA-SR ohne Python (0.5.76 beta)
 
-- **Wunsch des Benutzers:** Vergrößern auf dem Stand der Technik, lokal und so, dass das Original erkennbar bleibt; drei Stufen
+- **Ziel:** Vergrößern auf dem Stand der Technik, lokal und so, dass das Original erkennbar bleibt; drei Stufen
   (x4v3 · UltraSharpV2 · PiSA-SR), Knopf statt Rechnen bei jeder Änderung, Fortschritt mit Restzeit, fertige Kacheln
   sofort sichtbar, Vorher/Nachher und richtig hineinzoomen — auch schon während der Rechnung. Konzept `KONZEPT.md` §1 N,
   Doku `docs/KI-UPSCALING.md` (mit Liste zum Entfernen).
@@ -1916,11 +1916,11 @@ Test oder Nachweis.
 - **Geprüft:** `UpscaleTests` (13), Undo der drei Einstellungen; Prüfstand ohne Fenster (Avalonia headless, außerhalb des
   Projekts): Bild öffnen → ×4 → „KI schnell“ (Kacheln live, Prüfansicht 2000 × 1200, Vorher/Nachher, Treue neu) →
   Speichern ohne Rückfrage → „KI mittel“ mit Rückfrage und Ausschnitt → Speichern fragt → PiSA-SR mit Umwandeln beim
-  ersten Mal. Am Fenster nicht geklickt (Benutzer arbeitete).
+  ersten Mal. Am Fenster nicht geklickt (der Rechner war gerade in anderer Benutzung).
 
 ## 62. Gruppe „Größe“ neu: Verfahren je Richtung, „Skalieren“, DPI über die Einheit (0.5.77 beta)
 
-- **Wunsch des Benutzers:** Der Upscaler soll nichts im KI-Tab voraussetzen; alles zur Größe in eine Gruppe: Einheit und
+- **Ziel:** Der Upscaler soll nichts im KI-Tab voraussetzen; alles zur Größe in eine Gruppe: Einheit und
   Formate, Maße mit Kette, DPI (nur das Feld), eine Liste „Verfahren“ (beim Verkleinern nur Filter dafür, beim Vergrößern
   oben die Filter inkl. Lanczos und Spline, unter einer Linie „KI-Scaler“), Treue/Details, Knopf „Skalieren“ auch für die
   Filter (vorher sah man eine reine Pixeländerung in der 2048-px-Vorschau nicht), Druckgröße. Weg: „Nicht vergrößern“,
@@ -1941,7 +1941,7 @@ Test oder Nachweis.
 
 ## 63. KI auf der Grafikkarte: DirectML unter Windows, automatisch (0.5.79 beta)
 
-- **Wunsch des Benutzers:** AMD- und NVIDIA-Grafikkarten nutzen, ohne Schalter — ist eine da, wird sie genommen.
+- **Ziel:** AMD- und NVIDIA-Grafikkarten nutzen, ohne Schalter — ist eine da, wird sie genommen.
   Was noch fehlt (Linux mit der eigenen AMD-Karte des Debian-Rechners, NVIDIA unter Linux, fp16, größere Kacheln): `docs/KI-GRAFIKKARTE.md`.
 - **Umsetzung:** Paket `Microsoft.ML.OnnxRuntime.DirectML` für Windows (nach Zielplattform in `ImageConverter.Core.csproj`),
   `OnnxSessions` wählt die erste vorhandene Anbindung (DirectML, MIGraphX, ROCm, CUDA, WebGPU) und fällt beim Öffnen auf
@@ -1956,7 +1956,7 @@ Test oder Nachweis.
 
 ## 64. Halbe Genauigkeit auf der Grafikkarte (0.5.81 beta)
 
-- **Frage des Benutzers:** auswählbar? Entschieden: nein, automatisch — Grafikkarte fp16, CPU fp32.
+- **Frage:** auswählbar? Entschieden: nein, automatisch — Grafikkarte fp16, CPU fp32.
 - **Falle:** Normierungen in fp16 (Mittelwert/Streuung über viele Werte) und Softmax laufen über — dort vorher nach fp32
   wandeln, danach zurück. Konstanten in Mul/Add müssen den Typ des Graphen haben (`Net.Const`), Resize-Skalen und die
   Skalen der InstanceNormalization bleiben fp32.
@@ -1964,7 +1964,7 @@ Test oder Nachweis.
 
 ## 65. PiSA-SR: Kacheln erst am Ende sichtbar; Grafikkarte/CPU nicht zu sehen (0.5.83 beta)
 
-- **Meldung des Benutzers:** bei PiSA-SR keine Kacheln, und nicht erkennbar, ob Grafikkarte oder CPU rechnet.
+- **Beim Benutzen bemerkt:** bei PiSA-SR keine Kacheln, und nicht erkennbar, ob Grafikkarte oder CPU rechnet.
 - **Ursache:** PiSA-SR lief in drei Durchgängen über das ganze Bild (Encoder, UNet, Decoder) — fertige Bildteile gab es erst
   im letzten. Jetzt streifenweise: je Zeile Decoder-Kacheln nur so viel Encoder und UNet, wie die Zeilen darüber brauchen
   (eine Latentzeile ist fertig, wenn alle Kacheln mit Anfang davor gerechnet sind). Ergebnis bitgleich (0 Stufen
@@ -1976,14 +1976,14 @@ Test oder Nachweis.
 
 ## 66. Während des Upscalings weiterbearbeitet (0.5.84 beta)
 
-- **Meldung des Benutzers:** Man konnte während der Rechnung weiter einstellen. Jetzt gesperrt (`IsIdle` = !`IsUpscaling`):
+- **Beim Benutzen bemerkt:** Man konnte während der Rechnung weiter einstellen. Jetzt gesperrt (`IsIdle` = !`IsUpscaling`):
   Kopf- und Fußleiste, Einstellungen, Drehen/Entzerren/Gewölbtes Blatt/KI begradigen, Rahmen aufziehen (`SelectionActive`),
   Rückgängig, Bildwechsel, Speichern, Drucken — auch die Tastenkürzel (CanExecute). Frei: Zoom, Verschieben, Vorher/Nachher,
   Abbrechen. „Zurücksetzen“ als Symbol ↺, sonst war „Skalieren (≈ 2 min)“ abgeschnitten.
 
 ## 67. Absturz bei „Gesichter“ nach DirectML; weggeschnittene Gesichter mitgezählt (0.5.85 beta)
 
-- **Meldung des Benutzers:** Familienfoto auf ein Gesicht zugeschnitten, RestoreFormer++ — „2 Gesichter gefunden“, Ergebnis
+- **Beim Benutzen bemerkt:** Familienfoto auf ein Gesicht zugeschnitten, RestoreFormer++ — Meldung „2 Gesichter gefunden“, Ergebnis
   deutlich schlechter, danach Absturz. Ereignisanzeige: Zugriffsverletzung in `InferenceSession.Run` im Gesichtsbereichsmodell
   (BiSeNet) auf DirectML — ein Speicherfehler der Laufzeit, den .NET nicht abfangen kann.
 - **Abhilfe:** Grafikkarte nur für Modelle, die dort geprüft sind (`AiModel.Gpu`: x4v3, UltraSharpV2, PiSA-SR); Gesichter,
@@ -1996,8 +1996,8 @@ Test oder Nachweis.
 
 ## 68. Über 4× nur ein KI-Durchgang (0.5.87 beta)
 
-- **Frage des Benutzers:** Ausschnitt 300 px auf 4000 px — die KI rechnete nur ×4, die restlichen 3,3× machte Lanczos,
-  das Ergebnis war weich. Gewünscht: Meldung mit voraussichtlicher Dauer.
+- **Beim Benutzen bemerkt:** Ausschnitt 300 px auf 4000 px — die KI rechnete nur ×4, die restlichen 3,3× machte Lanczos,
+  das Ergebnis war weich. Dazu vorgesehen: Meldung mit voraussichtlicher Dauer.
 - **Test (docs/KI-UPSCALING.md):** erst Lanczos, dann KI ist am schlechtesten (die KI hält die Unschärfe für gewollt);
   zweimal KI am schärfsten. Eingebaut: zwei Durchgänge, das Zwischenbild vorher auf ein Viertel des Ziels verkleinert
   (genauso scharf, schneller).
@@ -2007,7 +2007,7 @@ Test oder Nachweis.
 
 ## 69. Absturz bei Gesichtern war die Speicherbereinigung, nicht die Grafikkarte (0.5.89 beta)
 
-- **Meldung des Benutzers:** Familienfoto, mehrere Gesichtsmodelle nacheinander — öfter Absturz, auch nach 0.5.85 (dort
+- **Beim Benutzen bemerkt:** Familienfoto, mehrere Gesichtsmodelle nacheinander — öfter Absturz, auch nach 0.5.85 (dort
   auf die CPU verlegt). Ereignisanzeige: wieder Zugriffsverletzung in `InferenceSession.Run` aus `OnnxFaceParser.Parse`.
 - **Ursache:** `session.Run(new RunOptions(), …)` — die Laufoptionen hatten außer dem Aufruf keinen Halter. Im Release-Bau
   darf die Speicherbereinigung sie freigeben, sobald ihr Zeiger übergeben ist; ihr Finalizer gibt die nativen Optionen frei,
@@ -2021,11 +2021,11 @@ Test oder Nachweis.
 
 ## 70. Vorschau beschleunigen: messen, nicht raten (0.5.91–0.5.95 beta)
 
-- **Wunsch des Benutzers:** Regler reagieren verzögert; Berechnungen auf die Grafikkarte; Ergebnis muss gleich bleiben,
+- **Anlass:** Regler reagierten verzögert. Ziel: Berechnungen auf die Grafikkarte; Ergebnis muss gleich bleiben,
   jeder Schritt ein Commit. Messung und Ergebnis: docs/TEMPO.md.
 - **Messfalle:** Der Laptop taktet unter Dauerlast herunter — eine Messung „vorher“ und eine spätere „nachher“ zeigte
   Verbesserungen und Verschlechterungen bei Stufen, die sich nicht geändert hatten. Nur abwechselnd messen (alter Stand
-  im Arbeitsbaum `~/.cache/imageconverter-build/alt`, `gleich-probe/ab.sh`), bester von mehreren Läufen.
+  im Arbeitsbaum `<testordner>/alt`, `gleich-probe/ab.sh`), bester von mehreren Läufen.
 - **Gleichheit:** Referenz der CPU-Ergebnisse speichern, jede Fassung dagegen vergleichen. CPU-Umbauten bitgleich halten
   (gleiche Reihenfolge der Additionen je Spalte/Zeile). Grafikkarte: nie bitgleich; winzige Unterschiede kippen an
   einzelnen Pixeln Schwellen (Entstufen) — das ist normal, nicht ein Fehler im Kernel.
@@ -2038,7 +2038,7 @@ Test oder Nachweis.
 
 ## 71. Entfernen: Vorher/Nachher-Linie ließ sich nicht ziehen, Markierung erschien wieder (0.5.96 beta)
 
-- **Meldung des Benutzers:** Im Tab „Entfernen“ ließ sich die Trennlinie von Vorher/Nachher nicht ziehen (die Maus malt),
+- **Beim Benutzen bemerkt:** Im Tab „Entfernen“ ließ sich die Trennlinie von Vorher/Nachher nicht ziehen (die Maus malt),
   und die roten Markierungen standen nach dem letzten Versuch wieder da, obwohl das Markierte entfernt war.
 - **Ursache:** In `CropView.OnPointerPressed` kam der Pinsel (und die Pipette) vor der Trennlinie. Der Versuch, sie zu
   ziehen, malte einen Strich — und ein neuer Strich blendet die ganze Markierung wieder ein (`StrokesApplied = false`).
@@ -2060,7 +2060,7 @@ Test oder Nachweis.
 
 ## 73. Upscaler-Zeitschätzung nach jedem Start wieder mit den Werten des Laptops (0.5.104 beta)
 
-- **Entdeckt in:** 0.5.103 beta (18.10.2026), Benutzer auf dem Debian-Rechner: PiSA-SR ×4 „braucht 34 Minuten“;
+- **Entdeckt in:** 0.5.103 beta (18.10.2026), beim Benutzen auf dem Debian-Rechner: die Schätzung zeigte für PiSA-SR ×4 34 Minuten;
   **behoben in:** 0.5.104 beta.
 - **Was:** Die Schätzung („Skalieren (≈ …)“) rechnet mit festen Sekunden je Megapixel, gemessen auf dem Laptop (8 Kerne).
   Der Debian-Rechner (16 Kerne) ist bei PiSA-SR auf der CPU etwa 6× so schnell (58 s statt 355 s am selben Ausschnitt) — angezeigt
@@ -2103,12 +2103,12 @@ Test oder Nachweis.
   Rechner (#73), niedrige Priorität und CPU-Obergrenze, Einstellungen neu gegliedert (Leistung, Allgemein, KI mit je
   einer Seite pro Anwendung), ROCm-OpenCL unter Linux mit Wahl der Karte nach Recheneinheiten, Pkcs-Lücke (#72),
   DirectML.dll in der unter Linux gebauten Windows-Fassung (#74), Orts- und Fotonamen entfernt; WebGPU gemessen und
-  verworfen (docs/KI-GRAFIKKARTE.md). Vom Benutzer als Meilenstein bestimmt. Tag `v0.6.0`, schlanke Sicherung
-  `../ImageConverter-0.6.0-Sicherung.zip`; Windows-Fassung in den vom Benutzer genannten Ordner übertragen.
+  verworfen (docs/KI-GRAFIKKARTE.md). Als Meilenstein abgenommen. Tag `v0.6.0`, schlanke Sicherung
+  `../ImageConverter-0.6.0-Sicherung.zip`; Windows-Fassung in den Ablageordner der Windows-Fassung übertragen.
 
 ## 75. Nach dem Export blieben 7 GB Arbeitsspeicher belegt (0.6.1 beta)
 
-- **Entdeckt in:** 0.6.0 (18.10.2026) bei der gezielten Speicher-Analyse (Wunsch des Benutzers, keine formelle Runde);
+- **Entdeckt in:** 0.6.0 (18.10.2026) bei der gezielten Speicher-Analyse (keine formelle Runde);
   **behoben in:** 0.6.1 beta.
 - **Was:** Export des Panoramas (7895 × 3544, 28 MP) mit typischen Reglern (Dunst 9 Durchläufe, Gleiche Farbe,
   Luminanzmaske, Licht): Spitze 7,6 GB, **danach blieben 7,0 GB belegt** — bis zum nächsten großen Schritt. Auf einem
@@ -2146,7 +2146,7 @@ Test oder Nachweis.
   Rechnung schließen (`OnnxSessions.Release`; nicht beim Stapel). 12 MP ×4 mit x4v3: Spitze 9,6 → 9,0 GB, beim Export
   7,4 → 6,9 GB; Export pixelgleich. **Mit Alphakanal bleibt es bei einem Stück:** `Extent` verrechnet ganz durchsichtige
   Pixel mit dem Hintergrund (Farbe wird 0) — Test `UpscaleTests.Compose_InBands_IsPixelIdentical_ToOnePiece` (beide Fälle;
-  schlug mit Bändern bei Alpha an). Nicht umgesetzt (Upscaler selten benutzt, Hinweis des Benutzers): Puffer je Kachel
+  schlug mit Bändern bei Alpha an). Nicht umgesetzt (der Upscaler wird selten benutzt): Puffer je Kachel
   beim Zusammensetzen, Speicher-Arenen der KI-Laufzeit, Zwischenbild bei zwei Durchgängen.
 
 ## 76. Entzerren und Gerade richten liefen auf einem Kern (0.6.6 beta)
@@ -2223,7 +2223,7 @@ Test oder Nachweis.
 
 ## 78. Präparierte Bilddatei mit riesigen Maßen füllte Speicher bzw. Auslagerung (0.6.13 beta)
 
-- **Entdeckt in:** 0.6.12 beta (18.10.2026) beim gezielten Test mit präparierten Dateien (Wunsch des Benutzers);
+- **Entdeckt in:** 0.6.12 beta (18.10.2026) beim gezielten Test mit präparierten Dateien;
   **behoben in:** 0.6.13 beta.
 - **Was:** Eine 1,5 MB kleine PNG, die 40000 × 40000 Pixel behauptet (alles 0, stark komprimiert), wurde geladen —
   ImageMagick belegte dafür Speicher bzw. wich auf eine Auslagerungsdatei aus (Linux standardmäßig `/tmp`, oft im
@@ -2283,15 +2283,15 @@ Test oder Nachweis.
   sparsame Speicherbereinigung, ImageMagick auf allen Kernen, Absturz beim Ändern der Strangzahl, Entrauschen,
   Größenprüfung gegen präparierte Dateien, lange Sitzungen), Einstellungen sicher gespeichert, Export-/Druckliste nur mit
   Kopfdaten, Windows-Test vom anderen Rechner, Projekt aufgeräumt. Vor dem Meilenstein 10 Testläufe im Release-Modus
-  fehlerfrei. Tag `v0.6.18`, schlanke Sicherung `../ImageConverter-0.6.18-Sicherung.zip`, Windows-Fassung in den vom
-  Benutzer genannten Ordner übertragen.
+  fehlerfrei. Tag `v0.6.18`, schlanke Sicherung `../ImageConverter-0.6.18-Sicherung.zip`, Windows-Fassung in den
+  Ablageordner der Windows-Fassung übertragen.
 
 ## 81. Historie: Orts- und Fotonamen in alten Ständen (24.10.2026)
 
 - **Entdeckt:** 24.10.2026 bei der Prüfung der ganzen Historie vor einer Veröffentlichung, Stand 0.6.18
   (Commit a06f066 nach dem Umschreiben).
-- **Wie bemerkt:** Prüfskript über alle Zweige und Tags (Werkzeug aus den gemeinsamen Vorlagen unter
-  „Linux Progs“) – gesperrte Begriffe aus `.git/blocked-words`.
+- **Wie bemerkt:** Prüfskript über alle Zweige und Tags (Werkzeug aus der gemeinsamen Vorlage) – gesperrte
+  Begriffe aus `.git/blocked-words`.
 - **Was:** Die Orts- und Fotonamen, die 0.5.99-beta aus Doku, Kommentaren und Abnahme entfernt hatte,
   standen weiter in den älteren Commits und in zwei Commit-Nachrichten – auch auf GitHub.
 - **Warum:** 0.5.99-beta änderte nur den aktuellen Stand; die Historie blieb, wie sie war.
@@ -2306,8 +2306,8 @@ Test oder Nachweis.
   zeilenweise mit den alten verglichen – geändert sind nur Zeilen mit den Namen; Historienprüfung danach
   ohne Fund. Der Kommentar zum Lösungsverfahren für Tridiagonalsysteme in `Dewarp.cs` trägt den
   Namen des Verfahrens; genau diese Stelle ist in `.git/allowed-words` erlaubt.
-- **Sicherung des alten Stands:** `~/.cache/imageconverter-build/vor-bereinigung-2026-10-24_1233.bundle`.
-- **Auf GitHub:** dort liegt die alte Historie, bis der Nutzer sie überschreibt (`git push --force-with-lease
+- **Sicherung des alten Stands:** `<testordner>/vor-bereinigung-2026-10-24_1233.bundle`.
+- **Auf GitHub:** dort liegt die alte Historie, bis sie von Hand überschrieben wird (`git push --force-with-lease
   origin main` und `git push --force origin --tags`). Der zweite Rechner muss danach neu klonen (vorher
   dort nicht gepushte Commits und die lokalen Notizen sichern).
 - **Nicht tun:** echte Orts-, Foto- oder Personennamen in Doku, Kommentare, Tests oder Nachrichten
@@ -2338,7 +2338,7 @@ Test oder Nachweis.
 
 ## 84. Hintergrund: neuer Versuch rechnete auf dem Ergebnis statt auf dem Original (0.6.36 beta)
 
-- **Entdeckt:** 29.10.2026, 0.6.36-beta, vom Nutzer: „Hintergrund entfernen“ ein zweites Mal mit anderem
+- **Entdeckt:** 29.10.2026, 0.6.36-beta, beim Benutzen bemerkt: „Hintergrund entfernen“ ein zweites Mal mit anderem
   Modell nahm nicht das ursprüngliche Bild. **Behoben:** 0.6.37-beta.
 - **Was:** Das Ausgangsbild eines Versuchs war nur als „letztes Ergebnis“ gemerkt und wurde beim Wechsel
   auf ein anderes Bild gelöscht; nach Rückgängig auf einen früheren Versuch passte es auch nicht mehr.
@@ -2373,7 +2373,7 @@ Test oder Nachweis.
   aus dem Verlauf.
 - **Wo im Code:** `MainViewModel.Editing.cs` (`ApplyEditAsync`, `ReleaseIfUnusedAsync`, `DisposeAllHistories`),
   `MainViewModel.cs` (`ShowFileAsync`).
-- **Test:** im unsichtbaren Fenster `~/.cache/imageconverter-build/hintergrund-ui` mit BiRefNet lite: A starten →
+- **Test:** im unsichtbaren Fenster `<testordner>/hintergrund-ui` mit BiRefNet lite: A starten →
   zu B blättern (A behält sein Ergebnis, Rückgängig geht) und starten → neue Bilder öffnen (keine Meldung,
   kein Ergebnis und kein Rückgängig im neuen Bild). Im Testprojekt fehlt eine Fensterumgebung (siehe offene Punkte).
 
@@ -2396,7 +2396,7 @@ Test oder Nachweis.
 ## 87. Hintergrund: Schwarz-Weiß-Bilder brachen ab; unbrauchbare Modellausgabe ohne klare Meldung (0.6.39 beta)
 
 - **Entdeckt:** 29.10.2026, 0.6.39-beta, Analyserunde „Hintergrund entfernen“, Prüfprogramm
-  `~/.cache/imageconverter-build/hintergrund-probe` (Bildarten, Größen, präparierte Modellausgaben).
+  `<testordner>/hintergrund-probe` (Bildarten, Größen, präparierte Modellausgaben).
   **Behoben:** 0.6.40-beta.
 - **Was:** (1) Graustufenbilder – PNG 8/16 Bit, JPEG, TIFF, über den Loader des Programms geladen – brachen mit
   „InvalidOperationException: Green“ ab. (2) Lieferte ein Modell eine Maske falscher Größe, kam „Bearbeiten
@@ -2452,7 +2452,7 @@ Test oder Nachweis.
 
 ## 90. Hintergrund: Neuer Versuch rechnete auf dem freigestellten Bild, wenn danach ein anderer Bildschritt kam (0.7.0)
 
-- **Entdeckt:** 30.10.2026, 0.7.0, vom Nutzer: „nimmt das zweite Modell das Bild ohne Hintergrund“. **Behoben:** 0.7.1-beta.
+- **Entdeckt:** 30.10.2026, 0.7.0, beim Benutzen bemerkt: das zweite Modell schien das Bild schon ohne Hintergrund zu nehmen. **Behoben:** 0.7.1-beta.
 - **Was:** Direkt hintereinander stimmte es schon (pixelgleich gemessen), sah aber falsch aus: Die Vorschau zeigte bis zum
   neuen Ergebnis das alte, und das neue ist wieder ohne Hintergrund. Falsch gerechnet wurde, wenn nach dem Hintergrund ein
   anderer Bildschritt kam (KI, Entfernen): Das aktuelle Bild galt dann nicht mehr als Ergebnis eines Versuchs (#84), und der
@@ -2467,10 +2467,10 @@ Test oder Nachweis.
   (`ReleaseReplaced`). Vorher blieb jeder Versuch im Rückgängig-Stapel. Läuft ein Upscaling, das noch daraus lesen könnte,
   bleibt die Freigabe dem Finalizer überlassen.
 - **Nicht tun:** Aus „sieht gleich aus“ auf den Rechenweg schließen, in beide Richtungen; einen einzelnen Pixel prüfen statt
-  das ganze Bild. Mein Test zu #84 hat nur eine Stelle geprüft und den Fall mit Zwischenschritt nicht abgedeckt.
+  das ganze Bild. Der Test zu #84 hat nur eine Stelle geprüft und den Fall mit Zwischenschritt nicht abgedeckt.
 - **Wo im Code:** `MainViewModel.Edits.cs` (`LastBackground`, `LiveSteps`, `ReleaseReplaced`), `MainViewModel.Editing.cs`
   (`ApplyEditAsync`), `BackgroundViewModel.Apply`.
-- **Test:** unsichtbares Fenster `~/.cache/imageconverter-build/hintergrund-ui`, echte Modelle, ganzes Bild verglichen: lite →
+- **Test:** unsichtbares Fenster `<testordner>/hintergrund-ui`, echte Modelle, ganzes Bild verglichen: lite →
   BEN2, auch mit Regler und mit Zwischenschritt, gleich BEN2 direkt (0 Werte verschieden); Gegenprobe BEN2 auf dem
   freigestellten Bild: 3,5 Mio. Werte verschieden. Im Testprojekt fehlt die Fensterumgebung (siehe offene Punkte).
 
@@ -2503,7 +2503,7 @@ Test oder Nachweis.
 - **Nicht tun:** Messwerte aus einem Lauf nehmen, dessen Messfaden den Rücksetzwert überschreiben kann: Die Spalte „Spitze“ des
   App-Ablaufs (`hintergrund-speicher`) ist deshalb unbrauchbar, gültig sind die Einzelmessungen (`sitzung-speicher`).
 - **Wo im Code:** `BackgroundViewModel.Apply`.
-- **Test:** `~/.cache/imageconverter-build/sitzung-speicher` (je Modell und Weg), `hintergrund-speicher` (Ablauf in der App).
+- **Test:** `<testordner>/sitzung-speicher` (je Modell und Weg), `hintergrund-speicher` (Ablauf in der App).
 
 ## 93. Hintergrund: Der entfernte Hintergrund blieb in der gespeicherten Datei, die Filter rechneten aus ihm (0.7.5 beta)
 
@@ -2521,7 +2521,7 @@ Test oder Nachweis.
 - **Nicht tun:** „Transparent“ für „gelöscht“ halten.
 - **Wo im Code:** `BackgroundRemover.Compose`, `BackgroundRemover.FillFromVisible`.
 - **Test:** `BackgroundTests.InvisiblePixels_KeepNothingOfTheOldBackground`, `BackgroundTests.Filters_DoNotSeeTheRemovedBackground`; beide
-  scheitern am alten Stand. Echte Fotos: `~/.cache/imageconverter-build/transparent-probe` alt gegen neu (Zahlen in docs/KI-HINTERGRUND.md).
+  scheitern am alten Stand. Echte Fotos: `<testordner>/transparent-probe` alt gegen neu (Zahlen in docs/KI-HINTERGRUND.md).
 
 ## 94. Vorschau: Beim Vergrößern mit Rauschfilter wurden transparente Bilder deckend (seit dem Rauschfilter vor dem Vergrößern)
 
@@ -2532,7 +2532,7 @@ Test oder Nachweis.
 - **Lösung:** Alpha wie im Bild; auch dieser Zweig rechnet nur im sichtbaren Rechteck (`VisibleArea.Apply`).
 - **Nicht tun:** Alpha fest abschalten: Das Bild kann seit „Hintergrund“ auch aus der App selbst transparent sein.
 - **Wo im Code:** `MainViewModel.Preview.cs` (`Render`).
-- **Test:** `~/.cache/imageconverter-build/sichtbar-probe`, Modus `wege`, mit einem Bild, das wirklich vergrößert wird: Mit einem großen Bild
+- **Test:** `<testordner>/sichtbar-probe`, Modus `wege`, mit einem Bild, das wirklich vergrößert wird: Mit einem großen Bild
   trifft die Vorschau (höchstens 2048 px) diesen Zweig nicht, das zeigte der erste Versuch.
 
 ## 95. Prüfstand: Regler außerhalb ihres Bereichs ließen einen Fehler vermuten, den es nicht gab (30.10.2026)
@@ -2569,13 +2569,13 @@ Test oder Nachweis.
   dann kein Profil). Der zuerst vermutete Dunst macht nur einen kleinen Teil aus.
 - **Nicht tun:** Farbraum und Filter in Vorschau und Export in verschiedener Reihenfolge rechnen. Beim Vergleich zweier Wege jede Stufe einzeln prüfen.
 - **Wo im Code:** `ImageExporter.FiltersInSrgb`, `Render`, `RenderCached`.
-- **Test:** `ColorOrderTests` (auch: die andere Reihenfolge ergibt wirklich etwas anderes); `~/.cache/imageconverter-build/sichtbar-probe`, `stufen-probe`.
+- **Test:** `ColorOrderTests` (auch: die andere Reihenfolge ergibt wirklich etwas anderes); `<testordner>/sichtbar-probe`, `stufen-probe`.
 
 ## 98. KI-Schritte: Ergebnis und Striche landeten beim Blättern im falschen Bild, Upscaling und Export mischten Stände (0.7.11 beta)
 
-- **Entdeckt:** 31.10.2026, 0.7.11-beta, Prüfung des Ablaufs nach dem Eindruck des Nutzers, „dass bei verschiedenen KI-Features nicht
-  immer das richtige Ausgangsbild genommen wird“: drei Prüfdurchgänge durch den Code, dann jeder Fall im unsichtbaren Fenster mit echten
-  Modellen nachgestellt (`~/.cache/imageconverter-build/kette-ui`, Fälle 1–6). **Behoben:** 0.7.12-beta.
+- **Entdeckt:** 31.10.2026, 0.7.11-beta, Prüfung des Ablaufs, weil beim Benutzen der Eindruck entstand, dass verschiedene KI-Funktionen nicht
+  immer das richtige Ausgangsbild nehmen: drei Prüfdurchgänge durch den Code, dann jeder Fall im unsichtbaren Fenster mit echten
+  Modellen nachgestellt (`<testordner>/kette-ui`, Fälle 1–6). **Behoben:** 0.7.12-beta.
 - **Was (alle mit dem alten Code nachgestellt):**
   1. KI-Verbesserung „Übernehmen“, währenddessen geblättert: Die nächste KI auf Bild B rechnete von Bild A (Ergebnis 3000 × 2000 statt
      600 × 400) – das Muster von #86, bei der KI noch offen.
@@ -2644,7 +2644,7 @@ Test oder Nachweis.
 - **Warum:** Die Rubriken nahmen das Pixelbild (`CurrentImage`), das die KI enthält; gezeigt wird bei ausgeschalteter KI eine
   nachgerechnete Variante ohne sie (`PixelsFor`). Nach einem nicht wiederholbaren Schritt lässt sich die KI nicht mehr abtrennen, das
   Auge wirkt nicht mehr – die KI erschien wieder. Ein neuer KI-Schritt ließ das ausgeschaltete Auge stehen.
-- **Lösung (Wahl des Nutzers: „rechnen auf dem Gezeigten“):** Vor Entfernen, Hintergrund und einer neuen KI macht
+- **Lösung (gewählt: rechnen auf dem Gezeigten):** Vor Entfernen, Hintergrund und einer neuen KI macht
   `TakeOverHiddenAiAsync` das Gezeigte zum Pixelbild – wie „Neu anwenden“, aber nur für KI und „Haut & Details“ (`ApplyImageVariantAsync`),
   ohne Geometrie und Regler; ein eigener Schritt, Strg+Z holt die KI zurück, die Statuszeile sagt es. Verworfen: die KI wieder
   einschalten (rechnet auf etwas, das der Nutzer nicht sieht) und nur nachfragen.
@@ -2692,9 +2692,9 @@ Test oder Nachweis.
 
 ## 102. „Bearbeitungen“: KI-Verbesserung, Entfernen und Hintergrund ließen sich nicht (mehr) ausschalten (0.7.16 beta)
 
-- **Entdeckt:** 31.10.2026, 0.7.16-beta, vom Nutzer: „KI entfernen kann ich nicht deaktivieren … Hintergrund entfernen oder unscharf
-  lässt sich auch nicht aktivieren oder deaktivieren. Hat das einen Grund?“ **Geändert:** 0.7.17-beta (Wahl des Nutzers: „schaltbar mit
-  Nachrechnen“).
+- **Entdeckt:** 31.10.2026, 0.7.16-beta, beim Benutzen bemerkt: „KI entfernen“ ließ sich in der Liste nicht ausschalten, „Hintergrund
+  entfernen“ und „Hintergrund unscharf“ ebenfalls nicht ein- oder ausschalten. **Geändert:** 0.7.17-beta (gewählt: schaltbar mit
+  Nachrechnen).
 - **Was:** Entfernen und Hintergrund hatten in der Liste immer „Lässt sich nicht ausschalten“. Die KI war nur schaltbar, solange nach
   ihr nichts anderes kam; danach „festgeschrieben“.
 - **Warum:** Diese Schritte ändern das Pixelbild selbst. Ausschalten heißt: das Bild vor dem Schritt nehmen und alle späteren Schritte
@@ -2725,10 +2725,10 @@ Test oder Nachweis.
 
 ## 103. KI-Verbesserung: Ergebnis fehlte in „Bearbeitungen“, weil „Übernehmen“ übersehen wurde (0.7.17 beta)
 
-- **Entdeckt:** 30.10.2026, 0.7.17-beta, vom Nutzer: „Gesichter wird immer noch nicht rechts in der Bearbeiten-Liste angezeigt“, dann
-  „Übernehmen hatte ich nicht gesehen“. Im unsichtbaren Fenster erschien die Zeile nach „Übernehmen“ (Gesichter mit einem gemeinfreien
-  Testfoto nachgestellt) – der Code war richtig, der Ablauf missverständlich. **Geändert:** 0.7.18-beta (Vorschlag des Nutzers: „wie bei den
-  anderen – wenn es fertig ist, ist es übernommen; neu machen nimmt wieder das Original“).
+- **Entdeckt:** 30.10.2026, 0.7.17-beta, beim Benutzen bemerkt: „Gesichter“ erschien nicht rechts in der Liste „Bearbeitungen“; der
+  Knopf „Übernehmen“ war übersehen worden. Im unsichtbaren Fenster erschien die Zeile nach „Übernehmen“ (Gesichter mit einem gemeinfreien
+  Testfoto nachgestellt) – der Code war richtig, der Ablauf missverständlich. **Geändert:** 0.7.18-beta (wie bei den
+  anderen Schritten: wenn es fertig ist, ist es übernommen; ein neuer Lauf nimmt wieder das Original).
 - **Was:** Die KI zeigte ihr Ergebnis zuerst nur als Vorschau mit live wirkenden Reglern; ins Bild und in die Liste kam es erst mit
   „Übernehmen“ unter den Reglern. Entfernen und Hintergrund schreiben dagegen sofort ins Bild.
 - **Lösung:** Fertig gerechnet heißt im Bild (`ComputeAsync` → `Commit`), wie bei den anderen Schritten; „Übernehmen“ und „Verwerfen“
@@ -2745,20 +2745,20 @@ Test oder Nachweis.
 
 ## 104. Hintergrund: Grün markierte Stelle wurde trotzdem unscharf bzw. entfernt (0.7.17 beta)
 
-- **Entdeckt:** 30.10.2026, 0.7.17-beta, vom Nutzer: „bei Hintergrund unscharf hatte ich etwas selektiert, was nicht unscharf werden soll,
-  aber das wird ignoriert“. **Behoben:** 0.7.18-beta.
+- **Entdeckt:** 30.10.2026, 0.7.17-beta, beim Benutzen bemerkt: bei „Hintergrund unscharf“ wurde eine grün markierte Stelle, die scharf
+  bleiben sollte, nicht beachtet. **Behoben:** 0.7.18-beta.
 - **Was:** Grün schützte nur Objekte, die das Modell als Motiv erkannt hatte, und ergänzte, was ein vergrößerter Lauf um den Strich fand.
   Hielt das Modell die Stelle auch dann nicht für Motiv, blieb der Strich ohne Wirkung.
 - **Lösung:** Was grün übermalt ist, bleibt in jedem Fall (Alpha 1 unter dem Strich); die Kanten kommen weiter aus dem Foto (Kantenfilter
   in `Compose`). Berührte Objekte bleiben ganz, das Ergänzen per Zoom-Lauf bleibt.
-- **Nicht tun:** Eine Markierung des Nutzers nur als Hinweis ans Modell behandeln.
+- **Nicht tun:** Eine Markierung von Hand nur als Hinweis ans Modell behandeln.
 - **Wo im Code:** `BackgroundRemover.Edit`; Hinweistext in `BackgroundViewModel.ToolHint`.
 - **Test:** `BackgroundTests.GreenStroke_KeepsWhatItCovers_EvenIfTheModelSeesNothingThere` (transparent und unscharf, beide scheitern
   am alten Kern: Blau am Scheibenrand 58981 → 38272, ins Grün gemischt).
 
 ## 106. Vorher/Nachher: Die verkleinerte Vorher-Seite wurde nie erzeugt („Invalid source bitmap type“) (seit der Vorher-Ansicht)
 
-- **Entdeckt:** 30.10.2026, 0.8.0, im Programm-Log des Nutzers: „Fehler in einer Hintergrundaufgabe (nicht abgefangen) … Invalid source
+- **Entdeckt:** 30.10.2026, 0.8.0, im Programm-Log: „Fehler in einer Hintergrundaufgabe (nicht abgefangen) … Invalid source
   bitmap type … CreateScaledBitmap … PrepareFullPreviewAsync“ (20:24, zuvor 19:08). **Behoben:** 0.8.1-beta.
 - **Was:** Für den Vergleich wird das große Anzeigebild auf Vorschaugröße verkleinert, damit das Ziehen der Trennlinie nicht jedes Mal
   das Bild in voller Größe zeichnet. Das schlug bei jedem Bild über der Vorschaugröße fehl; der Vergleich lief dann mit dem vollen Bild
@@ -2769,12 +2769,12 @@ Test oder Nachweis.
   Ränder werden nicht dunkel). Geprüft: Muster aus deckend rot / durchsichtig ergibt Rot 200 bei Alpha 128; 6 MP in 15 ms.
 - **Nicht tun:** `CreateScaledBitmap` auf Bitmaps aus `FromBgra` anwenden; Fehler aus `Task.Run` ohne `await` liegen lassen.
 - **Wo im Code:** `BitmapOps.Shrink`, `MainViewModel.PrepareFullPreviewAsync`.
-- **Test:** Prüfprogramm `~/.cache/imageconverter-build/bitmaptest` (Fenster-Umgebung nötig, im Testprojekt nicht möglich).
+- **Test:** Prüfprogramm `<testordner>/bitmaptest` (Fenster-Umgebung nötig, im Testprojekt nicht möglich).
 
 ## 107. Pinsel: Ein weicher Pinsel ließ sich nicht bis in Ränder und Ecken führen (0.7.18 beta)
 
-- **Entdeckt:** 30.10.2026, 0.8.0, vom Nutzer: „Ich kann den Pinsel nicht komplett bis zum Rand führen, bei einem großen Pinsel bleibt eine
-  Menge im Bild … wenn ich etwas Richtung einer Ecke markieren will“; dazu „die Härte sieht man an der grünen Maske gar nicht“. **Behoben:**
+- **Entdeckt:** 30.10.2026, 0.8.0, beim Benutzen bemerkt: der Pinsel ließ sich nicht ganz bis zum Rand führen, bei einem großen Pinsel blieb
+  beim Markieren zu einer Ecke hin ein breiter Streifen unerfasst; dazu war die Härte an der grünen Maske nicht zu sehen. **Behoben:**
   0.8.1-beta.
 - **Was:** Die Pinselmitte war auf das Bild begrenzt, ein Strich begann nur im Bild. Mit der Härte (0.7.18) wirkt ein weicher Pinsel nur in
   seiner Mitte voll; am Rand festgehalten, blieb ein breiter Streifen halb erfasst. Die Vorschau zeichnete weiche Striche hart.
@@ -2786,12 +2786,12 @@ Test oder Nachweis.
   `IBrushTool.StrokeHardness`/`StrokeStrength`.
 - **Test:** Aufnahme im unsichtbaren Fenster (`kette-ui`, Modus `haerte`): Härte 100/50/0 % sichtbar verschieden, Strich über die Ecke
   am Bildrand abgeschnitten.
-- **Nachgebessert in 0.8.3-beta:** Vom Nutzer: „Das Auslaufen sieht im Grünen sehr treppenmäßig aus.“ Zwölf feste Schichten waren bei
+- **Nachgebessert in 0.8.3-beta:** Beim Benutzen bemerkt: das Auslaufen zeigte in der grünen Maske deutliche Treppen. Zwölf feste Schichten waren bei
   großen Pinseln je mehrere Bildschirmpixel breit; jetzt etwa eine Schicht je 1,5 Bildschirmpixel des Auslaufens (8–64).
 
 ## 108. SVG ließ sich nicht öffnen (seit SVG in der Liste der lesbaren Formate steht)
 
-- **Entdeckt:** 31.10.2026, 0.8.7-beta, auf die Frage des Nutzers „Kann ich bereits SVG damit anschauen?“ nachgeprüft. **Behoben:** 0.8.8-beta.
+- **Entdeckt:** 31.10.2026, 0.8.7-beta, bei der Prüfung, ob sich SVG schon anzeigen lässt. **Behoben:** 0.8.8-beta.
 - **Was:** SVG wurde angenommen (Liste der Formate), Öffnen scheiterte aber mit „attempt to perform an operation not authorized by the
   security policy `inkscape'“.
 - **Warum:** Ohne ausdrückliches Format ruft ImageMagick für SVG das externe Programm Inkscape auf; die Sicherheitsregel des Programms
@@ -2803,7 +2803,7 @@ Test oder Nachweis.
   Konfiguration nicht; auch mit `FONTCONFIG_FILE=/etc/fonts/fonts.conf` blieb es so (Warnung „using without calling FcInit()“) – verworfen.
 - **Nicht tun:** Die Sperre für externe Programme lockern, um SVG zu öffnen.
 - **Wo im Code:** `ImageLoader` (`VectorSettings`, `LoadAsync`, `ProbeAsync`, `LoadThumbnailAsync`, `CheckSize`).
-- **Test:** Prüfprogramm `~/.cache/imageconverter-build/probezeit` mit einem Testbild (Verlauf, Transparenz, Text) und einem 24-Pixel-Symbol:
+- **Test:** Prüfprogramm `<testordner>/probezeit` mit einem Testbild (Verlauf, Transparenz, Text) und einem 24-Pixel-Symbol:
   beide auf 2048 Pixel gerechnet, Formen und Verlauf richtig.
 
 ## 109. 3D: Ein Klick genau auf die Kante zweier Facetten traf, was dahinter lag (während der Entwicklung des STL-Betrachters)
@@ -2887,7 +2887,7 @@ Test oder Nachweis.
 
 ## 115. 3D: Modell ließ sich nicht drehen – Maus kam nicht bei der Ansicht an (0.8.11-beta)
 
-- **Entdeckt:** 31.10.2026, 0.8.12-beta, vom Nutzer: „Anzeige funktioniert, aber ich kann es nicht drehen.“ **Behoben:** 0.8.13-beta.
+- **Entdeckt:** 31.10.2026, 0.8.12-beta, beim Benutzen bemerkt: das Modell wurde angezeigt, ließ sich aber nicht drehen. **Behoben:** 0.8.13-beta.
 - **Was:** Ziehen, Mausrad, Doppelklick und Messklicks über der 3D-Ansicht taten nichts.
 - **Warum:** Avalonia zählt ein Steuerelement nur dort als getroffen, wo es selbst etwas zeichnet. Die OpenGL-Ansicht zeichnet ihr Bild an
   Avalonias Zeichnung vorbei (eigene Fläche), also ging jede Maus-Eingabe an den Rahmen dahinter (`InputHitTest` in der Mitte der Ansicht:
@@ -2902,7 +2902,7 @@ Test oder Nachweis.
 
 ## 116. 3D: Kugeln und andere Freiformflächen zerfielen in Schein-Zylinder – Messen traf Bruchstücke (0.8.10-beta)
 
-- **Entdeckt:** 31.10.2026, 0.8.14-beta, Analyserunde Genauigkeit (Wunsch des Nutzers): kürzester Abstand zweier Kugeln 1000 mm vom
+- **Entdeckt:** 31.10.2026, 0.8.14-beta, Analyserunde Genauigkeit: kürzester Abstand zweier Kugeln 1000 mm vom
   Nullpunkt um 20 µm falsch, bei 10 m um 0,4–6 mm; eine fein geteilte Kugel (2 Mio. Dreiecke) hatte nach einer ersten Korrektur 315 Flächen.
   **Behoben:** 0.8.15-beta.
 - **Was:** Die Flächensuche fand auf Kugeln kleine „Zylinder“; wer z. B. auf den Pol klickte, maß zu diesem Bruchstück statt zur Kugel.
@@ -2941,8 +2941,8 @@ Test oder Nachweis.
 
 ## 118. 3D: Durch eine Wand zoomen ging nicht, der Zoom blieb hängen (0.8.16-beta)
 
-- **Entdeckt:** 31.10.2026, 0.8.16-beta, vom Nutzer an einem Gehäuse (Unterteil, 49,5 × 66,1 × 19,5 mm): „Ich möchte durch eine lange
-  Seite zoomen, so dass ich den Steg hinter dieser Wand sehe – das geht nicht, und der Zoom bleibt irgendwann hängen.“ **Behoben:** 0.8.17-beta.
+- **Entdeckt:** 31.10.2026, 0.8.16-beta, beim Benutzen an einem Gehäuse (Unterteil, 49,5 × 66,1 × 19,5 mm) bemerkt: durch eine lange
+  Seite zoomen, um den Steg hinter dieser Wand zu sehen, ging nicht, und der Zoom blieb irgendwann hängen. **Behoben:** 0.8.17-beta.
 - **Wie geprüft:** mit Mausrad-Ereignissen über den Ereignisweg des Fensters (Ansicht von rechts, auf die lange Wand vor dem Steg), jeder
   Schritt protokolliert.
 - **Was und warum:**
@@ -2967,7 +2967,7 @@ Test oder Nachweis.
 
 ## 119. 3D: Flächen wurden ab einem bestimmten Blickwinkel schlagartig fleckig dunkel (0.9.0)
 
-- **Entdeckt:** 31.10.2026, 0.9.0, vom Nutzer: „Wenn ein bestimmter Winkel erreicht ist, wird eine Fläche abrupt dunkel.“
+- **Entdeckt:** 31.10.2026, 0.9.0, beim Benutzen bemerkt: ab einem bestimmten Blickwinkel wurde eine Fläche schlagartig dunkel.
   **Behoben:** 0.9.1-beta.
 - **Wie bemerkt und geprüft:** Messlauf im Prüfprogramm (`stl-shot <stl> sweep`): Kamera in 2°-Schritten einmal herum und von −80° bis
   +80° gekippt, beide Projektionen, mit und ohne Umgebungsverdeckung; Helligkeit an den 14 größten Flächen (3 × 3 Pixel, nur wo die Fläche
@@ -2994,8 +2994,8 @@ Test oder Nachweis.
 
 ## 120. 3D: Nach dem Durchzoomen kam man nicht mehr ganz zurück, der Zoom blieb hängen (0.9.0)
 
-- **Entdeckt:** 31.10.2026, 0.9.0, vom Nutzer: „Es hängt sich immer noch der Zoom auf, wenn man durch eine Fläche zoomt und dann wieder
-  raus will; nach zwei, drei Mal kommt man nicht mehr ganz zurück.“ **Behoben:** 0.9.1-beta.
+- **Entdeckt:** 31.10.2026, 0.9.0, beim Benutzen bemerkt: der Zoom hing weiterhin, wenn man durch eine Fläche zoomte und wieder
+  heraus wollte; nach zwei, drei Mal kam man nicht mehr ganz zurück. **Behoben:** 0.9.1-beta.
 - **Wie geprüft:** Prüfprogramm `stl-shot <stl> cycle`: dreimal 70 Rasten hinein und wieder heraus bis das ganze Modell im Bild ist, mit
   echten Mausrad-Ereignissen, Maus in der Mitte und seitlich, beide Projektionen.
 - **Was und warum:** In der Perspektive skalierte der Zoom Auge und Drehpunkt um den Punkt unter der Maus. Nach dem Durchfliegen liegt die
@@ -3018,10 +3018,10 @@ Test oder Nachweis.
 
 ## 121. 3D: Treppen an Rundungen, Schnittkanten und Kantenlinien (0.10.0)
 
-- **Entdeckt:** 31.10.2026, 0.10.0, vom Nutzer: „An den Kanten sind manchmal Treppen zu sehen“ und „Rundungen haben auch wie Treppen“.
+- **Entdeckt:** 31.10.2026, 0.10.0, beim Benutzen bemerkt: an Kanten und an Rundungen waren Treppen zu sehen.
   **Behoben:** 0.10.1-beta (Qualitätsstufen Mittel und Hoch; Schnell zeichnet bewusst wie vorher).
 - **Wie geprüft:** Nahaufnahmen im Prüfprogramm (`stl-shot <stl> edges`), Helligkeit quer über eine Rundung gemessen, Facetten der Zylinder
-  gezählt; danach eine Probe mit Vorher/Nachher-Schieber in derselben Ansicht, die der Nutzer abgenommen hat, dazu Differenzbilder.
+  gezählt; danach eine Probe mit Vorher/Nachher-Schieber in derselben Ansicht, per Sichtprüfung abgenommen, dazu Differenzbilder.
 - **Was und warum:**
   1. *Rundungen:* Jede Facette wurde flach schattiert (Normale aus den Ableitungen der Position). Am Gehäuse alle 2,8–2,9° eine neue Facette –
      je Facette 1 Helligkeitsstufe, im Glanz und bei schrägem Licht 3–5; das Auge verstärkt solche Kanten (Streifen statt Verlauf). Die Form
@@ -3037,7 +3037,7 @@ Test oder Nachweis.
   einfache Darstellung behalten. Ergebnis: Rundung als glatter Verlauf, Schnittkante und Linien glatt; Ebenen ändern sich höchstens um einen
   Helligkeitswert.
 - **Verworfen:** fester Knickwinkel über alle Dreiecke (25°) – hätte ein bewusst eckiges Teil (z. B. 16 Seiten) rund und eine flache Fase von
-  wenigen Grad weich gezeigt; der Nutzer verlangt eine absolut präzise Anzeige. Normalen je Dreiecksecke ohne gemeinsame Eckpunkte – 72 Byte
+  wenigen Grad weich gezeigt; gefordert ist eine absolut präzise Anzeige. Normalen je Dreiecksecke ohne gemeinsame Eckpunkte – 72 Byte
   je Dreieck statt 18, bei großen Modellen zu viel Grafikspeicher.
 - **Nicht tun:** Bildraum-Effekte (Schnitt, Verdeckung) je Bildpunkt entscheiden, wo es geometrisch geht; Rundungen über Flächengrenzen oder
   über grobe Facetten hinweg glätten.
@@ -3067,7 +3067,7 @@ Test oder Nachweis.
 
 ## 123. 3D: Knopf „Messen“ in der Spalte in der Höhe abgeschnitten (0.11.0)
 
-- **Entdeckt:** 31.10.2026, 0.11.0, vom Nutzer („der Messen-Button links ist in der Höhe abgeschnitten“). **Behoben:** 0.11.1-beta.
+- **Entdeckt:** 31.10.2026, 0.11.0, beim Benutzen bemerkt: der Knopf „Messen“ links war in der Höhe abgeschnitten. **Behoben:** 0.11.1-beta.
 - **Wie geprüft:** Im Prüfprogramm (`stl-shot <stl> panel`) Höhe des Knopfs und Platzbedarf des Inhalts im echten Fenster ausgelesen.
 - **Was und warum:** Die Werkzeugknöpfe der Spalte nutzen den Stil der Kettenschaltfläche (`ToggleButton.chain`); der setzt eine feste Höhe,
   in der Einstellungsspalte (`.settings`) 26 px. Mit 6 px Innenabstand oben und unten und dem Rand blieben 12 px – das Lineal-Symbol mit Text
@@ -3078,7 +3078,7 @@ Test oder Nachweis.
 
 ## 124. 3D: Das ✕ im Maß-Etikett löschte das Maß nur bei eingeschaltetem „Messen“ (0.12.0)
 
-- **Entdeckt:** 01.11.2026, 0.12.0, vom Nutzer („Messen-Labels gehen über das ✕ im Label nicht weg, nur links in der Liste“).
+- **Entdeckt:** 01.11.2026, 0.12.0, beim Benutzen bemerkt: Maß-Etiketten ließen sich über das ✕ im Etikett nicht löschen, nur links in der Liste.
   **Behoben:** 0.12.1-beta.
 - **Was und warum:** `ModelGlView.OnPointerReleased` fragte das Etikett unter der Maus (`LabelAt`) erst hinter der Bedingung „Messen ist
   eingeschaltet“ ab; mit einem anderen Werkzeug oder ohne Werkzeug kam der Klick nie dort an.
@@ -3106,7 +3106,7 @@ Test oder Nachweis.
 
 ## 126. Öffnen: Ein Bild, dessen Inhalt nicht zur Dateiendung passt, ließ sich nicht öffnen (seit 0.4.1)
 
-- **Entdeckt:** 14.11.2026, 0.12.2-beta, vom Nutzer (ein Buchscan als „.png“ öffnete nicht). **Behoben:** 0.12.3-beta.
+- **Entdeckt:** 14.11.2026, 0.12.2-beta, beim Benutzen bemerkt: ein Buchscan mit der Endung „.png“ öffnete nicht. **Behoben:** 0.12.3-beta.
 - **Wie bemerkt:** Die Datei war in Wahrheit ein AVIF mit der Endung `.png`. Das Vorschaubild erschien, das Bild selbst nicht:
   „improper image header … ReadPNGImage“. Nachgestellt in einer Probe über `ImageLoader.LoadAsync`.
 - **Warum:** `MagickImage.ReadAsync(path)` liest die Bytes selbst und gibt ImageMagick dann das Format nach der Dateiendung vor – der

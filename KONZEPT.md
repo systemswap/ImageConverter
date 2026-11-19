@@ -31,15 +31,15 @@ Bittiefe (8/16), Alpha-Behandlung inkl. Hintergrundfarbe beim Flatten.
   „Längste Kante" und Prozent kommen erst mit dem Batch-Modus zurück, wo sie
   gebraucht werden (gemischt Hoch- und Querformat).
 - **Proportional / nicht-proportional**: Kettensymbol zum Sperren des Seitenverhältnisses.
-- **Verhalten bei gesperrter Kette (wichtig):** Ich gebe *eine* Kante ein, die andere
-  wird sofort passend nachgerechnet und als abgeleiteter Wert angezeigt (ausgegraut
-  oder mit Hinweis), während ich noch tippe bzw. beim Verlassen des Feldes.
+- **Verhalten bei gesperrter Kette (wichtig):** Wird *eine* Kante eingegeben, wird die andere
+  sofort passend nachgerechnet und als abgeleiteter Wert angezeigt (ausgegraut
+  oder mit Hinweis), noch während der Eingabe bzw. beim Verlassen des Feldes.
   - Breite eingetippt ⇒ `höhe = round(breite / seitenverhältnis)`, und umgekehrt.
   - Seitenverhältnis wird **einmal beim Laden** aus dem Original (bzw. nach Zuschnitt
     aus der Auswahl) festgehalten, nicht nach jedem Rundungsschritt neu berechnet —
     sonst driftet das Verhältnis beim Hin-und-Her-Tippen weg.
   - Rundung: mindestens 1 px, nie 0. Rundungsfehler ≤ 1 px akzeptieren statt die
-    eingegebene Kante zu korrigieren — die vom Nutzer getippte Zahl bleibt exakt.
+    eingegebene Kante zu korrigieren — die eingetippte Zahl bleibt exakt.
   - Rekursionsschutz: das Nachrechnen darf kein erneutes Nachrechnen der ersten Kante
     auslösen (Flag `isUpdating` im ViewModel).
   - Kette *nachträglich* geschlossen ⇒ Verhältnis der aktuellen Werte übernehmen,
@@ -165,7 +165,7 @@ seinen Namen in allen Sprachen.
 > Integration automatisch funktioniert. Empfehlung: (b) umsetzen *und* Flatpak als
 > zweite Auslieferungsform einplanen.
 
-### J. Drucken (Wunsch vom 07.10.2026)
+### J. Drucken
 
 - Neben „Exportieren" ein **„Drucken"** — gedruckt wird in der eingestellten Größe
   (Pixel bzw. mm bei der gewählten DPI), mit Schärfe/Entrauschen wie beim Export.
@@ -185,7 +185,7 @@ den Seiten rechnet der Core (plattformunabhängig, testbar). Daraus entsteht pro
 Bild in Druckauflösung bzw. ein PDF mit exakten physischen Maßen. Ausgabe unter Linux über
 CUPS (`lp`), unter Windows über den Windows-Druckdienst.
 
-### K. Körnung (Wunsch vom 12.10.2026, umgesetzt in 0.5.53 beta – siehe Fehlergedächtnis #45)
+### K. Körnung (umgesetzt in 0.5.53 beta – siehe Fehlergedächtnis #45)
 
 - Eigene Gruppe **KÖRNUNG** als **letzte** Gruppe unter den Reglern (nach FARBE) —
   die Gruppen stehen in der Reihenfolge, in der sie wirken. Unabhängig von und
@@ -209,13 +209,13 @@ CUPS (`lp`), unter Windows über den Windows-Druckdienst.
   Vorschau = Export. Korngröße bezogen auf die Ausgabegröße, damit es beim
   Verkleinern gleich aussieht.
 
-### L. Gewölbtes Blatt gerade ziehen (Wunsch vom 12.10.2026, Schritt 1 – von Hand – in 0.5.54 beta, Schritt 2 – Vorschläge ohne Modell – in 0.5.55 beta, genauer und mit senkrechten Linien in 0.5.56 beta, siehe Fehlergedächtnis #46–#48)
+### L. Gewölbtes Blatt gerade ziehen (Schritt 1 – von Hand – in 0.5.54 beta, Schritt 2 – Vorschläge ohne Modell – in 0.5.55 beta, genauer und mit senkrechten Linien in 0.5.56 beta, siehe Fehlergedächtnis #46–#48)
 
 Fotografiertes Blatt oder Buch wölbt sich, gerade Linien werden zu Bögen. Recherche
 (Stand 10/2026): Die KI-Verfahren (UVDoc 2023, DocTr++, DocRes 2024, DocMatcher,
 ForCenNet, DvD 2025, Axis-Aligned Dewarping, BookNet 2026) arbeiten vollautomatisch,
 schneiden auf das Blatt zu und lassen sich nicht nachbessern; keines nimmt Vorgaben
-des Benutzers. Interaktiv gibt es nur Teile: obere und untere
+von Hand an. Interaktiv gibt es nur Teile: obere und untere
 Kurve vorgeben oder Linien nachziehen, deren Gitter dann
 optimiert wird (Carroll/Agrawala/Agarwala 2009). Das echte Seitenverhältnis liefert nur ein
 Blattmodell im Raum (page_dewarp, Zucker 2016; Kim/Koo/Cho 2015; Kil u. a. 2017).
@@ -293,7 +293,7 @@ Ziehen wie dort.
 **Reihenfolge der Umsetzung:** (1) Werkzeug von Hand mit Richtungen, Falz, Rechnung,
 Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
 
-### M. Doppelseite trennen (Wunsch vom 12.10.2026, noch nicht umgesetzt)
+### M. Doppelseite trennen (noch nicht umgesetzt)
 
 - Eigenes Symbol oben in der Vorschau: setzt eine senkrechte **Trennlinie**, die sich
   wie die Vorher/Nachher-Linie verschieben lässt (Vorschlag: am erkannten bzw.
@@ -304,12 +304,12 @@ Rezept, Tests · (2) Vorschläge ohne Modell · (3) Vorschläge mit UVDoc.
   Rezept gilt (ausschaltbar) oder nur beim Speichern wirkt, PDF-Seitengröße (DIN aus
   der Schätzung?).
 
-### N. Upscaling (Wunsch vom 14.10.2026, Konzept mit Messplatz und Modellwahl — umgesetzt in 0.5.76 beta, siehe `docs/KI-UPSCALING.md`)
+### N. Upscaling (Konzept mit Messplatz und Modellwahl — umgesetzt in 0.5.76 beta, siehe `docs/KI-UPSCALING.md`)
 
 **Ziel:** Vergrößern auf dem Stand der Technik, ohne etwas Neues ins Bild zu erfinden — das
 Original muss ohne Weiteres wiederzuerkennen sein: Auflösung höher, Inhalt und Aufbau
-bleiben, keine neuen Elemente. Wunsch
-als Messlatte: Panorama aus 5000+ px auf 600 px verkleinert, wieder vergrößert, sieht aus
+bleiben, keine neuen Elemente.
+Messlatte: Panorama aus 5000+ px auf 600 px verkleinert, wieder vergrößert, sieht aus
 wie das Original — idealerweise mit Nadeln und Blättern im Wald.
 
 **Was physikalisch geht (ehrlich):** Auf 600 px sind einzelne Nadeln und Blätter nicht mehr im
@@ -351,10 +351,10 @@ die Gruppe das und löst den Haken mit einem Klick).
   Foto ermitteln“) füllt es in Ausgabepixeln wieder auf (Hinweis in der Gruppe).
 - Die Vergrößerung im Tab KI („2× / 4×“ beim Allround-Modell) zieht hierher um; der Tab KI bleibt
   fürs Restaurieren (Rauschen, Artefakte, Gesichter).
-- **Keine feste Größengrenze** (Wunsch: auch sehr große Ergebnisse): gerechnet wird in Kacheln;
+- **Keine feste Größengrenze** (Ziel: auch sehr große Ergebnisse): gerechnet wird in Kacheln;
   vor dem Start prüft die App den Arbeitsspeicher und nennt Zeit und Bedarf; nur wenn es nicht
   passt, schlägt sie ×2 oder den Filter vor.
-- **Nur lokal, nur ONNX** (Wunsch; keine Online-Dienste). Mindestens
+- **Nur lokal, nur ONNX** (keine Online-Dienste). Mindestens
   CPU; AMD-Grafik: unter Windows über DirectML (`Microsoft.ML.OnnxRuntime.DirectML`, jede
   DirectX-12-Karte), unter Linux ROCm/MIGraphX oder WebGPU prüfen.
 
@@ -371,7 +371,7 @@ Originalpixel. Sekundenbruchteile, unabhängig vom Modell. Gemessen: hebt die Ü
 verkleinert/Original bei allen Modellen von 28–50 dB auf 49–65 dB und behebt die Tonverschiebung
 von PiSA-SR (roh dunkler und orangestichig) vollständig.
 
-**Entschieden: drei Modelle** (Messplatz 14.10.2026, vom Benutzer gewählt):
+**Entschieden: drei Modelle** (nach dem Messplatz vom 14.10.2026 gewählt):
 
 | Platz | Modell | Größe | Lizenz | CPU-Zeit 0,15 MP → 2,4 MP |
 |---|---|---|---|---|
@@ -379,7 +379,7 @@ von PiSA-SR (roh dunkler und orangestichig) vollständig.
 | KI mittel | 4x-UltraSharpV2 (DAT, 05/2025, Kim2091), ONNX fp32 opset 17 | 52 MB | CC BY-NC-SA 4.0 (privat in Ordnung) | 2 min |
 | KI langsam | PiSA-SR (CVPR 2025, SD 2.1-base + Dual-LoRA, ein Schritt) | ≈ 5,2 GB fp32 (2,6 GB fp16) + 33 MB LoRA | Code Apache-2.0, SD 2.1 OpenRAIL++, LoRA ohne Angabe | 7,5 min |
 
-**Messplatz** (`~/.cache/imageconverter-build/pisa/`, Skript `werkzeug/messplatz.py`): zwei
+**Messplatz** (`<testordner>/pisa/`, Skript `werkzeug/messplatz.py`): zwei
 Ausschnitte des Panoramas (2000 × 1200, Kiefernnadeln und Waldhang) auf 500 × 300 verkleinert und
 zurückgerechnet; Bilder `TestBilder/Merge/upscale-vergleich-{nadeln,hang}.jpg`,
 `upscale-ohne-treue-nadeln.jpg`.
@@ -391,7 +391,7 @@ zurückgerechnet; Bilder `TestBilder/Merge/upscale-vergleich-{nadeln,hang}.jpg`,
 | 4xNomos2 RealPLKSR | 40 s | 24,1 | 34,0 | Kleckse, Plastik — verworfen |
 | 4xNomos2 DAT2 | 2 min | 23,7 | 33,9 | scharf, aber wurmige Strukturen — verworfen |
 | 4x-UltraSharpV2 | 2 min | 26,2 | 35,2 | treu und natürlich |
-| PiSA-SR | 7,5 min | 23,2 | 31,4 | einzelne Nadeln und Wipfel, glaubwürdig — am nächsten am Wunsch |
+| PiSA-SR | 7,5 min | 23,2 | 31,4 | einzelne Nadeln und Wipfel, glaubwürdig — am nächsten an der Messlatte |
 
 dB = PSNR gegen den echten Ausschnitt; das Maß bevorzugt Weiches, gemalte (nicht pixelgenaue)
 Feinstruktur wird bestraft — entschieden wird am Bild. Ein überzeugendes Modell für ≈ 20 s gibt
@@ -423,7 +423,7 @@ Ausschnitt), Prüfansicht in voller Auflösung mit fertigen Kacheln schon währe
 Nachbau in C#, gegen PyTorch geprüft. Noch nicht: Grafikkarte (DirectML/ROCm), Speicherprüfung vor dem Rechnen, das
 2×/4× im KI-Tab bleibt vorerst daneben bestehen.
 
-**Neu gestaltet (0.5.77 beta, Wunsch vom 14.10.2026):** eine Gruppe „Größe“ — Einheit + Formate, Maße mit Kette, DPI (nur
+**Neu gestaltet (0.5.77 beta):** eine Gruppe „Größe“ — Einheit + Formate, Maße mit Kette, DPI (nur
 das Feld; die Einheit entscheidet: Pixel → nur Druckgröße, mm → Pixel), Liste „Verfahren“ (je nach Richtung; Filter oben,
 unter „KI-Scaler“ die KI), Gamma, Treue/Details (nur KI), Knopf „Skalieren“ für jedes Verfahren (Ergebnis in voller Größe in
 der Vorschau), Druckgröße. Weggefallen: Gruppen „Upscaling“ und „Auflösung & DPI“, Filter-Liste, DPI-Regler und -Knöpfe,
@@ -434,7 +434,7 @@ der Vorschau), Druckgröße. Weggefallen: Gruppen „Upscaling“ und „Auflös
 Gesichtsmodell? Gewicht der PiSA-Regler (λpix/λsem kosten einen zweiten UNet-Lauf) statt
 „Details“ als Mischung?
 
-### O. STL-Betrachter mit Messen (Wunsch vom 30.10.2026, umgesetzt in 0.8.10/0.8.11 beta, siehe `docs/STL-BETRACHTER.md`)
+### O. STL-Betrachter mit Messen (umgesetzt in 0.8.10/0.8.11 beta, siehe `docs/STL-BETRACHTER.md`)
 
 - `.stl` öffnet sich wie ein Bild und lässt sich im Ordner mitblättern; solange ein Modell
   gezeigt wird, sind die Bildfunktionen gesperrt. Nur STL, kein STEP.
@@ -445,7 +445,7 @@ Gesichtsmodell? Gewicht der PiSA-Regler (λpix/λsem kosten einen zweiten UNet-L
   zeigen Ø, Umschalt+Klick misst Punkt zu Punkt.
 - Drehen um die Klickstelle oder um die Mittelachse des Modells (umschaltbar), Drehscheibe
   um Z; Darstellung mit Umgebungsverdeckung im Bildraum, Bodenschatten, Kantenlinien.
-- Bearbeiten (Wunsch vom 01.11.2026, umgesetzt in 0.12.1 beta): Länge zwischen zwei parallelen
+- Bearbeiten (umgesetzt in 0.12.1 beta): Länge zwischen zwei parallelen
   Flächen ändern, Quader/Zylinder hinzufügen oder wegnehmen (andocken, frei verschieben), Fläche
   (auch maskiert) verschieben, Flächen zeichnen und aufbauen oder wegnehmen, mit Griffen,
   Einrasten und Bemaßen; Rückgängig und „Speichern unter …“ als STL. Nur geschlossene Modelle;
@@ -453,7 +453,7 @@ Gesichtsmodell? Gewicht der PiSA-Regler (λpix/λsem kosten einen zweiten UNet-L
 
 ---
 
-## 2. Was ein einfacher Konverter noch braucht (von dir nicht genannt)
+## 2. Was ein einfacher Konverter noch braucht
 
 1. **Live-Vorschau mit Vorher/Nachher** — umgesetzt als Trennlinie zum Schieben (0.4.37):
    links Vorher, rechts das Ergebnis; Zoom und Ausschnitt gelten für beide.
@@ -525,7 +525,7 @@ Ausschnitt auf, springt die Leiste auf „Standard“ (dort liegt der Zuschnitt)
 
 ## 4. Technik-Empfehlung
 
-**Du hast schon:** Avalonia 12.1 / .NET 10 mit Heads für Desktop, Android, iOS, Browser.
+**Vorhanden:** Avalonia 12.1 / .NET 10 mit Heads für Desktop, Android, iOS, Browser.
 
 **Empfehlung: Avalonia behalten, aufräumen.**
 
@@ -538,10 +538,10 @@ Ausschnitt auf, springt die Leiste auf „Standard“ (dort liegt der Zuschnitt)
 - Strikte Trennung: Core kennt kein Avalonia. Damit sind CLI-Modus und
   automatisiertes Testen der Pipeline gratis.
 
-**Alternative, falls dir GNOME-Integration wichtiger ist als Windows:**
+**Alternative, falls GNOME-Integration wichtiger wäre als Windows:**
 GTK4 + libadwaita (Rust oder Python) — sieht auf GNOME
 perfekt aus, Flatpak-Pfad ist ausgetreten. Preis: Windows-Support wird mühsam.
-→ Da du Windows ausdrücklich willst, bleibt Avalonia die richtige Wahl.
+→ Da Windows ausdrücklich unterstützt werden soll, bleibt Avalonia die richtige Wahl.
 
 **Bildbibliothek — die wichtigste Entscheidung:**
 
@@ -726,7 +726,7 @@ liefert Q16 direkt in den Puffer (`Pixels.FromMagick`), zurück als 16-Bit-Bild
 exakte Stufen bleiben unverändert — unbearbeitete 8-Bit-Bilder bleiben pixelgenau).
 16-Bit-Quellen bleiben bei PNG/TIFF 16 Bit, sonst Haken „16 Bit je Kanal“.
 
-**Stufenplan** — jede Phase endet mit einer Beta, die der Benutzer mit dem Auge abnimmt,
+**Stufenplan** — jede Phase endet mit einer Beta, die per Sichtprüfung abgenommen wird,
 bevor die nächste beginnt. Ab Phase 1 liegt `ImageConverter-0.4.45-Referenz.exe` neben der
 aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-Ordner.
 
@@ -736,8 +736,8 @@ aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-
 | 1 Durchgehend 32 Bit | 0.4.49 beta | Gemeinsamer Pixelpuffer (Fließkomma, linear), Q16 direkt aus Magick; Dunst/Entstufen, Tools, Tiefen/Lichter, Schärfen umgestellt; 8 Bit nur für Anzeige und 8-Bit-Formate; Export 16-Bit-PNG/TIFF | Abweichung < 1 Tonstufe außer gewollt; Treppen ≤ Referenz |
 | 2 Speicher & Tempo | 0.4.50 beta | Puffer wiederverwenden, Kacheln, SIMD; Abbrechen mitten in der Rechnung; Fortschritt auch in der Vorschau | 28,7 MP × 3: < 3 GB, < 10 s; 80 MP läuft |
 | 3 Szenenkarte | 0.4.51 beta | Himmel, Sonnenhof, Landschaft einmal am Anfang; alle Schritte lesen sie | Sonne und Himmel wie 0.4.45 |
-| 4 Dunst neu gegliedert | 0.4.52 beta | Stufe A Physik (Luftlicht hierarchisch), Stufe B Look an einer Stelle | kein Messwert schlechter; Auge des Benutzers |
-| 5 Abschluss | Meilenstein (z. B. 0.5.0) | Linux-Bau, Doku, Zip-Sicherung | Benutzer |
+| 4 Dunst neu gegliedert | 0.4.52 beta | Stufe A Physik (Luftlicht hierarchisch), Stufe B Look an einer Stelle | kein Messwert schlechter; Sichtprüfung |
+| 5 Abschluss | Meilenstein (z. B. 0.5.0) | Linux-Bau, Doku, Zip-Sicherung | Abnahme des Meilensteins |
 
 **Stand (09.10.2026):**
 - Phase 0 ✓ — Prüflauf gegen 0.4.45 byte-gleich.
@@ -749,7 +749,7 @@ aktuellen Exe, Vergleichsbilder je Version unter `vergleich/<Version>` im Build-
 - Phase 4 ✓ — `DehazeLook`; Vorgaben auf 0.4.45 abgestimmt
   (ΔE 0,3–0,7 bei Dunst 100), Luftlicht aus überlappenden Fenstern; das Luftlicht war schon
   dreistufig (Bild → 8 Streifen → 6 × 4 Kacheln, jede Stufe nur begrenzte Korrektur).
-- Phase 5 — **Meilenstein 0.5.0** (vom Benutzer am 09.10.2026 als Meilenstein bestimmt): Doku und
+- Phase 5 — **Meilenstein 0.5.0** (am 09.10.2026 als Meilenstein abgenommen): Doku und
   Zip-Sicherung erledigt; der Linux-Bau (`./publish.sh linux` auf dem Debian-Rechner) steht noch aus.
   0.5.0 ist die neue Referenz für Abnahme und Vergleich.
 

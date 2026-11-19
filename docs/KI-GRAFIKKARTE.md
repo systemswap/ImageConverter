@@ -1,6 +1,6 @@
 # KI auf der Grafikkarte
 
-Ist eine Grafikkarte da, rechnen alle KI-Modelle der App darauf — ohne Schalter (Wunsch des Benutzers, 14.10.2026).
+Ist eine Grafikkarte da, rechnen alle KI-Modelle der App darauf — ohne Schalter.
 Lässt sich ein Modell auf der Grafikkarte nicht öffnen, rechnet es auf der CPU; was gerade gilt, steht in den
 Einstellungen › KI-Modelle (`AiViewModel.GpuStatus`).
 
@@ -71,7 +71,7 @@ Panorama-Ausschnitt 500 × 300 → 2000 × 1200, mit Laden der Modelle:
 
 ## Geschwindigkeitstest: Grafikkarte oder CPU (0.5.100 beta)
 
-Wunsch des Benutzers (18.10.2026): Nicht annehmen, dass die Grafikkarte schneller ist, sondern messen und das
+Grundsatz: Nicht annehmen, dass die Grafikkarte schneller ist, sondern messen und das
 Schnellere nehmen — auf dem Debian-Rechner mit 16-Kern-Prozessor ist die CPU oft gleich schnell oder schneller (siehe
 unten), auf dem Laptop die Grafikkarte deutlich schneller.
 
@@ -109,8 +109,8 @@ unten), auf dem Laptop die Grafikkarte deutlich schneller.
 
 ## Rechner bedienbar halten, Upscaler im Test (0.5.105 beta)
 
-Wunsch des Benutzers (18.10.2026): Bei stundenlangem Rechnen auf 100 % ist der Rechner nicht mehr benutzbar; die
-Zeitschätzung soll schon vor dem ersten Lauf stimmen.
+Ausgangslage: Bei stundenlangem Rechnen auf 100 % ist der Rechner nicht mehr benutzbar. Ziel: Der Rechner bleibt
+bedienbar, und die Zeitschätzung stimmt schon vor dem ersten Lauf.
 
 - **Niedrige Priorität** (Einstellungen › Leistung, Vorgabe an; `ComputeLimits.LowerPriority`): andere Programme haben
   Vorrang, ist der Rechner frei, wird trotzdem voll gerechnet. Linux: `setpriority` auf nice 10 für jeden Strang unter
@@ -146,7 +146,7 @@ Effizienzkerne), PiSA-SR fp32 auf der CPU:
 | zwei Kacheln gleichzeitig, zwei Sitzungen je 8 Stränge | 85,6 s (Messung gestört, eher ~90) | gleich, doppelter Speicher |
 
 - **Kachelgröße bleibt fest:** Der VAE-Decoder normiert innerhalb jeder Kachel (GroupNorm) — das Ergebnis hängt
-  sichtbar von der Kachelgröße ab, und schneller wird es kaum. Bedingung des Benutzers: Qualität darf nicht schlechter
+  sichtbar von der Kachelgröße ab, und schneller wird es kaum. Bedingung: Die Qualität darf nicht schlechter
   werden. **Nicht tun:** Kachelgrößen je Gerät „optimieren“, ohne das Ergebnis zu vergleichen.
 - **Mehr Stränge bringen nichts** (16 → 32), weniger kosten wenig (8 Stränge: +26 %) — Grundlage der Obergrenze.
 - **Zwei Kacheln gleichzeitig:** nur 8 % — lohnt den Umbau der Reihenfolge nicht; unter DirectML sind gleichzeitige

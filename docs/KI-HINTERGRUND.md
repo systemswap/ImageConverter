@@ -91,7 +91,7 @@ Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 Das Modell sieht das Bild also ohne Regler (Stufe 4); sie bleiben beim neuen Versuch stehen und wirken danach auf das
 Ergebnis. Es sieht aber KI- und Entfernen-Schritte, die vor dem Hintergrund-Schritt liegen.
 
-Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `~/.cache/imageconverter-build/transparent-probe`,
+Gemessen an drei freigestellten Bildern (6–7 MP, 30.10.2026, `<testordner>/transparent-probe`,
 `sichtbar-probe`):
 
 - **Zeit je Stufe (ohne Zuschnitt):** Rauschen 1,1–1,4 s, Dunst 1,9–2,4 s, Tiefen/Lichter 0,9–1,0 s, Licht und Farbe 0,1 s, Schärfen 0,1 s.
@@ -169,12 +169,12 @@ Je Modell (Notebook mit integrierter Grafik, je eigener Prozess, 1024², MB priv
 Die Spitze auf der Grafikkarte bleibt: Sie ist der Preis des Rechenwegs. BiRefNet lite rechnet deshalb seit 0.7.5 beta nur
 noch auf der CPU (3 s langsamer, rund 10 GB weniger); BiRefNet general nur mit dem optionalen Zusatz auf der Grafikkarte.
 Prüfung: `BackgroundTests` (Ersatzmodell: Kanten, Rot, Grün mit Zoom, Farbsaum, Unscharf, Ausschnitt);
-`~/.cache/imageconverter-build/hintergrund-probe` (Kern an den Testbildern), `hintergrund-ui` (Rubrik im unsichtbaren
+`<testordner>/hintergrund-probe` (Kern an den Testbildern), `hintergrund-ui` (Rubrik im unsichtbaren
 Fenster: Automatik, Rot, Grün, Unscharf, Export PNG, Rückgängig).
 
 ## Messplatz
 
-`~/.cache/imageconverter-build/hintergrund/` (`messplatz.py`: CPU-Zeiten, Masken, Vergleichsbögen; `gpu.py`: Zeit mit
+`<testordner>/hintergrund/` (`messplatz.py`: CPU-Zeiten, Masken, Vergleichsbögen; `gpu.py`: Zeit mit
 DirectML und Abweichung zur CPU). Acht Testbilder: lange Haare, Zuckerwatte, Zopf vor Palmen, ganze Person mit Blumen,
 Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor Himmel (Bilder bis 3000 px).
 
@@ -197,7 +197,7 @@ Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor H
 ## Analyserunde (29.10.2026, 0.6.38–0.6.42 beta)
 
 Geprüft mit BiRefNet lite auf der CPU (Desktop, 32 Threads), Ersatzmodellen und künstlichen Bildern; Prüfprogramme
-außerhalb des Projekts: `~/.cache/imageconverter-build/hintergrund-ui` (unsichtbares Fenster: Blättern und neue
+außerhalb des Projekts: `<testordner>/hintergrund-ui` (unsichtbares Fenster: Blättern und neue
 Bilder während der Berechnung) und `hintergrund-probe` (Modi `eingaben`, `grau`, `modelle`, `formate`, `messen`,
 `arena`, `fuzz`).
 
