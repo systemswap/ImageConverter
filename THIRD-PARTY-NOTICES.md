@@ -94,6 +94,22 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 | Upscaling – 4x-UltraSharpV2 | **CC BY-NC-SA 4.0 – nur nicht-kommerzielle Nutzung**, Namensnennung | Kim2091 (UltraSharpV2), Hugging Face `Kim2091/UltraSharpV2`, feste Fassung |
 | Upscaling – PiSA-SR (LoRA) | Apache-2.0 (laut README des Codes) | Lingchen Sun u. a. (PiSA-SR, CVPR 2025), Google Drive der Autoren; Code als Kopie in `extern/PiSA-SR/` |
 | Upscaling – Stable Diffusion 2.1-base (UNet, VAE, Text-Encoder; Teile für PiSA-SR) | CreativeML Open RAIL++-M (Nutzungsbeschränkungen der Lizenz gelten) | Stability AI; das Original ist zurückgezogen, geladen vom Spiegel `Manojb/stable-diffusion-2-1-base` auf Hugging Face, feste Fassung |
+| Begradigen – SyntheticDoc | MIT | Daniel Woortmann, Tanguy Magne, Olga Sorkine-Hornung (SyntheticDoc, ECCV 2026, ETH Zürich), Checkpoint von igl.ethz.ch; das Netz ist in `ImageConverter.Core/Ai/SyntheticDoc/` nachgebaut, Code als Kopie in `extern/SyntheticDoc/` |
+| Freistellen – BiRefNet und BiRefNet lite | MIT | Peng Zheng u. a. (BiRefNet), ONNX vom Autor (GitHub-Release `ZhengPeng7/BiRefNet` v1) |
+| Freistellen – BiRefNet für die Grafikkarte (halbe Genauigkeit) | MIT | Peng Zheng u. a. (BiRefNet), ONNX von onnx-community (Hugging Face `onnx-community/BiRefNet-ONNX`, feste Fassung) |
+| Freistellen – BEN2 | MIT | Maxwell Meyer, Jack Spruyt (BEN2, Prama LLC), Hugging Face `PramaLLC/BEN2`, feste Fassung |
+| Freistellen – RMBG-2.0 | **CC BY-NC 4.0 – nur nicht-kommerzielle Nutzung** | Bria AI (RMBG-2.0); wird nicht vom Programm geladen: Man lädt die Datei selbst von Hugging Face `briaai/RMBG-2.0`, nachdem man dort den Bedingungen zugestimmt hat |
+
+## Bilder der Startseite (nur im Repository, nicht im Programm)
+
+Zwei Fotos in `docs/bilder/readme/` sind gemeinfrei und wurden für die Beispiele mit ImageConverter bearbeitet (Leitungen
+entfernt, Hintergrund weichgezeichnet und entfernt); Lizenztext: `docs/bilder/readme/CC0-1.0.txt`. Alle übrigen Bilder dort sind
+eigene Aufnahmen und Darstellungen des Projekts.
+
+| Bild | Foto | Lizenz | Quelle |
+|---|---|---|---|
+| `entfernen-vorher.jpg`, `entfernen-nachher.jpg` | „Power lines“, Charles Devaux, Unsplash, 1. 7. 2016 | CC0 1.0 | https://commons.wikimedia.org/wiki/File:Power_lines_(Unsplash).jpg |
+| `hintergrund-vorher.jpg`, `hintergrund-weich.jpg`, `hintergrund-frei.jpg` | „Hitchhiker in a forest“, Altas Green, Unsplash, 20. 8. 2014 | CC0 1.0 | https://commons.wikimedia.org/wiki/File:Hitchhiker_in_a_forest.jpg |
 
 ## Netzzugriffe
 

@@ -83,6 +83,17 @@ voneinander. Das ganze Panorama ist in rund zehn Sekunden gerechnet.
 
 ## Gerade ziehen, was schief ist
 
+<p align="center">
+  <img src="docs/bilder/readme/seite-vorher.jpg" width="32%" alt="Eine fotografierte Buchseite auf einem Holztisch, schräg aufgenommen und zum Bund hin gewölbt; die Zeilen laufen in Bögen">
+  <img src="docs/bilder/readme/seite-linien.jpg" width="32%" alt="Dieselbe Seite mit den vorgeschlagenen Linien: blau entlang der Textzeilen und der oberen und unteren Kante, orange entlang der senkrechten Ränder">
+  <img src="docs/bilder/readme/seite-nachher.jpg" width="32%" alt="Die Seite nach dem Begradigen: gerade Zeilen, rechte Winkel, flach wie gescannt">
+</p>
+
+**Was Sie sehen:** links eine Buchseite, schräg fotografiert und zum Bund hin gewölbt. In der Mitte die Linien, die das Programm von
+selbst vorschlägt – blau an Textzeilen und Kanten, orange an den Rändern. Rechts das Ergebnis: Die Zeilen liegen gerade, die Ecken
+sind rechtwinklig, die Seite liegt flach wie auf dem Scanner. Passt eine Linie nicht, ziehen Sie sie mit der Maus zurecht, und das
+Ergebnis folgt sofort.
+
 - **Gewölbtes Blatt:** Linien an Textzeilen und Rändern setzen oder vorschlagen lassen – ein Blattmodell zieht die Seite glatt und rastet
   auf DIN-Formate ein. Auch Doppelseiten mit Falz.
 - **KI begradigen:** ein Klick für zerknitterte Blätter, Kassenbons und Buchseiten; Schatten auf dem Papier verschwinden gleich mit.
@@ -93,6 +104,27 @@ voneinander. Das ganze Panorama ist in rund zehn Sekunden gerechnet.
   Rand.
 
 ## Wegradieren und freistellen
+
+<p align="center">
+  <img src="docs/bilder/readme/entfernen-vorher.jpg" width="49%" alt="Bewaldete Berge im Nebel, davor ein Strommast und Dutzende Leitungen quer durchs Bild">
+  <img src="docs/bilder/readme/entfernen-nachher.jpg" width="49%" alt="Dieselbe Landschaft ohne Strommast und ohne Leitungen; Wolken, Nebel und Wald laufen ungestört durch">
+</p>
+
+**Strommast weg, Leitungen weg:** Mast und Leitungen markieren, „Entfernen“ – die KI füllt die Stellen mit dem, was dahinter sein
+müsste: Wolken, Nebelschwaden, Baumkronen. Ein zweiter, kurzer Durchgang nimmt die letzten feinen Reste. Alles außerhalb der
+Markierung bleibt Pixel für Pixel, wie es war.
+
+<p align="center">
+  <img src="docs/bilder/readme/hintergrund-vorher.jpg" width="32%" alt="Eine Person mit Kapuze und Rucksack an einer Waldstraße, von schräg hinten, mit ausgestrecktem Daumen">
+  <img src="docs/bilder/readme/hintergrund-weich.jpg" width="32%" alt="Dasselbe Bild mit weichgezeichnetem Wald; die Person bleibt scharf">
+  <img src="docs/bilder/readme/hintergrund-frei.jpg" width="32%" alt="Die freigestellte Person vor einem Schachbrettmuster, das den durchsichtigen Hintergrund zeigt">
+</p>
+
+**Freistellen mit einem Klick:** Das Programm erkennt die Person samt Kapuze, Rucksack und ausgestrecktem Daumen. Danach wahlweise
+den Wald weichzeichnen wie bei einer offenen Blende (Mitte) oder ganz entfernen und als PNG mit durchsichtigem Hintergrund speichern
+(rechts, hier auf Schachbrett).
+
+<sub>Fotos: Altas Green und Charles Devaux über Unsplash, gemeinfrei (CC0).</sub>
 
 - **Entfernen:** mit dem Pinsel über das Störende malen. Zwei Modelle stehen bereit – eines gründlich, eines schnell.
 - **Hintergrund:** Motiv automatisch freistellen, mit Pinsel nacharbeiten (rot = weg, grün = bleibt), Hintergrund durchsichtig oder

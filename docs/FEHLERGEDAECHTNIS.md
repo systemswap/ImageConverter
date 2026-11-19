@@ -3199,3 +3199,20 @@ Test oder Nachweis.
 - **Wo im Code:** `LuminanceRegions.TargetGain`, `Spread`, `For`. **Test:** `AdjustTests.TargetGain_IsSoft_Monotonic_AndNeverAboveTheHardLimit`
   (schlägt mit dem alten Code fehl); `MatchTarget_*` und `MatchLuminance_UpTo300_*` erwarten „in Richtung Zielwert“ statt „bis
   zum Zielwert“.
+
+## 131. Entfernen: lange Leitungen quer durchs Bild werden in einem großen Ausschnitt gefüllt (Messung, offen)
+
+- **Entdeckt:** 19.11.2026 (Stand 0.12.14-beta), beim Erstellen der Beispielbilder für die Startseite: Strommast und Leitungen in
+  einem Foto mit 4288 × 2848 px entfernt. Kein Fehler im engeren Sinn, keine Codeänderung.
+- **Was:** Schräge Striche über das ganze Bild haben große Rahmen; `Inpainter.Pieces` fasst sie zu einem Stück zusammen, und
+  dessen Ausschnitt wird auf 512 × 512 verkleinert (hier etwa 8-fach). Die Füllung ist in voller Auflösung weich; neben dünnen
+  Markierungen bleiben leichte Schatten oder helle Schlieren. In Bildschirmgröße (etwa 1200 px) sieht das Ergebnis sauber aus.
+- **Gegenprobe – abschnittsweise füllen:** Dieselben Striche je Kachel (320 px) geschnitten und Kachel für Kachel gefüllt: Das
+  Modell setzte die Leitungen von den noch ungefüllten Nachbarkacheln her fort und malte sie fast vollständig wieder hin.
+  Lange, zusammenhängende Markierungen müssen also in einem Zug gefüllt werden, wie `Pieces` es tut.
+- **Was half:** die Striche eng an jeder Leitung entlang (Doppelseile einzeln, nicht breiter malen – breitere Striche brachten
+  mehr helle Schlieren) und ein zweiter, kurzer Durchgang nur über die Reste; der hat kleine Rahmen und wird scharf gefüllt.
+- **Nicht tun:** lange Markierungen in Kacheln zerlegen, die nacheinander gefüllt werden.
+- **Offen:** ein Weg, lange Markierungen in einem Zug, aber mit feinerem Ausschnitt zu füllen (z. B. den Ausschnitt entlang des
+  Strichs statt als Rechteck).
+- **Wo im Code:** `Inpainter.Pieces`, `CropAround`. **Test:** keiner (Messung mit einem Prüfprogramm im lokalen Testordner).
