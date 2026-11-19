@@ -52,13 +52,16 @@ dasselbe Bild nach dem Dunstfilter – im Programm schieben Sie die Trennlinie m
 seine Staffelung zurück, die Wiesen werden wieder grün, und trotzdem bleiben Himmel und Sonne ruhig: Der Filter erkennt sie und lässt
 sie in Frieden – ohne Streifen im Himmel und ohne helle Säume um die Bäume.
 
-<p align="center">
-  <img src="docs/bilder/readme/dunst-tal-vorher.jpg" width="49%" alt="Ausschnitt mit Dorf, Wiesen, einem Acker und Hügelketten vor dem Dunstfilter: alles unter einem grauen Schleier">
-  <img src="docs/bilder/readme/dunst-tal-nachher.jpg" width="49%" alt="Derselbe Ausschnitt nach dem Dunstfilter: grüne Wiesen, brauner Acker, rote Dächer">
-</p>
+**Vorher und nachher in voller Größe** – zum Vergrößern anklicken. Achten Sie auf das Tal links: Wo vorher ein grauer Schleier über
+allem lag, sind die Wiesen wieder grün, der Acker braun und die Dächer rot, und die Hügelketten lösen sich voneinander. Das ganze
+Panorama ist in rund zehn Sekunden gerechnet.
 
-**Im Ausschnitt** wird es deutlich: Wo vorher ein grauer Schleier über allem lag, sind die Wiesen wieder grün, der Acker braun und
-die Dächer rot, und die Hügelketten dahinter lösen sich voneinander. Das ganze Panorama ist in rund zehn Sekunden gerechnet.
+<p align="center">
+  <a href="docs/bilder/readme/dunst-vorher.jpg"><img src="docs/bilder/readme/dunst-vorher.jpg" width="100%" alt="Das ganze Panorama vor dem Dunstfilter: Tal, Hügel und Felder unter einem grauen Schleier"></a>
+</p>
+<p align="center">
+  <a href="docs/bilder/readme/dunst-nachher.jpg"><img src="docs/bilder/readme/dunst-nachher.jpg" width="100%" alt="Das ganze Panorama nach dem Dunstfilter: grüne Wiesen, klare Hügelketten, ruhiger Himmel mit Sonne"></a>
+</p>
 
 - **Wie das Auge:** Der Dunst wird in mehreren sachten Durchläufen entfernt – ansehen, neu schätzen, weiter. Mehr Durchläufe wirken
   kräftiger, jeder bleibt natürlich.
