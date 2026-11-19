@@ -71,12 +71,11 @@ Panorama ist in rund zehn Sekunden gerechnet.
 
 | Gruppe | Einstellung |
 |---|---|
-| Dunst | Stärke +36, 8 Durchläufe, Klarheit 42 %, Kontrast 22 %, Dynamik 25 %, Schärfe fein 33 %, Helligkeit 76 %, Entstufen 55 %, Dunstfarbe 51 % |
-| Gleiche Farbe | Gesamt 104 %, Luminanz 103 %, Zielwert 45 %, Ausgleichen 18 %, Farbe +4 |
-| Luminanzmaske | Stärke +38 %, Auslaufen 75 %, Verlauf 30 |
-| Licht | Kontrast +10, Tiefen +14, Lichter −100 |
-| Farbe | Dynamik +11 |
-| Körnung | Stärke 14 %, Korngröße 1,0 px, Rauheit 30 |
+| Dunst | Stärke +42, 8 Durchläufe, Klarheit 53 %, Kontrast 12 %, Dynamik 25 %, Schärfe fein 60 %, Helligkeit 85 %, Entstufen 50 %, Dunstfarbe 50 % |
+| Gleiche Farbe | Luminanz 117 %, Zielwert 48 %, Schwellwert 20 %, Farbe +30 |
+| Luminanzmaske | Stärke +19 %, Auslaufen 75 %, Verlauf 30 |
+| Licht | Kontrast +10, Tiefen +8, Lichter −100 |
+| Farbe | Dynamik +19, Sättigung −12 |
 
 </details>
 
@@ -192,6 +191,29 @@ Qualitätsstufe „Hoch“: glatte Rundungen, weiche Umgebungsschatten, Kanten a
 - **Messen:** zwei Flächen anklicken – Abstand und Winkel; Zylinderdurchmesser; Punkt zu Punkt mit ΔX/ΔY/ΔZ.
 - **Bearbeiten:** Längen ändern, Quader oder Zylinder hinzufügen und wegnehmen, Flächen verschieben, Formen zeichnen und aufbauen oder
   herausschneiden – mit Einrasten und Bemaßung, 30 Schritte rückgängig, Speichern als STL.
+
+<details>
+<summary><b>Was den Betrachter besonders macht</b></summary>
+
+- **Nichts sieht runder aus, als es ist.** Glatt gezeichnet werden nur Flächen, die der Betrachter selbst als Zylinder oder Rundung
+  erkannt hat, und nur dort, wo die Datei fein genug unterteilt ist. Ein Zylinder bekommt die exakte Richtung seiner Oberfläche,
+  Ebenen bleiben eben, Kanten scharf. Grob unterteilte Teile erscheinen so kantig, wie sie in der Datei stehen.
+- **Licht, das Formen zeigt.** Mattes Material, ein Hauptlicht von links oben, eine sanfte Aufhellung und eine Umgebungsverdeckung,
+  die Ecken, Bohrungen und Übergänge weich abdunkelt – gleich gut bei einer kleinen Schraube wie bei einem großen Gehäuse. Darunter
+  ein weicher Schatten auf dem Boden.
+- **Saubere Kanten.** Bis zu achtfache Kantenglättung, und ein feines Rauschen verhindert Stufen in langen Farbverläufen. Unter Linux
+  laufen außerdem die Kantenlinien weich aus und liegen genau auf der Kante, und auch Schnittkanten werden geglättet.
+- **Schnell auch bei großen Dateien.** Ein STL-Modell mit 5 Millionen Dreiecken ist in 0,4 Sekunden eingelesen und steht sofort auf dem
+  Bildschirm; die Flächenerkennung braucht danach 1,6 Sekunden, ein Messklick etwa zwei Millionstel Sekunden. Gezeichnet wird nur,
+  wenn sich etwas ändert – der Rechner bleibt ruhig.
+- **Gemessen wird an der Datei, nicht am Bild.** Alle Maße rechnet der Betrachter mit den Dreiecken der Datei in doppelter
+  Genauigkeit. Ebenen, Zylinder und Rundungen erkennt er selbst, auch in STL-Dateien, die davon nichts wissen.
+- **Vorsichtig mit Fremdem.** Dateien aus dem Netz werden mit festen Grenzen gelesen, damit eine beschädigte oder präparierte Datei
+  das Programm nicht lahmlegt.
+- **Eigenständig gebaut.** Die Darstellung spricht die Grafikkarte direkt über OpenGL an, ohne zusätzliche 3D-Bibliothek – unter
+  Linux und Windows.
+
+</details>
 
 ---
 
