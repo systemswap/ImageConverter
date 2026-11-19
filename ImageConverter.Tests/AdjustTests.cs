@@ -328,8 +328,9 @@ public class AdjustTests
     }
 
     /// <summary>
-    /// Target value: a dark region is lifted to about the target, a midtone region above it stays unchanged. Without
-    /// a target it would be lifted by the same ratio and blow out.
+    /// Target value: a dark region is lifted towards the target, a midtone region above it stays unchanged. Without
+    /// a target it would be lifted by the same ratio and blow out. The transition below the target is soft, so a region
+    /// near it reaches it only approximately (here about 80 %).
     /// </summary>
     [Fact]
     public void MatchTarget_LiftsDarkAreasToTarget_AndLeavesMidtonesAlone()
@@ -342,8 +343,44 @@ public class AdjustTests
 
         Assert.True(L(free, 300) > L(src, 300) + 0.15f, "ohne Zielwert würde die Wiese stark aufhellen");
         Assert.InRange(L(target, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f);   // meadow stays
-        Assert.InRange(L(target, 60), 0.36f, 0.44f);                              // tree lifted to about the target (40 %)
+        Assert.InRange(L(target, 60), 0.30f, 0.44f);                              // tree lifted towards the target (40 %)
         Assert.True(L(target, 60) > L(src, 60) + 0.1f);
+    }
+
+    /// <summary>
+    /// The gain towards the target: the result grows with the region brightness (no tonal reversal), more luminance never
+    /// gives less lift, the lift never exceeds the hard limit min(luminance, target / area) and is 0 at and above the
+    /// target, deep shadows get the full luminance, and with a small luminance the lift fades out over a wide range
+    /// instead of within 0.013 (the hard edge of the clamp).
+    /// </summary>
+    [Fact]
+    public void TargetGain_IsSoft_Monotonic_AndNeverAboveTheHardLimit()
+    {
+        const float target = 0.45f;
+        foreach (var lum in new[] { 1.03f, 1.5f, 2f, 3f })
+        {
+            var previous = 0f;
+            for (var k = 1; k < 2000; k++)
+            {
+                var area = k / 2000f;
+                var gain = LuminanceRegions.TargetGain(area, target, lum);
+                var result = area * gain;
+                Assert.True(result >= previous - 1e-5f, $"Luminanz {lum}: Tonwertumkehr bei {area:0.000}");
+                Assert.True(gain <= Math.Clamp(target / area, 1, lum) + 1e-5f, $"Luminanz {lum}: mehr als die harte Grenze bei {area:0.000}");
+                if (area >= target) Assert.Equal(1f, gain, 5);
+                previous = result;
+            }
+            Assert.Equal(lum, LuminanceRegions.TargetGain(0.02f, target, lum), 4);   // deep shadow: full luminance
+        }
+        for (var k = 1; k < 200; k++)
+        {
+            var area = k / 400f;
+            Assert.True(LuminanceRegions.TargetGain(area, target, 3f) >= LuminanceRegions.TargetGain(area, target, 2f) - 1e-6f);
+            Assert.True(LuminanceRegions.TargetGain(area, target, 2f) >= LuminanceRegions.TargetGain(area, target, 1.03f) - 1e-6f);
+        }
+        // 103 %: half of the lift is still there clearly below the target (hard clamp: full up to 0.437, nothing from 0.45)
+        var half = (LuminanceRegions.TargetGain(0.38f, target, 1.03f) - 1) / 0.03f;
+        Assert.InRange(half, 0.1f, 0.9f);
     }
 
     /// <summary>
@@ -400,8 +437,8 @@ public class AdjustTests
 
 
     /// <summary>
-    /// Luminance up to 300 %: with a target value a deep shadow reaches the target (with 200 % it does not), midtones
-    /// above it stay unchanged; values above 300 % are clamped (overall brightening is done by „Gesamt“).
+    /// Luminance up to 300 %: with a target value a deep shadow comes close to the target, clearly closer than with
+    /// 200 %; midtones above it stay unchanged; values above 300 % are clamped (overall brightening is done by „Gesamt“).
     /// </summary>
     [Fact]
     public void MatchLuminance_UpTo300_LetsDeepShadowsReachTheTarget()
@@ -415,7 +452,8 @@ public class AdjustTests
         var at300Target60 = Adjust.Apply(src, w, h, new Adjustments(MatchLuminance: 200, MatchTarget: 60));
 
         Assert.True(L(at200, 60) < 0.34f, $"Mit 200 % schon {L(at200, 60):0.00} — Testschatten nicht dunkel genug");
-        Assert.InRange(L(at300, 60), 0.36f, 0.44f);                              // with 300 % up to about the target
+        Assert.InRange(L(at300, 60), 0.30f, 0.44f);                              // with 300 % close to the target
+        Assert.True(L(at300, 60) > L(at200, 60) + 0.02f, "300 % hellt nicht stärker auf als 200 %");
         Assert.InRange(L(at300, 300), L(src, 300) - 0.01f, L(src, 300) + 0.01f); // meadow stays
         Assert.Equal(L(at300Target60, 60), L(above, 60), 3);                      // above 300 % is clamped
     }

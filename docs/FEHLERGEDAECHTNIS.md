@@ -3118,3 +3118,84 @@ Test oder Nachweis.
 - **Nicht tun:** `ReadAsync(path)` ohne Format aufrufen; der Dateiendung trauen (Downloads und Messenger benennen Bilder oft falsch).
 - **Wo im Code:** `ImageLoader.LoadAsync`, `ImageLoader.CheckSize`. **Test:** `ImageLoaderProbeTests.ContentNotMatchingExtension_LoadsByContent`
   (JPEG als .png, WebP als .jpg, PNG als .webp – schlägt mit dem alten Code fehl).
+
+## 127. Dunst: zwei Bausteine nach einem fremden Patent durch eigene ersetzt
+
+- **Entdeckt:** 19.11.2026, 0.12.10-beta, bei der Vorbereitung der Veröffentlichung (Lizenz- und Patentprüfung).
+  **Behoben:** 0.12.14-beta.
+- **Was:** Zwei Bausteine des Dunstfilters folgten der Beschreibung des Patents US 9 305 339 B2 („Multi-feature image haze
+  removal“, gültig bis 2034): das Luftlicht als Median der Pixel mit dem höchsten Dunkelkanal (dort Anspruch 10) und der
+  Helligkeitsausgleich mit dem Guided Filter („guided brightness scaling“, Anspruch 3). Alle unabhängigen Ansprüche (1, 13,
+  18) verlangen ein trainiertes Modell für die Durchlässigkeit, das der Filter nicht hat; die Bausteine wurden trotzdem
+  ersetzt, damit nichts im Filter einem fremden Patent folgt. Das Grundverfahren (Dark Channel Prior, US 8 340 461 B2) ist
+  wegen nicht bezahlter Gebühren erloschen; für den Guided Filter ist kein Patent bekannt. Weitere Patente und ihre Grenzen:
+  `docs/DUNSTFILTER.md`.
+- **Lösung:** Luftlicht wie im Grundverfahren: Kandidaten sind die 0,1 % mit dem höchsten Dunkelkanal, ohne übersteuerte
+  Pixel, gemittelt wird das hellste Zehntel (`AirLightOf`). Helligkeitsausgleich: Verhältnis der geglätteten Lichtmengen vorher
+  und nachher, getrennt für Landschaft und Himmel über die Himmelskarte gewichtet (`BrightnessGain`, Glättung 0,0125 der langen
+  Kante); die Anwendung auf CPU und Grafikkarte bleibt gleich (Steigung 0).
+- **Gemessen:** Labor mit künstlichem Dunst und bekannter Wahrheit: nirgends schlechter, in der Mitte bei dichtem Dunst besser.
+  Farbton einer Wiese unter dünnem Dunst bei Dunst 300: 4,3° statt 5,3°.
+- **Verworfen:** Verhältnis je Pixel glätten (Farbton 6,4°, über der Grenze von 6°); dieselbe Glättung wie vorher (0,05: 6,1°);
+  Mittel aller Kandidaten statt des hellsten Zehntels (Ferne noch weicher, Labor gleich).
+- **Nicht tun:** den Guided Filter für den Helligkeitsausgleich zurückholen oder das Luftlicht wieder über den Median des
+  Dunkelkanals bestimmen.
+- **Wo im Code:** `Dehaze.AirLightOf`, `Dehaze.BrightnessGain`. **Test:** `DehazeTests` (unverändert grün, besonders
+  `ThinHaze_KeepsTheHueOfVegetation`).
+
+## 128. Dunst: dunklerer Fleck in einem gleichmäßigen Feld (Himmelskarte)
+
+- **Entdeckt:** 19.11.2026 in der Testfassung, beim Vergleichen sichtbar: ein elliptischer, dunklerer Fleck mitten in einem
+  Feld im Tal. **Behoben:** 0.12.14-beta (der Fehler steckte schon in 0.12.7).
+- **Wie gefunden:** Verhältnisbild neu ÷ alt zeigte den Fleck; die Himmelskarte als Bild ausgegeben zeigte an derselben Stelle
+  einen „Himmels“-Fleck (Wert 0,7) und daneben einen schwächeren Streifen.
+- **Warum:** Die Himmelskarte urteilt örtlich: hell und ohne Struktur = Himmel. Eine glatte, helle Stelle im Feld galt teilweise
+  als Himmel und wurde geschützt, also weniger entdunstet. In 0.12.7 war das unsichtbar, weil der Helligkeitsausgleich dort kaum
+  wirkte; sobald er deutlicher wirkte, blieb die Stelle dunkler zurück.
+- **Lösung:** `DropIsolatedSky`: Eine „Himmels“-Region (zusammenhängend über 0,05), die weder den oberen Rand berührt noch
+  mindestens 1 % des Bildes bedeckt, zählt nicht als Himmel. Dazu `SkyColour`: Grün ist nie Himmel. Ein See, der den Himmel
+  spiegelt, und Wolken bleiben.
+- **Verworfen:** Braun als Nicht-Himmel – ein braunes Feld unter Dunst und der warme Himmel knapp über dem Horizont haben dieselbe
+  Farbe und ähnliche Helligkeit, die Regel ließ Sprenkel im Himmel. Die Horizontregel „nur was vom oberen Rand herabhängt“ als
+  harte Bedingung – 0.4.39 scheiterte daran, und ein bedeckter Himmel würde komplett entdunstet.
+- **Nicht tun:** die Himmelskarte für Folgestufen ändern, ohne sie als Bild auszugeben und am Feld-Fleck-Test zu prüfen.
+- **Wo im Code:** `Dehaze.SkyMap`, `DropIsolatedSky`, `SkyColour`. **Test:** `DehazeSceneTests.SkyMap_DropsAnIsolatedSmoothSpotInAField`,
+  `SkyMap_AGreenMeadowIsNeverSky` (beide schlagen mit dem alten Code fehl).
+
+## 129. Dunst: bläulicher Streifen im Himmel entlang von Silhouetten
+
+- **Entdeckt:** 19.11.2026, beim Betrachten bemerkt: der Himmel wirkt innen gräulich, neben Bäumen bläulicher. **Behoben:**
+  0.12.14-beta (verringert, siehe unten).
+- **Wie gemessen:** Sättigung (Oklab C × 100) quer zu einer Baumkante: Original 1,7 an der Kante, 0,9 innen; nach dem Filter 3,2
+  an der Kante, 1,4 innen. In einem rund 150 px breiten Streifen wurde der Himmel doppelt so stark gesättigt wie innen.
+- **Warum:** Die Strukturkarte wurde nach dem Bandpass isotrop geglättet (Gauß, 1,2 % der langen Kante auf der Schätzkopie,
+  beim Panorama ≈ 200 px). Die Struktur der Baumkante lief so in den Himmel daneben; dieser verlor den Himmelsschutz und bekam
+  die volle Rückrechnung, Dynamik und Kurve.
+- **Lösung:** Strukturmaß und Mittel werden mit dem Guided Filter geglättet (Farb-Führungsbild der Schätzkopie); dazu ein
+  Farbkriterium (`SceneMap.SkyAt(x, y, L, a, b)`): Ein Pixel in der Farbe des Himmels in der Nähe zählt für Farbstich, Sättigung,
+  Klarheit, Schärfe und Dynamik als Himmel, auch wo die Strukturkarte einen Übergangswert hat. Gemessen: 25–75 px neben den
+  Nadeln Sättigung 3,0 → 2,6 (Original 1,6). Den schmalen Ring, den die Kante im Bandpass selbst erzeugt (≈ 10 px auf der
+  Schätzkopie), löst die Glättung nicht auf; ihn fängt das Farbkriterium.
+- **Nicht tun:** das Farbkriterium nur auf der CPU auswerten – der GPU-Kern trägt es mit (`GpuSkyByColour`); beide Pfade müssen
+  dasselbe Bild liefern (`DehazeTests.Dehaze_GpuAndCpu_Agree`).
+- **Wo im Code:** `Dehaze.SkyMap`, `SceneMap.SkyAt`, `GuidedColor.Apply`, `Dehaze.Gpu.cs`. **Test:**
+  `DehazeSceneTests.Dehaze_SkyNextToASilhouette_IsNotMoreSaturated` (Rand ÷ innen 1,038, vorher 1,055).
+
+## 130. Zielwert („Gleiche Farbe“) mit harter Kante; mehr Luminanz konnte weniger aufhellen
+
+- **Entdeckt:** 19.11.2026, beim Benutzen bemerkt: der Zielwert läuft nicht weich genug aus, sichtbar als harte Kante.
+  **Behoben:** 0.12.14-beta.
+- **Warum:** Die Verstärkung je Bereich war min(Luminanz, Ziel ÷ Helligkeit), mindestens 1. Jeder Bereich zwischen
+  Ziel ÷ Luminanz und dem Ziel wurde auf genau den Zielwert gesetzt – ein ganzes Helligkeitsband gleich hell, mit Knicken an beiden
+  Enden; bei Luminanz 103 % fiel die Aufhellung innerhalb eines Helligkeitsbereichs von 0,013 von voll auf null.
+- **Lösung:** Die harte Grenze wird über eine kurze, einseitige Verteilung unterhalb des Zielwerts gemittelt (Glocke 6s(1 − s),
+  Breite eine halbe Blende): Aufhellung = G(x) − G(x − ln Luminanz). Daraus folgt: nie mehr Aufhellung als die harte Grenze, 0 ab
+  dem Zielwert (Lücken zwischen Ästen bleiben geschützt), monoton in der Helligkeit (keine Tonwertumkehr) und in der Luminanz,
+  tiefe Schatten bekommen die volle Verstärkung. Bereiche knapp unter dem Zielwert erreichen ihn nur zu etwa 80 %.
+- **Verworfen:** eine symmetrische Glocke (Rest über dem Zielwert hellte Himmelslücken an Baumkanten um 8 % auf); ein Auslauf,
+  dessen Breite mit der Luminanz wuchs (300 % hellte tiefe Schatten schwächer auf als 200 %); für die Erkennung „was liegt
+  dahinter“ bleibt die harte Grenze, sonst wird der Lückenschutz schwächer.
+- **Nicht tun:** die Breite des Auslaufs von der Luminanz abhängig machen; einen Rest über dem Zielwert zulassen.
+- **Wo im Code:** `LuminanceRegions.TargetGain`, `Spread`, `For`. **Test:** `AdjustTests.TargetGain_IsSoft_Monotonic_AndNeverAboveTheHardLimit`
+  (schlägt mit dem alten Code fehl); `MatchTarget_*` und `MatchLuminance_UpTo300_*` erwarten „in Richtung Zielwert“ statt „bis
+  zum Zielwert“.

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Labor des Dunstfilters mit künstlichem Dunst und bekannter Wahrheit — nicht Teil der Solution.
+         Aufruf im Repo: dotnet run -c Release (Projekt tools/DunstLabor), dahinter lab [csv datei]
+         Mit -p:CoreProject=… gegen eine andere Fassung von ImageConverter.Core bauen (z. B. eine Kopie der
+         Referenzversion), um zwei Stände zu vergleichen. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+        <CoreProject Condition="'$(CoreProject)' == ''">..\..\ImageConverter.Core\ImageConverter.Core.csproj</CoreProject>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="$(CoreProject)" />
+    </ItemGroup>
+</Project>

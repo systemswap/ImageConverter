@@ -83,10 +83,39 @@ public sealed class LuminanceRegions
     /// <param name="area">Region brightness (Oklab L).</param>
     /// <param name="target">Target value as Oklab L; 0 disables the target.</param>
     /// <param name="luminance">Luminance factor; upper limit of the gain.</param>
-    /// <returns>The gain needed to reach the target, clamped to 1 … <paramref name="luminance"/>; with the target disabled,
+    /// <returns>The gain towards the target, between 1 and <paramref name="luminance"/>; with the target disabled,
     /// <paramref name="luminance"/>.</returns>
-    public static float TargetGain(float area, float target, float luminance) =>
-        target > 0 ? Math.Clamp(target / Math.Max(area, 0.02f), 1, luminance) : luminance;
+    /// <remarks>
+    /// <para>In the logarithm, the hard limit is lift = clamp(ln(target / area), 0, ln luminance): every region between
+    /// target / luminance and the target became exactly the target – a whole band of brightness made equal, with a kink
+    /// at both ends; with a luminance of 103 % the lift fell from full to nothing within a brightness range of 0.013, a
+    /// hard edge in the picture.</para>
+    /// <para>Here the hard limit is averaged over a short, one-sided spread below the target (a smoothstep-shaped
+    /// distribution of width <see cref="TargetFade"/>, half a stop): lift = G(x) − G(x − ln luminance) with
+    /// x = ln(target / area) and G(v) = E[(v − Z)⁺]. Hence: the lift never exceeds the hard one and is 0 at and above the
+    /// target (gaps of sky at the edge of a tree stay protected); it grows with the luminance; deep shadows get the full
+    /// gain; the slope of the logarithmic gain stays between −1 and 0, so a brighter region never ends up darker than a
+    /// darker one. Regions near the target reach it only approximately – the price of the soft transition.</para>
+    /// </remarks>
+    public static float TargetGain(float area, float target, float luminance)
+    {
+        if (target <= 0) return luminance;
+        var x = MathF.Log(target / Math.Max(area, 0.02f));   // > 0: below the target
+        var hi = MathF.Log(Math.Max(luminance, 1));
+        return MathF.Exp(Math.Min(hi, Spread(x) - Spread(x - hi)));
+    }
+
+    /// <summary>Width of the soft transition of the target value (natural logarithm of the region brightness).</summary>
+    private const float TargetFade = 0.4f;
+
+    /// <summary>E[(v − Z)⁺] for Z = <see cref="TargetFade"/> · S with S distributed as 6s(1 − s) on [0, 1]: a smooth ramp
+    /// that is 0 for v ≤ 0 and v − TargetFade / 2 from TargetFade on.</summary>
+    private static float Spread(float v)
+    {
+        if (v <= 0) return 0;
+        var s = v / TargetFade;
+        return s >= 1 ? v - TargetFade / 2 : TargetFade * (s * s * s - 0.5f * s * s * s * s);
+    }
 
     /// <summary>
     /// Creates the weighting for fixed slider values (threshold, target value, luminance).
@@ -110,7 +139,10 @@ public sealed class LuminanceRegions
         for (var i = 0; i < n; i++)
         {
             var lift = BelowLimit(_base[i], limit);
-            if (target > 0 && luminance > 1) lift *= (TargetGain(_base[i], target, luminance) - 1) / (luminance - 1);
+            // "Behind" is what the target leaves alone: classified with the hard limit, so that sky slightly above the
+            // target counts fully as background (the soft transition of TargetGain would weaken the gap protection)
+            if (target > 0 && luminance > 1)
+                lift *= (Math.Clamp(target / Math.Max(_base[i], 0.02f), 1, luminance) - 1) / (luminance - 1);
             var e = 1 - lift;
             excluded[i] = e;
             el[i] = e * _l[i];

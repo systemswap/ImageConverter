@@ -6,19 +6,19 @@ namespace ImageConverter.Core.Imaging;
 /// image = scene · t + air light · (1 − t), where t is the transmission of the air.
 /// </summary>
 /// <remarks>
-/// Structure based on the dark channel prior (He, Sun, Tang 2009/2011) with the improvements described in the
-/// dehaze patent US 9 305 339 B2 and that address the known weaknesses in the literature:
+/// Structure based on the dark channel prior (He, Sun, Tang 2009/2011), with improvements that address its known
+/// weaknesses:
 /// <list type="number">
 /// <item>Computing in linear light: the model applies to quantities of light, not to gamma-encoded values (otherwise
 ///   colour shifts and wrong brightness).</item>
-/// <item>Air light: the brightest 1 % of the dark channel, of which the middle part is used (patent: median), so that
-///   the sun in the picture does not determine it.</item>
+/// <item>Air light: among the pixels with the highest dark channel the brightest decide, without clipped ones, per
+///   tile of the picture, so that neither the sun nor a single pixel determines it.</item>
 /// <item>Transmission from the dark channel on a downscaled copy, refined with a guided filter with a colour guide image
 ///   and brought to full size edge-preservingly (Fast Guided Filter, He 2015).</item>
 /// <item>Tolerance: whatever resembles the air light (sky, white walls) does not count as dense haze (otherwise colour
 ///   casts and noise in the sky).</item>
-/// <item>Brightness compensation as in the patent: matched to the original on a large scale, so that only local
-///   contrast and colour are gained; otherwise the image becomes dark.</item>
+/// <item>Brightness compensation: matched to the original on a large scale, separately for landscape and sky, so that
+///   only local contrast and colour are gained; otherwise the image becomes dark.</item>
 /// </list>
 /// </remarks>
 internal static partial class Dehaze
@@ -32,8 +32,15 @@ internal static partial class Dehaze
     /// <summary>Guided filter for the transmission (radius as Gaussian sigma), relative to the longest edge.</summary>
     private const double RefinePerEdge = 0.025;
 
-    /// <summary>Brightness compensation: smoothing of the brightness (large-scale), relative to the longest edge.</summary>
-    private const double BrightnessPerEdge = 0.05;
+    /// <summary>Share of the brightness compensation in haze: <see cref="CompensationFar"/> up to a transmission of
+    /// <see cref="CompensationFrom"/> in the first pass, the full share from <see cref="CompensationTo"/> on (nearly clear
+    /// air). Hazy distance keeps the darker, clearer look; the exposure of the near scene is kept.</summary>
+    private const float CompensationFar = 0.3f, CompensationFrom = 0.35f, CompensationTo = 0.85f;
+
+    /// <summary>Brightness compensation: smoothing of the light quantities (Gaussian sigma), relative to the longest edge.
+    /// Measured: 0.0125 keeps the hue of vegetation under thin haze better than 0.05 (4.3° instead of 6.1° at dehaze
+    /// 300) and gains slightly more local contrast in the valley, without fringes at trees.</summary>
+    private const double BrightnessPerEdge = 0.0125;
 
     // Defaults of the fine-tuning sliders in percent (sliders in the Tools tile); Adjustments uses them as its
     // defaults.
@@ -173,11 +180,19 @@ internal static partial class Dehaze
         var scene = pass?.Scene ?? SceneMap.Of(small, sw, sh, f);
         var sky = scene.Sky;
         var air = fresh ? AirLightField(small, sw, sh, sky) : pass!.Air;   // B, G, R per pixel of the small copy
-        if (pass is not null && fresh) { pass.Air = air; pass.Scene = scene; pass.W = sw; pass.H = sh; }
+        if (pass is not null && fresh)
+        {
+            pass.Air = air; pass.Scene = scene; pass.W = sw; pass.H = sh;
+            // For the coring of the sharpening: the noise of the source and, from pass to pass, its amplification
+            scene.Noise = EstimateNoise(bgra, width, height);
+            scene.Gain = new float[sw * sh];
+            Array.Fill(scene.Gain, 1f);
+        }
         var t = Transmission(small, sw, sh, air, 0.95f);
         if (!fresh)
             for (var p = 0; p < t.Length; p++) t[p] += (1 - t[p]) * Math.Min(1, sky[p]);   // Sky: only in the first pass
         var boosted = ProtectSky(sky, t, boost);
+        if (pass is not null && fresh) scene.Depth = (float[])t.Clone();   // depth for the brightness compensation
         if (boosted != null) LimitBoost(small, sw, sh, air, t, boosted);
         // Colour of the air light per cell (linear luma, Oklab a/b), for subtracting the colour cast
         var airLab = new float[sw * sh * 3];
@@ -229,10 +244,15 @@ internal static partial class Dehaze
                     var tt = TransmitAt(cell, sky[p], guide[p * 3], guide[p * 3 + 1], guide[p * 3 + 2],
                         small[p * 3], small[p * 3 + 1], small[p * 3 + 2], a3);
                     for (var c = 0; c < 3; c++) after[p * 3 + c] = Recover(small[p * 3 + c], air[o + c], tt, mix);
+                    // The recovery scales the noise by (1 − mix + mix / t); the passes multiply up
+                    if (scene.Gain.Length == after.Length / 3) scene.Gain[p] *= 1 - mix + mix / Math.Max(tt, 0.05f);
                 }
             });
-            gain = BrightnessGain(small, after, guide, sw, sh);
+            gain = BrightnessGain(small, after, sky, sw, sh);
         }
+        // The compensation share is scaled with the dehaze amount on purpose (the darkening in "after" already grows with
+        // mix, so at dehaze 36 about a third of the set share remains): a gentle dehaze keeps a gently darker, clearer
+        // picture, a strong one is matched more. Users have tuned their pictures to this behaviour.
         var k = s.BrightnessMatch * mix;
         // Chroma: haze reduces it by the factor t, so restoring up to 1/t is justified, plus a small remainder; thin haze
         // (fields at medium distance) thus gains hardly any colour
@@ -261,8 +281,9 @@ internal static partial class Dehaze
         }
 
         // GPU: the pixel loop of the model (physics only, as the passes of the chain compute it)
-        if (amount > 0 && clarity == 0 && sharpen == 0 && curve == 0 && vibrance == 0
-            && ModelOnGpu(bgra, width, height, f, sw, sh, air, sky, plain, strong, gain, airLab, mix, k, s.CastRemoval, strength) is { } onGpu)
+        if (amount > 0 && clarity == 0 && sharpen == 0 && curve == 0 && vibrance == 0 && scene.W == sw && scene.H == sh
+            && ModelOnGpu(bgra, width, height, f, sw, sh, air, sky, plain, strong, gain, airLab, scene.PackedForGpu(), mix, k,
+                s.CastRemoval, strength) is { } onGpu)
             return onGpu;
 
         var luma = amount > 0 && sharpen > 0 ? LumaPlane(bgra, width, height) : null;
@@ -303,13 +324,20 @@ internal static partial class Dehaze
                     }
                     // Only in the landscape: the linear model of the compensation extrapolates onto the sun (brighter
                     // than any haze), making the centre darker and the halo brighter, and the rays blur.
-                    g = 1 + (g - 1) * land;
+                    // Distant haze gets only a share of the compensation: matching its brightness to the hazy original
+                    // would give the milky distance straight back (measured: 1,3 × the true lightness however well the
+                    // air light is estimated); nearby, where the haze is thin, the compensation keeps the exposure.
+                    var depthShare = CompensationFar + (1 - CompensationFar) * SmoothStep(CompensationFrom, CompensationTo, scene.DepthAt(x, y));
+                    g = 1 + (g - 1) * land * depthShare;
                     oB *= g; oG *= g; oR *= g;
 
                     // Colour: lightness from the model, hue from the original, chroma limited (Oklab). The model drives
                     // the darkest channel towards zero (for green, the blue), and fields turn ochre and brown.
                     var was = Oklab.FromLinear(lin[2], lin[1], lin[0]);
                     var now = Oklab.FromLinear(Math.Max(0, oR), Math.Max(0, oG), Math.Max(0, oB));
+                    // Sky by colour: next to a silhouette the structure map is transitional; a pixel in the colour of the
+                    // sky nearby stays sky for cast, chroma, clarity, sharpening and vibrance (no band along the edge)
+                    land = Math.Min(land, SceneMap.Land(scene.SkyAt(x, y, was.L, was.A, was.B)));
                     // Subtract the colour cast of the haze: the haze mixes in the colour of the air light with the share
                     // (1 − t) · luma(air light) / luma(pixel). This share of its colour (Oklab a/b) is subtracted, gently
                     // (per pass, with the dehaze amount) and only in the landscape. The full hue of the model would turn
@@ -374,6 +402,27 @@ internal static partial class Dehaze
                     + 2 * (Y(x - 1, y) + Y(x + 1, y) + Y(x, y - 1) + Y(x, y + 1))
                     + Y(x - 1, y - 1) + Y(x + 1, y - 1) + Y(x - 1, y + 1) + Y(x + 1, y + 1)) / 16;
         return Y(x, y) - blur;
+    }
+
+    /// <summary>
+    /// Noise of a picture: standard deviation of the gamma-encoded luma, estimated with the 3 × 3 Laplacian mask of
+    /// Immerkær (Computer Vision and Image Understanding 64(2), 1996): the mask cancels constant and linear content, the
+    /// mean of its absolute response is √(π/2) · σ. Every third row is enough.
+    /// </summary>
+    internal static float EstimateNoise(float[] bgra, int w, int h)
+    {
+        if (w < 3 || h < 3) return 0;
+        float Y(int x, int y) { var i = (y * w + x) * 4; return 0.0722f * bgra[i] + 0.7152f * bgra[i + 1] + 0.2126f * bgra[i + 2]; }
+        double sum = 0; long n = 0;
+        for (var y = 1; y < h - 1; y += 3)
+        for (var x = 1; x < w - 1; x++)
+        {
+            var v = Y(x - 1, y - 1) - 2 * Y(x, y - 1) + Y(x + 1, y - 1)
+                    - 2 * Y(x - 1, y) + 4 * Y(x, y) - 2 * Y(x + 1, y)
+                    + Y(x - 1, y + 1) - 2 * Y(x, y + 1) + Y(x + 1, y + 1);
+            sum += Math.Abs(v); n++;
+        }
+        return n == 0 ? 0 : (float)(Math.Sqrt(Math.PI / 2) / 6 * sum / n);
     }
 
     /// <summary>Luma (gamma-encoded, ITU-R BT.709 weights) per pixel for <see cref="FineDetail"/>; buffer from the pool.</summary>
@@ -514,9 +563,8 @@ internal static partial class Dehaze
     }
 
     /// <summary>
-    /// Air light (B, G, R, linear) for the whole image: among the pixels whose dark channel belongs to the brightest 1 %,
-    /// the middle 20 % are averaged (patent: median), so that the sun or lights do not determine it. At least 0.25
-    /// (linear), so that dark images without haze are not ruined.
+    /// Air light (B, G, R, linear) for the whole image, chosen as in <see cref="AirLightOf"/>. At least 0.25 (linear), so
+    /// that dark images without haze are not ruined.
     /// </summary>
     internal static float[] AirLight(float[] lin, int w, int h) =>
         AirLightOf(lin, DarkChannel(lin, w, h), Enumerable.Range(0, w * h).ToArray());
@@ -666,18 +714,29 @@ internal static partial class Dehaze
         return MinFilter(minRgb, w, h, Math.Max(1, (int)Math.Round(PatchPerEdge * Math.Max(w, h))));
     }
 
-    /// <summary>Air light from a selection of pixels: the brightest 1 % of the dark channel, of which the middle 20 %.</summary>
+    /// <summary>
+    /// Air light from a selection of pixels, following the dark channel prior (He, Sun, Tang 2009): the candidates are
+    /// the 0.1 % with the highest dark channel (at least ten), and among them the brightest decide. Clipped pixels (a
+    /// channel at 0.95 or above: sun, lamps, glare) are left out unless nothing else remains, and the brightest tenth of
+    /// the candidates is averaged, so that a single pixel does not decide.
+    /// </summary>
     private static float[] AirLightOf(float[] lin, float[] dark, int[] pixels)
     {
-        var top = pixels.OrderByDescending(p => dark[p]).Take(Math.Max(1, pixels.Length / 100)).ToArray();
-        var from = (int)(top.Length * 0.4);
-        var count = Math.Max(1, (int)(top.Length * 0.2));
+        var take = Math.Min(pixels.Length, Math.Max(10, pixels.Length / 1000));
+        var top = pixels.OrderByDescending(p => dark[p]).Take(take).ToArray();
+        var unclipped = top.Where(p => Math.Max(lin[p * 3], Math.Max(lin[p * 3 + 1], lin[p * 3 + 2])) < ClipLevel).ToArray();
+        if (unclipped.Length > 0) top = unclipped;
+        var brightest = top.OrderByDescending(p => Luma(lin[p * 3], lin[p * 3 + 1], lin[p * 3 + 2]))
+            .Take(Math.Max(1, top.Length / 10)).ToArray();
         var air = new float[3];
-        foreach (var p in top.Skip(from).Take(count))
+        foreach (var p in brightest)
             for (var c = 0; c < 3; c++) air[c] += lin[p * 3 + c];
-        for (var c = 0; c < 3; c++) air[c] = Math.Max(0.25f, air[c] / count);
+        for (var c = 0; c < 3; c++) air[c] = Math.Max(0.25f, air[c] / brightest.Length);
         return air;
     }
+
+    /// <summary>Linear value from which a channel counts as clipped (no longer usable as the colour of the haze).</summary>
+    private const float ClipLevel = 0.95f;
 
     /// <summary>
     /// Protects the sky: areas without structure that are not dark are sky, not haze in front of a landscape. Without
@@ -726,8 +785,16 @@ internal static partial class Dehaze
         for (var i = 0; i < band.Length; i++) band[i] = Math.Abs(fine[i] - coarse[i]);
         var mean = (float[])l.Clone();
         var sigma = Math.Max(1.0, PatchPerEdge * edge);
-        Blur.Gauss(band, w, h, sigma);
-        Blur.Gauss(mean, w, h, sigma);
+        // The structure and the mean are smoothed with the colour of the picture as the guide, not isotropically: a plain
+        // Gaussian smears the structure of a tree edge about 200 px (full size) into the sky next to it, which then loses
+        // the protection and is dehazed in full – a saturated blue band along every silhouette. The guided filter gives
+        // sky pixels next to the edge the values of the sky side (Fehlergedächtnis #129).
+        Blur.Gauss(band, w, h, Math.Max(1.0, sigma / 4));
+        Blur.Gauss(mean, w, h, Math.Max(1.0, sigma / 4));
+        var guide = Encode(lin);
+        band = GuidedColor.Apply(guide, GuidedColor.Coefficients(guide, band, w, h, sigma, eps: 1e-3f), w * h);
+        mean = GuidedColor.Apply(guide, GuidedColor.Coefficients(guide, mean, w, h, sigma, eps: 1e-3f), w * h);
+        for (var i = 0; i < band.Length; i++) { band[i] = Math.Max(0, band[i]); mean[i] = Math.Max(1e-3f, mean[i]); }
 
         // Light source with halo: whatever lies around clipped pixels (sun, lamp) is light, not haze. Otherwise the rays
         // count as structure and the halo as landscape: the pixel rules would double the chroma there (measured
@@ -741,12 +808,19 @@ internal static partial class Dehaze
         var peak = hot.Max();
         var haloScale = peak > 0.001f ? 1 / peak : 0;   // Gate: a clipped disc, not a single pixel
 
-        var sky = new float[l.Length];
-        for (var i = 0; i < sky.Length; i++)
+        var plain = new float[l.Length];
+        for (var i = 0; i < plain.Length; i++)
         {
             var structure = band[i] / Math.Max(mean[i], 1e-3f);
             var smooth = 1 - SmoothStep(0.008f, 0.02f, structure);
             var bright = SmoothStep(0.03f, 0.1f, l[i]);   // Dark smooth shadows are not sky
+            plain[i] = bright * smooth * SkyColour(lin[i * 3 + 2], lin[i * 3 + 1], lin[i * 3]);
+        }
+        DropIsolatedSky(plain, w, h);
+
+        var sky = new float[l.Length];
+        for (var i = 0; i < sky.Length; i++)
+        {
             // Halo: near the sun and bright. The boundary follows the brightness of the sky, not a radius; a pure radius
             // gives a visibly brighter disc around the sun (unchanged inside, dehazed outside). This spares pixel by
             // pixel, like the rule "brighter than the air light" in Tolerate.
@@ -754,9 +828,71 @@ internal static partial class Dehaze
             // Values above 1 mark the halo (sky = 1 + halo): fine sharpening stays at full strength there, because the
             // rays of the sun are structure that should be visible (treated as sky they appear soft, with normal
             // sharpening crisp); only hazy sky is spared.
-            sky[i] = Math.Max(bright * smooth, halo) + halo;
+            sky[i] = Math.Max(plain[i], halo) + halo;
         }
         return sky;
+    }
+
+    /// <summary>
+    /// How far a colour can be sky at all (0 … 1): a sky is blue, grey, white or warm (yellow, orange, red, pink at
+    /// sunset), never green – a smooth green meadow is not sky. Brown is deliberately not excluded: a brown field under
+    /// haze and the warm, hazy sky just above the horizon have the same colour and similar brightness, and the rule
+    /// would leave speckles in that sky.
+    /// </summary>
+    private static float SkyColour(float r, float g, float b)
+    {
+        var (_, a, ob) = Oklab.FromLinear(r, g, b);
+        var chroma = MathF.Sqrt(a * a + ob * ob);
+        var hue = Oklab.Hue(a, ob);   // degrees, 0 … 360
+        var green = hue is > 95 and < 175 ? SmoothStep(0.025f, 0.06f, chroma) : 0;
+        return 1 - green;
+    }
+
+    /// <summary>Smallest area of a sky region that touches neither the top edge nor the large sky, as a share of the
+    /// picture.</summary>
+    private const float IsolatedSkyShare = 0.01f;
+
+    /// <summary>
+    /// Removes small, isolated "sky" spots: a smooth, bright patch in a field is bright and without structure like sky,
+    /// and as sky it would keep its haze (protected) while the landscape around it is cleared – a visible spot, a darker
+    /// one once the brightness compensation acts. A region (connected above 0.05) stays sky if it touches the top edge or
+    /// covers at least <see cref="IsolatedSkyShare"/> of the picture (a lake mirroring the sky, a large sky behind a tree);
+    /// Fehlergedächtnis #128.
+    /// </summary>
+    private static void DropIsolatedSky(float[] plain, int w, int h)
+    {
+        var label = new int[plain.Length];
+        var stack = new Stack<int>();
+        var region = new List<int>();
+        var minArea = (int)(IsolatedSkyShare * plain.Length);
+        for (var start = 0; start < plain.Length; start++)
+        {
+            if (label[start] != 0 || plain[start] <= 0.05f) continue;
+            region.Clear();
+            var touchesTop = false;
+            label[start] = 1;
+            stack.Push(start);
+            while (stack.Count > 0)
+            {
+                var p = stack.Pop();
+                region.Add(p);
+                int x = p % w, y = p / w;
+                if (y == 0) touchesTop = true;
+                if (x > 0) Visit(p - 1);
+                if (x < w - 1) Visit(p + 1);
+                if (y > 0) Visit(p - w);
+                if (y < h - 1) Visit(p + w);
+            }
+            if (!touchesTop && region.Count < minArea)
+                foreach (var p in region) plain[p] = 0;
+        }
+
+        void Visit(int q)
+        {
+            if (label[q] != 0 || plain[q] <= 0.05f) return;
+            label[q] = 1;
+            stack.Push(q);
+        }
     }
 
     /// <summary>From this luma (linear) on, a pixel is a light source (clipped).</summary>
@@ -769,26 +905,50 @@ internal static partial class Dehaze
     private const float SkyProtection = 0.85f;
 
     /// <summary>
-    /// Brightness compensation (patent: "guided brightness scaling"): the large-scale brightness of the result is matched
-    /// to that of the original; local contrast and colour remain gained. The ratio is smoothed with the colour guided
-    /// filter; a plain blur would carry the brightening from the land across the horizon into the sky (bright band).
-    /// Factor limited to 0.5 … 3.
+    /// Brightness compensation: the large-scale brightness of the result is matched to that of the original; local
+    /// contrast and colour remain gained. Compared are the smoothed light quantities (linear luma) before and after,
+    /// separately for the landscape and for the sky, each weighted by the sky map (normalised convolution): a plain blur
+    /// would carry the brightening from the land across the horizon into the sky (bright band). Factor limited to
+    /// 0.5 … 3.
     /// </summary>
-    /// <returns>Coefficients for log(factor), to be applied with the original as the guide image.</returns>
-    private static (float[] A, float[] B) BrightnessGain(float[] before, float[] after, float[] guide, int sw, int sh)
+    /// <returns>Coefficients in the form of <see cref="GuidedColor.Coefficients"/> with slope 0: only the smoothed
+    /// log(factor), so that the application (CPU and GPU) stays the same.</returns>
+    private static (float[] A, float[] B) BrightnessGain(float[] before, float[] after, float[] sky, int sw, int sh)
     {
-        var logGain = new float[sw * sh];
+        var n = sw * sh;
+        // Weighted light quantities (linear luma) before and after, separately for landscape and sky
+        var landBefore = new float[n]; var landAfter = new float[n]; var land = new float[n];
+        var skyBefore = new float[n]; var skyAfter = new float[n]; var skyWeight = new float[n];
         Parallel.For(0, sh, ComputeLimits.Options, row =>
         {
             for (int x = 0, p = row * sw; x < sw; x++, p++)
             {
                 var lb = Luma(before[p * 3], before[p * 3 + 1], before[p * 3 + 2]);
                 var la = Luma(after[p * 3], after[p * 3 + 1], after[p * 3 + 2]);
-                logGain[p] = MathF.Log(Math.Clamp(lb / Math.Max(la, 1e-4f), 0.5f, 3f));
+                var wl = 1 - Math.Clamp(sky[p], 0, 1);
+                (land[p], landBefore[p], landAfter[p]) = (wl, lb * wl, la * wl);
+                (skyWeight[p], skyBefore[p], skyAfter[p]) = (1 - wl, lb * (1 - wl), la * (1 - wl));
             }
         });
-        return GuidedColor.Coefficients(guide, logGain, sw, sh,
-            Math.Max(1.0, BrightnessPerEdge * Math.Max(sw, sh)), eps: 1e-2f);
+        var sigma = Math.Max(1.0, BrightnessPerEdge * Math.Max(sw, sh));
+        foreach (var plane in new[] { landBefore, landAfter, land, skyBefore, skyAfter, skyWeight }) Blur.Gauss(plane, sw, sh, sigma);
+        var b = new float[n];
+        Parallel.For(0, sh, ComputeLimits.Options, row =>
+        {
+            for (int x = 0, p = row * sw; x < sw; x++, p++)
+            {
+                var gl = MathF.Log(Math.Clamp(landBefore[p] / Math.Max(landAfter[p], 1e-6f), 0.5f, 3f));
+                var gs = MathF.Log(Math.Clamp(skyBefore[p] / Math.Max(skyAfter[p], 1e-6f), 0.5f, 3f));
+                // An estimate counts only where its side really occurs in the neighbourhood. A few pixels the sky map
+                // takes partly for sky (a smooth spot in a field) would otherwise get the sky's gain, a dark spot in the
+                // brightened landscape; the same for a few "land" pixels in the sky.
+                gs = gl + (gs - gl) * SmoothStep(0.05f, 0.3f, skyWeight[p]);
+                gl = gs + (gl - gs) * SmoothStep(0.05f, 0.3f, land[p]);
+                var wl = 1 - Math.Clamp(sky[p], 0, 1);
+                b[p] = wl * gl + (1 - wl) * gs;
+            }
+        });
+        return (new float[n * 3], b);
     }
 
     private static float SmoothStep(float edge0, float edge1, float x)
@@ -934,6 +1094,19 @@ internal static class Srgb
 internal static class GuidedColor
 {
     /// <returns>a (3 channels per pixel) and b (1 channel).</returns>
+    /// <summary>Applies coefficients on the same grid as the guide: q = aᵀ·I + b per pixel.</summary>
+    /// <param name="guide">Guide image, B, G, R per pixel.</param>
+    /// <param name="m">Coefficients from <see cref="Coefficients"/> for this guide.</param>
+    /// <param name="n">Number of pixels.</param>
+    /// <returns>The filtered values, one per pixel.</returns>
+    public static float[] Apply(float[] guide, (float[] A, float[] B) m, int n)
+    {
+        var q = new float[n];
+        Parallel.For(0, n, ComputeLimits.Options, p =>
+            q[p] = m.A[3 * p] * guide[3 * p] + m.A[3 * p + 1] * guide[3 * p + 1] + m.A[3 * p + 2] * guide[3 * p + 2] + m.B[p]);
+        return q;
+    }
+
     public static (float[] A, float[] B) Coefficients(float[] guide, float[] input, int w, int h, double sigma, float eps)
     {
         var n = w * h;

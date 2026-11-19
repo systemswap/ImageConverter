@@ -15,6 +15,7 @@ internal static partial class Dehaze
     internal readonly record struct ModelParams(int Width, int Height, int F, int Sw, int Sh, int HasStrong,
         float Mix, float K, float CastRemoval, float Strength);
 
+
     /// <summary>Constant parameters of the LookTone kernel.</summary>
     internal readonly record struct ToneParams(int Width, int Height, int F, int Sw, int Sh, int HasScene, int SceneW, int SceneH,
         int SceneFactor, float Clarity, float Curve, float Vibrance, float VibranceSky);
@@ -38,10 +39,10 @@ internal static partial class Dehaze
 
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
         ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
-        ModelParams>? _modelKernel;
+        ArrayView<float>, ModelParams>? _modelKernel;
 
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
-        ToneParams>? _toneKernel;
+        ArrayView<float>, ToneParams>? _toneKernel;
 
     /// <summary>Loaded kernels belong to the GPU accelerator; after it is closed they must be loaded again.</summary>
     internal static void ForgetGpuKernels() => (_modelKernel, _toneKernel) = (null, null);
@@ -49,15 +50,15 @@ internal static partial class Dehaze
     /// <summary>Runs the pixel loop of the model on the GPU (physics only: without clarity/sharpening/curve/vibrance).
     /// Returns a buffer from the <see cref="PixelPool"/>, or null if the CPU has to compute it.</summary>
     private static float[]? ModelOnGpu(float[] bgra, int width, int height, int f, int sw, int sh, float[] air, float[] sky,
-        (float[] A, float[] B) plain, (float[] A, float[] B) strong, (float[] A, float[] B) gain, float[] airLab, float mix, float k,
-        float castRemoval, float strength)
+        (float[] A, float[] B) plain, (float[] A, float[] B) strong, (float[] A, float[] B) gain, float[] airLab, float[] scene,
+        float mix, float k, float castRemoval, float strength)
     {
         float[]? result = null;
         var ok = GpuFilters.TryRun(acc =>
         {
             _modelKernel ??= acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
                 ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
-                ArrayView<float>, ModelParams>(ModelKernel);
+                ArrayView<float>, ArrayView<float>, ModelParams>(ModelKernel);
             var hasStrong = strong.A is not null;
             using var dIn = acc.Allocate1D(bgra);
             using var dOut = acc.Allocate1D<float>(bgra.Length);
@@ -70,9 +71,10 @@ internal static partial class Dehaze
             using var dGa = acc.Allocate1D(gain.A);
             using var dGb = acc.Allocate1D(gain.B);
             using var dLab = acc.Allocate1D(airLab);
+            using var dScene = acc.Allocate1D(scene);
             using var dT = acc.Allocate1D(GpuTables);
             _modelKernel(width * height, dIn.View, dOut.View, dAir.View, dSky.View, dPa.View, dPb.View, dSa.View, dSb.View, dGa.View,
-                dGb.View, dLab.View, dT.View,
+                dGb.View, dLab.View, dScene.View, dT.View,
                 new ModelParams(width, height, f, sw, sh, hasStrong ? 1 : 0, mix, k, castRemoval, strength));
             result = PixelPool.Rent(bgra.Length);
             dOut.CopyToCPU(result);
@@ -89,14 +91,15 @@ internal static partial class Dehaze
         GpuFilters.TryRun(acc =>
         {
             _toneKernel ??= acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>,
-                ArrayView<float>, ToneParams>(ToneKernel);
+                ArrayView<float>, ArrayView<float>, ToneParams>(ToneKernel);
             float[] one = [0f];
             using var dPx = acc.Allocate1D(px);
             using var dSky = acc.Allocate1D(scene?.Sky ?? one);
+            using var dScene = acc.Allocate1D(scene?.PackedForGpu() ?? one);
             using var dA = acc.Allocate1D(baseL.A ?? one);
             using var dB = acc.Allocate1D(baseL.B ?? one);
             using var dT = acc.Allocate1D(GpuTables);
-            _toneKernel(width * height, dPx.View, dSky.View, dA.View, dB.View, dT.View,
+            _toneKernel(width * height, dPx.View, dSky.View, dScene.View, dA.View, dB.View, dT.View,
                 new ToneParams(width, height, f, sw, sh, scene is null ? 0 : 1, scene?.W ?? 1, scene?.H ?? 1, scene?.Factor ?? 1,
                     s.Clarity, s.Curve, s.Vibrance, s.VibranceSky));
             dPx.CopyToCPU(px);
@@ -106,7 +109,8 @@ internal static partial class Dehaze
 
     private static void ModelKernel(Index1D index, ArrayView<float> bgra, ArrayView<float> result, ArrayView<float> air,
         ArrayView<float> sky, ArrayView<float> plainA, ArrayView<float> plainB, ArrayView<float> strongA, ArrayView<float> strongB,
-        ArrayView<float> gainA, ArrayView<float> gainB, ArrayView<float> airLab, ArrayView<float> tables, ModelParams p)
+        ArrayView<float> gainA, ArrayView<float> gainB, ArrayView<float> airLab, ArrayView<float> scene, ArrayView<float> tables,
+        ModelParams p)
     {
         int pix = index;
         var y = pix / p.Width;
@@ -145,11 +149,16 @@ internal static partial class Dehaze
             var before = Luma(l0, l1, l2);
             g = XMath.Min(g, XMath.Max(1f, before / XMath.Max(Luma(oB, oG, oR), 1e-4f)));
         }
-        g = 1 + (g - 1) * land;
+        // depth share of the compensation (Dehaze.CompensationFar …)
+        var depthShare = CompensationFar + (1 - CompensationFar)
+            * GpuSmoothStep(CompensationFrom, CompensationTo, Of(scene, i00, i01, i10, i11, fx, fy, 4, 5));
+        g = 1 + (g - 1) * land * depthShare;
         oB *= g; oG *= g; oR *= g;
 
-        GpuFromLinear(l2, l1, l0, out _, out var wasA, out var wasB);
+        GpuFromLinear(l2, l1, l0, out var wasL, out var wasA, out var wasB);
         GpuFromLinear(XMath.Max(0f, oR), XMath.Max(0f, oG), XMath.Max(0f, oB), out var nowL, out var nowA, out var nowB);
+        // sky by colour (SceneMap.SkyAt with the colour criterion)
+        land = XMath.Min(land, 1 - XMath.Clamp(GpuSkyByColour(scene, i00, i01, i10, i11, fx, fy, skyHere, wasL, wasA, wasB), 0f, 1f));
         var castShare = XMath.Clamp((1 - tt) * Of(airLab, i00, i01, i10, i11, fx, fy, 0, 3) / XMath.Max(Luma(l0, l1, l2), 1e-4f), 0f,
             MaxCastShare);
         var cast = p.CastRemoval * HueRecovery * p.Mix * land * castShare;
@@ -167,32 +176,31 @@ internal static partial class Dehaze
         result[i + 3] = bgra[i + 3];
     }
 
-    private static void ToneKernel(Index1D index, ArrayView<float> px, ArrayView<float> sky, ArrayView<float> baseA,
-        ArrayView<float> baseB, ArrayView<float> tables, ToneParams p)
+    private static void ToneKernel(Index1D index, ArrayView<float> px, ArrayView<float> sky, ArrayView<float> scene,
+        ArrayView<float> baseA, ArrayView<float> baseB, ArrayView<float> tables, ToneParams p)
     {
         int pix = index;
         var y = pix / p.Width;
         var x = pix - y * p.Width;
         var i = pix * 4;
         float b = px[i], g = px[i + 1], r = px[i + 2];
+        GpuFromLinear(Lookup(tables, OkLinearAt, TableSizeOk, r), Lookup(tables, OkLinearAt, TableSizeOk, g),
+            Lookup(tables, OkLinearAt, TableSizeOk, b), out var L, out var oa, out var ob);
         var skyHere = 0f;
         if (p.HasScene != 0)
         {
-            // SceneMap.SkyAt
+            // SceneMap.SkyAt, including the colour criterion
             var ssx = XMath.Clamp((x + 0.5f) / p.SceneFactor - 0.5f, 0f, (float)(p.SceneW - 1));
             var ssy = XMath.Clamp((y + 0.5f) / p.SceneFactor - 0.5f, 0f, (float)(p.SceneH - 1));
             int x0 = (int)ssx, y0 = (int)ssy;
             int x1 = XMath.Min(x0 + 1, p.SceneW - 1), y1 = XMath.Min(y0 + 1, p.SceneH - 1);
             float sfx = ssx - x0, sfy = ssy - y0;
-            var top = sky[y0 * p.SceneW + x0] * (1 - sfx) + sky[y0 * p.SceneW + x1] * sfx;
-            var bottom = sky[y1 * p.SceneW + x0] * (1 - sfx) + sky[y1 * p.SceneW + x1] * sfx;
-            skyHere = top * (1 - sfy) + bottom * sfy;
+            int j00 = y0 * p.SceneW + x0, j01 = y0 * p.SceneW + x1, j10 = y1 * p.SceneW + x0, j11 = y1 * p.SceneW + x1;
+            skyHere = GpuSkyByColour(scene, j00, j01, j10, j11, sfx, sfy, Of(sky, j00, j01, j10, j11, sfx, sfy, 0, 1), L, oa, ob);
         }
         var land = 1 - XMath.Clamp(skyHere, 0f, 1f);
         var halo = XMath.Clamp(skyHere - 1, 0f, 1f);
 
-        GpuFromLinear(Lookup(tables, OkLinearAt, TableSizeOk, r), Lookup(tables, OkLinearAt, TableSizeOk, g),
-            Lookup(tables, OkLinearAt, TableSizeOk, b), out var L, out var oa, out var ob);
         if (p.Clarity > 0)
         {
             var sy = (y + 0.5f) / p.F - 0.5f;
@@ -244,6 +252,21 @@ internal static partial class Dehaze
         var i = (int)x;
         if (i >= size) return tables[at + size];
         return tables[at + i] + (tables[at + i + 1] - tables[at + i]) * (x - i);
+    }
+
+    /// <summary>SceneMap.SkyAt with the colour criterion: a pixel in the colour of the sky nearby counts as sky.</summary>
+    private static float GpuSkyByColour(ArrayView<float> scene, int i00, int i01, int i10, int i11, float fx, float fy, float sky,
+        float L, float a, float b)
+    {
+        if (sky >= 1) return sky;
+        var cover = Of(scene, i00, i01, i10, i11, fx, fy, 0, 5);
+        if (cover < SceneMap.CoverMin) return sky;
+        var dL = L - Of(scene, i00, i01, i10, i11, fx, fy, 1, 5);
+        var da = a - Of(scene, i00, i01, i10, i11, fx, fy, 2, 5);
+        var db = b - Of(scene, i00, i01, i10, i11, fx, fy, 3, 5);
+        var dist = XMath.Sqrt(0.25f * dL * dL + da * da + db * db);
+        var like = 1 - GpuSmoothStep(SceneMap.ColourNear, SceneMap.ColourFar, dist);
+        return XMath.Max(sky, like * GpuSmoothStep(SceneMap.CoverFrom, SceneMap.CoverTo, cover));
     }
 
     private static float GpuKeep(float v, float air) => v < air

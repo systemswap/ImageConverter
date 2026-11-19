@@ -54,11 +54,10 @@ internal static partial class Dehaze
             {
                 var i = p * 4;
                 float b = px[i], g = px[i + 1], r = px[i + 2];
-                var sky = scene?.SkyAt(x, y) ?? 0;
+                var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
+                var sky = scene?.SkyAt(x, y, L, oa, ob) ?? 0;
                 var land = SceneMap.Land(sky);
                 var halo = SceneMap.Halo(sky);
-
-                var (L, oa, ob) = Oklab.FromSrgb(r, g, b);
                 if (s.Clarity > 0)
                 {
                     var cell = new Cell(sw, sh, (x + 0.5f) / f - 0.5f, sy);
@@ -116,6 +115,19 @@ internal static partial class Dehaze
         if (s.Edge > 0) WeightedSharpen(px, width, height, scene, s.Edge, EdgeSigma);
     }
 
+    /// <summary>Coring thresholds in multiples of the local noise: no sharpening below the low one, full above the high one.</summary>
+    private const float CoringLow = 1f, CoringHigh = 2.5f;
+
+    /// <summary>Largest noise amplification taken into account: beyond it the threshold would also swallow real edges
+    /// in the distance (ridge lines), which are worth more than the noise they carry.</summary>
+    private const float CoringGainCap = 2f;
+
+    private static float CoringStep(float e0, float e1, float v)
+    {
+        var t = Math.Clamp((v - e0) / (e1 - e0), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
     private static void WeightedSharpen(float[] px, int width, int height, SceneMap? scene, float amount, double sigma)
     {
         var sharp = Sharpen.UnsharpMask(px, width, height, amount, sigma);
@@ -132,6 +144,17 @@ internal static partial class Dehaze
                 var w = land + (1 - land) * SkySharpenShare + halo * (1 - SkySharpenShare);
                 if (w <= 0) continue;
                 var i = p * 4;
+                // Coring (classic, as in analogue video and Simoncelli & Adelson 1996): a detail is sharpened only when it
+                // stands out of the noise. The threshold comes from the measured noise of the source and the amplification
+                // of the passes so far – not from any local variance, and nothing is fitted to the output.
+                if (scene is { Noise: > 0 } sc)
+                {
+                    var detail = (0.0722f * (sharp[i] - px[i]) + 0.7152f * (sharp[i + 1] - px[i + 1]) + 0.2126f * (sharp[i + 2] - px[i + 2])) / amount;
+                    var sigma = sc.Noise * Math.Min(CoringGainCap, sc.GainAt(x, y));
+                    // not in the halo of a light source: its rays are structure, and the halo is bright, hardly noisy
+                    w *= halo + (1 - halo) * CoringStep(CoringLow * sigma, CoringHigh * sigma, Math.Abs(detail));
+                    if (w <= 0) continue;
+                }
                 for (var c = 0; c < 3; c++) px[i + c] += (sharp[i + c] - px[i + c]) * w;
             }
         });
