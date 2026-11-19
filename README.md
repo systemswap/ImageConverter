@@ -141,9 +141,22 @@ Rückgängig und Wiederholen gibt es für jeden Handgriff (Strg+Z / Strg+Y).
 
 ## 3D-Modelle ansehen, messen, ändern
 
-- **STL und 3MF ansehen:** bis 20 Millionen Dreiecke, glatt dargestellt mit Umgebungsschatten; Maße, Volumen, Oberfläche, ob das Modell
-  geschlossen ist; bis zu sechs Schnittebenen.
-- **Messen:** Abstand, Winkel, Zylinderdurchmesser, Punkt zu Punkt.
+<p align="center">
+  <img src="docs/bilder/readme/stl-fenster.jpg" width="100%" alt="Das Fenster im dunklen Design mit einem Gehäuse-Unterteil als STL: links Kennzahlen und Ansicht-Einstellungen, rechts das Modell mit Rippen, Bohrungen und Schienen">
+</p>
+
+**Was Sie sehen:** ein Gehäuse-Unterteil für den 3D-Druck, 6 792 Dreiecke. Links die Kennzahlen – Maße, Oberfläche, Volumen, ob das
+Modell geschlossen ist, 103 erkannte Flächen (72 Ebenen, 23 Zylinder) – und die Ansicht-Einstellungen. Rechts das Modell in der
+Qualitätsstufe „Hoch“: glatte Rundungen, weiche Umgebungsschatten, Kanten als feine Linien, acht­fache Kantenglättung.
+
+<p align="center">
+  <img src="docs/bilder/readme/stl-messen.jpg" width="49%" alt="Zwei Flächen angeklickt, dazwischen das Maß 10,00 mm mit Winkel 0°">
+  <img src="docs/bilder/readme/stl-schnitt.jpg" width="49%" alt="Eine waagerechte Schnittebene durch die Mitte des Gehäuses; die Schnittflächen sind warm eingefärbt">
+</p>
+
+- **STL und 3MF ansehen:** bis 20 Millionen Dreiecke; Darstellung als Fläche, Drahtgitter oder Bauplan, Teile einfärben, Perspektive
+  oder parallel; bis zu sechs Schnittebenen, die sich mit dem Mausrad fein verschieben lassen.
+- **Messen:** zwei Flächen anklicken – Abstand und Winkel; Zylinderdurchmesser; Punkt zu Punkt mit ΔX/ΔY/ΔZ.
 - **Bearbeiten:** Längen ändern, Quader oder Zylinder hinzufügen und wegnehmen, Flächen verschieben, Formen zeichnen und aufbauen oder
   herausschneiden – mit Einrasten und Bemaßung, 30 Schritte rückgängig, Speichern als STL.
 
