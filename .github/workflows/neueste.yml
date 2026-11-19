@@ -1,6 +1,6 @@
 # Baut nach jedem Push auf main beide Pakete mit publish.sh (Linux: AppImage im tar.gz, Windows: Zip; ReadyToRun,
 # Tests vorher) und legt sie ins Vorab-Release „neueste“ – die alten Dateien darin werden ersetzt. Ein Linux-Lauf
-# baut auch Windows: Windows-Läufe zählen im privaten Repository doppelt gegen die Freiminuten.
+# baut auch Windows (spart Zeit; in privaten Repositorys zählen Windows-Läufe doppelt gegen die Freiminuten).
 # KI-Modelle kommen nie in die Pakete (publish.sh lässt sie weg; auf dem Server gibt es keine).
 
 name: Neueste Version bauen
@@ -71,7 +71,7 @@ jobs:
           stamp="$(date -u '+%d.%m.%Y %H:%M') UTC"
           notes="$RUNNER_TEMP/notes.md"
           {
-            echo "Automatisch gebaut nach dem letzten Push auf main – immer der neueste Stand, **privat**, Vorabversion."
+            echo "Automatisch gebaut nach dem letzten Push auf main – immer der neueste Stand, Vorabversion."
             echo
             echo "**Version:** $VERSION · **Commit:** \`$short\` · **gebaut:** $stamp · alle Tests bestanden"
             echo
