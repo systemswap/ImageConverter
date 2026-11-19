@@ -56,6 +56,32 @@ public class ThreeMfReaderTests
 
     private static StlFile Read(byte[] archive) => ThreeMfReader.Read(new MemoryStream(archive));
 
+    private const string ProductionNs = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
+
+    /// <summary>A model part with the production extension declared, as slicers write it.</summary>
+    private static string ProductionModelXml(string resources, string build, string unit = "millimeter") =>
+        $"<?xml version=\"1.0\" encoding=\"UTF-8\"?><model unit=\"{unit}\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:p=\"{ProductionNs}\" requiredextensions=\"p\">"
+        + "<resources>" + resources + "</resources><build>" + build + "</build></model>";
+
+    /// <summary>An archive whose root part may refer to further model parts.</summary>
+    private static byte[] Package(string rootXml, params (string Name, string Xml)[] parts)
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            void Add(string name, string content)
+            {
+                using var w = new StreamWriter(zip.CreateEntry(name).Open(), new UTF8Encoding(false));
+                w.Write(content);
+            }
+            Add("[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/></Types>");
+            Add("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Target=\"/3D/3dmodel.model\" Id=\"rel0\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/></Relationships>");
+            Add("3D/3dmodel.model", rootXml);
+            foreach (var (name, xml) in parts) Add(name, xml);
+        }
+        return ms.ToArray();
+    }
+
     private static readonly List<Tri> Cube = Box(new Vector3(0, 0, 0), new Vector3(20, 10, 5));
 
     // ------------------------------------------------------------------ tests
@@ -164,6 +190,57 @@ public class ThreeMfReaderTests
         Assert.Equal(1, file.Invalid);      // index 99 does not exist
         Assert.Equal(1, file.Degenerate);   // two corners the same
         Assert.Equal(14, file.FileTriangles);   // placed triangles, including the two skipped ones
+    }
+
+    [Fact]
+    public void ProductionExtension_ObjectsInOtherParts_ArePlaced()
+    {
+        // As a slicer saves a project: the root part holds only a component with p:path and the build item; the mesh
+        // lies in its own part. The same ID 1 exists in both parts and names different objects. Inside the referenced
+        // part, object 1 builds in object 2 of that part (no p:path). A second reference spells the part name in other
+        // letter case and with percent-encoding; it is the same part.
+        var unit = Box(new Vector3(0, 0, 0), new Vector3(10, 10, 10));
+        var root = ProductionModelXml(
+            "<object id=\"1\" type=\"model\"><components>"
+            + "<component p:path=\"/3D/Objects/teil%201.model\" objectid=\"1\" transform=\"1 0 0 0 1 0 0 0 1 0 0 0\"/>"
+            + "<component p:path=\"/3d/objects/TEIL 1.model\" objectid=\"1\" transform=\"1 0 0 0 1 0 0 0 1 30 0 0\"/>"
+            + "</components></object>",
+            "<item objectid=\"1\" transform=\"0.5 0 0 0 0.5 0 0 0 0.5 100 0 0\"/>");
+        var part = ProductionModelXml(
+            "<object id=\"1\" type=\"model\"><components><component objectid=\"2\" transform=\"1 0 0 0 1 0 0 0 1 0 0 4\"/></components></object>"
+            + $"<object id=\"2\" type=\"model\">{MeshXml(unit)}</object>", "");
+
+        var file = Read(Package(root, ("3D/Objects/teil 1.model", part)));
+
+        Assert.Equal(24, file.Mesh.TriangleCount);
+        Assert.Equal(24, file.FileTriangles);
+        // x: (0 … 10 and 30 … 40) · 0.5 + 100; z: (0 … 10 + 4) · 0.5
+        Assert.Equal(new Vector3(100, 0, 2), file.Mesh.Bounds.Min);
+        Assert.Equal(new Vector3(120, 5, 7), file.Mesh.Bounds.Max);
+        var topo = MeshTopology.Build(file.Mesh);
+        Assert.Equal(2, topo.ShellCount);
+        Assert.Equal(2 * 125, topo.Volume, 6);
+    }
+
+    [Fact]
+    public void ProductionExtension_PartInAnotherUnit_IsConverted()
+    {
+        var root = ProductionModelXml(
+            "<object id=\"5\"><components><component p:path=\"/3D/Objects/cm.model\" objectid=\"1\"/></components></object>",
+            "<item objectid=\"5\"/>");
+        var part = ProductionModelXml($"<object id=\"1\">{MeshXml(Box(new Vector3(0, 0, 0), new Vector3(1, 2, 3)))}</object>", "", unit: "centimeter");
+        var file = Read(Package(root, ("3D/Objects/cm.model", part)));
+        Assert.Equal(new Vector3(10, 20, 30), file.Mesh.Bounds.Size);
+    }
+
+    [Fact]
+    public void ProductionExtension_MissingPart_NamesThePart()
+    {
+        var root = ProductionModelXml(
+            "<object id=\"2\"><components><component p:path=\"/3D/Objects/object_1.model\" objectid=\"1\"/></components></object>",
+            "<item objectid=\"2\"/>");
+        var e = Assert.Throws<StlFormatException>(() => Read(Package(root)));
+        Assert.Contains("3D/Objects/object_1.model", e.Message);
     }
 
     [Fact]

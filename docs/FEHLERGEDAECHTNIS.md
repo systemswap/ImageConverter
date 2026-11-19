@@ -3216,3 +3216,25 @@ Test oder Nachweis.
 - **Offen:** ein Weg, lange Markierungen in einem Zug, aber mit feinerem Ausschnitt zu füllen (z. B. den Ausschnitt entlang des
   Strichs statt als Rechteck).
 - **Wo im Code:** `Inpainter.Pieces`, `CropAround`. **Test:** keiner (Messung mit einem Prüfprogramm im lokalen Testordner).
+
+## 132. 3MF aus einem Slicer ließ sich nicht öffnen („keine gültigen Dreiecke“)
+
+- **Entdeckt:** 19.11.2026 in 0.12.15-beta, vom Benutzer gemeldet: eine heruntergeladene Figur als 3MF (aus einem Slicer
+  gespeichert, rund 500 000 Dreiecke) ließ sich nicht öffnen. **Behoben:** 0.12.16-beta.
+- **Was:** Meldung „Die 3MF-Datei enthält keine gültigen Dreiecke“, obwohl das Archiv ein vollständiges Netz enthält.
+- **Warum:** Die Datei nutzt die Produktionserweiterung von 3MF: Das Hauptteil `3D/3dmodel.model` enthält nur ein Objekt mit
+  einem Bauteil `<component p:path="/3D/Objects/object_1.model" objectid="1"/>` und den Bauplatz; das Netz liegt in diesem
+  zweiten Teil. Der Leser las nur das Hauptteil und suchte Objekt 1 dort – nichts gefunden, nichts platziert. Die Tests
+  hatten nur Dateien mit einem Teil, wie sie Konstruktionsprogramme schreiben.
+- **Lösung:** Objekte werden je Teil verwaltet (Schlüssel Teil + ID, denn dieselbe ID kann in zwei Teilen verschiedene Objekte
+  meinen). `p:path` an Bauteilen und Bauplätzen nennt den Teil, Bauteile ohne `p:path` meinen den Teil, in dem sie stehen;
+  jeder verwiesene Teil wird nach dem Hauptteil genau einmal gelesen. Teilnamen werden wie im Paketformat ohne Rücksicht auf
+  Groß- und Kleinschreibung verglichen, Prozentzeichen aufgelöst; eine abweichende Einheit eines Teils wird umgerechnet. Die
+  Größengrenze gilt für alle Teile zusammen, der Fortschritt läuft über alle Modellteile. Fehlt ein verwiesener Teil und bleibt
+  nichts übrig, nennt die Meldung den Teil.
+- **Nicht tun:** Objekt-IDs über Teile hinweg zusammenwerfen; nur das Hauptteil lesen und andere `.model`-Einträge
+  ungeprüft dazunehmen (Teile ohne Verweis gehören nicht zum Modell).
+- **Wo im Code:** `ThreeMfReader` (`Read`, `ModelDocument`, `PartName`, `FindEntry`). **Test:**
+  `ThreeMfReaderTests.ProductionExtension_ObjectsInOtherParts_ArePlaced`, `…_PartInAnotherUnit_IsConverted`,
+  `…_MissingPart_NamesThePart` (alle drei schlagen mit dem alten Leser fehl); dazu die echte Datei im Prüfprogramm
+  (0,6 s, geschlossenes Netz, 3 252 Flächen).

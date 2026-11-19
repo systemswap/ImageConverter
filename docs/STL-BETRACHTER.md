@@ -66,6 +66,13 @@ IDocumentViewer                         IOpenDocument : IDisposable
   `3D/3dmodel.model`), ein XML mit `resources` (Objekte mit `mesh` aus `vertices` und
   `triangles` oder `components`, die andere Objekte mit einer Transformation einbauen) und
   `build` (Platzierung der Objekte auf der Bauplatte, ebenfalls mit Transformation).
+- Produktionserweiterung (Namensraum `…/production/2015/06`): Ein Bauteil oder Bauplatz mit
+  `p:path` verweist auf ein Objekt in einem anderen Modellteil des Archivs (z. B.
+  `/3D/Objects/object_1.model`). Slicer speichern Projekte fast immer so – das Hauptteil enthält
+  dann nur die Platzierung. Jeder verwiesene Teil wird einmal gelesen; Objekt-IDs gelten je Teil;
+  Teilnamen ohne Rücksicht auf Groß- und Kleinschreibung, Prozentzeichen-Kodierung aufgelöst; ein Teil
+  in anderer Einheit wird auf die des Hauptteils umgerechnet. Fehlt ein verwiesener Teil und bleibt
+  dadurch nichts übrig, nennt die Meldung ihn.
 - Alle platzierten Objekte werden zu einem Netz zusammengeführt; Transformationen sind
   zeilenweise 3 × 4-Matrizen, die letzte Zeile die Verschiebung; eine Spiegelung (negative
   Determinante) tauscht zwei Ecken, damit die Außenseite außen bleibt. Objekte vom Typ
@@ -73,7 +80,7 @@ IDocumentViewer                         IOpenDocument : IDisposable
 - Die Einheit der Datei (micron … meter) wird in Millimeter umgerechnet. Farben,
   Materialien, Texturen und Slices werden nicht gelesen; der Titel aus den Metadaten
   erscheint als Kopfzeile.
-- Grenzen wie bei STL (Dreiecke, Eckpunkte, Koordinaten), dazu: das Modellteil höchstens
+- Grenzen wie bei STL (Dreiecke, Eckpunkte, Koordinaten), dazu: die Modellteile zusammen höchstens
   2 GB entpackt, XML ohne DTD und externe Verweise, Bauteile höchstens 32 Ebenen tief und
   ohne Kreise. Die Auflösung ergibt sich wie bei Text-STL aus der Stellenzahl.
 - Tempo: Das Einlesen ist Text und damit langsamer als binäres STL – gemessen 1,0 s je

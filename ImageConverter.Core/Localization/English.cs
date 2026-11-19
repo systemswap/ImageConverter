@@ -1011,6 +1011,7 @@ public static class English
         ["Die 3MF-Datei ist beschädigt: Bauteile verweisen im Kreis aufeinander."] = "The 3MF file is damaged: components refer to each other in a cycle.",
         ["Die 3MF-Datei enthält keine Dreiecke."] = "The 3MF file contains no triangles.",
         ["Die 3MF-Datei enthält keine gültigen Dreiecke."] = "The 3MF file contains no valid triangles.",
+        ["Die 3MF-Datei ist unvollständig: Das Modellteil {0} fehlt."] = "The 3MF file is incomplete: the model part {0} is missing.",
         ["Achsabstand"] = "Axis distance",
         ["Alle Maße löschen"] = "Delete all measurements",
         ["ANSICHT"] = "VIEW",

@@ -16,6 +16,12 @@ namespace ImageConverter.Viewer3D.Geometry;
 /// transform) and <c>&lt;build&gt;</c> (items placing objects with a transform). A transform is a row-major 3 × 4 matrix
 /// "m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32"; the last row is the translation. The unit of the model is given on
 /// the root element and converted to millimetres here. Colours, materials, textures and slices are ignored.</para>
+/// <para>Production extension (3MF Production Extension 1.1, namespace
+/// <c>http://schemas.microsoft.com/3dmanufacturing/production/2015/06</c>): a component or build item with
+/// <c>p:path</c> refers to an object in another model part of the archive, e.g. <c>/3D/Objects/object_1.model</c>.
+/// Slicers save nearly every project this way; the root part then holds only the placement. Each referenced part is
+/// read once; object IDs count per part, so the same ID in two parts names two different objects. Components without
+/// <c>p:path</c> refer to the part they are written in.</para>
 /// <para>Files come from anywhere, so reading is defensive: the XML is streamed without DTD or external references,
 /// the unpacked size of the model part is limited, triangles and vertices are counted against the limits of
 /// <see cref="StlReader"/> while reading, coordinates must be finite and within range, and component references are
@@ -30,6 +36,8 @@ public static class ThreeMfReader
     private const int MaxComponentDepth = 32;
 
     private const string ModelRelationship = "3dmodel";
+
+    private const string ProductionNamespace = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
 
     /// <summary>Reads a 3MF file.</summary>
     /// <param name="path">Path of the file.</param>
@@ -63,13 +71,35 @@ public static class ThreeMfReader
         }
         using (archive)
         {
-            var part = ModelPart(archive)
+            var root = ModelPart(archive)
                 ?? throw new StlFormatException(Tr.T("Das ist keine 3MF-Datei (kein 3D-Modell im Archiv)."));
-            if (part.Length > MaxModelPartBytes)
-                throw new StlFormatException(Tr.T("Das 3MF-Archiv ist zu groß ({0:N0} MB entpackt).", part.Length >> 20));
-            using var xml = part.Open();
-            var reporting = progress is null ? xml : new ProgressStream(xml, part.Length, progress);
-            return ReadModel(reporting, ct);
+            // Progress runs over all model parts; which of them are referenced is known only after the root part
+            var total = Math.Max(1, archive.Entries
+                .Where(e => e == root || e.FullName.EndsWith(".model", StringComparison.OrdinalIgnoreCase))
+                .Sum(e => e.Length));
+            var document = new ModelDocument(PartName(root.FullName));
+            long unpacked = 0, done = 0;
+            ReadPart(root, isRoot: true);
+            var missing = new List<string>();
+            for (var i = 0; i < document.Referenced.Count; i++)
+            {
+                var name = document.Referenced[i];
+                if (FindEntry(archive, name) is { } entry) ReadPart(entry, isRoot: false);
+                else missing.Add(name);
+            }
+            progress?.Report(1);
+            return document.Assemble(missing, ct);
+
+            void ReadPart(ZipArchiveEntry entry, bool isRoot)
+            {
+                unpacked += entry.Length;
+                if (entry.Length > MaxModelPartBytes || unpacked > MaxModelPartBytes)
+                    throw new StlFormatException(Tr.T("Das 3MF-Archiv ist zu groß ({0:N0} MB entpackt).", unpacked >> 20));
+                using var xml = entry.Open();
+                var reporting = progress is null ? xml : new ProgressStream(xml, entry.Length, done, total, progress);
+                document.Read(reporting, PartName(entry.FullName), isRoot, ct);
+                done += entry.Length;
+            }
         }
     }
 
@@ -104,6 +134,14 @@ public static class ThreeMfReader
             ?? archive.Entries.FirstOrDefault(e => e.FullName.EndsWith(".model", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>The entry of a part name; part names in a package are case-insensitive.</summary>
+    private static ZipArchiveEntry? FindEntry(ZipArchive archive, string name) =>
+        archive.GetEntry(name)
+        ?? archive.Entries.FirstOrDefault(e => string.Equals(PartName(e.FullName), name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>A part name as written in the file ("/3D/Objects/a%20b.model") in the form of a zip entry name ("3D/Objects/a b.model").</summary>
+    private static string PartName(string path) => Uri.UnescapeDataString(path.Replace('\\', '/')).TrimStart('/');
+
     private static XmlReaderSettings Settings() => new()
     {
         DtdProcessing = DtdProcessing.Prohibit,
@@ -123,173 +161,228 @@ public static class ThreeMfReader
         public int[] Triangles = [];
         public bool[] InvalidVertex = [];
         public int InvalidTriangles;
-        public List<(int ObjectId, Matrix4x4 Transform)> Components = [];
+        public List<(ObjectKey Child, Matrix4x4 Transform)> Components = [];
         public bool Hidden;   // support structures and "other" objects are not part of the model
     }
 
-    private static StlFile ReadModel(Stream xmlStream, CancellationToken ct)
-    {
-        var objects = new Dictionary<int, ModelObject>();
-        var build = new List<(int ObjectId, Matrix4x4 Transform)>();
-        var scale = 1.0f;
-        var title = "";
-        var fewestDigits = int.MaxValue;
-        long trianglesInFile = 0;
+    /// <summary>An object by its model part (lower case, see <see cref="PartName"/>) and its ID within that part.</summary>
+    private readonly record struct ObjectKey(string Part, int Id);
 
-        using var reader = XmlReader.Create(xmlStream, Settings());
-        try
+    /// <summary>The objects of all model parts read so far and the build of the root part.</summary>
+    private sealed class ModelDocument(string rootPart)
+    {
+        private readonly Dictionary<ObjectKey, ModelObject> _objects = [];
+        private readonly List<(ObjectKey Object, Matrix4x4 Transform)> _build = [];
+        private readonly HashSet<string> _known = new(StringComparer.OrdinalIgnoreCase) { rootPart };
+        private float _rootScale = 1;
+        private string _title = "";
+        private int _fewestDigits = int.MaxValue;
+        private long _trianglesInFile;
+
+        /// <summary>Parts referenced with <c>p:path</c> that are still to be read, in the order they were found;
+        /// grows while reading.</summary>
+        public List<string> Referenced { get; } = [];
+
+        /// <summary>Reads one model part: its objects and, for the root part, the build.</summary>
+        public void Read(Stream xmlStream, string part, bool isRoot, CancellationToken ct)
         {
-            while (reader.Read())
+            var key = part.ToLowerInvariant();
+            var scale = 1.0f;
+            var read = new List<ModelObject>();
+            using var reader = XmlReader.Create(xmlStream, Settings());
+            try
+            {
+                while (reader.Read())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (reader.NodeType != XmlNodeType.Element) continue;
+                    switch (reader.LocalName)
+                    {
+                        case "model":
+                            scale = UnitScale(reader.GetAttribute("unit"));
+                            if (isRoot) _rootScale = scale;
+                            break;
+                        case "metadata":
+                            if (isRoot && string.Equals(reader.GetAttribute("name"), "Title", StringComparison.OrdinalIgnoreCase))
+                                _title = reader.ReadElementContentAsString().Trim();
+                            break;
+                        case "object":
+                            var (id, obj) = ReadObject(reader, key, ct);
+                            if (id >= 0) _objects[new ObjectKey(key, id)] = obj;
+                            read.Add(obj);
+                            break;
+                        case "item":
+                            // only the root part places objects
+                            if (isRoot && int.TryParse(reader.GetAttribute("objectid"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var itemId))
+                                _build.Add((new ObjectKey(Target(reader, key), itemId), Transform(reader.GetAttribute("transform"))));
+                            break;
+                    }
+                }
+            }
+            catch (XmlException e)
+            {
+                throw new StlFormatException(Tr.T("Die 3MF-Datei ist beschädigt: {0}", e.Message));
+            }
+
+            // Placements are in the unit of the root part; a part written in another unit is converted to it
+            var factor = isRoot ? 1 : scale / _rootScale;
+            if (factor != 1)
+            {
+                foreach (var obj in read)
+                {
+                    for (var i = 0; i < obj.Positions.Length; i++) obj.Positions[i] *= factor;
+                    for (var c = 0; c < obj.Components.Count; c++)
+                    {
+                        var (child, m) = obj.Components[c];
+                        m.Translation *= factor;
+                        obj.Components[c] = (child, m);
+                    }
+                }
+            }
+        }
+
+        /// <summary>The part an element refers to: its <c>p:path</c>, otherwise the part it is written in.</summary>
+        private string Target(XmlReader reader, string currentPart)
+        {
+            var path = reader.GetAttribute("path", ProductionNamespace);
+            if (string.IsNullOrWhiteSpace(path)) return currentPart;
+            var name = PartName(path);
+            if (_known.Add(name)) Referenced.Add(name);
+            return name.ToLowerInvariant();
+        }
+
+        /// <summary>Reads one &lt;object&gt; with its mesh or components; the reader is left after the element.</summary>
+        private (int Id, ModelObject Object) ReadObject(XmlReader reader, string part, CancellationToken ct)
+        {
+            var obj = new ModelObject();
+            if (!int.TryParse(reader.GetAttribute("id"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)) id = -1;
+            var type = reader.GetAttribute("type") ?? "model";
+            obj.Hidden = type is "support" or "surface" or "other";
+            if (reader.IsEmptyElement) return (id, obj);
+
+            var positions = new List<float>();
+            var triangles = new List<int>();
+            var depth = reader.Depth;
+            while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Depth == depth))
             {
                 ct.ThrowIfCancellationRequested();
                 if (reader.NodeType != XmlNodeType.Element) continue;
                 switch (reader.LocalName)
                 {
-                    case "model":
-                        scale = UnitScale(reader.GetAttribute("unit"));
+                    case "vertex":
+                        positions.Add(Coordinate(reader.GetAttribute("x"), ref _fewestDigits));
+                        positions.Add(Coordinate(reader.GetAttribute("y"), ref _fewestDigits));
+                        positions.Add(Coordinate(reader.GetAttribute("z"), ref _fewestDigits));
+                        if (positions.Count / 3 > StlReader.MaxVertices)
+                            throw new StlFormatException(Tr.T("Das Modell hat mehr als {0:N0} einzelne Eckpunkte – das lässt sich nicht anzeigen.", StlReader.MaxVertices));
                         break;
-                    case "metadata":
-                        if (string.Equals(reader.GetAttribute("name"), "Title", StringComparison.OrdinalIgnoreCase))
-                            title = reader.ReadElementContentAsString().Trim();
+                    case "triangle":
+                        triangles.Add(Index(reader.GetAttribute("v1")));
+                        triangles.Add(Index(reader.GetAttribute("v2")));
+                        triangles.Add(Index(reader.GetAttribute("v3")));
+                        if (!obj.Hidden && ++_trianglesInFile > StlReader.TriangleLimit)
+                            throw new StlFormatException(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", _trianglesInFile, StlReader.TriangleLimit));
                         break;
-                    case "object":
-                        var (id, obj) = ReadObject(reader, ref fewestDigits, ref trianglesInFile, ct);
-                        if (id >= 0) objects[id] = obj;
-                        break;
-                    case "item":
-                        if (int.TryParse(reader.GetAttribute("objectid"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var itemId))
-                            build.Add((itemId, Transform(reader.GetAttribute("transform"))));
+                    case "component":
+                        if (int.TryParse(reader.GetAttribute("objectid"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var childId))
+                            obj.Components.Add((new ObjectKey(Target(reader, part), childId), Transform(reader.GetAttribute("transform"))));
                         break;
                 }
             }
-        }
-        catch (XmlException e)
-        {
-            throw new StlFormatException(Tr.T("Die 3MF-Datei ist beschädigt: {0}", e.Message));
-        }
 
-        if (build.Count == 0)
-            throw new StlFormatException(Tr.T("Die 3MF-Datei enthält keine Dreiecke."));
-        if (trianglesInFile > StlReader.TriangleLimit)
-            throw new StlFormatException(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", trianglesInFile, StlReader.TriangleLimit));
-
-        // Place every build item: components are placed inside their parent's transform (p · component · item). An
-        // object may be placed several times, so the placed triangles are counted on the way.
-        var welder = new VertexWelder((int)Math.Min(StlReader.MaxVertices, Math.Max(16, trianglesInFile / 2 + 16)));
-        var indices = new int[3 * (int)Math.Min(StlReader.TriangleLimit, Math.Max(1, trianglesInFile))];
-        var written = 0;
-        long placed = 0;
-        int invalid = 0, degenerate = 0;
-        var unitMatrix = Matrix4x4.CreateScale(scale);
-        var chain = new HashSet<int>();
-        foreach (var (objectId, transform) in build)
-            Place(objectId, transform * unitMatrix, 0);
-
-        if (written == 0)
-            throw new StlFormatException(Tr.T("Die 3MF-Datei enthält keine gültigen Dreiecke."));
-        if (written != indices.Length) Array.Resize(ref indices, written);
-        var resolution = fewestDigits == int.MaxValue
-            ? StlReader.FloatResolution
-            : Math.Max(StlReader.FloatResolution, 0.5 * Math.Pow(10, 1 - fewestDigits));
-        return new StlFile(new Mesh(welder.TakePositions(), indices), StlEncoding.ThreeMf, title, placed,
-            invalid, degenerate, Truncated: false, resolution);
-
-        void Place(int id, Matrix4x4 m, int depth)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (!objects.TryGetValue(id, out var obj) || obj.Hidden) return;
-            if (depth > MaxComponentDepth || !chain.Add(id))
-                throw new StlFormatException(Tr.T("Die 3MF-Datei ist beschädigt: Bauteile verweisen im Kreis aufeinander."));
-            foreach (var (childId, childTransform) in obj.Components)
-                Place(childId, childTransform * m, depth + 1);
-            chain.Remove(id);
-
-            invalid += obj.InvalidTriangles;
-            placed += obj.InvalidTriangles;
-            if (obj.Triangles.Length == 0) return;
-            placed += obj.Triangles.Length / 3;
-            if (placed > StlReader.TriangleLimit)
-                throw new StlFormatException(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", placed, StlReader.TriangleLimit));
-            if (written + obj.Triangles.Length > indices.Length)
-                Array.Resize(ref indices, (int)Math.Min(3L * StlReader.TriangleLimit, Math.Max(written + obj.Triangles.Length, indices.Length * 3L / 2)));
-            // A mirroring transform turns the triangles inside out; swapping two corners keeps the outside outside.
-            var mirrored = Determinant3(m) < 0;
-            var p = obj.Positions;
-            for (var t = 0; t + 2 < obj.Triangles.Length; t += 3)
+            var vertexCount = positions.Count / 3;
+            obj.Positions = positions.ToArray();
+            obj.InvalidVertex = new bool[vertexCount];
+            for (var v = 0; v < vertexCount; v++)
+                obj.InvalidVertex[v] = !Valid(obj.Positions[3 * v]) || !Valid(obj.Positions[3 * v + 1]) || !Valid(obj.Positions[3 * v + 2]);
+            // Triangles with an index outside the vertex list are dropped here; the others keep their indices
+            var kept = new List<int>(triangles.Count);
+            for (var t = 0; t + 2 < triangles.Count; t += 3)
             {
-                int a = obj.Triangles[t], b = obj.Triangles[t + 1], c = obj.Triangles[t + 2];
-                if (obj.InvalidVertex[a] || obj.InvalidVertex[b] || obj.InvalidVertex[c]) { invalid++; continue; }
-                var va = Vector3.Transform(new Vector3(p[3 * a], p[3 * a + 1], p[3 * a + 2]), m);
-                var vb = Vector3.Transform(new Vector3(p[3 * b], p[3 * b + 1], p[3 * b + 2]), m);
-                var vc = Vector3.Transform(new Vector3(p[3 * c], p[3 * c + 1], p[3 * c + 2]), m);
-                if (mirrored) (vb, vc) = (vc, vb);
-                if (!Valid(va) || !Valid(vb) || !Valid(vc)) { invalid++; continue; }
-                var ia = welder.Add(va.X, va.Y, va.Z);
-                var ib = welder.Add(vb.X, vb.Y, vb.Z);
-                var ic = welder.Add(vc.X, vc.Y, vc.Z);
-                if (ia == ib || ib == ic || ia == ic) { degenerate++; continue; }
-                indices[written] = ia;
-                indices[written + 1] = ib;
-                indices[written + 2] = ic;
-                written += 3;
+                int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+                if ((uint)a >= (uint)vertexCount || (uint)b >= (uint)vertexCount || (uint)c >= (uint)vertexCount) { obj.InvalidTriangles++; continue; }
+                kept.Add(a); kept.Add(b); kept.Add(c);
+            }
+            obj.Triangles = kept.ToArray();
+            return (id, obj);
+        }
+
+        /// <summary>Places every build item and merges the placed objects into one mesh.</summary>
+        /// <param name="missing">Referenced parts that are not in the archive.</param>
+        /// <param name="ct">Cancels the assembly.</param>
+        public StlFile Assemble(IReadOnlyList<string> missing, CancellationToken ct)
+        {
+            if (_build.Count == 0)
+                throw new StlFormatException(Tr.T("Die 3MF-Datei enthält keine Dreiecke."));
+            if (_trianglesInFile > StlReader.TriangleLimit)
+                throw new StlFormatException(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", _trianglesInFile, StlReader.TriangleLimit));
+
+            // Place every build item: components are placed inside their parent's transform (p · component · item). An
+            // object may be placed several times, so the placed triangles are counted on the way.
+            var welder = new VertexWelder((int)Math.Min(StlReader.MaxVertices, Math.Max(16, _trianglesInFile / 2 + 16)));
+            var indices = new int[3 * (int)Math.Min(StlReader.TriangleLimit, Math.Max(1, _trianglesInFile))];
+            var written = 0;
+            long placed = 0;
+            int invalid = 0, degenerate = 0;
+            var unitMatrix = Matrix4x4.CreateScale(_rootScale);
+            var chain = new HashSet<ObjectKey>();
+            foreach (var (key, transform) in _build)
+                Place(key, transform * unitMatrix, 0);
+
+            if (written == 0)
+            {
+                throw new StlFormatException(missing.Count > 0
+                    ? Tr.T("Die 3MF-Datei ist unvollständig: Das Modellteil {0} fehlt.", missing[0])
+                    : Tr.T("Die 3MF-Datei enthält keine gültigen Dreiecke."));
+            }
+            if (written != indices.Length) Array.Resize(ref indices, written);
+            var resolution = _fewestDigits == int.MaxValue
+                ? StlReader.FloatResolution
+                : Math.Max(StlReader.FloatResolution, 0.5 * Math.Pow(10, 1 - _fewestDigits));
+            return new StlFile(new Mesh(welder.TakePositions(), indices), StlEncoding.ThreeMf, _title, placed,
+                invalid, degenerate, Truncated: false, resolution);
+
+            void Place(ObjectKey key, Matrix4x4 m, int depth)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!_objects.TryGetValue(key, out var obj) || obj.Hidden) return;
+                if (depth > MaxComponentDepth || !chain.Add(key))
+                    throw new StlFormatException(Tr.T("Die 3MF-Datei ist beschädigt: Bauteile verweisen im Kreis aufeinander."));
+                foreach (var (child, childTransform) in obj.Components)
+                    Place(child, childTransform * m, depth + 1);
+                chain.Remove(key);
+
+                invalid += obj.InvalidTriangles;
+                placed += obj.InvalidTriangles;
+                if (obj.Triangles.Length == 0) return;
+                placed += obj.Triangles.Length / 3;
+                if (placed > StlReader.TriangleLimit)
+                    throw new StlFormatException(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", placed, StlReader.TriangleLimit));
+                if (written + obj.Triangles.Length > indices.Length)
+                    Array.Resize(ref indices, (int)Math.Min(3L * StlReader.TriangleLimit, Math.Max(written + obj.Triangles.Length, indices.Length * 3L / 2)));
+                // A mirroring transform turns the triangles inside out; swapping two corners keeps the outside outside.
+                var mirrored = Determinant3(m) < 0;
+                var p = obj.Positions;
+                for (var t = 0; t + 2 < obj.Triangles.Length; t += 3)
+                {
+                    int a = obj.Triangles[t], b = obj.Triangles[t + 1], c = obj.Triangles[t + 2];
+                    if (obj.InvalidVertex[a] || obj.InvalidVertex[b] || obj.InvalidVertex[c]) { invalid++; continue; }
+                    var va = Vector3.Transform(new Vector3(p[3 * a], p[3 * a + 1], p[3 * a + 2]), m);
+                    var vb = Vector3.Transform(new Vector3(p[3 * b], p[3 * b + 1], p[3 * b + 2]), m);
+                    var vc = Vector3.Transform(new Vector3(p[3 * c], p[3 * c + 1], p[3 * c + 2]), m);
+                    if (mirrored) (vb, vc) = (vc, vb);
+                    if (!Valid(va) || !Valid(vb) || !Valid(vc)) { invalid++; continue; }
+                    var ia = welder.Add(va.X, va.Y, va.Z);
+                    var ib = welder.Add(vb.X, vb.Y, vb.Z);
+                    var ic = welder.Add(vc.X, vc.Y, vc.Z);
+                    if (ia == ib || ib == ic || ia == ic) { degenerate++; continue; }
+                    indices[written] = ia;
+                    indices[written + 1] = ib;
+                    indices[written + 2] = ic;
+                    written += 3;
+                }
             }
         }
-    }
-
-    /// <summary>Reads one &lt;object&gt; with its mesh or components; the reader is left after the element.</summary>
-    private static (int Id, ModelObject Object) ReadObject(XmlReader reader, ref int fewestDigits, ref long trianglesInFile, CancellationToken ct)
-    {
-        var obj = new ModelObject();
-        if (!int.TryParse(reader.GetAttribute("id"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)) id = -1;
-        var type = reader.GetAttribute("type") ?? "model";
-        obj.Hidden = type is "support" or "surface" or "other";
-        if (reader.IsEmptyElement) return (id, obj);
-
-        var positions = new List<float>();
-        var triangles = new List<int>();
-        var depth = reader.Depth;
-        while (reader.Read() && !(reader.NodeType == XmlNodeType.EndElement && reader.Depth == depth))
-        {
-            ct.ThrowIfCancellationRequested();
-            if (reader.NodeType != XmlNodeType.Element) continue;
-            switch (reader.LocalName)
-            {
-                case "vertex":
-                    positions.Add(Coordinate(reader.GetAttribute("x"), ref fewestDigits));
-                    positions.Add(Coordinate(reader.GetAttribute("y"), ref fewestDigits));
-                    positions.Add(Coordinate(reader.GetAttribute("z"), ref fewestDigits));
-                    if (positions.Count / 3 > StlReader.MaxVertices)
-                        throw new StlFormatException(Tr.T("Das Modell hat mehr als {0:N0} einzelne Eckpunkte – das lässt sich nicht anzeigen.", StlReader.MaxVertices));
-                    break;
-                case "triangle":
-                    triangles.Add(Index(reader.GetAttribute("v1")));
-                    triangles.Add(Index(reader.GetAttribute("v2")));
-                    triangles.Add(Index(reader.GetAttribute("v3")));
-                    if (!obj.Hidden && ++trianglesInFile > StlReader.TriangleLimit)
-                        throw new StlFormatException(Tr.T("Das Modell hat {0:N0} Dreiecke – angezeigt werden höchstens {1:N0}.", trianglesInFile, StlReader.TriangleLimit));
-                    break;
-                case "component":
-                    if (int.TryParse(reader.GetAttribute("objectid"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var childId))
-                        obj.Components.Add((childId, Transform(reader.GetAttribute("transform"))));
-                    break;
-            }
-        }
-
-        var vertexCount = positions.Count / 3;
-        obj.Positions = positions.ToArray();
-        obj.InvalidVertex = new bool[vertexCount];
-        for (var v = 0; v < vertexCount; v++)
-            obj.InvalidVertex[v] = !Valid(obj.Positions[3 * v]) || !Valid(obj.Positions[3 * v + 1]) || !Valid(obj.Positions[3 * v + 2]);
-        // Triangles with an index outside the vertex list are dropped here; the others keep their indices
-        var kept = new List<int>(triangles.Count);
-        for (var t = 0; t + 2 < triangles.Count; t += 3)
-        {
-            int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
-            if ((uint)a >= (uint)vertexCount || (uint)b >= (uint)vertexCount || (uint)c >= (uint)vertexCount) { obj.InvalidTriangles++; continue; }
-            kept.Add(a); kept.Add(b); kept.Add(c);
-        }
-        obj.Triangles = kept.ToArray();
-        return (id, obj);
     }
 
     // ------------------------------------------------------------------ values
@@ -355,8 +448,9 @@ public static class ThreeMfReader
         - m.M12 * (m.M21 * m.M33 - m.M23 * m.M31)
         + m.M13 * (m.M21 * m.M32 - m.M22 * m.M31);
 
-    /// <summary>Reports how much of the model part has been read.</summary>
-    private sealed class ProgressStream(Stream inner, long length, IProgress<double> progress) : Stream
+    /// <summary>Reports how much of the model parts has been read: <paramref name="before"/> bytes of earlier parts plus
+    /// what was read from this one (<paramref name="length"/> bytes unpacked), as a share of <paramref name="total"/>.</summary>
+    private sealed class ProgressStream(Stream inner, long length, long before, long total, IProgress<double> progress) : Stream
     {
         private long _read;
         private long _nextReport;
@@ -367,8 +461,8 @@ public static class ThreeMfReader
             _read += n;
             if (_read >= _nextReport)
             {
-                progress.Report(Math.Min(1.0, (double)_read / Math.Max(1, length)));
-                _nextReport = _read + Math.Max(1 << 16, length / 100);
+                progress.Report(Math.Min(1.0, (double)(before + _read) / Math.Max(1, total)));
+                _nextReport = _read + Math.Max(1 << 16, total / 100);
             }
             return n;
         }
