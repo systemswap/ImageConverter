@@ -145,7 +145,7 @@ seinen Namen in allen Sprachen.
   Dateien im privaten Vorab-Release „neueste“ (`gh release download neueste`). Ein neuer Push bricht einen laufenden Bau ab; reine
   Doku-Änderungen bauen nicht. Nur ein Linux-Lauf, weil Windows-Läufe im privaten Repository doppelt gegen die Freiminuten zählen.
 - **Spenden und Sprache** (19.11.2026): flacher goldener Knopf „♥ Spenden“ über Drucken und Exportieren (so breit wie beide), öffnet nur auf
-  Klick https://ko-fi.com/systemswap im Browser. Sprachauswahl oben rechts vor ☾/☀, so breit wie die längste Sprache;
+  Klick die Spendenseite (Ko-fi) im Browser. Sprachauswahl oben rechts vor ☾/☀, so breit wie die längste Sprache;
   Einstellungen öffnen auf „Allgemein“ (vor „Leistung“), dort steht die Sprache zuerst.
 
 - **Linux**: `.desktop`-Datei mit `MimeType=image/jpeg;image/png;…` ⇒ erscheint unter
