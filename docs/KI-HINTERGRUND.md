@@ -37,8 +37,7 @@ Geometrie, Größe/Upscaling und allen Filtern.
   meldet die App das und rechnet nicht. „Auswahl anwenden“ macht alles Bisherige endgültig: Danach ist das Bild der Ausgang.
 - Gerechnet wird der **sichtbare Ausschnitt** (nach Zuschnitt); außerhalb ist transparent bzw. unverändert.
 - JPEG/BMP: Hinweis mit „Als PNG speichern“ — beim Speichern als JPEG/BMP wird der Hintergrund weiß.
-- Modelle: Einstellungen › KI › Hintergrund. RMBG-2.0: „Seite öffnen“, dort zustimmen und laden, dann „Datei wählen …“ —
-  die App prüft Größe und Prüfsumme und kopiert die Datei in ihren Modellordner.
+- Modelle: Einstellungen › KI › Hintergrund.
 - BiRefNet general: rechnet die Grafikkarte (DirectML), nimmt die App den „Zusatz für die Grafikkarte“ (fp16), wenn er
   geladen ist; sonst die volle Datei auf der CPU.
 
@@ -53,25 +52,15 @@ die Lizenzen für den jeweiligen Nutzer — die App darf kostenlos weitergegeben
 | BiRefNet lite (Swin tiny) | `BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx` | 224 005 088 | `5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333` | 1024², ImageNet-normiert | MIT | dito |
 | BiRefNet HR-matting | `BiRefNet_HR-matting-epoch_135.onnx` | 1 098 928 867 | `45b7d92ce0e2e75e1c8a564a9e84c87ac9da7f4315d2deeef3674864e809aef3` | 2048², ImageNet-normiert | MIT | dito |
 | BEN2 base | `BEN2_Base.onnx` | 222 932 053 | `22cea62108ff53b7ccc20f7a008bf30494228d84b1687f29ecbe76936a998101` | 1024², 0…1 **ohne** Normierung | MIT | Hugging Face `PramaLLC/BEN2` |
-| RMBG-2.0 (Bria) | `onnx/model.onnx` | 1 024 331 469 | `5b486f08200f513f460da46dd701db5fbb47d79b4be4b708a19444bcd4e79958` | beliebig (gerechnet 1024²), ImageNet-normiert, Eingang `pixel_values`, Ausgang `alphas` | CC BY-NC 4.0 — **nur nicht-kommerziell** | Hugging Face `briaai/RMBG-2.0` (Anmeldung nötig) |
 
 Nicht genommen: `BiRefNet_lite-general-2K` — fester Eingang 1440 × 2560 (Hochformat), Querformate würden verzerrt.
 
+Nicht mehr dabei: **RMBG-2.0** (Bria, gleiches Netz wie BiRefNet, CC BY-NC 4.0). Das Ergebnis war etwa wie bei BiRefNet general
+(Messungen unten), die Lizenz erlaubt nur nicht-kommerzielle Nutzung, und Bria gibt die Datei nur nach Anmeldung und Zustimmung
+frei – jeder musste sie von Hand laden und in der App auswählen. Mit dem Modell ist dieser Handlade-Weg entfallen; alle Modelle
+lädt die App selbst.
+
 Ausgänge: je nach Modell Logits oder schon 0…1 — der Messplatz prüft den Wertebereich und rechnet Logits mit dem Sigmoid um.
-
-### RMBG-2.0 von Hand laden
-
-Bria gibt das Modell nur nach Zustimmung frei; die App kann es deshalb nicht selbst laden.
-
-1. Bei Hugging Face anmelden (kostenloses Konto) und https://huggingface.co/briaai/RMBG-2.0 öffnen.
-2. Im Formular Name und E-Mail angeben und den Haken setzen („Non commercial use … Personal use / Academy / Non
-   profit“). Damit gehen Name und E-Mail an Bria; der Zugang ist sofort frei.
-3. Im selben Browser https://huggingface.co/briaai/RMBG-2.0/resolve/main/onnx/model.onnx öffnen (1,02 GB, volle
-   Genauigkeit; die anderen Dateien im Ordner `onnx` sind kleinere, ungenauere Fassungen).
-4. In den Einstellungen bei RMBG-2.0 „Datei wählen …“ und die Datei aus dem Download-Ordner wählen — die App prüft Größe
-   und Prüfsumme und kopiert sie nach `KI-Modelle/rmbg-2.0/model.onnx` (neben dem Programm, sonst im Benutzerordner).
-
-Wer die App weitergibt: Jeder Nutzer muss diese Zustimmung selbst geben.
 
 ## Reihenfolge in der Kette
 
@@ -163,8 +152,8 @@ Je Modell (Notebook mit integrierter Grafik, je eigener Prozess, 1024², MB priv
 | BEN2 | CPU | 3,2 s | 15,5 s | 3 674 | 493 | 33 |
 | BiRefNet general | CPU | 6,8 s | 23,8 s | 6 016–7 101 | 1 108 | 36 |
 | BiRefNet general (fp16) | Grafikkarte | 19,3 s | 17,8 s | 8 797 | 8 781 | 89 |
-| RMBG-2.0 | CPU | 10,7 s | 27,7 s | 6 096–7 154 | 1 075 | 33 |
-| RMBG-2.0 | Grafikkarte | 9,0 s | 16,0 s | 13 505 | 13 490 | 323 |
+| RMBG-2.0 (nicht mehr dabei) | CPU | 10,7 s | 27,7 s | 6 096–7 154 | 1 075 | 33 |
+| RMBG-2.0 (nicht mehr dabei) | Grafikkarte | 9,0 s | 16,0 s | 13 505 | 13 490 | 323 |
 
 Die Spitze auf der Grafikkarte bleibt: Sie ist der Preis des Rechenwegs. BiRefNet lite rechnet deshalb seit 0.7.5 beta nur
 noch auf der CPU (3 s langsamer, rund 10 GB weniger); BiRefNet general nur mit dem optionalen Zusatz auf der Grafikkarte.
@@ -185,7 +174,7 @@ Schildkröte mit zwei Personen, Gruppe am Strand, Fliegenpilz, kahle Äste vor H
 | BiRefNet general | 24 s | 11–13 s mit `onnx-community/BiRefNet-ONNX` `model_fp16.onnx` und **ohne Graph-Optimierung**; Abweichung zu fp32 im Mittel 0,02–0,05 Stufen, > 8 Stufen an 0,005–0,05 % der Pixel. fp32 auf der Grafikkarte: bricht ab (Speicher) | am saubersten: Zuckerwatte ohne die Leute daneben, Pilz, Gruppe |
 | BiRefNet lite | 11 s | 7–9 s (fp32, ohne Graph-Optimierung), bitgleich bis 1 Stufe | gut, lässt öfter Reste stehen (Beine im Hintergrund) |
 | BEN2 | 17 s | 9 s, aber **weicht ab** (bis 122 Stufen, Mittel 0,7) — vorerst CPU | feinste Haare (abstehende Strähnen), behält aber Personen im Hintergrund (Zuckerwatte) |
-| RMBG-2.0 | 23 s | 14 s, gleich (höchstens 1 Stufe), mit Optimierung | etwa wie BiRefNet general |
+| RMBG-2.0 (nicht mehr dabei) | 23 s | 14 s, gleich (höchstens 1 Stufe), mit Optimierung | etwa wie BiRefNet general |
 | BiRefNet HR-matting | 116–196 s | lädt nicht | **verworfen**: zu langsam, Speicher reichte beim 6. Bild nicht, Schleier und falsche Reste (Blatt beim Pilz, Sand) |
 
 - **DirectML und BiRefNet:** Mit Graph-Optimierung bricht das Laden ab („Split … Cannot parse data from external tensors“) —

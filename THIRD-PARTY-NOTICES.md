@@ -98,7 +98,6 @@ liegen dann im Ordner `KI-Modelle/` neben dem Programm.
 | Freistellen – BiRefNet und BiRefNet lite | MIT | Peng Zheng u. a. (BiRefNet), ONNX vom Autor (GitHub-Release `ZhengPeng7/BiRefNet` v1) |
 | Freistellen – BiRefNet für die Grafikkarte (halbe Genauigkeit) | MIT | Peng Zheng u. a. (BiRefNet), ONNX von onnx-community (Hugging Face `onnx-community/BiRefNet-ONNX`, feste Fassung) |
 | Freistellen – BEN2 | MIT | Maxwell Meyer, Jack Spruyt (BEN2, Prama LLC), Hugging Face `PramaLLC/BEN2`, feste Fassung |
-| Freistellen – RMBG-2.0 | **CC BY-NC 4.0 – nur nicht-kommerzielle Nutzung** | Bria AI (RMBG-2.0); wird nicht vom Programm geladen: Man lädt die Datei selbst von Hugging Face `briaai/RMBG-2.0`, nachdem man dort den Bedingungen zugestimmt hat |
 
 ## Bilder der Startseite (nur im Repository, nicht im Programm)
 

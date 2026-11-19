@@ -360,61 +360,6 @@ public class AiTests
     }
 
     [Fact]
-    public async Task Import_ChecksSizeAndChecksum_AndLeavesNothingBehind()
-    {
-        // Models the user downloads by hand (RMBG-2.0): any file can be chosen in the dialog
-        var payload = RandomNumberGenerator.GetBytes(300_000);
-        var store = new AiModelStore([TempFolder()]);
-        var model = FakeModel(payload);
-        var source = TempFolder();
-        Directory.CreateDirectory(source);
-        try
-        {
-            var wrongSize = Path.Combine(source, "kurz.onnx");
-            await File.WriteAllBytesAsync(wrongSize, payload[..1000]);
-            await Assert.ThrowsAsync<InvalidDataException>(() => store.ImportAsync(model, wrongSize, null, default));
-
-            var wrongContent = Path.Combine(source, "anders.onnx");
-            await File.WriteAllBytesAsync(wrongContent, RandomNumberGenerator.GetBytes(payload.Length));
-            await Assert.ThrowsAsync<InvalidDataException>(() => store.ImportAsync(model, wrongContent, null, default));
-            Assert.False(Directory.Exists(Path.Combine(store.Folders[0], model.Id)), "nichts liegen geblieben");
-
-            // A link to the right file: the model folder gets a real copy, not the link
-            var real = Path.Combine(source, "richtig.onnx");
-            await File.WriteAllBytesAsync(real, payload);
-            var link = Path.Combine(source, "verknuepfung.onnx");
-            try
-            {
-                File.CreateSymbolicLink(link, real);
-            }
-            catch (IOException) when (OperatingSystem.IsWindows())
-            {
-                link = real;   // Windows allows links only with developer mode or as administrator: test the rest
-            }
-            await store.ImportAsync(model, link, null, default);
-            var installed = store.PathOf(model)!;
-            Assert.Null(new FileInfo(installed).LinkTarget);
-            Assert.Equal(payload, await File.ReadAllBytesAsync(installed));
-
-            // The installed file itself chosen again: stays intact
-            await store.ImportAsync(model, installed, null, default);
-            Assert.Equal(payload, await File.ReadAllBytesAsync(installed));
-
-            // Cancelled half way: the installed file stays, no .part is left
-            using var cts = new CancellationTokenSource();
-            var progress = new SyncProgress([], f => { if (f > 0.3) cts.Cancel(); });
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.ImportAsync(model, real, progress, cts.Token));
-            Assert.Equal(payload, await File.ReadAllBytesAsync(installed));
-            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(installed)!, "*.part"));
-        }
-        finally
-        {
-            Directory.Delete(source, true);
-            if (Directory.Exists(store.Folders[0])) Directory.Delete(store.Folders[0], true);
-        }
-    }
-
-    [Fact]
     public async Task Download_WrongChecksum_LeavesNothing()
     {
         var payload = RandomNumberGenerator.GetBytes(10_000);

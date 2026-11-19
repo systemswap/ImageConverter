@@ -60,10 +60,6 @@ public enum AiModelKind
 /// Whether the model must be opened on the graphics card without graph optimisation: with it, DirectML fails to load
 /// BiRefNet ("Split … Cannot parse data from external tensors"). See docs/KI-HINTERGRUND.md.
 /// </param>
-/// <param name="ManualPage">
-/// For models without a download address (<paramref name="Url"/> empty): page where the user downloads the file
-/// after agreeing to the terms (RMBG-2.0); the model list then shows instructions instead of "Herunterladen".
-/// </param>
 public sealed record AiModel(
     string Id,
     string Name,
@@ -83,8 +79,7 @@ public sealed record AiModel(
     bool FixedTile = true,
     string[]? Requires = null,
     bool Gpu = false,
-    bool GpuWithoutOptimization = false,
-    string? ManualPage = null)
+    bool GpuWithoutOptimization = false)
 {
     /// <summary>Gets the IDs of further models that are downloaded together with this one; never null.</summary>
     public string[] Requires { get; init; } = Requires ?? [];
@@ -470,35 +465,10 @@ public static class AiModelCatalog
         Origin: "Maxwell Meyer, Jack Spruyt (BEN2, Prama LLC)",
         TileSize: 1024);
 
-    /// <summary>
-    /// Gets RMBG-2.0 by Bria (BiRefNet architecture, trained on licensed data). Non-commercial only and downloadable only after
-    /// agreeing to Bria's terms, so it has no download address: the user places the file by hand (<see cref="AiModel.ManualPage"/>).
-    /// </summary>
-    public static AiModel Rmbg2 { get; } = new(
-        "rmbg-2.0",
-        "RMBG-2.0",
-        "Hintergrund entfernen – etwa wie BiRefNet, nur nicht-kommerziell",
-        "RMBG-2.0 von Bria: gleiches Netz wie BiRefNet, mit lizenzierten Bildern trainiert. Bria gibt die Datei nur nach " +
-        "Zustimmung frei: 1. Bei Hugging Face anmelden und auf der Seite des Modells das Formular ausfüllen (Name, E-Mail, " +
-        "„Non commercial use“). 2. Im selben Browser „onnx/model.onnx“ herunterladen (1,02 GB). 3. Hier „Datei wählen …“ " +
-        "und die Datei auswählen – die App prüft sie und kopiert sie in ihren Modellordner.",
-        AiModelKind.Background,
-        "",
-        1_024_331_469,
-        "5b486f08200f513f460da46dd701db5fbb47d79b4be4b708a19444bcd4e79958",
-        IsZip: false,
-        MainFile: "model.onnx",
-        License: "CC-BY-NC-4.0",
-        NonCommercial: true,
-        Origin: "Bria AI (RMBG-2.0), Datei von Hugging Face „briaai/RMBG-2.0“ nach Zustimmung",
-        TileSize: 1024,
-        Gpu: true,
-        ManualPage: "https://huggingface.co/briaai/RMBG-2.0");
-
     /// <summary>Gets all models of the catalogue.</summary>
     public static IReadOnlyList<AiModel> All { get; } =
         [Allround, Gfpgan, Gfpgan13, RestoreFormer, CodeFormer, Lama, Migan, SyntheticDoc, UltraSharpV2, PiSaSr, Sd21Unet, Sd21Vae, Sd21Text,
-         BiRefNetGeneral, BiRefNetGeneralGpu, BiRefNetLite, Ben2, Rmbg2, FaceDetector, FaceParser];
+         BiRefNetGeneral, BiRefNetGeneralGpu, BiRefNetLite, Ben2, FaceDetector, FaceParser];
 
     /// <summary>Looks up a model by its ID.</summary>
     /// <param name="id">Model ID (<see cref="AiModel.Id"/>), compared case-sensitively.</param>

@@ -13,7 +13,7 @@
             <!-- Noch kein Modell -->
             <StackPanel IsVisible="{Binding !HasModels}" Spacing="6">
                 <TextBlock Classes="hint" TextWrapping="Wrap"
-                           Text="{l:T 'Zum Freistellen wird ein Modell gebraucht (BiRefNet, BEN2 oder RMBG-2.0). Es läuft komplett auf deinem Rechner und wird einmalig heruntergeladen.'}" />
+                           Text="{l:T 'Zum Freistellen wird ein Modell gebraucht (BiRefNet oder BEN2). Es läuft komplett auf deinem Rechner und wird einmalig heruntergeladen.'}" />
                 <Button HorizontalAlignment="Left" Content="{l:T 'Modelle laden …'}" Command="{Binding OpenModelsCommand}" />
             </StackPanel>
 

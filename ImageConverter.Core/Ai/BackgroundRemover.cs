@@ -29,7 +29,7 @@ public interface ISegmentModel
     float[] Run(float[] rgb, CancellationToken ct);
 }
 
-/// <summary>Background model over ONNX (BiRefNet, BEN2, RMBG-2.0): NCHW, RGB, ImageNet-normalised except BEN2.</summary>
+/// <summary>Background model over ONNX (BiRefNet, BEN2): NCHW, RGB, ImageNet-normalised except BEN2.</summary>
 /// <param name="session">Open session of the model; stays owned by the caller.</param>
 /// <param name="model">Catalogue entry (input size in <see cref="AiModel.TileSize"/>).</param>
 public sealed class OnnxSegmentModel(InferenceSession session, AiModel model) : ISegmentModel
@@ -42,7 +42,7 @@ public sealed class OnnxSegmentModel(InferenceSession session, AiModel model) : 
 
     /// <inheritdoc />
     /// <remarks>
-    /// BEN2 expects plain 0 … 1 values; the BiRefNet family (also RMBG-2.0) expects ImageNet normalisation. BiRefNet returns
+    /// BEN2 expects plain 0 … 1 values; the BiRefNet family expects ImageNet normalisation. BiRefNet returns
     /// logits, the others probabilities — the value range tells them apart (docs/KI-HINTERGRUND.md).
     /// </remarks>
     public float[] Run(float[] rgb, CancellationToken ct)

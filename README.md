@@ -128,7 +128,7 @@ den Wald weichzeichnen wie bei einer offenen Blende (Mitte) oder ganz entfernen 
 
 - **Entfernen:** mit dem Pinsel über das Störende malen. Zwei Modelle stehen bereit – eines gründlich, eines schnell.
 - **Hintergrund:** Motiv automatisch freistellen, mit Pinsel nacharbeiten (rot = weg, grün = bleibt), Hintergrund durchsichtig oder
-  unscharf wie beim Porträt mit offener Blende. Fünf Modelle für Menschen, Produkte und feine Haare.
+  unscharf wie beim Porträt mit offener Blende. Drei Modelle für Menschen, Produkte und feine Haare.
 
 ## Vergrößern und Gesichter retten
 
@@ -228,7 +228,7 @@ ImageConverter ist **kostenlos** – für alle, auch für Firmen. Der Quellcode 
 und verändern. Nur **verkaufen** darf ihn niemand: Die Lizenz ist MIT mit der Commons Clause ([LICENSE](LICENSE)). Das ist bewusst
 „Source Available“ und kein Open Source im Sinne der OSI.
 
-**KI-Modelle** haben eigene Lizenzen. Drei davon sind nur für nicht-kommerzielle Nutzung frei (CodeFormer, 4x-UltraSharpV2, RMBG-2.0);
+**KI-Modelle** haben eigene Lizenzen. Zwei davon sind nur für nicht-kommerzielle Nutzung frei (CodeFormer, 4x-UltraSharpV2);
 die Modellliste im Programm zeigt bei jedem Modell seine Lizenz. Alle Bestandteile mit Version und Lizenz: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 **Haftung und Gewährleistung:** ImageConverter wird unentgeltlich und ohne Gewähr („wie es ist“) überlassen. Der Urheber haftet nur für

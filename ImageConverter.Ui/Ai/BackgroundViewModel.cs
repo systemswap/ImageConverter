@@ -582,7 +582,6 @@ public partial class BackgroundViewModel : ViewModelBase, IBrushTool
         {
             ("birefnet-lite", _) => 11,
             ("ben2", _) => 17,
-            ("rmbg-2.0", true) => 14,
             ("birefnet-general-gpu", true) => 12,
             (_, _) => 24,
         };
