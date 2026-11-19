@@ -1,3 +1,5 @@
+<p align="right"><b>Deutsch</b> · <a href="README.en.md">English</a></p>
+
 <p align="center">
   <img src="docs/bilder/readme/banner.jpg" width="100%" alt="ImageConverter – Fotos, Scans und Dokumente umwandeln, retten, verbessern. Auf dem eigenen Rechner, für Linux und Windows, ohne Cloud.">
 </p>
