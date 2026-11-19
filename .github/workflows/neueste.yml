@@ -1,0 +1,105 @@
+# Baut nach jedem Push auf main beide Pakete mit publish.sh (Linux: AppImage im tar.gz, Windows: Zip; ReadyToRun,
+# Tests vorher) und legt sie ins Vorab-Release „neueste“ – die alten Dateien darin werden ersetzt. Ein Linux-Lauf
+# baut auch Windows: Windows-Läufe zählen im privaten Repository doppelt gegen die Freiminuten.
+# KI-Modelle kommen nie in die Pakete (publish.sh lässt sie weg; auf dem Server gibt es keine).
+
+name: Neueste Version bauen
+
+on:
+  push:
+    branches: [main]
+    # Nur Doku geändert: das Programm ist dasselbe
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+# Kommt ein neuer Push, während noch gebaut wird, bricht der ältere Lauf ab
+concurrency:
+  group: neueste
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  AVALONIA_TELEMETRY_OPTOUT: '1'
+  ORT_DISABLE_TELEMETRY: '1'
+  DO_NOT_TRACK: '1'
+  # appimagetool ist selbst ein AppImage; auf dem Server ohne FUSE entpackt es sich und läuft so
+  APPIMAGE_EXTRACT_AND_RUN: '1'
+
+jobs:
+  bauen:
+    name: Bauen und veröffentlichen
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # NuGet-Pakete zwischen den Läufen behalten (spart Minuten)
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Tests und beide Pakete (publish.sh beides)
+        run: ./publish.sh beides
+
+      - name: Version und Dateien
+        id: info
+        run: |
+          version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          ls -l published/*.zip published/*.tar.gz
+
+      - name: Release „neueste“ aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          set -euo pipefail
+          files=(published/ImageConverter-"$VERSION"-windows-x64.zip published/ImageConverter-"$VERSION"-linux-x64.tar.gz)
+          short="$(git rev-parse --short HEAD)"
+          stamp="$(date -u '+%d.%m.%Y %H:%M') UTC"
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "Automatisch gebaut nach dem letzten Push auf main – immer der neueste Stand, **privat**, Vorabversion."
+            echo
+            echo "**Version:** $VERSION · **Commit:** \`$short\` · **gebaut:** $stamp · alle Tests bestanden"
+            echo
+            echo "| Datei | SHA-256 |"
+            echo "|---|---|"
+            for f in "${files[@]}"; do echo "| \`$(basename "$f")\` | \`$(sha256sum "$f" | cut -d' ' -f1)\` |"; done
+            echo
+            echo "**Windows:** Zip entpacken, \`ImageConverter.exe\` starten (optional \`einrichten.ps1\` für „Öffnen mit“)."
+            echo "**Linux:** \`tar xzf\` und im Ordner \`./einrichten.sh\` (Menüeintrag); das AppImage braucht den Ordner \`Tools/\` daneben."
+            echo
+            echo "KI-Modelle sind nicht enthalten: in der App unter Einstellungen › KI laden oder aus dem Release \`ki-modelle-2026-10-14\`."
+            echo
+            echo "Laden: \`gh release download neueste -R ${GITHUB_REPOSITORY}\`"
+          } > "$notes"
+
+          # Das Tag zeigt immer auf den gebauten Commit
+          git tag -f neueste HEAD
+          git push -f origin refs/tags/neueste
+
+          if ! gh release view neueste > /dev/null 2>&1; then
+            gh release create neueste --prerelease --title "ImageConverter neueste ($VERSION)" --notes-file "$notes"
+          fi
+          gh release upload neueste "${files[@]}" --clobber
+          gh release edit neueste --prerelease --title "ImageConverter neueste ($VERSION)" --notes-file "$notes"
+
+          # Dateien älterer Versionen entfernen (die Namen tragen die Version)
+          keep=" $(for f in "${files[@]}"; do printf '%s ' "$(basename "$f")"; done)"
+          gh release view neueste --json assets -q '.assets[].name' | while read -r name; do
+            case "$keep" in *" $name "*) ;; *) gh release delete-asset neueste "$name" -y ;; esac
+          done
+          gh release view neueste --json assets -q '.assets[] | "\(.name) \(.size)"'

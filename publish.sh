@@ -300,8 +300,8 @@ echo
 echo "Fertig (ImageConverter $VERSION):"
 find "$OUT_DIR" -maxdepth 4 -type f \( -name "*.AppImage" -o -name "*.exe" -o -name ImageConverter -o -name "Magick.Native*" -o -name "*onnxruntime.*" -o -name "*.tar.gz" -o -name "*.zip" \) -printf "  %P  (%s Bytes)\n" | sort
 
-# Menüeintrag auf das neue Programm setzen (fester Pfad).
-if [ "$TARGET" = all ] || [ "$TARGET" = linux ]; then
+# Menüeintrag auf das neue Programm setzen (fester Pfad) – nicht beim automatischen Bau auf GitHub.
+if { [ "$TARGET" = all ] || [ "$TARGET" = linux ]; } && [ -z "${CI:-}" ]; then
   echo
   "$LINUX_DIR/einrichten.sh"
 fi
