@@ -53,12 +53,12 @@ seine Staffelung zurück, die Wiesen werden wieder grün, und trotzdem bleiben H
 sie in Frieden – ohne Streifen im Himmel und ohne helle Säume um die Bäume.
 
 <p align="center">
-  <img src="docs/bilder/readme/dunst-tal-vorher.jpg" width="49%" alt="Ausschnitt des Tals vor dem Dunstfilter">
-  <img src="docs/bilder/readme/dunst-tal-nachher.jpg" width="49%" alt="Derselbe Ausschnitt nach dem Dunstfilter">
+  <img src="docs/bilder/readme/dunst-tal-vorher.jpg" width="49%" alt="Ausschnitt mit Dorf, Wiesen, einem Acker und Hügelketten vor dem Dunstfilter: alles unter einem grauen Schleier">
+  <img src="docs/bilder/readme/dunst-tal-nachher.jpg" width="49%" alt="Derselbe Ausschnitt nach dem Dunstfilter: grüne Wiesen, brauner Acker, rote Dächer">
 </p>
 
-**Im Ausschnitt** wird es deutlich: Dörfer, Felder und der Flusslauf treten aus dem Grau hervor, die fernen Hügelketten lösen sich
-voneinander. Das ganze Panorama ist in rund zehn Sekunden gerechnet.
+**Im Ausschnitt** wird es deutlich: Wo vorher ein grauer Schleier über allem lag, sind die Wiesen wieder grün, der Acker braun und
+die Dächer rot, und die Hügelketten dahinter lösen sich voneinander. Das ganze Panorama ist in rund zehn Sekunden gerechnet.
 
 - **Wie das Auge:** Der Dunst wird in mehreren sachten Durchläufen entfernt – ansehen, neu schätzen, weiter. Mehr Durchläufe wirken
   kräftiger, jeder bleibt natürlich.
