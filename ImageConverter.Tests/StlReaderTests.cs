@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Numerics;
 using System.Text;
+using ImageConverter.Core.Localization;
 using ImageConverter.Viewer3D.Geometry;
 using static ImageConverter.Tests.StlTestModels;
 
@@ -128,7 +129,8 @@ public class StlReaderTests
         using var stream = new HugeStlStream(count);
         var watch = Stopwatch.StartNew();
         var e = Assert.Throws<StlFormatException>(() => StlReader.Read(stream));
-        Assert.Contains(StlReader.TriangleLimit.ToString("N0"), e.Message);
+        // formatted like the message (language of the program), not by the culture of the computer the tests run on
+        Assert.Contains(Tr.T("{0:N0}", StlReader.TriangleLimit), e.Message);
         Assert.True(watch.ElapsedMilliseconds < 500);
         Assert.True(stream.BytesRead < 10_000);
     }

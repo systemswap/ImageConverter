@@ -74,7 +74,9 @@ public class PlatformTests
         try
         {
             var dead = Path.Combine(dir, $"ImageConverter.{int.MaxValue}.laeuft");
-            File.WriteAllLines(dead, ["2026-10-15T09:01:13.0000000+02:00", "2026-10-15T09:07:58.0000000+02:00", "KI-Tab: Testmodell"]);
+            // times in the time zone of the computer the tests run on: the log shows local time
+            string Local(int h, int m, int s) => new DateTime(2026, 10, 15, h, m, s, DateTimeKind.Local).ToString("o");
+            File.WriteAllLines(dead, [Local(9, 1, 13), Local(9, 7, 58), "KI-Tab: Testmodell"]);
 
             AppLog.Start(dir);
             AppLog.Activity("Upscaling: Test");
