@@ -183,7 +183,7 @@ Qualitätsstufe „Hoch“: glatte Rundungen, weiche Umgebungsschatten, Kanten a
 
 <p align="center">
   <img src="docs/bilder/readme/stl-messen.jpg" width="49%" alt="Zwei Flächen angeklickt, dazwischen das Maß 10,00 mm mit Winkel 0°">
-  <img src="docs/bilder/readme/stl-schnitt.jpg" width="49%" alt="Eine waagerechte Schnittebene durch die Mitte des Gehäuses; die Schnittflächen sind warm eingefärbt">
+  <img src="docs/bilder/readme/stl-schnitt.jpg" width="49%" alt="Eine leicht schräge Schnittebene knapp über dem Boden des Gehäuses; die angeschnittenen Wände und Lüftungsschlitze sind warm eingefärbt">
 </p>
 
 - **STL und 3MF ansehen:** bis 20 Millionen Dreiecke; Darstellung als Fläche, Drahtgitter oder Bauplan, Teile einfärben, Perspektive
