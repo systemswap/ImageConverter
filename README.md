@@ -23,9 +23,9 @@
 
 ## Für den Alltag gebaut
 
-Das Foto vom Handy ist zu groß für die Mail. Die Buchseite ist gewölbt fotografiert, der Kassenbon zerknittert, der Scan schief.
-Auf dem Urlaubsbild steht ein Wasserzeichen, über dem Tal liegt Dunst, und das alte Familienfoto ist winzig. Für jedes davon gibt es
-irgendwo ein Werkzeug – ImageConverter macht all das in einem Programm, ohne dass ein Bild den Rechner verlässt.
+Das Handyfoto ist zu groß für die Mail. Die Buchseite ist gewölbt, der Kassenbon zerknittert, der Scan schief. Auf dem Urlaubsbild
+prangt ein Wasserzeichen, über dem Tal hängt Dunst, und das alte Familienfoto ist kaum größer als eine Briefmarke. Für all das gibt
+es irgendwo ein Werkzeug – ImageConverter hat sie in einem Fenster versammelt. Und kein Bild verlässt dabei Ihren Rechner.
 
 - **Öffnen, was kommt:** 35 Dateiendungen – JPEG, PNG, HEIC vom iPhone, WebP, AVIF, JPEG XL, PSD, SVG und RAW-Dateien der gängigen
   Kameras. Entscheidend ist der Inhalt, nicht die Endung: Auch ein falsch benanntes Bild öffnet.
@@ -47,24 +47,23 @@ irgendwo ein Werkzeug – ImageConverter macht all das in einem Programm, ohne d
   <img src="docs/bilder/readme/dunst-vergleich.jpg" width="100%" alt="Panorama eines Tals bei tief stehender Sonne, links das Original mit Dunst, rechts nach dem Dunstfilter">
 </p>
 
-**Was Sie sehen:** ein Panorama mit fast 8 000 Pixeln Breite, aufgenommen gegen die tief stehende Sonne. Links das Original, rechts
-dasselbe Bild nach dem Dunstfilter – im Programm schieben Sie die Trennlinie mit der Maus hin und her. Das Tal bekommt seine Farben und
-seine Staffelung zurück, die Wiesen werden wieder grün, und trotzdem bleiben Himmel und Sonne ruhig: Der Filter erkennt sie und lässt
-sie in Frieden – ohne Streifen im Himmel und ohne helle Säume um die Bäume.
+Gegen die tief stehende Sonne fotografiert, fast 8 000 Pixel breit – und über dem ganzen Tal ein grauer Schleier. Nach dem
+Dunstfilter ist die Landschaft wieder da: grüne Wiesen, Hügelketten, die sich hintereinander staffeln, Farben, wie man sie vor Ort
+gesehen hat. Himmel und Sonne bleiben dabei ruhig, denn der Filter erkennt sie und lässt sie in Frieden – keine Streifen im Himmel,
+keine hellen Säume um die Bäume. Im Programm schieben Sie die Trennlinie einfach mit der Maus hin und her.
 
-**Vorher und nachher nebeneinander** – zum Vergrößern anklicken. Achten Sie auf das Tal links: Wo vorher ein grauer Schleier über
-allem lag, sind die Wiesen wieder grün, der Acker braun und die Dächer rot, und die Hügelketten lösen sich voneinander. Das ganze
-Panorama ist in rund zehn Sekunden gerechnet.
+Am schönsten in groß – ein Klick auf die Bilder öffnet sie. Schauen Sie ins Tal links: Wo eben noch alles grau verschleiert war,
+sind die Wiesen wieder grün, der Acker braun und die Dächer rot. Das ganze Panorama ist in rund zehn Sekunden gerechnet.
 
 <p align="center">
   <a href="docs/bilder/readme/dunst-vorher.jpg"><img src="docs/bilder/readme/dunst-vorher.jpg" width="49%" alt="Das ganze Panorama vor dem Dunstfilter: Tal, Hügel und Felder unter einem grauen Schleier"></a>
   <a href="docs/bilder/readme/dunst-nachher.jpg"><img src="docs/bilder/readme/dunst-nachher.jpg" width="49%" alt="Das ganze Panorama nach dem Dunstfilter: grüne Wiesen, klare Hügelketten, ruhiger Himmel mit Sonne"></a>
 </p>
 
-- **Wie das Auge:** Der Dunst wird in mehreren sachten Durchläufen entfernt – ansehen, neu schätzen, weiter. Mehr Durchläufe wirken
-  kräftiger, jeder bleibt natürlich.
-- **Feinregler** für Klarheit, Kontrast, Dynamik, Schärfe, Kanten, Helligkeit, Entstufen und Dunstfarbe.
-- **Himmel und Sonne geschützt,** auch bei Gegenlicht und Verläufen.
+- **Behutsam statt brachial:** Der Dunst verschwindet in mehreren sachten Durchläufen – ansehen, neu schätzen, weiter. Mehr
+  Durchläufe wirken kräftiger und bleiben trotzdem natürlich.
+- **Fein abstimmbar:** acht Regler von Klarheit über Schärfe bis Dunstfarbe – für genau die Stimmung, die Sie im Kopf haben.
+- **Gegenlicht ohne Sorge:** Himmel, Sonne und weiche Verläufe bleiben geschützt.
 
 <details>
 <summary><b>Die Einstellungen dieses Beispiels</b></summary>
@@ -86,13 +85,13 @@ Panorama ist in rund zehn Sekunden gerechnet.
 <p align="center">
   <img src="docs/bilder/readme/seite-vorher.jpg" width="32%" alt="Eine fotografierte Buchseite auf einem Holztisch, schräg aufgenommen und zum Bund hin gewölbt; die Zeilen laufen in Bögen">
   <img src="docs/bilder/readme/seite-linien.jpg" width="32%" alt="Dieselbe Seite mit den vorgeschlagenen Linien: blau entlang der Textzeilen und der oberen und unteren Kante, orange entlang der senkrechten Ränder">
-  <img src="docs/bilder/readme/seite-nachher.jpg" width="32%" alt="Die Seite nach dem Begradigen: gerade Zeilen, rechte Winkel, flach wie gescannt">
+  <img src="docs/bilder/readme/seite-nachher.jpg" width="32%" alt="Die Seite nach dem Geradeziehen, auf die Seite zugeschnitten: gerade Zeilen, rechte Winkel, flach wie gescannt">
 </p>
 
-**Was Sie sehen:** links eine Buchseite, schräg fotografiert und zum Bund hin gewölbt. In der Mitte die Linien, die das Programm von
-selbst vorschlägt – blau an Textzeilen und Kanten, orange an den Rändern. Rechts das Ergebnis: Die Zeilen liegen gerade, die Ecken
-sind rechtwinklig, die Seite liegt flach wie auf dem Scanner. Passt eine Linie nicht, ziehen Sie sie mit der Maus zurecht, und das
-Ergebnis folgt sofort.
+Schnell mit dem Handy fotografiert, schräg von oben, und die Seite wölbt sich zum Bund – die Zeilen laufen in Bögen. ImageConverter
+findet Textzeilen, Kanten und Ränder von selbst (Mitte) und zieht die Seite daraus glatt. Rechts das Ergebnis, auf die Seite
+zugeschnitten: gerade Zeilen, rechte Winkel, flach wie vom Scanner. Sitzt eine Linie nicht ganz, ziehen Sie sie mit der Maus
+zurecht – auch hinterher noch.
 
 - **Gewölbtes Blatt:** Linien an Textzeilen und Rändern setzen oder vorschlagen lassen – ein Blattmodell zieht die Seite glatt und rastet
   auf DIN-Formate ein. Auch Doppelseiten mit Falz.
@@ -110,9 +109,9 @@ Ergebnis folgt sofort.
   <img src="docs/bilder/readme/entfernen-nachher.jpg" width="49%" alt="Dieselbe Landschaft ohne Strommast und ohne Leitungen; Wolken, Nebel und Wald laufen ungestört durch">
 </p>
 
-**Strommast weg, Leitungen weg:** Mast und Leitungen markieren, „Entfernen“ – die KI füllt die Stellen mit dem, was dahinter sein
-müsste: Wolken, Nebelschwaden, Baumkronen. Ein zweiter, kurzer Durchgang nimmt die letzten feinen Reste. Alles außerhalb der
-Markierung bleibt Pixel für Pixel, wie es war.
+**Strommast weg, Leitungen weg.** Einmal drübermalen, „Entfernen“ – und die KI setzt ein, was dahinter sein müsste: Wolken,
+Nebelschwaden, Baumkronen. Ein zweiter kurzer Durchgang nimmt die letzten feinen Reste mit. Alles außerhalb der Markierung bleibt
+Pixel für Pixel unangetastet.
 
 <p align="center">
   <img src="docs/bilder/readme/hintergrund-vorher.jpg" width="32%" alt="Eine Person mit Kapuze und Rucksack an einer Waldstraße, von schräg hinten, mit ausgestrecktem Daumen">
@@ -120,9 +119,9 @@ Markierung bleibt Pixel für Pixel, wie es war.
   <img src="docs/bilder/readme/hintergrund-frei.jpg" width="32%" alt="Die freigestellte Person vor einem Schachbrettmuster, das den durchsichtigen Hintergrund zeigt">
 </p>
 
-**Freistellen mit einem Klick:** Das Programm erkennt die Person samt Kapuze, Rucksack und ausgestrecktem Daumen. Danach wahlweise
-den Wald weichzeichnen wie bei einer offenen Blende (Mitte) oder ganz entfernen und als PNG mit durchsichtigem Hintergrund speichern
-(rechts, hier auf Schachbrett).
+**Freistellen mit einem Klick.** ImageConverter findet die Person samt Kapuze, Rucksack und ausgestrecktem Daumen. Dann haben Sie
+die Wahl: den Wald weich verschwimmen lassen wie bei offener Blende (Mitte) oder ganz entfernen und als PNG mit durchsichtigem
+Hintergrund speichern (rechts, hier auf Schachbrett).
 
 <sub>Fotos: Altas Green und Charles Devaux über Unsplash, gemeinfrei (CC0).</sub>
 
@@ -177,9 +176,10 @@ Rückgängig und Wiederholen gibt es für jeden Handgriff (Strg+Z / Strg+Y).
   <img src="docs/bilder/readme/stl-fenster.jpg" width="100%" alt="Das Fenster im dunklen Design mit einem Gehäuse-Unterteil als STL: links Kennzahlen und Ansicht-Einstellungen, rechts das Modell mit Rippen, Bohrungen und Schienen">
 </p>
 
-**Was Sie sehen:** ein Gehäuse-Unterteil für den 3D-Druck, 6 792 Dreiecke. Links die Kennzahlen – Maße, Oberfläche, Volumen, ob das
-Modell geschlossen ist, 103 erkannte Flächen (72 Ebenen, 23 Zylinder) – und die Ansicht-Einstellungen. Rechts das Modell in der
-Qualitätsstufe „Hoch“: glatte Rundungen, weiche Umgebungsschatten, Kanten als feine Linien, acht­fache Kantenglättung.
+Ein Gehäuse-Unterteil für den 3D-Druck, so wie es der Betrachter in der Qualitätsstufe „Hoch“ zeigt: glatte Rundungen, weiche
+Schatten in Ecken und Bohrungen, Kanten als feine Linien. Links stehen die Kennzahlen bereit – Maße, Oberfläche, Volumen, ob das
+Modell geschlossen ist, und 103 erkannte Flächen, darunter 23 Zylinder. Zwei Klicks auf zwei Flächen, und Sie wissen, ob das Bauteil
+hineinpasst.
 
 <p align="center">
   <img src="docs/bilder/readme/stl-messen.jpg" width="49%" alt="Zwei Flächen angeklickt, dazwischen das Maß 10,00 mm mit Winkel 0°">
